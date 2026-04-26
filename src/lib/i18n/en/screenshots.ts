@@ -98,6 +98,13 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddedCount": "Embedded",
   "screenshots.unembeddedCount": "Not yet embedded",
   "screenshots.staleCount": "Stale (different model)",
+
+  "screenshots.userScreenshotToggle": "Track User Screenshots",
+  "screenshots.userScreenshotDesc":
+    "Detect when you take a screenshot (Cmd+Shift+3/4 on macOS, Print Screen on Windows) and import it for OCR, search, and EEG correlation. Original files are never moved or deleted.",
+  "screenshots.clipboardImageToggle": "Track Clipboard Images",
+  "screenshots.clipboardImageDesc":
+    "When an image is copied to the clipboard, capture and index it alongside other screenshots for search and analysis.",
 };
 
 export default screenshots;

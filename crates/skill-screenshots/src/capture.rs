@@ -36,7 +36,7 @@ use skill_data::screenshot_store::{ReembedEstimate, ReembedResult, ScreenshotRes
 /// `target × target` with black pixels.  Returns the padded `DynamicImage`
 /// directly — callers that need encoded bytes (PNG for the vision encoder)
 /// should use [`encode_png`] separately.
-fn resize_fit_pad_image(raw_bytes: &[u8], target: u32) -> Option<DynamicImage> {
+pub(crate) fn resize_fit_pad_image(raw_bytes: &[u8], target: u32) -> Option<DynamicImage> {
     let img = ImageReader::new(Cursor::new(raw_bytes))
         .with_guessed_format()
         .ok()?
@@ -92,7 +92,7 @@ fn encode_png(img: &DynamicImage) -> Option<Vec<u8>> {
 }
 
 /// Encode an already-decoded image as WebP with the given quality.
-fn encode_webp(img: &DynamicImage, _quality: u8, out_path: &Path) -> Option<u64> {
+pub(crate) fn encode_webp(img: &DynamicImage, _quality: u8, out_path: &Path) -> Option<u64> {
     let mut buf = Vec::new();
     img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::WebP)
         .ok()?;

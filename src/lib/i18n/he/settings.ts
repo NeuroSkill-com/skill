@@ -738,6 +738,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "העתק auth token",
   "extensions.tokenCopied": "הטוקן הועתק ללוח",
   "extensions.tokenFailed": "לא ניתן להעתיק את הטוקן",
+  "extensions.pairViaBrowser": "שיוך בדפדפן",
+  "extensions.pairViaBrowserHint": "פותח דף שיוך בדפדפן ברירת המחדל שלך",
+  "extensions.copyTokenHint": "ידני — הדבק בהגדרות ההרחבה",
+  "extensions.pairingOpened": "דף השיוך נפתח — ההרחבה תתחבר אוטומטית",
+  "extensions.pairingFailed": "לא ניתן ליצור קישור שיוך",
+  "extensions.pairingInProgress": "פותח…",
 };
 
 export default settings;

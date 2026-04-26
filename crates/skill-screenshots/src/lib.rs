@@ -14,6 +14,7 @@ pub mod context;
 #[allow(dead_code)]
 pub(crate) mod gif_encode;
 pub(crate) mod platform;
+pub mod user_screenshot;
 
 // Re-export so existing `skill_screenshots::ScreenshotConfig` paths keep working.
 pub use context::{ActiveWindowInfo, ScreenshotContext};

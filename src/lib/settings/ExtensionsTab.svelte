@@ -135,6 +135,26 @@ async function copyAuthToken(): Promise<void> {
   setTimeout(() => { statusMessage = ""; }, 3000);
 }
 
+let pairingInProgress = $state(false);
+
+async function pairViaBrowser(): Promise<void> {
+  pairingInProgress = true;
+  statusMessage = "";
+  try {
+    const { daemonPost } = await import("$lib/daemon/http");
+    const result = await daemonPost<{ code: string; url: string }>("/pair/generate-code");
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(result.url);
+    statusMessage = t("extensions.pairingOpened");
+    statusType = "success";
+  } catch {
+    statusMessage = t("extensions.pairingFailed");
+    statusType = "error";
+  }
+  pairingInProgress = false;
+  setTimeout(() => { statusMessage = ""; }, 5000);
+}
+
 // Check status on mount
 $effect(() => {
   checkInstalled();
@@ -257,12 +277,25 @@ $effect(() => {
     <SectionHeader>{t("extensions.pairingTitle")}</SectionHeader>
     <p class="text-sm text-muted-foreground -mt-1 mb-1">{t("extensions.pairingDesc")}</p>
     <SettingsCard>
-      <CardContent class="px-4 py-3.5">
-        <Button size="sm" variant="outline" onclick={copyAuthToken}>
-          {t("extensions.copyToken")}
-        </Button>
+      <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="default" onclick={pairViaBrowser} disabled={pairingInProgress}>
+            {#if pairingInProgress}
+              {t("extensions.pairingInProgress")}
+            {:else}
+              {t("extensions.pairViaBrowser")}
+            {/if}
+          </Button>
+          <span class="text-xs text-muted-foreground">{t("extensions.pairViaBrowserHint")}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="outline" onclick={copyAuthToken}>
+            {t("extensions.copyToken")}
+          </Button>
+          <span class="text-xs text-muted-foreground">{t("extensions.copyTokenHint")}</span>
+        </div>
         {#if statusMessage}
-          <span class="ml-3 text-xs {statusType === 'success' ? 'text-green-500' : 'text-red-500'}">
+          <span class="text-xs {statusType === 'success' ? 'text-green-500' : 'text-red-500'}">
             {statusMessage}
           </span>
         {/if}

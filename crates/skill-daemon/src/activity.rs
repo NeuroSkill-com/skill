@@ -42,6 +42,16 @@ pub fn start_workers(state: AppState) {
         run_clipboard_monitor,
     );
 
+    // On non-macOS platforms, run a dedicated clipboard image watcher since
+    // the full clipboard monitor (osascript-based) is macOS-only.
+    #[cfg(not(target_os = "macos"))]
+    spawn_resilient(
+        "daemon-clipboard-image-watcher",
+        state.clone(),
+        store.clone(),
+        run_clipboard_image_watcher,
+    );
+
     spawn_resilient(
         "daemon-user-screenshot-watcher",
         state,
@@ -2381,7 +2391,7 @@ fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
                 if let Some(png_path) = extract_clipboard_image_to_temp() {
                     let (eeg_focus, eeg_mood) = read_eeg_snapshot(&state);
                     if let Some(saved) =
-                        skill_screenshots::user_screenshot::import_user_screenshot(&skill_dir, &png_path)
+                        skill_screenshots::user_screenshot::import_clipboard_image(&skill_dir, &png_path)
                     {
                         store.insert_user_screenshot_event(
                             saved.row_id,
@@ -2433,10 +2443,143 @@ fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Extract clipboard image data to a temporary PNG file (Windows).
+/// Uses PowerShell to read the clipboard image and save as PNG.
+#[cfg(target_os = "windows")]
 fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
-    // TODO: Windows/Linux clipboard image extraction.
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join(format!("skill_clipboard_{}.png", unix_secs()));
+    let script = format!(
+        r#"Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) {{ $img.Save('{}', [System.Drawing.Imaging.ImageFormat]::Png) }}"#,
+        tmp_path.display()
+    );
+    let output = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if output.status.success() && tmp_path.exists() {
+        Some(tmp_path)
+    } else {
+        let _ = std::fs::remove_file(&tmp_path);
+        None
+    }
+}
+
+/// Extract clipboard image data to a temporary PNG file (Linux).
+/// Tries `xclip` first (X11), then `wl-paste` (Wayland).
+#[cfg(target_os = "linux")]
+fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join(format!("skill_clipboard_{}.png", unix_secs()));
+
+    // Try xclip (X11)
+    let xclip = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-target", "image/png", "-o"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output();
+
+    if let Ok(output) = xclip {
+        if output.status.success() && !output.stdout.is_empty() {
+            if std::fs::write(&tmp_path, &output.stdout).is_ok() {
+                return Some(tmp_path);
+            }
+        }
+    }
+
+    // Try wl-paste (Wayland)
+    let wl = std::process::Command::new("wl-paste")
+        .args(["--type", "image/png"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output();
+
+    if let Ok(output) = wl {
+        if output.status.success() && !output.stdout.is_empty() {
+            if std::fs::write(&tmp_path, &output.stdout).is_ok() {
+                return Some(tmp_path);
+            }
+        }
+    }
+
+    let _ = std::fs::remove_file(&tmp_path);
     None
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
+    None
+}
+
+// ── Clipboard image watcher (Windows/Linux) ─────────────────────────────────
+//
+// On macOS, clipboard image capture is handled inside run_clipboard_monitor.
+// On other platforms we run a dedicated poller that checks for image content
+// on the clipboard every 3 seconds.
+
+#[cfg(not(target_os = "macos"))]
+fn run_clipboard_image_watcher(state: AppState, store: Arc<ActivityStore>) {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let mut prev_hash: u64 = 0;
+
+    loop {
+        std::thread::sleep(Duration::from_secs(3));
+
+        let settings = skill_settings::load_settings(&skill_dir);
+        if !settings.screenshot.clipboard_image_enabled {
+            continue;
+        }
+
+        // Try to extract clipboard image.
+        let Some(png_path) = extract_clipboard_image_to_temp() else {
+            continue;
+        };
+
+        // Hash the file to detect duplicates (same image still on clipboard).
+        let Ok(bytes) = std::fs::read(&png_path) else {
+            let _ = std::fs::remove_file(&png_path);
+            continue;
+        };
+        let mut hasher = DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        let current_hash = hasher.finish();
+
+        if current_hash == prev_hash {
+            let _ = std::fs::remove_file(&png_path);
+            continue;
+        }
+        prev_hash = current_hash;
+
+        // Capture context.
+        let (eeg_focus, eeg_mood) = read_eeg_snapshot(&state);
+        let source_app = poll_active_window().map(|w| w.app_name).unwrap_or_default();
+
+        // Import into screenshot store.
+        if let Some(saved) = skill_screenshots::user_screenshot::import_clipboard_image(&skill_dir, &png_path) {
+            store.insert_user_screenshot_event(
+                saved.row_id,
+                unix_secs(),
+                &source_app,
+                "clipboard",
+                &png_path.to_string_lossy(),
+                "",
+                eeg_focus,
+                eeg_mood,
+            );
+            tracing::info!(
+                "[clipboard-image] captured clipboard image -> row_id={} (focus={:?})",
+                saved.row_id,
+                eeg_focus,
+            );
+        }
+
+        let _ = std::fs::remove_file(&png_path);
+    }
 }
 
 // ── User screenshot watcher (cross-platform) ────────────────────────────────

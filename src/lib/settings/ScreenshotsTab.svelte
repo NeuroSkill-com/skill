@@ -33,6 +33,8 @@ interface ScreenshotConfig {
   ocr_enabled: boolean;
   ocr_engine: string;
   use_gpu: boolean;
+  user_screenshot_enabled: boolean;
+  clipboard_image_enabled: boolean;
 }
 interface ConfigChangeResult {
   model_changed: boolean;
@@ -58,6 +60,8 @@ let config = $state<ScreenshotConfig>({
   ocr_enabled: true,
   ocr_engine: "ocrs",
   use_gpu: true,
+  user_screenshot_enabled: false,
+  clipboard_image_enabled: false,
 });
 
 let saving = $state(false);
@@ -180,6 +184,14 @@ async function toggleGpu() {
   config.use_gpu = !config.use_gpu;
   await save();
 }
+async function toggleUserScreenshot() {
+  config.user_screenshot_enabled = !config.user_screenshot_enabled;
+  await save();
+}
+async function toggleClipboardImage() {
+  config.clipboard_image_enabled = !config.clipboard_image_enabled;
+  await save();
+}
 
 // ── Re-embed ───────────────────────────────────────────────────────────────
 async function reembed() {
@@ -260,10 +272,14 @@ onDestroy(() => {
     sessionOnly={config.session_only}
     ocrEnabled={config.ocr_enabled}
     useGpu={config.use_gpu}
+    userScreenshotEnabled={config.user_screenshot_enabled}
+    clipboardImageEnabled={config.clipboard_image_enabled}
     onToggleEnabled={toggleEnabled}
     onToggleSessionOnly={toggleSessionOnly}
     onToggleOcr={toggleOcr}
     onToggleGpu={toggleGpu}
+    onToggleUserScreenshot={toggleUserScreenshot}
+    onToggleClipboardImage={toggleClipboardImage}
   />
 
   <!-- ── Capture settings ────────────────────────────────────────────────── -->

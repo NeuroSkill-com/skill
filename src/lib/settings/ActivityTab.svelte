@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Activity dashboard — daily stats, top files/projects, focus sessions, meetings. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
 import { Button } from "$lib/components/ui/button";
 import { CardContent } from "$lib/components/ui/card";
 import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
@@ -70,6 +71,36 @@ let devLoops = $state<{ loop_type: string; command: string; iterations: number; 
 let conversations = $state<{ app: string; role: string; text: string; at: number; eeg_focus: number | null }[]>([]);
 let aiUsage = $state<{ suggestions_shown: number; accepted: number; acceptance_rate: number; chat_sessions: number; by_source: { source: string; count: number }[] } | null>(null);
 let insights = $state<any>(null);
+
+// Browser analytics
+let browserDistraction = $state<{ score: number; tab_switches_per_min: number; social_pct: number; productive_pct: number; idle_pct: number; suggestion: string } | null>(null);
+let browserContent = $state<{ content_type: string; events: number; avg_focus: number | null; total_secs: number }[]>([]);
+let browserDomains = $state<[string, string, number][]>([]);
+let browserResearch = $state<{ total_searches: number; refinement_rate: number; revisit_count: number; avg_search_focus: number | null; stuck_indicator: boolean } | null>(null);
+let browserFocus = $state<{ domain: string; category: string; content_type: string; events: number; avg_focus: number | null; total_reading_secs: number; avg_scroll_depth: number | null; visits: number }[]>([]);
+let browserLearning = $state<{ domain: string; content_type: string; efficiency_score: number; avg_focus: number | null; pages: number; revisits: number; avg_reading_secs: number }[]>([]);
+let browserOptimalHours = $state<{ best_hours: number[]; worst_hours: number[]; by_hour: { hour: number; avg_focus: number; events: number }[] } | null>(null);
+let browserAiEff = $state<{ provider: string; interactions: number; avg_focus: number | null; avg_session_secs: number | null }[]>([]);
+let browserProcrast = $state<{ score: number; procrastinating: boolean; suggestion: string; idle_secs: number; revisit_loops: number } | null>(null);
+let browserDeepReading = $state<{ domain: string; title: string; reading_secs: number; scroll_depth: number | null; eeg_focus: number | null; at: number }[]>([]);
+let browserVideoRoi = $state<{ total_watched_secs: number; focused_watched_secs: number; focus_ratio: number; avg_focus: number | null } | null>(null);
+let browserEmailImpact = $state<{ email_sessions: number; avg_focus_during_email: number | null; avg_focus_outside_email: number | null; focus_delta: number | null } | null>(null);
+let browserTabLoad = $state<{ tab_count: number; avg_focus: number; samples: number }[]>([]);
+let browserWeekday = $state<{ weekday_avg_focus: number | null; weekend_avg_focus: number | null; delta: number | null } | null>(null);
+let browserNightOwl = $state<{ hour: number; avg_focus: number; events: number }[]>([]);
+let browserCopyPaste = $state<{ copies: number; pastes: number; avg_paste_length: number | null; top_domains: [string, number][] } | null>(null);
+let browserPostMeeting = $state<{ meeting_title: string; platform: string; post_meeting_focus: number | null; distraction_events: number }[]>([]);
+let browserSwitchTax = $state<{ total_switches: number; avg_focus_at_switch: number | null; estimated_lost_minutes: number } | null>(null);
+
+// Feedback system
+let feedbackSent = $state<Record<string, "yay" | "nay" | null>>({});
+
+async function sendFeedback(insight: string, correct: boolean, score?: number, context?: string): Promise<void> {
+  feedbackSent[insight] = correct ? "yay" : "nay";
+  try {
+    await daemonPost("/v1/brain/feedback", { insight, correct, score, context });
+  } catch { /* best-effort */ }
+}
 
 // Fusion insights
 let taskType = $state<{ task_type: string; confidence: number; signals: string[] } | null>(null);
@@ -190,6 +221,25 @@ onMount(async () => {
       daemonPost("/v1/brain/search-conversations", { mode: "structured", since: todayStart, limit: 50 }),
       daemonPost("/v1/brain/ai-usage", { since: todayStart }),
       daemonPost("/v1/brain/developer-insights", { since: todayStart - 7 * 86400 }),
+      // Browser analytics
+      daemonPost("/v1/brain/browser-distraction", { windowSecs: 300 }).catch(() => null),
+      daemonPost("/v1/brain/browser-content", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-domains", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-research", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-focus", { since: weekAgo, limit: 20 }).catch(() => null),
+      daemonPost("/v1/brain/browser-learning", { since: weekAgo }).catch(() => null),
+      daemonPost("/v1/brain/browser-optimal-hours", { since: weekAgo }).catch(() => null),
+      daemonPost("/v1/brain/browser-ai-effectiveness", { since: weekAgo }).catch(() => null),
+      daemonPost("/v1/brain/browser-procrastination", { windowSecs: 600 }).catch(() => null),
+      daemonPost("/v1/brain/browser-deep-reading", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-video-roi", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-email-impact", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-tab-load", { since: weekAgo }).catch(() => null),
+      daemonPost("/v1/brain/browser-weekday", { since: weekAgo }).catch(() => null),
+      daemonPost("/v1/brain/browser-night-owl", { since: weekAgo }).catch(() => null),
+      daemonPost("/v1/brain/browser-copypaste", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-post-meeting", { since: todayStart }).catch(() => null),
+      daemonPost("/v1/brain/browser-switch-tax", { since: todayStart }).catch(() => null),
     ]);
 
     if (results[0].status === "fulfilled") summary = results[0].value;
@@ -211,6 +261,25 @@ onMount(async () => {
     if (results[16].status === "fulfilled") conversations = (results[16].value as typeof conversations) ?? [];
     if (results[17].status === "fulfilled") aiUsage = results[17].value as typeof aiUsage;
     if (results[18].status === "fulfilled") insights = results[18].value;
+    // Browser analytics (indices 19-23)
+    if (results[19]?.status === "fulfilled" && results[19].value) browserDistraction = results[19].value as typeof browserDistraction;
+    if (results[20]?.status === "fulfilled" && results[20].value) browserContent = (results[20].value as typeof browserContent) ?? [];
+    if (results[21]?.status === "fulfilled" && results[21].value) browserDomains = (results[21].value as typeof browserDomains) ?? [];
+    if (results[22]?.status === "fulfilled" && results[22].value) browserResearch = results[22].value as typeof browserResearch;
+    if (results[23]?.status === "fulfilled" && results[23].value) browserFocus = (results[23].value as typeof browserFocus) ?? [];
+    if (results[24]?.status === "fulfilled" && results[24].value) browserLearning = (results[24].value as typeof browserLearning) ?? [];
+    if (results[25]?.status === "fulfilled" && results[25].value) browserOptimalHours = results[25].value as typeof browserOptimalHours;
+    if (results[26]?.status === "fulfilled" && results[26].value) browserAiEff = (results[26].value as typeof browserAiEff) ?? [];
+    if (results[27]?.status === "fulfilled" && results[27].value) browserProcrast = results[27].value as typeof browserProcrast;
+    if (results[28]?.status === "fulfilled" && results[28].value) browserDeepReading = (results[28].value as typeof browserDeepReading) ?? [];
+    if (results[29]?.status === "fulfilled" && results[29].value) browserVideoRoi = results[29].value as typeof browserVideoRoi;
+    if (results[30]?.status === "fulfilled" && results[30].value) browserEmailImpact = results[30].value as typeof browserEmailImpact;
+    if (results[31]?.status === "fulfilled" && results[31].value) browserTabLoad = (results[31].value as typeof browserTabLoad) ?? [];
+    if (results[32]?.status === "fulfilled" && results[32].value) browserWeekday = results[32].value as typeof browserWeekday;
+    if (results[33]?.status === "fulfilled" && results[33].value) browserNightOwl = (results[33].value as typeof browserNightOwl) ?? [];
+    if (results[34]?.status === "fulfilled" && results[34].value) browserCopyPaste = results[34].value as typeof browserCopyPaste;
+    if (results[35]?.status === "fulfilled" && results[35].value) browserPostMeeting = (results[35].value as typeof browserPostMeeting) ?? [];
+    if (results[36]?.status === "fulfilled" && results[36].value) browserSwitchTax = results[36].value as typeof browserSwitchTax;
   } catch {}
   loading = false;
 });
@@ -953,6 +1022,398 @@ let heatmapMax = $state(1);
           </div>
         </CardContent>
       </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── Browser Activity ──────────────────────────────────────────────────── -->
+  {#if browserDistraction || browserContent.length > 0 || browserFocus.length > 0}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>{t("activity.browserTitle")}</SectionHeader>
+
+      <!-- Distraction Score -->
+      {#if browserDistraction}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium">{t("activity.browserDistraction")}</span>
+              <Badge variant={browserDistraction.score > 70 ? "destructive" : browserDistraction.score > 40 ? "secondary" : "default"}>
+                {browserDistraction.score > 70 ? t("activity.distractionHigh") : browserDistraction.score > 40 ? t("activity.distractionMedium") : t("activity.distractionLow")}
+                {Math.round(browserDistraction.score)}/100
+              </Badge>
+            </div>
+            <div class="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
+              <div><span class="font-medium text-foreground">{browserDistraction.tab_switches_per_min}</span> {t("activity.tabSwitchesPerMin")}</div>
+              <div><span class="font-medium text-foreground">{browserDistraction.productive_pct}%</span> {t("activity.productivePct")}</div>
+              <div><span class="font-medium text-foreground">{browserDistraction.social_pct}%</span> {t("activity.socialPct")}</div>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+              <p class="text-xs text-muted-foreground">{browserDistraction.suggestion}</p>
+              {#if !feedbackSent["distraction"]}
+                <div class="flex gap-1 shrink-0 ml-2">
+                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("distraction", true, browserDistraction?.score)} title="Accurate">&#x1F44D;</button>
+                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-red-500/20 transition-colors" onclick={() => sendFeedback("distraction", false, browserDistraction?.score)} title="Inaccurate">&#x1F44E;</button>
+                </div>
+              {:else}
+                <span class="text-[10px] text-muted-foreground ml-2">{feedbackSent["distraction"] === "yay" ? "&#x2713;" : "&#x2717;"} noted</span>
+              {/if}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Content Breakdown -->
+      {#if browserContent.length > 0}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">{t("activity.browserContent")}</span>
+            <div class="space-y-1.5">
+              {#each browserContent.slice(0, 8) as ct}
+                {@const maxSecs = Math.max(...browserContent.map(c => c.total_secs), 1)}
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="w-16 shrink-0 font-medium">{ct.content_type}</span>
+                  <div class="flex-1 h-4 bg-muted rounded-sm overflow-hidden dark:bg-white/[0.04]">
+                    <div class="h-full rounded-sm {ct.content_type === 'social' || ct.content_type === 'shopping' ? 'bg-yellow-500/60' : 'bg-primary/60'}"
+                         style="width: {Math.round((ct.total_secs / maxSecs) * 100)}%"></div>
+                  </div>
+                  <span class="w-12 shrink-0 text-right text-muted-foreground">{Math.round(ct.total_secs / 60)}m</span>
+                  {#if ct.avg_focus != null}
+                    <span class="w-10 shrink-0 text-right tabular-nums {ct.avg_focus > 60 ? 'text-green-500' : ct.avg_focus > 30 ? 'text-yellow-500' : 'text-red-500'}">{ct.avg_focus.toFixed(0)}</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Focus by Domain -->
+      {#if browserFocus.length > 0}
+        <SettingsCard>
+          <CardContent class="py-0 px-0">
+            <div class="px-4 pt-3.5 pb-2">
+              <span class="text-sm font-medium">{t("activity.browserFocus")}</span>
+            </div>
+            <div class="divide-y divide-border dark:divide-white/[0.04]">
+              {#each browserFocus.slice(0, 10) as df}
+                <div class="flex items-center gap-3 px-4 py-2 text-xs">
+                  <span class="flex-1 font-medium truncate">{df.domain}</span>
+                  <span class="text-muted-foreground">{df.category}</span>
+                  <span class="w-8 text-right tabular-nums">{df.visits}</span>
+                  <span class="w-12 text-right text-muted-foreground">{Math.round(df.total_reading_secs / 60)}m</span>
+                  {#if df.avg_focus != null}
+                    <span class="w-10 text-right tabular-nums font-medium {df.avg_focus > 60 ? 'text-green-500' : df.avg_focus > 30 ? 'text-yellow-500' : 'text-red-500'}">{df.avg_focus.toFixed(0)}</span>
+                  {:else}
+                    <span class="w-10 text-right text-muted-foreground">--</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Research Patterns -->
+      {#if browserResearch && browserResearch.total_searches > 0}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">{t("activity.browserResearch")}</span>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+              <div><span class="font-medium text-foreground">{browserResearch.total_searches}</span> <span class="text-muted-foreground">{t("activity.searches")}</span></div>
+              <div><span class="font-medium text-foreground">{browserResearch.refinement_rate}%</span> <span class="text-muted-foreground">{t("activity.refinementRate")}</span></div>
+              <div><span class="font-medium text-foreground">{browserResearch.revisit_count}</span> <span class="text-muted-foreground">{t("activity.revisits")}</span></div>
+              <div class="flex items-center gap-1">
+                {#if browserResearch.stuck_indicator}
+                  <Badge variant="destructive">{t("activity.stuck")}</Badge>
+                {:else}
+                  <Badge variant="default">{t("activity.notStuck")}</Badge>
+                {/if}
+                {#if !feedbackSent["research_stuck"]}
+                  <button class="px-1 py-0.5 text-[10px] rounded bg-muted hover:bg-green-500/20" onclick={() => sendFeedback("research_stuck", true)} title="Accurate">&#x1F44D;</button>
+                  <button class="px-1 py-0.5 text-[10px] rounded bg-muted hover:bg-red-500/20" onclick={() => sendFeedback("research_stuck", false)} title="Inaccurate">&#x1F44E;</button>
+                {:else}
+                  <span class="text-[10px] text-muted-foreground">{feedbackSent["research_stuck"] === "yay" ? "&#x2713;" : "&#x2717;"}</span>
+                {/if}
+              </div>
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Procrastination Detector -->
+      {#if browserProcrast && browserProcrast.score > 20}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-medium">Procrastination</span>
+              <Badge variant={browserProcrast.procrastinating ? "destructive" : "secondary"}>
+                {Math.round(browserProcrast.score)}/100
+              </Badge>
+            </div>
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-muted-foreground">{browserProcrast.suggestion}</p>
+              {#if !feedbackSent["procrastination"]}
+                <div class="flex gap-1 shrink-0 ml-2">
+                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("procrastination", true, browserProcrast?.score)} title="Accurate">&#x1F44D;</button>
+                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-red-500/20 transition-colors" onclick={() => sendFeedback("procrastination", false, browserProcrast?.score)} title="Inaccurate">&#x1F44E;</button>
+                </div>
+              {:else}
+                <span class="text-[10px] text-muted-foreground ml-2">{feedbackSent["procrastination"] === "yay" ? "&#x2713;" : "&#x2717;"} noted</span>
+              {/if}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Learning Efficiency -->
+      {#if browserLearning.length > 0}
+        <SettingsCard>
+          <CardContent class="py-0 px-0">
+            <div class="px-4 pt-3.5 pb-2">
+              <span class="text-sm font-medium">Learning Efficiency</span>
+            </div>
+            <div class="divide-y divide-border dark:divide-white/[0.04]">
+              {#each browserLearning.slice(0, 8) as lr}
+                <div class="flex items-center gap-3 px-4 py-2 text-xs">
+                  <span class="flex-1 font-medium truncate">{lr.domain}</span>
+                  <span class="text-muted-foreground">{lr.pages} pages</span>
+                  <span class="w-12 text-right tabular-nums font-semibold {lr.efficiency_score > 60 ? 'text-green-500' : lr.efficiency_score > 30 ? 'text-yellow-500' : 'text-red-500'}">{lr.efficiency_score.toFixed(0)}</span>
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Deep Reading Sessions -->
+      {#if browserDeepReading.length > 0}
+        <SettingsCard>
+          <CardContent class="py-0 px-0">
+            <div class="px-4 pt-3.5 pb-2">
+              <span class="text-sm font-medium">Deep Reading Sessions</span>
+            </div>
+            <div class="divide-y divide-border dark:divide-white/[0.04]">
+              {#each browserDeepReading.slice(0, 6) as dr}
+                <div class="flex items-center gap-2 px-4 py-2 text-xs">
+                  <span class="w-12 shrink-0 text-muted-foreground tabular-nums">{new Date(dr.at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
+                  <span class="flex-1 truncate font-medium">{dr.title || dr.domain}</span>
+                  <span class="text-muted-foreground">{Math.round(dr.reading_secs / 60)}m</span>
+                  {#if dr.eeg_focus != null}
+                    <span class="w-8 text-right tabular-nums {dr.eeg_focus > 60 ? 'text-green-500' : 'text-yellow-500'}">{dr.eeg_focus.toFixed(0)}</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- AI Chat Effectiveness -->
+      {#if browserAiEff.length > 0}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">AI Chat Effectiveness</span>
+            <div class="space-y-2">
+              {#each browserAiEff as ai}
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-medium">{ai.provider}</span>
+                  <div class="flex items-center gap-3">
+                    <span class="text-muted-foreground">{ai.interactions} chats</span>
+                    {#if ai.avg_focus != null}
+                      <span class="tabular-nums font-medium {ai.avg_focus > 60 ? 'text-green-500' : 'text-yellow-500'}">focus {ai.avg_focus.toFixed(0)}</span>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Optimal Research Hours -->
+      {#if browserOptimalHours && browserOptimalHours.best_hours.length > 0}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Optimal Research Hours</span>
+            <div class="text-xs space-y-1">
+              <div>Best: <span class="font-medium text-green-500">{browserOptimalHours.best_hours.map(h => `${h}:00`).join(", ")}</span></div>
+              <div>Worst: <span class="font-medium text-red-500">{browserOptimalHours.worst_hours.map(h => `${h}:00`).join(", ")}</span></div>
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Video ROI -->
+      {#if browserVideoRoi && browserVideoRoi.total_watched_secs > 60}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Video Learning ROI</span>
+            <div class="grid grid-cols-3 gap-3 text-xs text-center">
+              <div>
+                <div class="text-lg font-semibold">{Math.round(browserVideoRoi.total_watched_secs / 60)}m</div>
+                <div class="text-muted-foreground">watched</div>
+              </div>
+              <div>
+                <div class="text-lg font-semibold {browserVideoRoi.focus_ratio > 0.5 ? 'text-green-500' : 'text-yellow-500'}">{Math.round(browserVideoRoi.focus_ratio * 100)}%</div>
+                <div class="text-muted-foreground">focused</div>
+              </div>
+              <div>
+                <div class="text-lg font-semibold">{browserVideoRoi.avg_focus?.toFixed(0) ?? "--"}</div>
+                <div class="text-muted-foreground">avg focus</div>
+              </div>
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Email Impact -->
+      {#if browserEmailImpact && browserEmailImpact.email_sessions > 0}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Email Impact</span>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div>During email: <span class="font-medium">{browserEmailImpact.avg_focus_during_email?.toFixed(0) ?? "--"}</span></div>
+              <div>Outside email: <span class="font-medium">{browserEmailImpact.avg_focus_outside_email?.toFixed(0) ?? "--"}</span></div>
+            </div>
+            {#if browserEmailImpact.focus_delta != null}
+              <p class="text-xs mt-1 {browserEmailImpact.focus_delta < -5 ? 'text-red-500' : 'text-muted-foreground'}">
+                Focus {browserEmailImpact.focus_delta > 0 ? "+" : ""}{browserEmailImpact.focus_delta.toFixed(0)} during email
+              </p>
+            {/if}
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Context Switch Tax -->
+      {#if browserSwitchTax && browserSwitchTax.total_switches > 0}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Context Switch Tax</span>
+            <div class="grid grid-cols-3 gap-3 text-xs text-center">
+              <div>
+                <div class="text-lg font-semibold">{browserSwitchTax.total_switches}</div>
+                <div class="text-muted-foreground">switches</div>
+              </div>
+              <div>
+                <div class="text-lg font-semibold text-red-500">{browserSwitchTax.estimated_lost_minutes}m</div>
+                <div class="text-muted-foreground">lost</div>
+              </div>
+              <div>
+                <div class="text-lg font-semibold">{browserSwitchTax.avg_focus_at_switch?.toFixed(0) ?? "--"}</div>
+                <div class="text-muted-foreground">focus at switch</div>
+              </div>
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Tab Count vs Cognitive Load -->
+      {#if browserTabLoad.length > 3}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Tab Count vs Focus</span>
+            <div class="flex items-end gap-0.5 h-16">
+              {#each browserTabLoad as tl}
+                {@const maxFocus = Math.max(...browserTabLoad.map(t => t.avg_focus), 1)}
+                <div class="flex-1 flex flex-col items-center gap-0.5">
+                  <div class="w-full rounded-t-sm {tl.avg_focus > 60 ? 'bg-green-500/60' : tl.avg_focus > 40 ? 'bg-yellow-500/60' : 'bg-red-500/60'}"
+                       style="height: {Math.round((tl.avg_focus / maxFocus) * 48)}px"></div>
+                  <span class="text-[9px] text-muted-foreground">{tl.tab_count}</span>
+                </div>
+              {/each}
+            </div>
+            <div class="flex justify-between text-[9px] text-muted-foreground mt-1">
+              <span>fewer tabs</span><span>more tabs</span>
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Night Owl Analysis -->
+      {#if browserNightOwl.length > 6}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Focus by Hour</span>
+            <div class="flex items-end gap-0.5 h-12">
+              {#each browserNightOwl as hn}
+                {@const maxF = Math.max(...browserNightOwl.map(h => h.avg_focus), 1)}
+                <div class="flex-1 rounded-t-sm {hn.avg_focus > 60 ? 'bg-green-500/50' : hn.avg_focus > 40 ? 'bg-yellow-500/50' : 'bg-red-500/50'}"
+                     style="height: {Math.round((hn.avg_focus / maxF) * 40)}px"
+                     title="{hn.hour}:00 — focus {hn.avg_focus.toFixed(0)}, {hn.events} events"></div>
+              {/each}
+            </div>
+            <div class="flex justify-between text-[9px] text-muted-foreground mt-1">
+              <span>0:00</span><span>12:00</span><span>23:00</span>
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Weekday vs Weekend -->
+      {#if browserWeekday && browserWeekday.weekday_avg_focus != null}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Weekday vs Weekend</span>
+            <div class="grid grid-cols-2 gap-4 text-xs text-center">
+              <div>
+                <div class="text-lg font-semibold">{browserWeekday.weekday_avg_focus?.toFixed(0) ?? "--"}</div>
+                <div class="text-muted-foreground">weekday focus</div>
+              </div>
+              <div>
+                <div class="text-lg font-semibold">{browserWeekday.weekend_avg_focus?.toFixed(0) ?? "--"}</div>
+                <div class="text-muted-foreground">weekend focus</div>
+              </div>
+            </div>
+            {#if browserWeekday.delta != null}
+              <p class="text-xs text-center mt-1 text-muted-foreground">
+                {browserWeekday.delta > 0 ? "Weekday" : "Weekend"} focus is {Math.abs(browserWeekday.delta).toFixed(0)} points higher
+              </p>
+            {/if}
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Post-Meeting Browser Spiral -->
+      {#if browserPostMeeting.length > 0}
+        <SettingsCard>
+          <CardContent class="py-0 px-0">
+            <div class="px-4 pt-3.5 pb-2">
+              <span class="text-sm font-medium">Post-Meeting Browsing</span>
+            </div>
+            <div class="divide-y divide-border dark:divide-white/[0.04]">
+              {#each browserPostMeeting as pm}
+                <div class="flex items-center gap-2 px-4 py-2 text-xs">
+                  <span class="flex-1 truncate">{pm.meeting_title || pm.platform}</span>
+                  {#if pm.post_meeting_focus != null}
+                    <span class="tabular-nums {pm.post_meeting_focus < 40 ? 'text-red-500' : 'text-muted-foreground'}">focus {pm.post_meeting_focus.toFixed(0)}</span>
+                  {/if}
+                  {#if pm.distraction_events > 0}
+                    <Badge variant="secondary">{pm.distraction_events} distractions</Badge>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
+      <!-- Copy-Paste Patterns -->
+      {#if browserCopyPaste && (browserCopyPaste.copies > 0 || browserCopyPaste.pastes > 0)}
+        <SettingsCard>
+          <CardContent class="px-4 py-3.5">
+            <span class="text-sm font-medium mb-2 block">Copy-Paste Workflow</span>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div><span class="font-medium text-foreground">{browserCopyPaste.copies}</span> copies</div>
+              <div><span class="font-medium text-foreground">{browserCopyPaste.pastes}</span> pastes</div>
+            </div>
+            {#if browserCopyPaste.top_domains.length > 0}
+              <div class="mt-2 text-xs text-muted-foreground">
+                Top: {browserCopyPaste.top_domains.map(([d, n]) => `${d} (${n})`).join(", ")}
+              </div>
+            {/if}
+          </CardContent>
+        </SettingsCard>
+      {/if}
+
     </section>
   {/if}
 

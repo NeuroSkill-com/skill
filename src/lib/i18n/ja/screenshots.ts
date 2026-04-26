@@ -98,6 +98,13 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddedCount": "埋め込み済み",
   "screenshots.unembeddedCount": "未埋め込み",
   "screenshots.staleCount": "古い（別のモデル）",
+
+  "screenshots.userScreenshotToggle": "ユーザースクリーンショットを追跡",
+  "screenshots.userScreenshotDesc":
+    "スクリーンショットの撮影を検出し（macOSではCmd+Shift+3/4、WindowsではPrint Screen）、OCR、検索、EEG相関のためにインポートします。元のファイルは移動・削除されません。",
+  "screenshots.clipboardImageToggle": "クリップボード画像を追跡",
+  "screenshots.clipboardImageDesc":
+    "画像がクリップボードにコピーされると、他のスクリーンショットと一緒にキャプチャしてインデックス化し、検索と分析に使用します。",
 };
 
 export default screenshots;

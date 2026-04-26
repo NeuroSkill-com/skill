@@ -777,6 +777,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "Auth-Token kopieren",
   "extensions.tokenCopied": "Token in die Zwischenablage kopiert",
   "extensions.tokenFailed": "Token konnte nicht kopiert werden",
+  "extensions.pairViaBrowser": "Im Browser koppeln",
+  "extensions.pairViaBrowserHint": "Öffnet eine Kopplungsseite in Ihrem Standardbrowser",
+  "extensions.copyTokenHint": "Manuell — in den Erweiterungseinstellungen einfügen",
+  "extensions.pairingOpened": "Kopplungsseite geöffnet — die Erweiterung verbindet sich automatisch",
+  "extensions.pairingFailed": "Kopplungslink konnte nicht erstellt werden",
+  "extensions.pairingInProgress": "Wird geöffnet…",
 };
 
 export default settings;

@@ -150,6 +150,9 @@ pub struct AppState {
     pub calibration_running: Arc<AtomicBool>,
     /// Observable snapshot of the current calibration session phase.
     pub calibration_phase: Arc<Mutex<CalibrationPhaseSnapshot>>,
+    /// Short-lived pairing codes for browser extension setup.
+    /// Maps code → (auth_token, expires_unix_secs).
+    pub pairing_codes: Arc<Mutex<HashMap<String, (String, u64)>>>,
 }
 
 /// Observable state of the daemon-driven calibration session.
@@ -272,6 +275,7 @@ impl AppState {
             calibration_cancel: Arc::new(Mutex::new(None)),
             calibration_running: Arc::new(AtomicBool::new(false)),
             calibration_phase: Arc::new(Mutex::new(CalibrationPhaseSnapshot::default())),
+            pairing_codes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

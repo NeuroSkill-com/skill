@@ -593,6 +593,12 @@ pub(crate) async fn activity_weekly_digest_impl(
         meeting_count: 0,
         peak_day_idx: 0,
         peak_hour: 0,
+        browser_events: 0,
+        browser_top_domains: vec![],
+        browser_content_breakdown: vec![],
+        browser_total_reading_secs: 0,
+        browser_avg_distraction: None,
+        browser_video_watched_secs: 0,
     });
     Json(result)
 }
@@ -690,7 +696,7 @@ pub(crate) async fn activity_vscode_events_impl(
                 | "ai_chat_start"
                 | "ai_chat_end" => {
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
-                    store.insert_ai_event(event_type, source, path, language, now);
+                    store.insert_ai_event(event_type, source, path, language, now, eeg_focus, eeg_mood);
                 }
                 "conversation_message" if !command.is_empty() => {
                     let role = event.get("source").and_then(|v| v.as_str()).unwrap_or("user");
@@ -717,6 +723,91 @@ pub(crate) async fn activity_vscode_events_impl(
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("vscode");
                     let zone = if command == "focused" { "vscode_focus" } else { "vscode_blur" };
                     store.insert_zone_switch(zone, source, now, eeg_focus);
+                }
+                // Git operations — store in build_events with source tag.
+                "git_commit" => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("human");
+                    let label = if source == "ai" { "git commit (ai-assisted)" } else { "git commit" };
+                    store.insert_build_event(label, "pass", command, now);
+                    // Also record as an AI event if AI-assisted, so brain analysis can weight it.
+                    if source == "ai" {
+                        store.insert_ai_event("ai_commit", "copilot", path, language, now, eeg_focus, eeg_mood);
+                    }
+                }
+                "git_push" => {
+                    store.insert_build_event("git push", "pass", "", now);
+                }
+                "git_pull" => {
+                    store.insert_build_event("git pull", "pass", "", now);
+                }
+                "git_checkout" => {
+                    store.insert_build_event("git checkout", "pass", command, now);
+                }
+                "git_stage" | "git_unstage" | "git_stash" => {
+                    store.insert_build_event(event_type, "pass", "", now);
+                }
+                // Inline completion accepted — track as AI event for analytics.
+                "completion_accepted" if !path.is_empty() => {
+                    let chars = event.get("lines_added").and_then(|v| v.as_u64()).unwrap_or(0);
+                    store.insert_ai_event("suggestion_accepted", "copilot", path, language, now, eeg_focus, eeg_mood);
+                    // Also record edit chunk if we have a recent file interaction.
+                    let lines = (chars / 40).max(1);
+                    let recent = store.get_recent_files(1, None);
+                    if let Some(fi) = recent.first().filter(|f| f.file_path == path) {
+                        store.insert_edit_chunk(fi.id, now, lines, 0, 0, 0);
+                    }
+                }
+                // AI code lifecycle events.
+                "ai_code_refined" | "ai_code_undone" | "ai_code_deleted" | "ai_invocation" => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                    store.insert_ai_event(event_type, source, path, language, now, eeg_focus, eeg_mood);
+                }
+                // Error recovery: developer fixed an error.
+                "error_fixed" => {
+                    let latency = event.get("fix_latency_secs").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let severity = event.get("severity").and_then(|v| v.as_str()).unwrap_or("error");
+                    store.insert_build_event(
+                        &format!("error_fixed ({severity} in {latency}s)"), "fixed", path, now,
+                    );
+                }
+                // File dwell time: how long developer spent in a file.
+                "file_dwell" => {
+                    let dwell = event.get("dwell_secs").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if !path.is_empty() && dwell > 5 {
+                        let recent = store.get_recent_files(1, None);
+                        if let Some(fi) = recent.first().filter(|f| f.file_path == path) {
+                            store.update_file_interaction_duration(fi.id, dwell);
+                        }
+                    }
+                }
+                // Typing velocity: chars per minute sample.
+                "typing_velocity" => {
+                    let cpm = event.get("chars_per_min").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if cpm > 0 {
+                        store.insert_build_event(
+                            &format!("typing {cpm} cpm"), "ok", path, now,
+                        );
+                    }
+                }
+                // Test execution with framework detection.
+                "test_run" => {
+                    let exit_code = event.get("exit_code").and_then(|v| v.as_i64());
+                    let outcome = match exit_code {
+                        Some(0) => "pass",
+                        Some(_) => "fail",
+                        _ => "running",
+                    };
+                    let framework = event.get("framework").and_then(|v| v.as_str()).unwrap_or("");
+                    let cmd_label = if framework.is_empty() { command } else { framework };
+                    store.insert_build_event(cmd_label, outcome, path, now);
+                }
+                // Documentation access: hover, parameter hints, completions.
+                "doc_access" => {
+                    store.insert_ai_event("doc_access", command, path, language, now, eeg_focus, eeg_mood);
+                }
+                // File lifecycle events.
+                "file_created" | "file_deleted" | "file_renamed" => {
+                    store.insert_build_event(event_type, "ok", path, now);
                 }
                 "layout_snapshot" => {
                     // command field carries JSON payload
@@ -760,7 +851,11 @@ pub(crate) async fn activity_vscode_events_impl(
                 }
 
                 // === Git operations ===
-                "git_commit" => ("git commit".to_string(), command.to_string()),
+                "git_commit" => {
+                    let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("human");
+                    let label = if source == "ai" { "git commit (AI)" } else { "git commit" };
+                    (label.to_string(), command.to_string())
+                }
                 "git_push" => ("git push".to_string(), String::new()),
                 "git_pull" => ("git pull".to_string(), String::new()),
                 "git_checkout" => ("git branch switch".to_string(), String::new()),
@@ -779,6 +874,24 @@ pub(crate) async fn activity_vscode_events_impl(
                     (format!("AI chat: {source}"), basename.to_string())
                 }
                 "ai_inline_chat" => ("AI inline assist".to_string(), format!("{basename} ({language})")),
+                "ai_code_refined" => ("AI code refined".to_string(), format!("{basename} ({language})")),
+                "ai_code_undone" => ("AI code undone".to_string(), format!("{basename}")),
+                "ai_code_deleted" => ("AI code deleted".to_string(), format!("{basename}")),
+                "completion_accepted" => ("AI completion accepted".to_string(), format!("{basename} ({language})")),
+
+                // === Developer signals ===
+                "error_fixed" => {
+                    let sev = event.get("severity").and_then(|v| v.as_str()).unwrap_or("error");
+                    (format!("{sev} fixed"), basename.to_string())
+                }
+                "test_run" => {
+                    let exit_code = event.get("exit_code").and_then(|v| v.as_i64());
+                    let status = if exit_code == Some(0) { "passed" } else { "failed" };
+                    (format!("test {status}"), command.to_string())
+                }
+                "file_created" => ("file created".to_string(), basename.to_string()),
+                "file_deleted" => ("file deleted".to_string(), basename.to_string()),
+                "file_renamed" => ("file renamed".to_string(), basename.to_string()),
 
                 // === Collaboration ===
                 "liveshare_start" => ("pair programming started".to_string(), String::new()),
@@ -997,9 +1110,10 @@ pub(crate) async fn activity_browser_events_impl(
                 .unwrap_or("");
 
             // ── Data storage ────────────────────────────────────────────
+            // All events go into browser_activities via JSON extraction.
+            // Special events also write to other tables for cross-analytics.
             match event_type {
                 "tab_switch" | "page_load" if !domain.is_empty() => {
-                    // Insert into active_windows so brain analytics see browser context.
                     let app_name = format!("Browser ({})", if !browser_name.is_empty() { browser_name } else { domain });
                     let aw = skill_data::active_window::ActiveWindowInfo {
                         app_name,
@@ -1011,97 +1125,16 @@ pub(crate) async fn activity_browser_events_impl(
                         monitor_id: None,
                     };
                     store.insert_active_window(&aw);
-                    // Insert into browser_activities.
-                    store.insert_browser_activity(
-                        event_type, url, domain, title, tab_id,
-                        browser_name, None, None, false, false,
-                        "", tab_count, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "navigation" if !domain.is_empty() => {
-                    store.insert_browser_activity(
-                        event_type, url, domain, title, tab_id,
-                        "", None, None, false, false,
-                        "", tab_count, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "tab_open" | "tab_close" => {
-                    store.insert_browser_activity(
-                        event_type, url, domain, title, tab_id,
-                        "", None, None, false, false,
-                        "", tab_count, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
                 }
                 "window_focus" | "window_blur" => {
                     let zone = if event_type == "window_focus" { "browser_focus" } else { "browser_blur" };
                     store.insert_zone_switch(zone, "browser", now, eeg_focus);
                 }
-                "scroll" => {
-                    let depth = event.get("scroll_depth").and_then(|v| v.as_f64());
-                    store.insert_browser_activity(
-                        event_type, url, domain, title, tab_id,
-                        "", depth, None, false, false,
-                        "", None, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "reading_time" => {
-                    let secs = event.get("reading_time_secs").and_then(|v| v.as_i64());
-                    let depth = event.get("scroll_depth").and_then(|v| v.as_f64());
-                    store.insert_browser_activity(
-                        event_type, url, domain, title, tab_id,
-                        "", depth, secs, false, false,
-                        "", None, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "typing_detected" => {
-                    store.insert_browser_activity(
-                        event_type, "", domain, "", tab_id,
-                        "", None, None, true, false,
-                        "", None, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "media_state" => {
-                    let playing = event.get("media_playing").and_then(|v| v.as_bool()).unwrap_or(false);
-                    store.insert_browser_activity(
-                        event_type, "", domain, "", tab_id,
-                        "", None, None, false, playing,
-                        "", None, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "search_query" => {
-                    let query = event.get("search_query").and_then(|v| v.as_str()).unwrap_or("");
-                    store.insert_browser_activity(
-                        event_type, "", domain, "", tab_id,
-                        "", None, None, false, false,
-                        query, None, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "devtools_toggle" => {
-                    let open = event.get("devtools_open").and_then(|v| v.as_bool()).unwrap_or(false);
-                    store.insert_browser_activity(
-                        event_type, "", domain, "", tab_id,
-                        "", None, None, false, false,
-                        "", None, open, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
-                "bookmark_created" | "download_started" => {
-                    store.insert_browser_activity(
-                        event_type, url, domain, title, tab_id,
-                        "", None, None, false, false,
-                        "", None, false, category, "", now,
-                        eeg_focus, eeg_mood,
-                    );
-                }
                 _ => {}
+            }
+            // Store every event in browser_activities (JSON field extraction).
+            if event_type != "env_context" {
+                store.insert_browser_activity_json(event, now, eeg_focus, eeg_mood);
             }
 
             // ── EEG auto-labeling ───────────────────────────────────────
@@ -1146,9 +1179,113 @@ pub(crate) async fn activity_browser_events_impl(
                     }
                 }
                 "bookmark_created" => ("bookmarked".to_string(), domain.to_string()),
-                "download_started" => ("file download".to_string(), domain.to_string()),
-                "typing_detected" => ("form input".to_string(), domain.to_string()),
-                "env_context" | "window_focus" | "window_blur" | "tab_open" | "tab_close" | "navigation" => {
+                "download_started" => {
+                    let ext = event.get("download_type").and_then(|v| v.as_str()).unwrap_or("");
+                    (format!("download .{ext}"), domain.to_string())
+                }
+                "typing_detected" | "form_submit" => ("form input".to_string(), domain.to_string()),
+
+                // ── Visible text context (high-value for EEG labels) ────
+                "visible_context" => {
+                    let heading = event.get("heading").and_then(|v| v.as_str()).unwrap_or("");
+                    let visible = event.get("visible_text").and_then(|v| v.as_str()).unwrap_or("");
+                    let page_title = event.get("page_title").and_then(|v| v.as_str()).unwrap_or(title);
+                    let ct = event.get("content_type").and_then(|v| v.as_str()).unwrap_or("");
+                    if visible.is_empty() && heading.is_empty() { count += 1; continue; }
+                    let label_text = if !heading.is_empty() {
+                        format!("reading: {heading}")
+                    } else {
+                        format!("reading {ct}: {domain}")
+                    };
+                    let ctx_text = if !visible.is_empty() {
+                        visible.to_string()
+                    } else {
+                        page_title.to_string()
+                    };
+                    (label_text, ctx_text)
+                }
+
+                // ── LLM chat interaction ────────────────────────────────
+                "llm_interaction" => {
+                    let provider = event.get("llm_provider").and_then(|v| v.as_str()).unwrap_or("ai");
+                    let turns = event.get("llm_turn_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let input = event.get("llm_input_detected").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if input {
+                        (format!("prompting {provider}"), format!("{turns} turns"))
+                    } else {
+                        (format!("reading {provider} response"), format!("{turns} turns"))
+                    }
+                }
+
+                // ── Email activity ──────────────────────────────────────
+                "email_activity" => {
+                    let mode = event.get("email_mode").and_then(|v| v.as_str()).unwrap_or("inbox");
+                    let unread = event.get("email_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                    (format!("email: {mode}"), if unread > 0 { format!("{unread} unread") } else { String::new() })
+                }
+
+                // ── Search patterns ─────────────────────────────────────
+                "search_pattern" => {
+                    let q = event.get("search_query").and_then(|v| v.as_str()).unwrap_or("");
+                    let refined = event.get("search_refinement").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if refined {
+                        ("search refined".to_string(), q.to_string())
+                    } else {
+                        ("new search".to_string(), q.to_string())
+                    }
+                }
+
+                // ── Revisit detection ───────────────────────────────────
+                "revisit" => {
+                    let count_v = event.get("revisit_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if count_v < 3 { count += 1; continue; }
+                    (format!("revisited {count_v}x"), domain.to_string())
+                }
+
+                // ── Click patterns ──────────────────────────────────────
+                "click" => {
+                    // Only label non-trivial click patterns (not every click)
+                    count += 1; continue;
+                }
+
+                // ── Mouse activity ──────────────────────────────────────
+                "mouse_activity" => {
+                    let idle = event.get("mouse_idle_secs").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if idle > 120 {
+                        ("idle".to_string(), format!("{idle}s on {domain}"))
+                    } else {
+                        count += 1; continue;
+                    }
+                }
+
+                // ── Page profile ────────────────────────────────────────
+                "page_profile" => {
+                    let ct = event.get("content_type").and_then(|v| v.as_str()).unwrap_or("text");
+                    (format!("viewing {ct}"), domain.to_string())
+                }
+
+                // ── Navigation type ─────────────────────────────────────
+                "navigation_committed" => {
+                    let nav = event.get("nav_type").and_then(|v| v.as_str()).unwrap_or("");
+                    if nav == "back_forward" {
+                        ("back/forward navigation".to_string(), domain.to_string())
+                    } else {
+                        count += 1; continue;
+                    }
+                }
+
+                // ── Clipboard ───────────────────────────────────────────
+                "clipboard_copy" => ("copied text".to_string(), domain.to_string()),
+                "clipboard_paste" => {
+                    let len = event.get("paste_length").and_then(|v| v.as_u64()).unwrap_or(0);
+                    if len > 50 { ("large paste".to_string(), format!("{len} chars on {domain}")) }
+                    else { count += 1; continue; }
+                }
+
+                // ── Low-signal events ───────────────────────────────────
+                "env_context" | "window_focus" | "window_blur" | "tab_open"
+                | "tab_close" | "navigation" | "navigation_type"
+                | "tab_snapshot" | "link_navigate" => {
                     count += 1;
                     continue;
                 }

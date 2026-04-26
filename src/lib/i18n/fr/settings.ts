@@ -780,6 +780,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "Copier l'auth token",
   "extensions.tokenCopied": "Token copié dans le presse-papiers",
   "extensions.tokenFailed": "Impossible de copier le token",
+  "extensions.pairViaBrowser": "Appairer dans le navigateur",
+  "extensions.pairViaBrowserHint": "Ouvre une page d'appairage dans votre navigateur par défaut",
+  "extensions.copyTokenHint": "Manuel — coller dans les paramètres de l'extension",
+  "extensions.pairingOpened": "Page d'appairage ouverte — l'extension se connectera automatiquement",
+  "extensions.pairingFailed": "Impossible de générer le lien d'appairage",
+  "extensions.pairingInProgress": "Ouverture…",
 };
 
 export default settings;

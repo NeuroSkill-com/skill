@@ -530,6 +530,20 @@ impl ScreenshotStore {
         rows.filter_map(std::result::Result::ok).collect()
     }
 
+    /// Check if an imported screenshot (user or clipboard) from a given original
+    /// file path already exists.  Uses the `caption` column for dedup.
+    pub fn has_user_screenshot_from_path(&self, source_path: &str) -> bool {
+        let conn = self.conn.lock_or_recover();
+        conn.query_row(
+            "SELECT 1 FROM screenshots
+             WHERE source IN ('user_screenshot', 'clipboard_image')
+               AND caption = ?1 LIMIT 1",
+            params![source_path],
+            |_| Ok(()),
+        )
+        .is_ok()
+    }
+
     /// Fetch the vision embedding, model provenance, OCR text, and OCR
     /// embedding for a given row — used to copy results when consecutive
     /// screenshots are identical.

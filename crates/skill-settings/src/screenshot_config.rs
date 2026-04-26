@@ -111,6 +111,15 @@ pub struct ScreenshotConfig {
     /// Maximum GIF file size in KB; discard if exceeded.
     #[serde(default = "default_screenshot_gif_max_size_kb")]
     pub gif_max_size_kb: u64,
+
+    /// Watch for user-taken screenshots (Cmd+Shift+3/4 on macOS, Print Screen
+    /// on Windows, etc.) and import them into the screenshot index.
+    #[serde(default)]
+    pub user_screenshot_enabled: bool,
+
+    /// Capture images from the clipboard and index them alongside screenshots.
+    #[serde(default)]
+    pub clipboard_image_enabled: bool,
 }
 
 impl Default for ScreenshotConfig {
@@ -131,6 +140,8 @@ impl Default for ScreenshotConfig {
             gif_frame_delay_ms: default_screenshot_gif_frame_delay(),
             gif_motion_threshold: default_screenshot_gif_motion_thr(),
             gif_max_size_kb: default_screenshot_gif_max_size_kb(),
+            user_screenshot_enabled: false,
+            clipboard_image_enabled: false,
         }
     }
 }

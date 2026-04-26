@@ -119,6 +119,21 @@ async fn main() -> anyhow::Result<()> {
 
     activity::start_workers(state.clone());
 
+    // Auto-refresh installed shell hooks so upgrades propagate fixes (e.g. the
+    // macOS `script` SIGWINCH fix) without requiring manual reinstallation.
+    {
+        let hook_dir = skill_dir.join("shell-hooks");
+        for (shell, ext) in &[("zsh", "zsh"), ("bash", "bash"), ("fish", "fish")] {
+            let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
+            if hook_file.exists() {
+                let content = routes::settings::generate_shell_hook(shell);
+                if std::fs::write(&hook_file, &content).is_ok() {
+                    info!(shell, "refreshed shell hook");
+                }
+            }
+        }
+    }
+
     // Spawn daemon-authoritative background loops.
     reconnect::spawn_reconnect_loop(state.clone(), state.reconnect.clone());
     monitor::spawn_status_monitor(state.clone());
@@ -155,6 +170,7 @@ async fn main() -> anyhow::Result<()> {
     let v1 = Router::new()
         .route("/version", get(handlers::version))
         .route("/log/recent", get(handlers::get_log_recent))
+        .route("/pair/generate-code", axum::routing::post(handlers::pair_generate_code))
         .route("/status", get(handlers::status).post(handlers::update_status))
         .route("/devices", get(handlers::devices).post(handlers::update_devices))
         .route(
@@ -287,6 +303,8 @@ async fn main() -> anyhow::Result<()> {
         // Public health check endpoints (no auth required)
         .route("/healthz", get(handlers::healthz))
         .route("/readyz", get(handlers::readyz))
+        // Public pairing page for browser extensions (code-gated, no bearer auth)
+        .route("/pair/browser", get(handlers::pair_browser_page))
         .merge(authed_root)
         .nest("/v1", v1)
         .merge(root_cmd)

@@ -779,6 +779,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "Copiar auth token",
   "extensions.tokenCopied": "Token copiado al portapapeles",
   "extensions.tokenFailed": "No se pudo copiar el token",
+  "extensions.pairViaBrowser": "Emparejar en el navegador",
+  "extensions.pairViaBrowserHint": "Abre una página de emparejamiento en su navegador predeterminado",
+  "extensions.copyTokenHint": "Manual — pegar en los ajustes de la extensión",
+  "extensions.pairingOpened": "Página de emparejamiento abierta — la extensión se conectará automáticamente",
+  "extensions.pairingFailed": "No se pudo generar el enlace de emparejamiento",
+  "extensions.pairingInProgress": "Abriendo…",
 };
 
 export default settings;

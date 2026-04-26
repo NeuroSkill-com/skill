@@ -95,6 +95,13 @@ const screenshots: Record<string, string> = {
   "screenshots.perfDropsHint":
     "потік вбудовування надто повільний — інтервал автоматично збільшено, відновиться коли черга спорожніє",
   "screenshots.perfErrors": "помилки",
+
+  "screenshots.userScreenshotToggle": "Відстежувати знімки екрана користувача",
+  "screenshots.userScreenshotDesc":
+    "Визначає коли ви робите знімок екрана (Cmd+Shift+3/4 на macOS, Print Screen на Windows) та імпортує його для OCR, пошуку та кореляції з EEG. Оригінальні файли ніколи не переміщуються та не видаляються.",
+  "screenshots.clipboardImageToggle": "Відстежувати зображення з буфера обміну",
+  "screenshots.clipboardImageDesc":
+    "Коли зображення копіюється до буфера обміну, воно захоплюється та індексується разом з іншими знімками екрана для пошуку та аналізу.",
 };
 
 export default screenshots;

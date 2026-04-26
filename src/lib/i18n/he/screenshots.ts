@@ -92,6 +92,13 @@ const screenshots: Record<string, string> = {
   "screenshots.perfBackoff": "השהייה",
   "screenshots.perfDropsHint": "תהליכון הטמעה איטי מדי — המרווח הוגדל אוטומטית, יתאושש כשהתור יתרוקן",
   "screenshots.perfErrors": "שגיאות",
+
+  "screenshots.userScreenshotToggle": "מעקב אחר צילומי מסך של המשתמש",
+  "screenshots.userScreenshotDesc":
+    "מזהה כאשר אתה מצלם צילום מסך (Cmd+Shift+3/4 ב-macOS, Print Screen ב-Windows) ומייבא אותו עבור OCR, חיפוש וקורלציית EEG. קבצים מקוריים לעולם לא מועברים או נמחקים.",
+  "screenshots.clipboardImageToggle": "מעקב אחר תמונות בלוח",
+  "screenshots.clipboardImageDesc":
+    "כאשר תמונה מועתקת ללוח, היא נלכדת ומאונדקסת יחד עם צילומי מסך אחרים לחיפוש וניתוח.",
 };
 
 export default screenshots;
