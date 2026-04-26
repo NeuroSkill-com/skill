@@ -224,4 +224,179 @@ pub async fn pick_exg_weights_file() -> Option<String> {
     .flatten()
 }
 
+// ── Extension installation ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn install_extension(extension_id: String) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        let result = match extension_id.as_str() {
+            "vscode" => install_vscode_extension(),
+            "chrome" | "firefox" | "safari" => install_browser_extension(&extension_id),
+            _ => Err(format!("Unknown extension: {extension_id}")),
+        };
+        match result {
+            Ok(msg) => Ok(serde_json::json!({"ok": true, "message": msg})),
+            Err(e) => Ok(serde_json::json!({"ok": false, "message": e})),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn install_vscode_extension() -> Result<String, String> {
+    let code_paths = [
+        "code",
+        "codium",
+        "cursor",
+        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+        "/Applications/VSCodium.app/Contents/Resources/app/bin/codium",
+        "/Applications/Cursor.app/Contents/Resources/app/bin/code",
+    ];
+    let mut code_bin = None;
+    for p in &code_paths {
+        if std::process::Command::new(p)
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
+            code_bin = Some(p.to_string());
+            break;
+        }
+    }
+    let code_bin = code_bin.ok_or("VS Code / VSCodium / Cursor not found")?;
+
+    let ext_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("extensions")
+        .join("vscode");
+    if !ext_dir.join("package.json").exists() {
+        return Err(format!("Extension not found at {}", ext_dir.display()));
+    }
+
+    // Build
+    std::process::Command::new("npm")
+        .arg("install")
+        .current_dir(&ext_dir)
+        .output()
+        .map_err(|e| format!("npm install: {e}"))?;
+    std::process::Command::new("npx")
+        .args(["tsc", "-p", "tsconfig.json"])
+        .current_dir(&ext_dir)
+        .output()
+        .map_err(|e| format!("tsc: {e}"))?;
+    let vsce = std::process::Command::new("npx")
+        .args(["@vscode/vsce", "package", "--no-dependencies"])
+        .current_dir(&ext_dir)
+        .output()
+        .map_err(|e| format!("vsce: {e}"))?;
+    let output = String::from_utf8_lossy(&vsce.stdout);
+    let vsix = output
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("Packaged: ")
+                .map(|p| ext_dir.join(p.trim()).to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| {
+            ext_dir
+                .join("neuroskill-0.1.0.vsix")
+                .to_string_lossy()
+                .to_string()
+        });
+
+    // Install
+    let install = std::process::Command::new(&code_bin)
+        .args(["--install-extension", &vsix, "--force"])
+        .output()
+        .map_err(|e| format!("install: {e}"))?;
+    if install.status.success() {
+        Ok("VS Code extension installed. Reload VS Code to activate.".into())
+    } else {
+        Err(String::from_utf8_lossy(&install.stderr).to_string())
+    }
+}
+
+fn install_browser_extension(target: &str) -> Result<String, String> {
+    let ext_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("extensions")
+        .join("browser");
+    if !ext_dir.join("package.json").exists() {
+        return Err(format!(
+            "Browser extension not found at {}",
+            ext_dir.display()
+        ));
+    }
+
+    std::process::Command::new("npm")
+        .arg("install")
+        .current_dir(&ext_dir)
+        .output()
+        .map_err(|e| format!("npm install: {e}"))?;
+
+    let env_target = format!("BROWSER_TARGET={target}");
+    let build = std::process::Command::new("node")
+        .args(["build/build.mjs"])
+        .env("BROWSER_TARGET", target)
+        .current_dir(&ext_dir)
+        .output()
+        .map_err(|e| format!("build: {e}"))?;
+    if !build.status.success() {
+        return Err(format!(
+            "Build failed: {}",
+            String::from_utf8_lossy(&build.stderr)
+        ));
+    }
+
+    let dist = ext_dir.join("dist").join(target);
+    Ok(format!(
+        "Extension built at {}. Load it in your browser's extension settings.",
+        dist.display()
+    ))
+}
+
+#[tauri::command]
+pub async fn check_extensions_installed() -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(|| {
+        let mut result = serde_json::Map::new();
+
+        // VS Code: check if neuroskill extension is listed
+        let vscode = std::process::Command::new("code")
+            .args(["--list-extensions"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("neuroskill"))
+            .unwrap_or(false);
+        result.insert("vscode".into(), vscode.into());
+
+        // Browser extensions: check if dist directory exists with a manifest
+        let ext_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("extensions")
+            .join("browser")
+            .join("dist");
+        result.insert(
+            "chrome".into(),
+            ext_dir.join("chrome").join("manifest.json").exists().into(),
+        );
+        result.insert(
+            "firefox".into(),
+            ext_dir
+                .join("firefox")
+                .join("manifest.json")
+                .exists()
+                .into(),
+        );
+        result.insert(
+            "safari".into(),
+            ext_dir.join("safari").join("manifest.json").exists().into(),
+        );
+
+        Ok(serde_json::Value::Object(result))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ── Re-embed all raw EXG data ─────────────────────────────────────────────────

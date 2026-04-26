@@ -323,8 +323,22 @@ CREATE TABLE IF NOT EXISTS browser_activities (
     word_count        INTEGER,
     form_count        INTEGER,
     video_watched_secs INTEGER,
+    video_playback_rate REAL,
     copy_length       INTEGER,
     paste_length      INTEGER,
+    scroll_speed      INTEGER,
+    scroll_direction  TEXT    NOT NULL DEFAULT '',
+    scroll_reversals  INTEGER,
+    llm_provider      TEXT    NOT NULL DEFAULT '',
+    llm_turn_count    INTEGER,
+    email_mode        TEXT    NOT NULL DEFAULT '',
+    email_count       INTEGER,
+    revisit_count     INTEGER,
+    domain_visit_count INTEGER,
+    visible_text      TEXT    NOT NULL DEFAULT '',
+    heading           TEXT    NOT NULL DEFAULT '',
+    page_title        TEXT    NOT NULL DEFAULT '',
+    download_type     TEXT    NOT NULL DEFAULT '',
     at                INTEGER NOT NULL,
     eeg_focus         REAL,
     eeg_mood          REAL
@@ -347,6 +361,21 @@ CREATE TABLE IF NOT EXISTS user_screenshot_events (
     eeg_mood      REAL
 );
 CREATE INDEX IF NOT EXISTS idx_use_captured ON user_screenshot_events (captured_at DESC);
+
+-- User feedback on brain state predictions (yay/nay).
+-- Accumulates over time for statistical weight adjustment.
+CREATE TABLE IF NOT EXISTS brain_feedback (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    insight     TEXT    NOT NULL,
+    correct     INTEGER NOT NULL,
+    score       REAL,
+    eeg_focus   REAL,
+    eeg_mood    REAL,
+    context     TEXT    NOT NULL DEFAULT '',
+    at          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bf_insight ON brain_feedback (insight);
+CREATE INDEX IF NOT EXISTS idx_bf_at ON brain_feedback (at DESC);
 ";
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -399,6 +428,37 @@ impl ActivityStore {
             // conversations — EEG columns
             "ALTER TABLE conversations ADD COLUMN eeg_focus REAL",
             "ALTER TABLE conversations ADD COLUMN eeg_mood REAL",
+            // browser_activities — expanded tracking columns
+            "ALTER TABLE browser_activities ADD COLUMN active_time_secs INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN idle_time_secs INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN content_type TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN nav_type TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN click_target TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN click_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN mouse_distance INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN mouse_idle_secs INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN has_video INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE browser_activities ADD COLUMN has_audio INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE browser_activities ADD COLUMN image_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN word_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN form_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN video_watched_secs INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN video_playback_rate REAL",
+            "ALTER TABLE browser_activities ADD COLUMN copy_length INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN paste_length INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN scroll_speed INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN scroll_direction TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN scroll_reversals INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN llm_provider TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN llm_turn_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN email_mode TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN email_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN revisit_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN domain_visit_count INTEGER",
+            "ALTER TABLE browser_activities ADD COLUMN visible_text TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN heading TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN page_title TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE browser_activities ADD COLUMN download_type TEXT NOT NULL DEFAULT ''",
         ] {
             let _ = conn.execute_batch(alter);
         }
@@ -705,6 +765,15 @@ impl ActivityStore {
         }
     }
 
+    /// Update only the duration of a file interaction (from VSCode dwell time events).
+    pub fn update_file_interaction_duration(&self, row_id: i64, duration_secs: u64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "UPDATE file_interactions SET duration_secs = ?1 WHERE id = ?2 AND (duration_secs IS NULL OR duration_secs < ?1)",
+            params![duration_secs as i64, row_id],
+        );
+    }
+
     // ── Analytics queries ──────────────────────────────────────────────────────
 
     /// Language breakdown: total time and edit count per language.
@@ -991,6 +1060,41 @@ impl ActivityStore {
             .map(|h| h.hour)
             .unwrap_or(0);
 
+        // Browser stats for the week
+        let browser_top_domains = self.browser_domain_breakdown(week_start);
+        let browser_content_breakdown = self.browser_content_breakdown(week_start);
+        let browser_events: u64 = {
+            let c2 = self.conn.lock_or_recover();
+            c2.query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE at >= ?1 AND at < ?2",
+                params![week_start as i64, week_end as i64],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64
+        };
+        let browser_total_reading_secs: u64 = {
+            let c2 = self.conn.lock_or_recover();
+            c2.query_row(
+                "SELECT COALESCE(SUM(reading_time_secs), 0) FROM browser_activities WHERE at >= ?1 AND at < ?2 AND reading_time_secs IS NOT NULL",
+                params![week_start as i64, week_end as i64], |row| row.get::<_,i64>(0),
+            ).unwrap_or(0) as u64
+        };
+        let browser_video_watched_secs: u64 = {
+            let c2 = self.conn.lock_or_recover();
+            c2.query_row(
+                "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE at >= ?1 AND at < ?2 AND video_watched_secs IS NOT NULL",
+                params![week_start as i64, week_end as i64], |row| row.get::<_,i64>(0),
+            ).unwrap_or(0) as u64
+        };
+        let browser_avg_distraction: Option<f64> = {
+            let d = self.browser_distraction_score(7 * 86400);
+            if d.score > 0.0 {
+                Some(d.score)
+            } else {
+                None
+            }
+        };
+
         WeeklyDigest {
             week_start,
             days,
@@ -1010,6 +1114,12 @@ impl ActivityStore {
             meeting_count: meetings.len() as u32,
             peak_day_idx,
             peak_hour,
+            browser_events,
+            browser_top_domains,
+            browser_content_breakdown,
+            browser_total_reading_secs,
+            browser_avg_distraction,
+            browser_video_watched_secs,
         }
     }
 
@@ -1099,14 +1209,58 @@ impl ActivityStore {
                 })
             },
         );
-        row.unwrap_or(FlowStateResult {
+        let mut result = row.unwrap_or(FlowStateResult {
             in_flow: false,
             score: 0.0,
             duration_secs: 0,
             avg_focus: None,
             file_switches: 0,
             edit_velocity: 0.0,
-        })
+        });
+
+        // ── Browser signal integration ──────────────────────────────
+        // Frequent tab switching breaks flow. Penalize score if browser
+        // data shows high distraction in the same window.
+        let tab_switches: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities
+             WHERE event_type = 'tab_switch' AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let social_events: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities
+             WHERE category IN ('social', 'media') AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let minutes = window_secs as f32 / 60.0;
+        let tab_rate = if minutes > 0.0 {
+            tab_switches as f32 / minutes
+        } else {
+            0.0
+        };
+
+        // Apply feedback-adjusted weight
+        let browser_weight = self.brain_feedback_weight("flow_browser") as f32;
+
+        // >4 tab switches/min = significant distraction penalty
+        if tab_rate > 4.0 {
+            let penalty = ((tab_rate - 4.0) * 5.0).min(20.0) * browser_weight;
+            result.score = (result.score - penalty).max(0.0);
+            result.in_flow = false; // can't be in flow with rapid switching
+        }
+        // Social media during work = minor penalty
+        if social_events > 2 {
+            let penalty = (social_events as f32 * 2.0).min(10.0) * browser_weight;
+            result.score = (result.score - penalty).max(0.0);
+        }
+
+        result
     }
 
     /// Cognitive load aggregated by file or language.
@@ -1516,18 +1670,30 @@ impl ActivityStore {
 
     // ── AI events ─────────────────────────────────────────────────────────────
 
-    pub fn insert_ai_event(&self, event_type: &str, source: &str, file_path: &str, language: &str, at: u64) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_ai_event(
+        &self,
+        event_type: &str,
+        source: &str,
+        file_path: &str,
+        language: &str,
+        at: u64,
+        eeg_focus: Option<f64>,
+        eeg_mood: Option<f64>,
+    ) {
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO ai_events (event_type, source, file_path, language, at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![event_type, source, file_path, language, at as i64],
+            "INSERT INTO ai_events (event_type, source, file_path, language, at, eeg_focus, eeg_mood)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![event_type, source, file_path, language, at as i64, eeg_focus, eeg_mood],
         );
     }
 
     pub fn get_recent_ai_events(&self, limit: u32) -> Vec<AiEventRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, event_type, source, file_path, language, at FROM ai_events ORDER BY at DESC LIMIT ?1",
+            "SELECT id, event_type, source, file_path, language, at, eeg_focus, eeg_mood
+             FROM ai_events ORDER BY at DESC LIMIT ?1",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -1540,6 +1706,8 @@ impl ActivityStore {
                 file_path: row.get(3)?,
                 language: row.get(4)?,
                 at: row.get::<_, i64>(5)? as u64,
+                eeg_focus: row.get(6)?,
+                eeg_mood: row.get(7)?,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -1758,6 +1926,26 @@ impl ActivityStore {
             (fails, reruns)
         };
 
+        // ── Browser signals: search refinements + revisits = stuck ──────
+        let (search_refinements, browser_revisits): (u64, u64) = {
+            let c = self.conn.lock_or_recover();
+            let refs = c
+                .query_row(
+                    "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'search_pattern' AND at >= ?1",
+                    params![since as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as u64;
+            let revs = c
+                .query_row(
+                    "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND at >= ?1",
+                    params![since as i64],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as u64;
+            (refs, revs)
+        };
+
         let mins = (window_secs as f32 / 60.0).max(1.0);
         let undo_rate = undo_total as f32 / mins;
         let velocity_drop = if prior_churn > 0 {
@@ -1769,19 +1957,29 @@ impl ActivityStore {
         let time_stuck = (time_on_file as f32 / 60.0).min(30.0) / 30.0 * 100.0;
         let fail_penalty = (fail_count as f32 * 8.0).min(40.0);
         let rerun_penalty = (rerun_count as f32 * 15.0).min(30.0);
+        // Browser: repeated search refinements and page revisits signal struggle
+        let browser_weight = self.brain_feedback_weight("struggle_browser") as f32;
+        let search_penalty = (search_refinements as f32 * 5.0).min(15.0) * browser_weight;
+        let revisit_penalty = (browser_revisits as f32 * 3.0).min(10.0) * browser_weight;
         let score = (undo_rate * 15.0
             + velocity_drop * 0.25
             + focus_penalty * 0.2
             + time_stuck * 0.1
             + fail_penalty
-            + rerun_penalty)
+            + rerun_penalty
+            + search_penalty
+            + revisit_penalty)
             .clamp(0.0, 100.0);
         let struggling = score > 60.0;
         let suggestion = if struggling {
-            if rerun_count > 0 {
+            if search_refinements >= 4 {
+                "You've refined your search query multiple times — try rephrasing the problem entirely or ask for help."
+            } else if rerun_count > 0 {
                 "You're re-running the same failing command — try a different approach."
             } else if fail_count >= 3 {
                 "Multiple failures — step back and read the error messages carefully."
+            } else if browser_revisits >= 5 {
+                "You keep revisiting the same pages — the answer might not be there. Try a different source."
             } else if undo_rate > 3.0 {
                 "High undo rate — try a different approach or break the problem down."
             } else if focus_penalty > 60.0 {
@@ -2251,53 +2449,85 @@ impl ActivityStore {
         );
     }
 
-    /// Record a browser extension activity event.
-    #[allow(clippy::too_many_arguments)]
-    pub fn insert_browser_activity(
+    /// Record a browser extension activity event from raw JSON.
+    /// Extracts all known fields from the event object — new fields added to
+    /// the extension are automatically captured without daemon code changes.
+    pub fn insert_browser_activity_json(
         &self,
-        event_type: &str,
-        url: &str,
-        domain: &str,
-        title: &str,
-        tab_id: Option<i64>,
-        browser_name: &str,
-        scroll_depth: Option<f64>,
-        reading_time_secs: Option<i64>,
-        typing_detected: bool,
-        media_playing: bool,
-        search_query: &str,
-        tab_count: Option<i64>,
-        devtools_open: bool,
-        category: &str,
-        referrer_domain: &str,
+        event: &serde_json::Value,
         at: u64,
         eeg_focus: Option<f64>,
         eeg_mood: Option<f64>,
     ) {
+        let s = |k: &str| event.get(k).and_then(|v| v.as_str()).unwrap_or("");
+        let i = |k: &str| event.get(k).and_then(|v| v.as_i64());
+        let f = |k: &str| event.get(k).and_then(|v| v.as_f64());
+        let b = |k: &str| event.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
+
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
             "INSERT INTO browser_activities
                 (event_type, url, domain, title, tab_id, browser_name,
-                 scroll_depth, reading_time_secs, typing_detected, media_playing,
-                 search_query, tab_count, devtools_open, category, referrer_domain,
+                 scroll_depth, reading_time_secs, active_time_secs, idle_time_secs,
+                 typing_detected, media_playing,
+                 search_query, tab_count, devtools_open,
+                 category, content_type, referrer_domain, nav_type,
+                 click_target, click_count, mouse_distance, mouse_idle_secs,
+                 has_video, has_audio, image_count, word_count, form_count,
+                 video_watched_secs, video_playback_rate, copy_length, paste_length,
+                 scroll_speed, scroll_direction, scroll_reversals,
+                 llm_provider, llm_turn_count,
+                 email_mode, email_count,
+                 revisit_count, domain_visit_count,
+                 visible_text, heading, page_title, download_type,
                  at, eeg_focus, eeg_mood)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48)",
             params![
-                event_type,
-                url,
-                domain,
-                title,
-                tab_id,
-                browser_name,
-                scroll_depth,
-                reading_time_secs,
-                typing_detected as i32,
-                media_playing as i32,
-                search_query,
-                tab_count,
-                devtools_open as i32,
-                category,
-                referrer_domain,
+                s("type"),
+                s("url"),
+                s("domain"),
+                s("title"),
+                i("tab_id"),
+                s("browser_name"),
+                f("scroll_depth"),
+                i("reading_time_secs"),
+                i("active_time_secs"),
+                i("idle_time_secs"),
+                b("typing_detected") as i32,
+                b("media_playing") as i32,
+                s("search_query"),
+                i("tab_count"),
+                b("devtools_open") as i32,
+                s("category"),
+                s("content_type"),
+                s("referrer_domain"),
+                s("nav_type"),
+                s("click_target"),
+                i("clicks_per_min"),
+                i("mouse_distance"),
+                i("mouse_idle_secs"),
+                b("has_video") as i32,
+                b("has_audio") as i32,
+                i("image_count"),
+                i("word_count"),
+                i("form_count"),
+                i("video_watched_secs"),
+                f("video_playback_rate"),
+                i("copy_length"),
+                i("paste_length"),
+                i("scroll_speed"),
+                s("scroll_direction"),
+                i("scroll_reversals"),
+                s("llm_provider"),
+                i("llm_turn_count"),
+                s("email_mode"),
+                i("email_count"),
+                i("revisit_count"),
+                i("domain_visit_count"),
+                s("visible_text"),
+                s("heading"),
+                s("page_title"),
+                s("download_type"),
                 at as i64,
                 eeg_focus,
                 eeg_mood,
@@ -2387,6 +2617,795 @@ impl ActivityStore {
         } else {
             0.0
         }
+    }
+
+    // ── Browser-specific brain analytics ────────────────────────────────────
+
+    /// Focus correlation by domain — which websites correspond to high vs low focus.
+    pub fn browser_focus_by_domain(&self, since: u64, limit: u32) -> Vec<BrowserDomainFocusRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain, category, content_type,
+                    COUNT(*) as events,
+                    AVG(eeg_focus) as avg_focus,
+                    SUM(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE 0 END) as total_reading_secs,
+                    AVG(CASE WHEN scroll_depth > 0 THEN scroll_depth ELSE NULL END) as avg_scroll_depth,
+                    SUM(CASE WHEN event_type = 'tab_switch' THEN 1 ELSE 0 END) as visits
+             FROM browser_activities
+             WHERE at >= ?1 AND domain != '' AND eeg_focus IS NOT NULL
+             GROUP BY domain
+             HAVING events >= 3
+             ORDER BY avg_focus DESC
+             LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, limit], |row| {
+            Ok(BrowserDomainFocusRow {
+                domain: row.get(0)?,
+                category: row.get(1)?,
+                content_type: row.get(2)?,
+                events: row.get::<_, i64>(3)? as u64,
+                avg_focus: row.get(4)?,
+                total_reading_secs: row.get::<_, i64>(5)? as u64,
+                avg_scroll_depth: row.get(6)?,
+                visits: row.get::<_, i64>(7)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Distraction score — measures tab-switching frequency, social/media time,
+    /// and idle browsing relative to productive browsing.
+    pub fn browser_distraction_score(&self, window_secs: u64) -> BrowserDistractionScore {
+        let now = now_secs();
+        let since = now.saturating_sub(window_secs);
+        let c = self.conn.lock_or_recover();
+
+        let tab_switches: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'tab_switch' AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let social_events: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE category IN ('social', 'media') AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let productive_events: i64 = c.query_row(
+            "SELECT COUNT(*) FROM browser_activities WHERE category IN ('development', 'reference', 'code') AND at >= ?1",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let idle_secs: i64 = c.query_row(
+            "SELECT COALESCE(SUM(idle_time_secs), 0) FROM browser_activities WHERE at >= ?1 AND idle_time_secs IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let total_events = tab_switches + social_events + productive_events;
+        let minutes = window_secs as f64 / 60.0;
+        let switches_per_min = if minutes > 0.0 {
+            tab_switches as f64 / minutes
+        } else {
+            0.0
+        };
+
+        // Score 0-100: higher = more distracted
+        let switch_score = (switches_per_min * 10.0).min(40.0); // max 40 from switching
+        let social_ratio = if total_events > 0 {
+            social_events as f64 / total_events as f64
+        } else {
+            0.0
+        };
+        let social_score = social_ratio * 40.0; // max 40 from social
+        let idle_score = ((idle_secs as f64 / window_secs as f64) * 20.0).min(20.0); // max 20 from idle
+
+        let score = (switch_score + social_score + idle_score).min(100.0);
+
+        BrowserDistractionScore {
+            score,
+            tab_switches_per_min: (switches_per_min * 10.0).round() / 10.0,
+            social_pct: (social_ratio * 100.0).round(),
+            productive_pct: if total_events > 0 {
+                ((productive_events as f64 / total_events as f64) * 100.0).round()
+            } else {
+                0.0
+            },
+            idle_pct: ((idle_secs as f64 / window_secs as f64) * 100.0).round(),
+            suggestion: if score > 70.0 {
+                "High distraction. Close social media tabs and focus on one task.".to_string()
+            } else if score > 40.0 {
+                "Moderate distraction. Consider batching tab switches.".to_string()
+            } else {
+                "Focused browsing. Keep it up.".to_string()
+            },
+        }
+    }
+
+    /// Content type breakdown — how time is split across video/paper/social/code/etc.
+    pub fn browser_content_breakdown(&self, since: u64) -> Vec<BrowserContentBreakdownRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT content_type,
+                    COUNT(*) as events,
+                    AVG(eeg_focus) as avg_focus,
+                    SUM(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE 0 END) as total_secs
+             FROM browser_activities
+             WHERE at >= ?1 AND content_type != ''
+             GROUP BY content_type
+             ORDER BY total_secs DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            Ok(BrowserContentBreakdownRow {
+                content_type: row.get(0)?,
+                events: row.get::<_, i64>(1)? as u64,
+                avg_focus: row.get(2)?,
+                total_secs: row.get::<_, i64>(3)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// LLM usage from browser — tracks interactions with ChatGPT, Claude, Gemini, etc.
+    pub fn browser_llm_usage(&self, since: u64) -> Vec<BrowserLlmUsageRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain, content_type,
+                    COUNT(*) as interactions,
+                    AVG(eeg_focus) as avg_focus,
+                    MAX(CAST(json_extract(title, '$.llm_turn_count') AS INTEGER)) as max_turns
+             FROM browser_activities
+             WHERE at >= ?1 AND event_type = 'llm_interaction'
+             GROUP BY domain
+             ORDER BY interactions DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            Ok(BrowserLlmUsageRow {
+                domain: row.get(0)?,
+                provider: row.get::<_, String>(1).unwrap_or_default(),
+                interactions: row.get::<_, i64>(2)? as u64,
+                avg_focus: row.get(3)?,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Research patterns — search frequency, refinement rate, stuck detection.
+    pub fn browser_research_patterns(&self, since: u64) -> BrowserResearchPatterns {
+        let c = self.conn.lock_or_recover();
+
+        let total_searches: i64 = c.query_row(
+            "SELECT COUNT(*) FROM browser_activities WHERE event_type IN ('search_query', 'search_pattern') AND at >= ?1",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let refinements: i64 = c.query_row(
+            "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'search_pattern' AND search_query != '' AND at >= ?1",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let revisits: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let avg_focus: Option<f64> = c.query_row(
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE event_type IN ('search_query', 'search_pattern') AND at >= ?1 AND eeg_focus IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(None);
+
+        let refinement_rate = if total_searches > 0 {
+            refinements as f64 / total_searches as f64
+        } else {
+            0.0
+        };
+
+        BrowserResearchPatterns {
+            total_searches: total_searches as u64,
+            refinement_rate: (refinement_rate * 100.0).round(),
+            revisit_count: revisits as u64,
+            avg_search_focus: avg_focus,
+            stuck_indicator: refinement_rate > 0.5 && revisits > 3,
+        }
+    }
+
+    // ── Advanced browser-brain insights ────────────────────────────────────
+
+    /// Learning efficiency: deep scroll + high focus + low revisits = retaining.
+    pub fn browser_learning_efficiency(&self, since: u64) -> Vec<BrowserLearningRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain, content_type,
+                    AVG(eeg_focus) as avg_focus,
+                    AVG(CASE WHEN scroll_depth > 0 THEN scroll_depth ELSE NULL END) as avg_depth,
+                    AVG(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE NULL END) as avg_read_secs,
+                    COUNT(DISTINCT url) as pages,
+                    SUM(CASE WHEN event_type = 'revisit' THEN 1 ELSE 0 END) as revisits
+             FROM browser_activities
+             WHERE at >= ?1 AND domain != '' AND eeg_focus IS NOT NULL
+                   AND event_type IN ('reading_time', 'page_profile', 'revisit')
+             GROUP BY domain
+             HAVING pages >= 2
+             ORDER BY avg_focus DESC
+             LIMIT 20",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            let focus: f64 = row.get::<_, f64>(2).unwrap_or(0.0);
+            let depth: f64 = row.get::<_, f64>(3).unwrap_or(0.0);
+            let read_secs: f64 = row.get::<_, f64>(4).unwrap_or(0.0);
+            let revisits: i64 = row.get(6)?;
+            // Score: high focus + deep scroll + long read + low revisits = learning
+            let score = (focus * 0.4 + depth * 100.0 * 0.3 + (read_secs / 60.0).min(10.0) * 3.0)
+                * (1.0 - (revisits as f64 * 0.1).min(0.5));
+            Ok(BrowserLearningRow {
+                domain: row.get(0)?,
+                content_type: row.get(1)?,
+                avg_focus: Some(focus),
+                avg_scroll_depth: Some(depth),
+                avg_reading_secs: read_secs as u64,
+                pages: row.get::<_, i64>(5)? as u64,
+                revisits: revisits as u64,
+                efficiency_score: (score.max(0.0).min(100.0) * 10.0).round() / 10.0,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Optimal research window: which hours produce highest reading focus.
+    pub fn browser_optimal_research_hours(&self, since: u64, tz_offset: i32) -> BrowserOptimalHours {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT ((at + ?2) % 86400) / 3600 as hour,
+                    AVG(eeg_focus) as avg_focus,
+                    COUNT(*) as events,
+                    SUM(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE 0 END) as total_read
+             FROM browser_activities
+             WHERE at >= ?1 AND eeg_focus IS NOT NULL AND domain != ''
+             GROUP BY hour
+             ORDER BY avg_focus DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return BrowserOptimalHours::default(),
+        };
+        let rows: Vec<(u32, f64, u64, u64)> = stmt
+            .query_map(params![since as i64, tz_offset as i64], |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u32,
+                    row.get(1)?,
+                    row.get::<_, i64>(2)? as u64,
+                    row.get::<_, i64>(3)? as u64,
+                ))
+            })
+            .map(|r| r.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default();
+
+        if rows.is_empty() {
+            return BrowserOptimalHours::default();
+        }
+        let best: Vec<u32> = rows.iter().take(3).map(|r| r.0).collect();
+        let worst: Vec<u32> = rows.iter().rev().take(3).map(|r| r.0).collect();
+        BrowserOptimalHours {
+            best_hours: best,
+            worst_hours: worst,
+            by_hour: rows
+                .iter()
+                .map(|(h, f, e, r)| BrowserHourRow {
+                    hour: *h,
+                    avg_focus: *f,
+                    events: *e,
+                    reading_secs: *r,
+                })
+                .collect(),
+        }
+    }
+
+    /// AI chat effectiveness: compare focus/turns across LLM providers.
+    pub fn browser_ai_effectiveness(&self, since: u64) -> Vec<BrowserAiEffectivenessRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain,
+                    COUNT(*) as interactions,
+                    AVG(eeg_focus) as avg_focus,
+                    AVG(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE NULL END) as avg_session_secs
+             FROM browser_activities
+             WHERE at >= ?1 AND event_type = 'llm_interaction'
+             GROUP BY domain
+             ORDER BY avg_focus DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            Ok(BrowserAiEffectivenessRow {
+                provider: row.get(0)?,
+                interactions: row.get::<_, i64>(1)? as u64,
+                avg_focus: row.get(2)?,
+                avg_session_secs: row.get::<_, f64>(3).ok(),
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Procrastination detection: idle + low focus + same-site cycling.
+    pub fn browser_procrastination_check(&self, window_secs: u64) -> BrowserProcrastination {
+        let now = now_secs();
+        let since = now.saturating_sub(window_secs);
+        let c = self.conn.lock_or_recover();
+
+        let idle: i64 = c.query_row(
+            "SELECT COALESCE(SUM(idle_time_secs), 0) FROM browser_activities WHERE at >= ?1 AND idle_time_secs IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let mouse_idle: i64 = c.query_row(
+            "SELECT COALESCE(MAX(mouse_idle_secs), 0) FROM browser_activities WHERE at >= ?1 AND mouse_idle_secs IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let revisits: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let avg_focus: f64 = c
+            .query_row(
+                "SELECT COALESCE(AVG(eeg_focus), 50) FROM browser_activities WHERE at >= ?1 AND eeg_focus IS NOT NULL",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(50.0);
+
+        let idle_ratio = idle as f64 / window_secs.max(1) as f64;
+        let score =
+            ((1.0 - avg_focus / 100.0) * 40.0 + idle_ratio * 30.0 + (revisits as f64 * 3.0).min(30.0)).min(100.0);
+
+        BrowserProcrastination {
+            score,
+            idle_secs: idle as u64,
+            max_mouse_idle_secs: mouse_idle as u64,
+            revisit_loops: revisits as u64,
+            avg_focus: Some(avg_focus),
+            procrastinating: score > 60.0,
+            suggestion: if score > 70.0 {
+                "You're avoiding something. Commit to just 5 minutes of focused work.".into()
+            } else if score > 40.0 {
+                "Mild avoidance detected. Try breaking the task into smaller pieces.".into()
+            } else {
+                "On track.".into()
+            },
+        }
+    }
+
+    /// Deep reading sessions: periods of sustained, high-focus reading.
+    pub fn browser_deep_reading_sessions(&self, since: u64) -> Vec<BrowserDeepReadingRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain, title,
+                    reading_time_secs, scroll_depth, eeg_focus, at
+             FROM browser_activities
+             WHERE at >= ?1 AND event_type = 'reading_time'
+                   AND reading_time_secs >= 300 AND scroll_depth >= 0.6
+             ORDER BY eeg_focus DESC NULLS LAST
+             LIMIT 20",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            Ok(BrowserDeepReadingRow {
+                domain: row.get(0)?,
+                title: row.get(1)?,
+                reading_secs: row.get::<_, i64>(2)? as u64,
+                scroll_depth: row.get(3)?,
+                eeg_focus: row.get(4)?,
+                at: row.get::<_, i64>(5)? as u64,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Video learning ROI: focus during video vs total video time.
+    pub fn browser_video_roi(&self, since: u64) -> BrowserVideoRoi {
+        let c = self.conn.lock_or_recover();
+        let total_watched: i64 = c.query_row(
+            "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE at >= ?1 AND video_watched_secs > 0",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let focused_watched: i64 = c.query_row(
+            "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE at >= ?1 AND video_watched_secs > 0 AND eeg_focus > 60",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let avg_focus: Option<f64> = c.query_row(
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE at >= ?1 AND has_video = 1 AND eeg_focus IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(None);
+
+        BrowserVideoRoi {
+            total_watched_secs: total_watched as u64,
+            focused_watched_secs: focused_watched as u64,
+            focus_ratio: if total_watched > 0 {
+                focused_watched as f64 / total_watched as f64
+            } else {
+                0.0
+            },
+            avg_focus,
+        }
+    }
+
+    /// Email anxiety: focus/stress changes around email activity.
+    pub fn browser_email_impact(&self, since: u64) -> BrowserEmailImpact {
+        let c = self.conn.lock_or_recover();
+        let email_focus: Option<f64> = c.query_row(
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE at >= ?1 AND event_type = 'email_activity' AND eeg_focus IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(None);
+        let non_email_focus: Option<f64> = c.query_row(
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE at >= ?1 AND event_type != 'email_activity' AND eeg_focus IS NOT NULL AND domain != ''",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(None);
+        let email_events: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE at >= ?1 AND event_type = 'email_activity'",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let focus_delta = match (email_focus, non_email_focus) {
+            (Some(e), Some(n)) => Some(e - n),
+            _ => None,
+        };
+
+        BrowserEmailImpact {
+            email_sessions: email_events as u64,
+            avg_focus_during_email: email_focus,
+            avg_focus_outside_email: non_email_focus,
+            focus_delta,
+        }
+    }
+
+    /// Tab count vs cognitive load correlation.
+    pub fn browser_tab_cognitive_load(&self, since: u64) -> Vec<BrowserTabLoadRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT tab_count,
+                    AVG(eeg_focus) as avg_focus,
+                    COUNT(*) as samples
+             FROM browser_activities
+             WHERE at >= ?1 AND tab_count IS NOT NULL AND eeg_focus IS NOT NULL
+             GROUP BY tab_count
+             ORDER BY tab_count",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64], |row| {
+            Ok(BrowserTabLoadRow {
+                tab_count: row.get::<_, i64>(0)? as u32,
+                avg_focus: row.get(1)?,
+                samples: row.get::<_, i64>(2)? as u64,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Weekend vs weekday brain: compare focus patterns.
+    pub fn browser_weekday_vs_weekend(&self, since: u64) -> BrowserWeekdayComparison {
+        let c = self.conn.lock_or_recover();
+        // SQLite: strftime('%w', ts, 'unixepoch') gives 0=Sun, 6=Sat
+        let weekday_focus: Option<f64> = c
+            .query_row(
+                "SELECT AVG(eeg_focus) FROM browser_activities
+             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+                   AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) BETWEEN 1 AND 5",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+        let weekend_focus: Option<f64> = c
+            .query_row(
+                "SELECT AVG(eeg_focus) FROM browser_activities
+             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+                   AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) IN (0, 6)",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+        let weekday_events: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities
+             WHERE at >= ?1 AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) BETWEEN 1 AND 5",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let weekend_events: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities
+             WHERE at >= ?1 AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) IN (0, 6)",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        BrowserWeekdayComparison {
+            weekday_avg_focus: weekday_focus,
+            weekend_avg_focus: weekend_focus,
+            weekday_events: weekday_events as u64,
+            weekend_events: weekend_events as u64,
+            delta: match (weekday_focus, weekend_focus) {
+                (Some(w), Some(e)) => Some(w - e),
+                _ => None,
+            },
+        }
+    }
+
+    /// Night owl penalty: focus by hour bucket, detecting late-night degradation.
+    pub fn browser_night_owl_analysis(&self, since: u64, tz_offset: i32) -> Vec<BrowserHourFocusRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT ((at + ?2) % 86400) / 3600 as hour,
+                    AVG(eeg_focus) as avg_focus,
+                    COUNT(*) as events,
+                    AVG(CASE WHEN scroll_depth > 0 THEN scroll_depth ELSE NULL END) as avg_depth
+             FROM browser_activities
+             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+             GROUP BY hour
+             ORDER BY hour",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, tz_offset as i64], |row| {
+            Ok(BrowserHourFocusRow {
+                hour: row.get::<_, i64>(0)? as u32,
+                avg_focus: row.get(1)?,
+                events: row.get::<_, i64>(2)? as u64,
+                avg_scroll_depth: row.get(3)?,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Copy-paste workflow: frequency and patterns of clipboard usage by domain.
+    pub fn browser_copypaste_patterns(&self, since: u64) -> BrowserCopyPastePatterns {
+        let c = self.conn.lock_or_recover();
+        let copies: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'clipboard_copy' AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let pastes: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'clipboard_paste' AND at >= ?1",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let avg_paste_len: Option<f64> = c.query_row(
+            "SELECT AVG(paste_length) FROM browser_activities WHERE event_type = 'clipboard_paste' AND at >= ?1 AND paste_length IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(None);
+
+        // Top domains for copy activity
+        let mut stmt = match c.prepare_cached(
+            "SELECT domain, COUNT(*) as cnt FROM browser_activities
+             WHERE event_type IN ('clipboard_copy', 'clipboard_paste') AND at >= ?1 AND domain != ''
+             GROUP BY domain ORDER BY cnt DESC LIMIT 5",
+        ) {
+            Ok(s) => s,
+            Err(_) => {
+                return BrowserCopyPastePatterns {
+                    copies: copies as u64,
+                    pastes: pastes as u64,
+                    avg_paste_length: avg_paste_len,
+                    top_domains: vec![],
+                }
+            }
+        };
+        let top: Vec<(String, u64)> = stmt
+            .query_map(params![since as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+            })
+            .map(|r| r.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default();
+
+        BrowserCopyPastePatterns {
+            copies: copies as u64,
+            pastes: pastes as u64,
+            avg_paste_length: avg_paste_len,
+            top_domains: top,
+        }
+    }
+
+    /// Meeting → browser spiral detection: unfocused browsing after meetings.
+    pub fn browser_post_meeting_spiral(&self, since: u64) -> Vec<BrowserPostMeetingRow> {
+        let c = self.conn.lock_or_recover();
+        // Find meetings, then check browser focus in the 30 min after each
+        let mut stmt = match c.prepare_cached(
+            "SELECT m.id, m.title, m.platform, m.end_at,
+                    (SELECT AVG(b.eeg_focus) FROM browser_activities b
+                     WHERE b.at > m.end_at AND b.at <= m.end_at + 1800 AND b.eeg_focus IS NOT NULL) as post_focus,
+                    (SELECT COUNT(*) FROM browser_activities b
+                     WHERE b.at > m.end_at AND b.at <= m.end_at + 1800 AND b.category IN ('social', 'media', 'news')) as distraction_events
+             FROM meeting_events m
+             WHERE m.end_at IS NOT NULL AND m.end_at >= ?1
+             ORDER BY m.end_at DESC
+             LIMIT 10",
+        ) { Ok(s) => s, Err(_) => return vec![] };
+        stmt.query_map(params![since as i64], |row| {
+            Ok(BrowserPostMeetingRow {
+                meeting_title: row.get(1)?,
+                platform: row.get(2)?,
+                ended_at: row.get::<_, i64>(3)? as u64,
+                post_meeting_focus: row.get(4)?,
+                distraction_events: row.get::<_, i64>(5)? as u64,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Context switch tax: time to recover focus after switching from browser to code.
+    pub fn browser_switch_tax(&self, since: u64) -> BrowserSwitchTax {
+        let c = self.conn.lock_or_recover();
+        // Count browser→code switches via zone_switches
+        let switches: i64 = c.query_row(
+            "SELECT COUNT(*) FROM zone_switches WHERE at >= ?1 AND (zone LIKE 'browser%' OR from_zone LIKE 'browser%')",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(0);
+        let avg_focus_at_switch: Option<f64> = c.query_row(
+            "SELECT AVG(eeg_focus) FROM zone_switches WHERE at >= ?1 AND (zone LIKE 'browser%' OR from_zone LIKE 'browser%') AND eeg_focus IS NOT NULL",
+            params![since as i64], |row| row.get(0),
+        ).unwrap_or(None);
+
+        BrowserSwitchTax {
+            total_switches: switches as u64,
+            avg_focus_at_switch,
+            estimated_lost_minutes: (switches as f64 * 4.5).round() as u64, // ~4.5 min recovery per switch
+        }
+    }
+
+    // ── Brain feedback system ─────────────────────────────────────────────
+
+    /// Record user feedback on a brain insight (yay/nay).
+    pub fn insert_brain_feedback(
+        &self,
+        insight: &str,
+        correct: bool,
+        score: Option<f64>,
+        eeg_focus: Option<f64>,
+        eeg_mood: Option<f64>,
+        context: &str,
+    ) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT INTO brain_feedback (insight, correct, score, eeg_focus, eeg_mood, context, at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                insight,
+                correct as i32,
+                score,
+                eeg_focus,
+                eeg_mood,
+                context,
+                now_secs() as i64
+            ],
+        );
+    }
+
+    /// Get accuracy stats per insight type — used to adjust scoring weights.
+    pub fn brain_feedback_accuracy(&self) -> Vec<BrainFeedbackAccuracy> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT insight,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END) as correct_count,
+                    AVG(score) as avg_score,
+                    AVG(eeg_focus) as avg_focus_when_correct
+             FROM brain_feedback
+             GROUP BY insight
+             ORDER BY total DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map([], |row| {
+            let total: i64 = row.get(1)?;
+            let correct: i64 = row.get(2)?;
+            Ok(BrainFeedbackAccuracy {
+                insight: row.get(0)?,
+                total: total as u64,
+                correct: correct as u64,
+                accuracy: if total > 0 { correct as f64 / total as f64 } else { 0.0 },
+                avg_score: row.get(3)?,
+                avg_focus_when_correct: row.get(4)?,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Get weight adjustment factor for a specific insight based on feedback.
+    /// Returns 1.0 if no feedback, scales 0.5-1.5 based on accuracy.
+    /// When accuracy is low, the model should reduce confidence in that signal.
+    pub fn brain_feedback_weight(&self, insight: &str) -> f64 {
+        let c = self.conn.lock_or_recover();
+        let result: Option<(i64, i64)> = c
+            .query_row(
+                "SELECT COUNT(*), SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END)
+             FROM brain_feedback WHERE insight = ?1",
+                params![insight],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+        match result {
+            Some((total, correct)) if total >= 5 => {
+                let accuracy = correct as f64 / total as f64;
+                // Scale: 50% accuracy → 0.5 weight, 100% → 1.5 weight
+                0.5 + accuracy
+            }
+            _ => 1.0, // Not enough data yet
+        }
+    }
+
+    /// Recent feedback entries for display.
+    pub fn brain_feedback_recent(&self, limit: u32) -> Vec<BrainFeedbackRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, insight, correct, score, eeg_focus, context, at
+             FROM brain_feedback ORDER BY at DESC LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![limit], |row| {
+            Ok(BrainFeedbackRow {
+                id: row.get(0)?,
+                insight: row.get(1)?,
+                correct: row.get::<_, i32>(2)? != 0,
+                score: row.get(3)?,
+                eeg_focus: row.get(4)?,
+                context: row.get(5)?,
+                at: row.get::<_, i64>(6)? as u64,
+            })
+        })
+        .map(|r| r.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
     }
 
     /// Detect and store dev loops (edit → build/test → result cycles).
@@ -2910,6 +3929,324 @@ impl ActivityStore {
             "focus_by_language": self.insight_focus_by_language(since),
             "loop_efficiency": self.insight_loop_efficiency(since, tz_offset),
             "tool_impact": self.insight_tool_impact(since),
+            "screenshot_moments": self.screenshot_analysis(since, 0),
+        })
+    }
+
+    // ── Deep AI interaction analytics ──────────────────────────────────────
+    //
+    // 6 dimensions of how the developer works with AI, tracked over time
+    // and across modalities (code edits, EEG, diagnostics, conversations).
+
+    /// Deep AI analytics — returns 6 dimensions of AI interaction quality.
+    pub fn ai_deep_analytics(&self, since: u64) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+
+        // ── Dimension 1: AI Code Lifecycle ──
+        let lifecycle: Vec<(String, i64)> = c
+            .prepare(
+                "SELECT event_type, COUNT(*) FROM ai_events
+                 WHERE at >= ?1 AND event_type IN (
+                     'suggestion_accepted', 'ai_code_refined', 'ai_code_undone', 'ai_code_deleted'
+                 ) GROUP BY event_type",
+            )
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            })
+            .unwrap_or_default();
+
+        let accepted = lifecycle
+            .iter()
+            .find(|(t, _)| t == "suggestion_accepted")
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
+        let refined = lifecycle
+            .iter()
+            .find(|(t, _)| t == "ai_code_refined")
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
+        let undone = lifecycle
+            .iter()
+            .find(|(t, _)| t == "ai_code_undone")
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
+        let deleted = lifecycle
+            .iter()
+            .find(|(t, _)| t == "ai_code_deleted")
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
+        let survival_rate = if accepted > 0 {
+            (accepted - undone - deleted).max(0) as f64 / accepted as f64
+        } else {
+            0.0
+        };
+        let refinement_rate = if accepted > 0 {
+            refined as f64 / accepted as f64
+        } else {
+            0.0
+        };
+
+        // ── Dimension 2: AI Dependency Trend (daily ratio over 30 days) ──
+        let daily_trend: Vec<serde_json::Value> = c
+            .prepare(
+                "SELECT (at / 86400) * 86400 AS day_ts, COUNT(*) AS ai_events
+                 FROM ai_events WHERE at >= ?1
+                 AND event_type IN ('suggestion_accepted', 'ai_code_refined')
+                 GROUP BY day_ts ORDER BY day_ts",
+            )
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| {
+                    Ok(serde_json::json!({
+                        "day": r.get::<_, i64>(0)?,
+                        "ai_events": r.get::<_, i64>(1)?,
+                    }))
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            })
+            .unwrap_or_default();
+
+        let invocation_counts: (i64, i64) = c
+            .query_row(
+                "SELECT
+                    SUM(CASE WHEN source = 'active' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN source = 'passive' THEN 1 ELSE 0 END)
+                 FROM ai_events WHERE at >= ?1 AND event_type = 'ai_invocation'",
+                params![since as i64],
+                |r| Ok((r.get::<_, i64>(0).unwrap_or(0), r.get::<_, i64>(1).unwrap_or(0))),
+            )
+            .unwrap_or((0, 0));
+
+        // ── Dimension 3: AI Effectiveness by Context ──
+        let by_language: Vec<serde_json::Value> = c
+            .prepare(
+                "SELECT language,
+                    SUM(CASE WHEN event_type = 'suggestion_accepted' THEN 1 ELSE 0 END) AS accepted,
+                    SUM(CASE WHEN event_type IN ('ai_code_undone', 'ai_code_deleted') THEN 1 ELSE 0 END) AS rejected,
+                    AVG(eeg_focus) AS avg_focus
+                 FROM ai_events WHERE at >= ?1 AND language != ''
+                 GROUP BY language HAVING COUNT(*) >= 2
+                 ORDER BY accepted DESC LIMIT 10",
+            )
+            .and_then(|mut s| {
+                s.query_map(params![since as i64], |r| {
+                    Ok(serde_json::json!({
+                        "language": r.get::<_, String>(0)?,
+                        "accepted": r.get::<_, i64>(1)?,
+                        "rejected": r.get::<_, i64>(2)?,
+                        "avg_focus": r.get::<_, Option<f64>>(3)?,
+                    }))
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            })
+            .unwrap_or_default();
+
+        // ── Dimension 4: AI Conversation Quality ──
+        let conversation_stats: serde_json::Value = c
+            .query_row(
+                "SELECT COUNT(DISTINCT session) AS sessions,
+                        COUNT(*) AS total_messages,
+                        AVG(CASE WHEN role = 'user' THEN eeg_focus END) AS avg_focus_during
+                 FROM conversations WHERE at >= ?1 AND session != ''",
+                params![since as i64],
+                |r| {
+                    Ok(serde_json::json!({
+                        "sessions": r.get::<_, i64>(0)?,
+                        "total_messages": r.get::<_, i64>(1)?,
+                        "avg_focus_during": r.get::<_, Option<f64>>(2)?,
+                    }))
+                },
+            )
+            .unwrap_or(serde_json::json!({}));
+
+        // ── Dimension 5: AI Impact on Cognition ──
+        let ai_focus: Option<f64> = c
+            .query_row(
+                "SELECT AVG(eeg_focus) FROM ai_events
+                 WHERE at >= ?1 AND eeg_focus IS NOT NULL
+                 AND event_type IN ('suggestion_accepted', 'ai_code_refined')",
+                params![since as i64],
+                |r| r.get(0),
+            )
+            .unwrap_or(None);
+
+        let human_focus: Option<f64> = c
+            .query_row(
+                "SELECT AVG(eeg_focus) FROM file_interactions
+                 WHERE seen_at >= ?1 AND eeg_focus IS NOT NULL",
+                params![since as i64],
+                |r| r.get(0),
+            )
+            .unwrap_or(None);
+
+        let focus_delta = match (ai_focus, human_focus) {
+            (Some(ai), Some(human)) => Some(ai - human),
+            _ => None,
+        };
+
+        // ── Dimension 6: AI Code Quality ──
+        // Undo rate on AI events vs overall.
+        let ai_undo_rate: f64 = c
+            .query_row(
+                "SELECT CAST(SUM(CASE WHEN event_type = 'ai_code_undone' THEN 1 ELSE 0 END) AS REAL) /
+                        NULLIF(SUM(CASE WHEN event_type = 'suggestion_accepted' THEN 1 ELSE 0 END), 0)
+                 FROM ai_events WHERE at >= ?1",
+                params![since as i64],
+                |r| r.get::<_, Option<f64>>(0),
+            )
+            .unwrap_or(None)
+            .unwrap_or(0.0);
+
+        serde_json::json!({
+            "lifecycle": {
+                "accepted": accepted,
+                "refined": refined,
+                "undone": undone,
+                "deleted": deleted,
+                "survival_rate": survival_rate,
+                "refinement_rate": refinement_rate,
+            },
+            "dependency": {
+                "daily_trend": daily_trend,
+                "active_invocations": invocation_counts.0,
+                "passive_invocations": invocation_counts.1,
+            },
+            "effectiveness": {
+                "by_language": by_language,
+            },
+            "conversations": conversation_stats,
+            "cognition": {
+                "ai_focus": ai_focus,
+                "human_focus": human_focus,
+                "focus_delta": focus_delta,
+            },
+            "quality": {
+                "ai_undo_rate": ai_undo_rate,
+            },
+        })
+    }
+
+    // ── User screenshot analysis ────────────────────────────────────────────
+    //
+    // User-initiated screenshots are *intentional mental actions* — the user
+    // decided this moment was worth capturing.  This makes them high-signal
+    // markers for EEG correlation, context analysis, and focus patterns.
+
+    /// Return recent user screenshot events with full context.
+    pub fn get_user_screenshot_events(&self, since: u64, limit: u32) -> Vec<UserScreenshotEventRow> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT id, screenshot_id, captured_at, app_name, window_title,
+                    original_path, ocr_preview, eeg_focus, eeg_mood
+             FROM user_screenshot_events
+             WHERE captured_at >= ?1
+             ORDER BY captured_at DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] get_user_screenshot_events: {e}");
+                return vec![];
+            }
+        };
+        stmt.query_map(params![since as i64, limit as i64], |row| {
+            Ok(UserScreenshotEventRow {
+                id: row.get(0)?,
+                screenshot_id: row.get(1)?,
+                captured_at: row.get::<_, i64>(2)? as u64,
+                app_name: row.get(3)?,
+                window_title: row.get(4)?,
+                original_path: row.get(5)?,
+                ocr_preview: row.get(6)?,
+                eeg_focus: row.get(7)?,
+                eeg_mood: row.get(8)?,
+            })
+        })
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    /// Analyze screenshot-taking behavior correlated with EEG focus.
+    ///
+    /// Returns:
+    /// - `screenshot_count`: total screenshots in the period
+    /// - `avg_focus`: average EEG focus at screenshot moments
+    /// - `avg_mood`: average EEG mood at screenshot moments
+    /// - `by_app`: screenshots grouped by the app that was focused
+    /// - `by_hour`: screenshots grouped by hour-of-day (local time)
+    /// - `high_focus_screenshots`: screenshots taken during high-focus periods (>60)
+    pub fn screenshot_analysis(&self, since: u64, tz_offset: i32) -> serde_json::Value {
+        let c = self.conn.lock_or_recover();
+
+        // Aggregate counts and averages.
+        let (count, avg_focus, avg_mood): (i64, Option<f64>, Option<f64>) = c
+            .query_row(
+                "SELECT COUNT(*), AVG(eeg_focus), AVG(eeg_mood)
+                 FROM user_screenshot_events WHERE captured_at >= ?1",
+                params![since as i64],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap_or((0, None, None));
+
+        // By app.
+        let by_app: Vec<serde_json::Value> = c
+            .prepare(
+                "SELECT app_name, COUNT(*), AVG(eeg_focus)
+                 FROM user_screenshot_events
+                 WHERE captured_at >= ?1 AND app_name != ''
+                 GROUP BY app_name ORDER BY COUNT(*) DESC LIMIT 20",
+            )
+            .and_then(|mut stmt| {
+                stmt.query_map(params![since as i64], |row| {
+                    Ok(serde_json::json!({
+                        "app": row.get::<_, String>(0)?,
+                        "count": row.get::<_, i64>(1)?,
+                        "avg_focus": row.get::<_, Option<f64>>(2)?,
+                    }))
+                })
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            })
+            .unwrap_or_default();
+
+        // By hour of day.
+        let by_hour: Vec<serde_json::Value> = c
+            .prepare(
+                "SELECT ((captured_at + ?2) % 86400) / 3600 AS hour, COUNT(*), AVG(eeg_focus)
+                 FROM user_screenshot_events
+                 WHERE captured_at >= ?1
+                 GROUP BY hour ORDER BY hour",
+            )
+            .and_then(|mut stmt| {
+                stmt.query_map(params![since as i64, tz_offset as i64], |row| {
+                    Ok(serde_json::json!({
+                        "hour": row.get::<_, i64>(0)?,
+                        "count": row.get::<_, i64>(1)?,
+                        "avg_focus": row.get::<_, Option<f64>>(2)?,
+                    }))
+                })
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            })
+            .unwrap_or_default();
+
+        // High-focus screenshots (focus > 60).
+        let high_focus_count: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM user_screenshot_events
+                 WHERE captured_at >= ?1 AND eeg_focus > 60",
+                params![since as i64],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        serde_json::json!({
+            "screenshot_count": count,
+            "avg_focus": avg_focus,
+            "avg_mood": avg_mood,
+            "by_app": by_app,
+            "by_hour": by_hour,
+            "high_focus_count": high_focus_count,
+            "high_focus_ratio": if count > 0 { high_focus_count as f64 / count as f64 } else { 0.0 },
         })
     }
 
@@ -3961,6 +5298,13 @@ pub struct WeeklyDigest {
     pub peak_day_idx: u8,
     /// Hour of day with most activity (0–23).
     pub peak_hour: u8,
+    // ── Browser stats ──────────────────────────────────────────────────
+    pub browser_events: u64,
+    pub browser_top_domains: Vec<(String, String, u64)>,
+    pub browser_content_breakdown: Vec<BrowserContentBreakdownRow>,
+    pub browser_total_reading_secs: u64,
+    pub browser_avg_distraction: Option<f64>,
+    pub browser_video_watched_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3999,6 +5343,19 @@ pub struct ClipboardEventRow {
     pub content_type: String,
     pub content_size: u64,
     pub copied_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserScreenshotEventRow {
+    pub id: i64,
+    pub screenshot_id: i64,
+    pub captured_at: u64,
+    pub app_name: String,
+    pub window_title: String,
+    pub original_path: String,
+    pub ocr_preview: String,
+    pub eeg_focus: Option<f32>,
+    pub eeg_mood: Option<f32>,
 }
 
 // ── Brain awareness types ────────────────────────────────────────────────────
@@ -4229,6 +5586,8 @@ pub struct AiEventRow {
     pub file_path: String,
     pub language: String,
     pub at: u64,
+    pub eeg_focus: Option<f32>,
+    pub eeg_mood: Option<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -4289,6 +5648,194 @@ pub struct BrowserActivityRow {
     pub at: u64,
     pub eeg_focus: Option<f64>,
     pub eeg_mood: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserDomainFocusRow {
+    pub domain: String,
+    pub category: String,
+    pub content_type: String,
+    pub events: u64,
+    pub avg_focus: Option<f64>,
+    pub total_reading_secs: u64,
+    pub avg_scroll_depth: Option<f64>,
+    pub visits: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserDistractionScore {
+    pub score: f64,
+    pub tab_switches_per_min: f64,
+    pub social_pct: f64,
+    pub productive_pct: f64,
+    pub idle_pct: f64,
+    pub suggestion: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserContentBreakdownRow {
+    pub content_type: String,
+    pub events: u64,
+    pub avg_focus: Option<f64>,
+    pub total_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserLlmUsageRow {
+    pub domain: String,
+    pub provider: String,
+    pub interactions: u64,
+    pub avg_focus: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserResearchPatterns {
+    pub total_searches: u64,
+    pub refinement_rate: f64,
+    pub revisit_count: u64,
+    pub avg_search_focus: Option<f64>,
+    pub stuck_indicator: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserLearningRow {
+    pub domain: String,
+    pub content_type: String,
+    pub avg_focus: Option<f64>,
+    pub avg_scroll_depth: Option<f64>,
+    pub avg_reading_secs: u64,
+    pub pages: u64,
+    pub revisits: u64,
+    pub efficiency_score: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BrowserOptimalHours {
+    pub best_hours: Vec<u32>,
+    pub worst_hours: Vec<u32>,
+    pub by_hour: Vec<BrowserHourRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserHourRow {
+    pub hour: u32,
+    pub avg_focus: f64,
+    pub events: u64,
+    pub reading_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserAiEffectivenessRow {
+    pub provider: String,
+    pub interactions: u64,
+    pub avg_focus: Option<f64>,
+    pub avg_session_secs: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserProcrastination {
+    pub score: f64,
+    pub idle_secs: u64,
+    pub max_mouse_idle_secs: u64,
+    pub revisit_loops: u64,
+    pub avg_focus: Option<f64>,
+    pub procrastinating: bool,
+    pub suggestion: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserDeepReadingRow {
+    pub domain: String,
+    pub title: String,
+    pub reading_secs: u64,
+    pub scroll_depth: Option<f64>,
+    pub eeg_focus: Option<f64>,
+    pub at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserVideoRoi {
+    pub total_watched_secs: u64,
+    pub focused_watched_secs: u64,
+    pub focus_ratio: f64,
+    pub avg_focus: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserEmailImpact {
+    pub email_sessions: u64,
+    pub avg_focus_during_email: Option<f64>,
+    pub avg_focus_outside_email: Option<f64>,
+    pub focus_delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserTabLoadRow {
+    pub tab_count: u32,
+    pub avg_focus: f64,
+    pub samples: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserWeekdayComparison {
+    pub weekday_avg_focus: Option<f64>,
+    pub weekend_avg_focus: Option<f64>,
+    pub weekday_events: u64,
+    pub weekend_events: u64,
+    pub delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserHourFocusRow {
+    pub hour: u32,
+    pub avg_focus: f64,
+    pub events: u64,
+    pub avg_scroll_depth: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserCopyPastePatterns {
+    pub copies: u64,
+    pub pastes: u64,
+    pub avg_paste_length: Option<f64>,
+    pub top_domains: Vec<(String, u64)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserPostMeetingRow {
+    pub meeting_title: String,
+    pub platform: String,
+    pub ended_at: u64,
+    pub post_meeting_focus: Option<f64>,
+    pub distraction_events: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrainFeedbackAccuracy {
+    pub insight: String,
+    pub total: u64,
+    pub correct: u64,
+    pub accuracy: f64,
+    pub avg_score: Option<f64>,
+    pub avg_focus_when_correct: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrainFeedbackRow {
+    pub id: i64,
+    pub insight: String,
+    pub correct: bool,
+    pub score: Option<f64>,
+    pub eeg_focus: Option<f64>,
+    pub context: String,
+    pub at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserSwitchTax {
+    pub total_switches: u64,
+    pub avg_focus_at_switch: Option<f64>,
+    pub estimated_lost_minutes: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -4948,11 +6495,928 @@ mod tests {
     #[test]
     fn ai_events_insert_and_retrieve() {
         let store = open_temp();
-        store.insert_ai_event("suggestion_accepted", "copilot", "/a.rs", "rust", 1000);
-        store.insert_ai_event("chat_start", "claude", "/b.ts", "typescript", 2000);
+        store.insert_ai_event(
+            "suggestion_accepted",
+            "copilot",
+            "/a.rs",
+            "rust",
+            1000,
+            Some(75.0),
+            Some(60.0),
+        );
+        store.insert_ai_event("chat_start", "claude", "/b.ts", "typescript", 2000, None, None);
         let events = store.get_recent_ai_events(10);
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].source, "claude"); // newest first
         assert_eq!(events[1].event_type, "suggestion_accepted");
+        // EEG data should be stored and retrieved.
+        assert!((events[1].eeg_focus.unwrap() - 75.0).abs() < 0.1);
+        assert!(events[0].eeg_focus.is_none());
+    }
+
+    // ── User screenshot event tests ─────────────────────────────────────
+
+    #[test]
+    fn insert_user_screenshot_event_roundtrip() {
+        let store = open_temp();
+        store.insert_user_screenshot_event(
+            42,    // screenshot_id
+            1_000, // captured_at
+            "Safari",
+            "GitHub - skill",
+            "/Users/test/Desktop/Screenshot 2026-04-25.png",
+            "some OCR text",
+            Some(72.5),
+            Some(65.0),
+        );
+        // Should appear in the activity timeline as kind="screenshot".
+        let timeline = store.activity_timeline(900, 1_100, 100);
+        assert_eq!(timeline.len(), 1);
+        assert_eq!(timeline[0].kind, "screenshot");
+        assert_eq!(timeline[0].ts, 1_000);
+        assert!(timeline[0].eeg_focus.is_some());
+        assert!((timeline[0].eeg_focus.unwrap() - 72.5).abs() < 0.1);
+    }
+
+    #[test]
+    fn user_screenshot_in_mixed_timeline() {
+        let store = open_temp();
+        // Insert a file interaction
+        ins(&store, "/src/main.rs", "Code", "myproject", 1_000);
+        // Insert a user screenshot event
+        store.insert_user_screenshot_event(
+            1,
+            2_000,
+            "Preview",
+            "image.png",
+            "/Desktop/Screenshot.png",
+            "",
+            Some(80.0),
+            None,
+        );
+        // Insert a clipboard event
+        store.insert_clipboard_event("Chrome", "text", 100, 3_000);
+
+        let timeline = store.activity_timeline(500, 3_500, 100);
+        assert_eq!(timeline.len(), 3);
+        // Newest first
+        assert_eq!(timeline[0].kind, "clipboard");
+        assert_eq!(timeline[0].ts, 3_000);
+        assert_eq!(timeline[1].kind, "screenshot");
+        assert_eq!(timeline[1].ts, 2_000);
+        assert_eq!(timeline[2].kind, "file");
+        assert_eq!(timeline[2].ts, 1_000);
+    }
+
+    #[test]
+    fn user_screenshot_event_without_eeg() {
+        let store = open_temp();
+        store.insert_user_screenshot_event(
+            99,
+            5_000,
+            "Finder",
+            "Desktop",
+            "/Desktop/Screenshot.png",
+            "",
+            None,
+            None,
+        );
+        let timeline = store.activity_timeline(4_900, 5_100, 10);
+        assert_eq!(timeline.len(), 1);
+        assert_eq!(timeline[0].kind, "screenshot");
+        assert!(timeline[0].eeg_focus.is_none());
+    }
+
+    #[test]
+    fn screenshot_analysis_aggregates() {
+        let store = open_temp();
+        // Three screenshots from different apps, different focus levels.
+        store.insert_user_screenshot_event(1, 1_000, "Safari", "GitHub", "/s1.png", "", Some(80.0), Some(70.0));
+        store.insert_user_screenshot_event(2, 2_000, "Code", "main.rs", "/s2.png", "", Some(40.0), Some(50.0));
+        store.insert_user_screenshot_event(3, 3_000, "Safari", "Docs", "/s3.png", "", Some(90.0), Some(75.0));
+
+        let result = store.screenshot_analysis(500, 0);
+        assert_eq!(result["screenshot_count"], 3);
+        // Average focus: (80+40+90)/3 = 70
+        let avg = result["avg_focus"].as_f64().unwrap();
+        assert!((avg - 70.0).abs() < 0.5, "avg_focus should be ~70, got {avg}");
+        // high_focus_count: 80 and 90 are > 60 → 2
+        assert_eq!(result["high_focus_count"], 2);
+        // by_app: Safari=2, Code=1
+        let by_app = result["by_app"].as_array().unwrap();
+        assert_eq!(by_app.len(), 2);
+        assert_eq!(by_app[0]["app"], "Safari");
+        assert_eq!(by_app[0]["count"], 2);
+    }
+
+    #[test]
+    fn get_user_screenshot_events_returns_with_context() {
+        let store = open_temp();
+        store.insert_user_screenshot_event(
+            10,
+            5_000,
+            "Finder",
+            "Desktop — Finder",
+            "/Users/me/Desktop/Screenshot.png",
+            "hello world",
+            Some(65.0),
+            Some(55.0),
+        );
+        let events = store.get_user_screenshot_events(4_000, 10);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].app_name, "Finder");
+        assert_eq!(events[0].window_title, "Desktop — Finder");
+        assert_eq!(events[0].ocr_preview, "hello world");
+        assert!((events[0].eeg_focus.unwrap() - 65.0).abs() < 0.1);
+    }
+
+    // ── Browser activity tests ──────────────────────────────────────────
+
+    fn browser_event(event_type: &str, domain: &str) -> serde_json::Value {
+        serde_json::json!({
+            "type": event_type,
+            "domain": domain,
+            "category": "development",
+            "content_type": "code",
+        })
+    }
+
+    fn browser_event_full(
+        event_type: &str,
+        domain: &str,
+        category: &str,
+        content_type: &str,
+        focus: Option<f64>,
+        extras: serde_json::Value,
+    ) -> serde_json::Value {
+        let mut v = serde_json::json!({
+            "type": event_type,
+            "domain": domain,
+            "category": category,
+            "content_type": content_type,
+        });
+        if let serde_json::Value::Object(map) = extras {
+            for (k, val) in map {
+                v[k] = val;
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn browser_insert_and_query() {
+        let store = open_temp();
+        let ev = browser_event("tab_switch", "github.com");
+        store.insert_browser_activity_json(&ev, 1000, Some(75.0), None);
+        store.insert_browser_activity_json(&browser_event("page_load", "docs.rs"), 1001, Some(80.0), None);
+
+        let recent = store.get_recent_browser_activities(10, 0);
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].domain, "docs.rs"); // newest first
+        assert_eq!(recent[1].domain, "github.com");
+    }
+
+    #[test]
+    fn browser_domain_breakdown_groups() {
+        let store = open_temp();
+        for i in 0..5 {
+            store.insert_browser_activity_json(&browser_event("tab_switch", "github.com"), 1000 + i, None, None);
+        }
+        for i in 0..3 {
+            store.insert_browser_activity_json(&browser_event("tab_switch", "twitter.com"), 2000 + i, None, None);
+        }
+        let breakdown = store.browser_domain_breakdown(0);
+        assert!(breakdown.len() >= 2);
+        assert_eq!(breakdown[0].0, "github.com"); // most events first
+        assert_eq!(breakdown[0].2, 5);
+    }
+
+    #[test]
+    fn browser_context_switch_rate_calculation() {
+        let store = open_temp();
+        // 10 tab switches in 5 minutes = 2/min
+        for i in 0..10 {
+            store.insert_browser_activity_json(&browser_event("tab_switch", "example.com"), 1000 + i * 30, None, None);
+        }
+        let rate = store.browser_context_switch_rate(1000, 1300); // 5 min window
+        assert!(rate > 1.5 && rate < 2.5, "rate was {rate}");
+    }
+
+    #[test]
+    fn browser_distraction_score_social_heavy() {
+        let store = open_temp();
+        let now = now_secs();
+        // Insert social media events
+        for i in 0..10 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "tab_switch",
+                    "twitter.com",
+                    "social",
+                    "social",
+                    None,
+                    serde_json::json!({}),
+                ),
+                now - 200 + i,
+                None,
+                None,
+            );
+        }
+        // Only 2 productive events
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "tab_switch",
+                "github.com",
+                "development",
+                "code",
+                None,
+                serde_json::json!({}),
+            ),
+            now - 100,
+            None,
+            None,
+        );
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "tab_switch",
+                "docs.rs",
+                "development",
+                "code",
+                None,
+                serde_json::json!({}),
+            ),
+            now - 50,
+            None,
+            None,
+        );
+
+        let score = store.browser_distraction_score(300);
+        // Social events should outnumber productive
+        assert!(
+            score.social_pct >= score.productive_pct,
+            "social% {} should be >= productive% {}",
+            score.social_pct,
+            score.productive_pct
+        );
+    }
+
+    #[test]
+    fn browser_distraction_score_focused() {
+        let store = open_temp();
+        let now = now_secs();
+        // All productive events
+        for i in 0..10 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "tab_switch",
+                    "github.com",
+                    "development",
+                    "code",
+                    None,
+                    serde_json::json!({}),
+                ),
+                now - 200 + i * 20,
+                None,
+                None,
+            );
+        }
+        let score = store.browser_distraction_score(300);
+        assert!(
+            score.productive_pct > score.social_pct,
+            "productive% {} should be > social% {}",
+            score.productive_pct,
+            score.social_pct
+        );
+    }
+
+    #[test]
+    fn browser_content_breakdown_groups_by_type() {
+        let store = open_temp();
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "page_profile",
+                "youtube.com",
+                "media",
+                "video",
+                None,
+                serde_json::json!({"reading_time_secs": 120}),
+            ),
+            1000,
+            None,
+            None,
+        );
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "page_profile",
+                "arxiv.org",
+                "reference",
+                "paper",
+                None,
+                serde_json::json!({"reading_time_secs": 300}),
+            ),
+            1001,
+            None,
+            None,
+        );
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "page_profile",
+                "github.com",
+                "development",
+                "code",
+                None,
+                serde_json::json!({"reading_time_secs": 200}),
+            ),
+            1002,
+            None,
+            None,
+        );
+
+        let breakdown = store.browser_content_breakdown(0);
+        assert!(breakdown.len() >= 3);
+        // Paper has most reading time (300s)
+        assert_eq!(breakdown[0].content_type, "paper");
+    }
+
+    #[test]
+    fn browser_focus_by_domain_with_eeg() {
+        let store = open_temp();
+        for i in 0..5 {
+            store.insert_browser_activity_json(&browser_event("reading_time", "docs.rs"), 1000 + i, Some(80.0), None);
+        }
+        for i in 0..5 {
+            store.insert_browser_activity_json(
+                &browser_event("reading_time", "reddit.com"),
+                2000 + i,
+                Some(30.0),
+                None,
+            );
+        }
+        let focus = store.browser_focus_by_domain(0, 10);
+        assert!(focus.len() >= 2);
+        // docs.rs should have higher focus
+        let docs = focus.iter().find(|f| f.domain == "docs.rs").unwrap();
+        let reddit = focus.iter().find(|f| f.domain == "reddit.com").unwrap();
+        assert!(docs.avg_focus.unwrap() > reddit.avg_focus.unwrap());
+    }
+
+    #[test]
+    fn browser_procrastination_detection() {
+        let store = open_temp();
+        let now = now_secs();
+        // Lots of idle + revisits + low focus
+        for i in 0..6 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "revisit",
+                    "stackoverflow.com",
+                    "development",
+                    "code",
+                    None,
+                    serde_json::json!({"idle_time_secs": 60}),
+                ),
+                now - 200 + i * 30,
+                Some(25.0),
+                None,
+            );
+        }
+        let result = store.browser_procrastination_check(300);
+        assert!(
+            result.score > 40.0,
+            "procrastination score should be elevated: {}",
+            result.score
+        );
+        assert!(result.revisit_loops >= 6);
+    }
+
+    #[test]
+    fn browser_deep_reading_sessions() {
+        let store = open_temp();
+        // Deep read: >5min, >60% scroll
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "reading_time",
+                "rust-lang.org",
+                "reference",
+                "text",
+                None,
+                serde_json::json!({"reading_time_secs": 480, "scroll_depth": 0.85}),
+            ),
+            1000,
+            Some(78.0),
+            None,
+        );
+        // Shallow read: too short
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "reading_time",
+                "twitter.com",
+                "social",
+                "social",
+                None,
+                serde_json::json!({"reading_time_secs": 30, "scroll_depth": 0.2}),
+            ),
+            2000,
+            Some(20.0),
+            None,
+        );
+
+        let sessions = store.browser_deep_reading_sessions(0);
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].domain, "rust-lang.org");
+        assert_eq!(sessions[0].reading_secs, 480);
+    }
+
+    #[test]
+    fn browser_video_roi() {
+        let store = open_temp();
+        // High-focus video watching
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "media_state",
+                "youtube.com",
+                "media",
+                "video",
+                None,
+                serde_json::json!({"video_watched_secs": 300, "has_video": true}),
+            ),
+            1000,
+            Some(70.0),
+            None,
+        );
+        // Low-focus video
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "media_state",
+                "youtube.com",
+                "media",
+                "video",
+                None,
+                serde_json::json!({"video_watched_secs": 200, "has_video": true}),
+            ),
+            2000,
+            Some(30.0),
+            None,
+        );
+
+        let roi = store.browser_video_roi(0);
+        assert_eq!(roi.total_watched_secs, 500);
+        assert_eq!(roi.focused_watched_secs, 300); // only the >60 focus one
+        assert!((roi.focus_ratio - 0.6).abs() < 0.01);
+    }
+
+    #[test]
+    fn browser_email_impact() {
+        let store = open_temp();
+        // Email sessions with lower focus
+        for i in 0..3 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "email_activity",
+                    "mail.google.com",
+                    "communication",
+                    "email",
+                    None,
+                    serde_json::json!({}),
+                ),
+                1000 + i,
+                Some(40.0),
+                None,
+            );
+        }
+        // Non-email with higher focus
+        for i in 0..5 {
+            store.insert_browser_activity_json(&browser_event("tab_switch", "github.com"), 2000 + i, Some(75.0), None);
+        }
+        let impact = store.browser_email_impact(0);
+        assert_eq!(impact.email_sessions, 3);
+        assert!(impact.focus_delta.unwrap() < 0.0); // email focus < non-email
+    }
+
+    #[test]
+    fn browser_tab_cognitive_load() {
+        let store = open_temp();
+        // Few tabs = high focus
+        for i in 0..5 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "tab_snapshot",
+                    "",
+                    "development",
+                    "",
+                    None,
+                    serde_json::json!({"tab_count": 5}),
+                ),
+                1000 + i,
+                Some(80.0),
+                None,
+            );
+        }
+        // Many tabs = low focus
+        for i in 0..5 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "tab_snapshot",
+                    "",
+                    "development",
+                    "",
+                    None,
+                    serde_json::json!({"tab_count": 40}),
+                ),
+                2000 + i,
+                Some(35.0),
+                None,
+            );
+        }
+        let load = store.browser_tab_cognitive_load(0);
+        assert!(load.len() >= 2);
+        let low_tabs = load.iter().find(|t| t.tab_count == 5).unwrap();
+        let high_tabs = load.iter().find(|t| t.tab_count == 40).unwrap();
+        assert!(low_tabs.avg_focus > high_tabs.avg_focus);
+    }
+
+    #[test]
+    fn browser_copypaste_patterns() {
+        let store = open_temp();
+        for i in 0..3 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "clipboard_copy",
+                    "stackoverflow.com",
+                    "development",
+                    "code",
+                    None,
+                    serde_json::json!({}),
+                ),
+                1000 + i,
+                None,
+                None,
+            );
+        }
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "clipboard_paste",
+                "github.com",
+                "development",
+                "code",
+                None,
+                serde_json::json!({"paste_length": 150}),
+            ),
+            2000,
+            None,
+            None,
+        );
+
+        let patterns = store.browser_copypaste_patterns(0);
+        assert_eq!(patterns.copies, 3);
+        assert_eq!(patterns.pastes, 1);
+        assert!(patterns.top_domains.len() >= 1);
+    }
+
+    // ── Feedback system tests ───────────────────────────────────────────
+
+    #[test]
+    fn brain_feedback_insert_and_accuracy() {
+        let store = open_temp();
+        store.insert_brain_feedback("distraction", true, Some(75.0), Some(60.0), None, "was accurate");
+        store.insert_brain_feedback("distraction", true, Some(80.0), Some(55.0), None, "correct");
+        store.insert_brain_feedback("distraction", false, Some(30.0), Some(70.0), None, "was wrong");
+
+        let acc = store.brain_feedback_accuracy();
+        let d = acc.iter().find(|a| a.insight == "distraction").unwrap();
+        assert_eq!(d.total, 3);
+        assert_eq!(d.correct, 2);
+        assert!((d.accuracy - 0.666).abs() < 0.01);
+    }
+
+    #[test]
+    fn brain_feedback_weight_default_and_adjusted() {
+        let store = open_temp();
+        // No feedback yet — default weight 1.0
+        assert!((store.brain_feedback_weight("flow_browser") - 1.0).abs() < 0.01);
+
+        // Add 5+ feedback entries (threshold for adjustment)
+        for _ in 0..4 {
+            store.insert_brain_feedback("flow_browser", true, None, None, None, "");
+        }
+        store.insert_brain_feedback("flow_browser", false, None, None, None, "");
+
+        // 4/5 = 80% accuracy → weight = 0.5 + 0.8 = 1.3
+        let w = store.brain_feedback_weight("flow_browser");
+        assert!((w - 1.3).abs() < 0.01, "weight was {w}");
+    }
+
+    #[test]
+    fn brain_feedback_weight_low_accuracy() {
+        let store = open_temp();
+        // All wrong — 0% accuracy → weight = 0.5
+        for _ in 0..5 {
+            store.insert_brain_feedback("bad_signal", false, None, None, None, "");
+        }
+        let w = store.brain_feedback_weight("bad_signal");
+        assert!((w - 0.5).abs() < 0.01, "weight was {w}");
+    }
+
+    #[test]
+    fn brain_feedback_recent() {
+        let store = open_temp();
+        store.insert_brain_feedback("a", true, None, None, None, "");
+        store.insert_brain_feedback("b", false, None, None, None, "");
+        let recent = store.brain_feedback_recent(10);
+        assert_eq!(recent.len(), 2);
+        // Both may have same timestamp, just verify both are returned
+        let insights: Vec<&str> = recent.iter().map(|r| r.insight.as_str()).collect();
+        assert!(insights.contains(&"a"));
+        assert!(insights.contains(&"b"));
+    }
+
+    // ── Flow state with browser integration ─────────────────────────────
+
+    #[test]
+    fn flow_state_penalized_by_tab_switching() {
+        let store = open_temp();
+        let now = 100_000u64;
+        // Create file activity for base flow score
+        store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", now - 200, Some(80.0), None);
+        store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", now - 100, Some(80.0), None);
+
+        // Base flow score without browser data
+        let base = store.flow_state_now(300);
+
+        // Now add rapid tab switching (>4/min)
+        for i in 0..30 {
+            store.insert_browser_activity_json(
+                &browser_event("tab_switch", "various.com"),
+                now - 250 + i * 5,
+                None,
+                None,
+            );
+        }
+
+        let after = store.flow_state_now(300);
+        assert!(
+            after.score < base.score,
+            "flow score should decrease with tab switching: base={}, after={}",
+            base.score,
+            after.score
+        );
+        assert!(!after.in_flow, "should not be in flow with rapid tab switching");
+    }
+
+    #[test]
+    fn struggle_prediction_uses_browser_search() {
+        let store = open_temp();
+        let now = 100_000u64;
+        // Add file interactions
+        store.insert_file_interaction("/bug.rs", "code", "proj", "rust", "", "", now - 500, Some(30.0), None);
+
+        // Add search refinements (indicating stuck)
+        for i in 0..5 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "search_pattern",
+                    "google.com",
+                    "development",
+                    "text",
+                    None,
+                    serde_json::json!({}),
+                ),
+                now - 400 + i * 50,
+                Some(25.0),
+                None,
+            );
+        }
+        // Add revisits
+        for i in 0..4 {
+            store.insert_browser_activity_json(
+                &browser_event("revisit", "stackoverflow.com"),
+                now - 300 + i * 60,
+                Some(30.0),
+                None,
+            );
+        }
+
+        let prediction = store.predict_struggle(600);
+        assert!(
+            prediction.score > 0.0,
+            "struggle score should incorporate browser signals: {}",
+            prediction.score
+        );
+    }
+
+    // ── Weekly digest with browser data ─────────────────────────────────
+
+    #[test]
+    fn weekly_digest_includes_browser_stats() {
+        let store = open_temp();
+        let week_start = 100_000u64;
+        // Add some file activity
+        store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", week_start + 100, None, None);
+        // Add browser events
+        for i in 0..10 {
+            store.insert_browser_activity_json(
+                &browser_event_full(
+                    "tab_switch",
+                    "github.com",
+                    "development",
+                    "code",
+                    None,
+                    serde_json::json!({"reading_time_secs": 60}),
+                ),
+                week_start + 200 + i,
+                None,
+                None,
+            );
+        }
+        store.insert_browser_activity_json(
+            &browser_event_full(
+                "media_state",
+                "youtube.com",
+                "media",
+                "video",
+                None,
+                serde_json::json!({"video_watched_secs": 300}),
+            ),
+            week_start + 500,
+            None,
+            None,
+        );
+
+        let digest = store.weekly_digest(week_start);
+        assert!(digest.browser_events >= 11);
+        assert!(digest.browser_top_domains.len() >= 1);
+        assert_eq!(digest.browser_video_watched_secs, 300);
+    }
+
+    // ── Edge cases: empty tables ────────────────────────────────────────
+
+    #[test]
+    fn browser_focus_by_domain_empty_table() {
+        let store = open_temp();
+        let result = store.browser_focus_by_domain(0, 10);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn browser_distraction_score_empty_table() {
+        let store = open_temp();
+        let score = store.browser_distraction_score(300);
+        assert!((score.score - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn browser_learning_efficiency_empty_table() {
+        let store = open_temp();
+        assert!(store.browser_learning_efficiency(0).is_empty());
+    }
+
+    #[test]
+    fn browser_all_null_eeg_returns_empty() {
+        let store = open_temp();
+        // Insert events with NULL eeg_focus
+        for i in 0..5 {
+            store.insert_browser_activity_json(&browser_event("tab_switch", "example.com"), 1000 + i, None, None);
+        }
+        // Focus-by-domain requires eeg_focus IS NOT NULL → should return empty
+        let focus = store.browser_focus_by_domain(0, 10);
+        assert!(focus.is_empty());
+    }
+
+    // ── New column storage verification ─────────────────────────────────
+
+    #[test]
+    fn browser_stores_llm_provider() {
+        let store = open_temp();
+        store.insert_browser_activity_json(
+            &serde_json::json!({
+                "type": "llm_interaction",
+                "domain": "claude.ai",
+                "llm_provider": "claude",
+                "llm_turn_count": 5,
+                "content_type": "chat",
+            }),
+            1000,
+            Some(70.0),
+            None,
+        );
+        let recent = store.get_recent_browser_activities(1, 0);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].event_type, "llm_interaction");
+        assert_eq!(recent[0].domain, "claude.ai");
+    }
+
+    #[test]
+    fn browser_stores_scroll_dynamics() {
+        let store = open_temp();
+        store.insert_browser_activity_json(
+            &serde_json::json!({
+                "type": "scroll",
+                "domain": "docs.rs",
+                "scroll_depth": 0.85,
+                "scroll_speed": 200,
+                "scroll_direction": "down",
+                "scroll_reversals": 3,
+            }),
+            1000,
+            None,
+            None,
+        );
+        let recent = store.get_recent_browser_activities(1, 0);
+        assert_eq!(recent.len(), 1);
+        assert!((recent[0].scroll_depth.unwrap() - 0.85).abs() < 0.01);
+    }
+
+    #[test]
+    fn browser_stores_visible_text() {
+        let store = open_temp();
+        store.insert_browser_activity_json(
+            &serde_json::json!({
+                "type": "visible_context",
+                "domain": "docs.rs",
+                "page_title": "tokio::runtime",
+                "heading": "Runtime Configuration",
+                "visible_text": "The runtime is the core of the async system...",
+                "content_type": "code",
+            }),
+            1000,
+            None,
+            None,
+        );
+        let recent = store.get_recent_browser_activities(1, 0);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].event_type, "visible_context");
+    }
+
+    // ── Feedback weight applied correctly ────────────────────────────────
+
+    #[test]
+    fn feedback_weight_reduces_browser_penalty_in_flow() {
+        let store = open_temp();
+        let now = now_secs();
+
+        // File activity for base flow score
+        store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", now - 200, Some(80.0), None);
+        store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", now - 100, Some(80.0), None);
+
+        // Rapid tab switching
+        for i in 0..30 {
+            store.insert_browser_activity_json(
+                &browser_event("tab_switch", "various.com"),
+                now - 250 + i * 5,
+                None,
+                None,
+            );
+        }
+
+        // Flow with default weight (1.0)
+        let base = store.flow_state_now(300);
+
+        // Now add feedback saying browser signal is wrong (low accuracy → lower weight)
+        for _ in 0..5 {
+            store.insert_brain_feedback("flow_browser", false, None, None, None, "");
+        }
+
+        // Flow with reduced weight (0.5)
+        let after = store.flow_state_now(300);
+        // The browser penalty should be reduced → higher score
+        assert!(
+            after.score >= base.score,
+            "score should be >= with low-accuracy feedback: base={}, after={}",
+            base.score,
+            after.score
+        );
+    }
+
+    // ── DB migration verification ───────────────────────────────────────
+
+    #[test]
+    fn db_migration_adds_new_columns() {
+        // Create a store (runs DDL + ALTERs), verify new columns exist by inserting data
+        let store = open_temp();
+        store.insert_browser_activity_json(
+            &serde_json::json!({
+                "type": "llm_interaction",
+                "domain": "claude.ai",
+                "llm_provider": "claude",
+                "llm_turn_count": 10,
+                "email_mode": "",
+                "scroll_speed": 150,
+                "scroll_direction": "down",
+                "scroll_reversals": 2,
+                "visible_text": "some text",
+                "heading": "Section Title",
+                "page_title": "Page Title",
+                "download_type": "pdf",
+                "revisit_count": 3,
+                "domain_visit_count": 7,
+                "video_playback_rate": 1.5,
+            }),
+            1000,
+            None,
+            None,
+        );
+        // If any column is missing, the INSERT would fail
+        let recent = store.get_recent_browser_activities(1, 0);
+        assert_eq!(recent.len(), 1);
     }
 }

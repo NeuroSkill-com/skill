@@ -767,6 +767,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "Скопіювати auth token",
   "extensions.tokenCopied": "Токен скопійовано до буфера обміну",
   "extensions.tokenFailed": "Не вдалося скопіювати токен",
+  "extensions.pairViaBrowser": "Парування у браузері",
+  "extensions.pairViaBrowserHint": "Відкриває сторінку парування у вашому браузері за замовчуванням",
+  "extensions.copyTokenHint": "Вручну — вставте в налаштуваннях розширення",
+  "extensions.pairingOpened": "Сторінку парування відкрито — розширення підключиться автоматично",
+  "extensions.pairingFailed": "Не вдалося створити посилання для парування",
+  "extensions.pairingInProgress": "Відкривається…",
 };
 
 export default settings;

@@ -1084,12 +1084,14 @@ async fn install_shell_hook(
 
         for rc_opt in &rc_paths {
             let Some(rc) = rc_opt else { continue };
-            // Check if already installed
+            // Check if rc already sources the hook — if so, the hook file was
+            // already refreshed above; just report that it's up to date.
             if let Ok(content) = std::fs::read_to_string(rc) {
                 if content.contains("neuroskill") {
                     return serde_json::json!({
                         "ok": true,
                         "already_installed": true,
+                        "hook_refreshed": true,
                         "rc_file": rc.to_string_lossy(),
                         "hook_path": hook_path_str,
                     });
@@ -1282,7 +1284,7 @@ fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
 }
 
 /// Generate the hook script content for a given shell. Self-contained — no external file deps.
-fn generate_shell_hook(shell: &str) -> String {
+pub(crate) fn generate_shell_hook(shell: &str) -> String {
     let port = 18444;
     match shell {
         "zsh" => format!(
@@ -1316,20 +1318,6 @@ _neuroskill_precmd() {{
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec _neuroskill_preexec
 add-zsh-hook precmd _neuroskill_precmd
-
-# Session recording — captures all terminal I/O (input inside interactive programs)
-if [[ -z "$NEUROSKILL_RECORDING" ]]; then
-  export NEUROSKILL_RECORDING=1
-  _ns_log_dir="$HOME/.skill/terminal-logs"
-  mkdir -p "$_ns_log_dir"
-  # Rotate: keep last 20 logs, max 1MB each
-  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
-  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
-  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
-  if command -v script >/dev/null 2>&1; then
-    SHELL=${{SHELL:-/bin/zsh}} exec script -q -F "$_ns_log" 2>/dev/null
-  fi
-fi
 "#
         ),
 
@@ -1369,19 +1357,6 @@ _neuroskill_prompt_cmd() {{
 }}
 trap '_neuroskill_debug_trap' DEBUG
 PROMPT_COMMAND="_neuroskill_prompt_cmd${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
-
-# Session recording
-if [[ -z "$NEUROSKILL_RECORDING" ]]; then
-  export NEUROSKILL_RECORDING=1
-  _ns_log_dir="$HOME/.skill/terminal-logs"
-  mkdir -p "$_ns_log_dir"
-  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
-  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
-  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
-  if command -v script >/dev/null 2>&1; then
-    SHELL=${{SHELL:-/bin/bash}} exec script -q -f "$_ns_log" 2>/dev/null
-  fi
-fi
 "#
         ),
 

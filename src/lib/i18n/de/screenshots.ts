@@ -98,6 +98,13 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddedCount": "Eingebettet",
   "screenshots.unembeddedCount": "Noch nicht eingebettet",
   "screenshots.staleCount": "Veraltet (anderes Modell)",
+
+  "screenshots.userScreenshotToggle": "Benutzer-Screenshots verfolgen",
+  "screenshots.userScreenshotDesc":
+    "Erkennt wenn Sie einen Screenshot aufnehmen (Cmd+Shift+3/4 auf macOS, Druck-Taste unter Windows) und importiert ihn für OCR, Suche und EEG-Korrelation. Originaldateien werden nie verschoben oder gelöscht.",
+  "screenshots.clipboardImageToggle": "Zwischenablage-Bilder verfolgen",
+  "screenshots.clipboardImageDesc":
+    "Wenn ein Bild in die Zwischenablage kopiert wird, wird es erfasst und zusammen mit anderen Screenshots für Suche und Analyse indiziert.",
 };
 
 export default screenshots;

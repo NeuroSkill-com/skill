@@ -96,6 +96,13 @@ const screenshots: Record<string, string> = {
   "screenshots.perfDropsHint":
     "thread d'embedding trop lent — intervalle augmenté automatiquement, récupération quand la file se vide",
   "screenshots.perfErrors": "erreurs",
+
+  "screenshots.userScreenshotToggle": "Suivre les captures d'écran utilisateur",
+  "screenshots.userScreenshotDesc":
+    "Détecte quand vous prenez une capture d'écran (Cmd+Shift+3/4 sur macOS, Impr écran sur Windows) et l'importe pour l'OCR, la recherche et la corrélation EEG. Les fichiers originaux ne sont jamais déplacés ni supprimés.",
+  "screenshots.clipboardImageToggle": "Suivre les images du presse-papiers",
+  "screenshots.clipboardImageDesc":
+    "Lorsqu'une image est copiée dans le presse-papiers, elle est capturée et indexée avec les autres captures d'écran pour la recherche et l'analyse.",
 };
 
 export default screenshots;

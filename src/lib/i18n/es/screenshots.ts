@@ -102,6 +102,13 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddedCount": "Incorporado",
   "screenshots.unembeddedCount": "Aún no incorporado",
   "screenshots.staleCount": "obsoleto (modelo diferente)",
+
+  "screenshots.userScreenshotToggle": "Rastrear capturas de pantalla del usuario",
+  "screenshots.userScreenshotDesc":
+    "Detecta cuando tomas una captura de pantalla (Cmd+Shift+3/4 en macOS, Impr Pant en Windows) y la importa para OCR, búsqueda y correlación EEG. Los archivos originales nunca se mueven ni eliminan.",
+  "screenshots.clipboardImageToggle": "Rastrear imágenes del portapapeles",
+  "screenshots.clipboardImageDesc":
+    "Cuando se copia una imagen al portapapeles, se captura e indexa junto con otras capturas de pantalla para búsqueda y análisis.",
 };
 
 export default screenshots;

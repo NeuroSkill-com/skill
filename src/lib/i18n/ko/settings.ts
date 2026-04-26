@@ -736,6 +736,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "auth token 복사",
   "extensions.tokenCopied": "토큰이 클립보드에 복사되었습니다",
   "extensions.tokenFailed": "토큰을 복사할 수 없습니다",
+  "extensions.pairViaBrowser": "브라우저에서 페어링",
+  "extensions.pairViaBrowserHint": "기본 브라우저에서 페어링 페이지를 엽니다",
+  "extensions.copyTokenHint": "수동 — 확장 프로그램 설정에 붙여넣기",
+  "extensions.pairingOpened": "페어링 페이지가 열렸습니다 — 확장 프로그램이 자동으로 연결됩니다",
+  "extensions.pairingFailed": "페어링 링크를 생성할 수 없습니다",
+  "extensions.pairingInProgress": "여는 중…",
 };
 
 export default settings;

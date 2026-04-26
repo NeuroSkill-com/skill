@@ -111,7 +111,33 @@ pub fn router() -> Router<AppState> {
         .route("/brain/recategorize-commands", post(recategorize_commands))
         .route("/brain/eeg-at", post(eeg_at))
         .route("/brain/eeg-range", post(eeg_range))
+        .route("/brain/screenshot-analysis", post(screenshot_analysis))
+        .route("/brain/screenshot-events", post(screenshot_events))
+        .route("/brain/ai-deep-analytics", post(ai_deep_analytics))
         .route("/activity/timeline", post(timeline))
+        // Browser analytics
+        .route("/brain/browser-focus", post(browser_focus))
+        .route("/brain/browser-distraction", post(browser_distraction))
+        .route("/brain/browser-content", post(browser_content))
+        .route("/brain/browser-llm", post(browser_llm))
+        .route("/brain/browser-research", post(browser_research))
+        .route("/brain/browser-domains", post(browser_domains))
+        .route("/brain/browser-learning", post(browser_learning))
+        .route("/brain/browser-optimal-hours", post(browser_optimal_hours))
+        .route("/brain/browser-ai-effectiveness", post(browser_ai_effectiveness))
+        .route("/brain/browser-procrastination", post(browser_procrastination))
+        .route("/brain/browser-deep-reading", post(browser_deep_reading))
+        .route("/brain/browser-video-roi", post(browser_video_roi))
+        .route("/brain/browser-email-impact", post(browser_email_impact))
+        .route("/brain/browser-tab-load", post(browser_tab_load))
+        .route("/brain/browser-weekday", post(browser_weekday))
+        .route("/brain/browser-night-owl", post(browser_night_owl))
+        .route("/brain/browser-copypaste", post(browser_copypaste))
+        .route("/brain/browser-post-meeting", post(browser_post_meeting))
+        .route("/brain/browser-switch-tax", post(browser_switch_tax))
+        // Feedback system
+        .route("/brain/feedback", post(submit_feedback).get(get_feedback_accuracy))
+        .route("/brain/feedback/recent", post(get_feedback_recent))
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -458,6 +484,315 @@ async fn timeline(State(state): State<AppState>, Json(req): Json<SinceRequest>) 
     let limit = req.limit.unwrap_or(100);
     run_query(&state, move |s| {
         serde_json::to_value(s.activity_timeline(since, now, limit)).unwrap_or_default()
+    })
+    .await
+}
+
+/// User screenshot analysis — EEG correlation, by-app, by-hour breakdown.
+async fn screenshot_analysis(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(86400));
+    let tz_offset = req.threshold.unwrap_or(0) as i32; // reuse threshold field for tz_offset
+    run_query(&state, move |s| s.screenshot_analysis(since, tz_offset)).await
+}
+
+/// Return recent user screenshot events with full context.
+async fn screenshot_events(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(86400));
+    let limit = req.limit.unwrap_or(50);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.get_user_screenshot_events(since, limit)).unwrap_or_default()
+    })
+    .await
+}
+
+/// Deep AI interaction analytics — 6 dimensions of how the developer works with AI.
+async fn ai_deep_analytics(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let since = req.since.unwrap_or(now.saturating_sub(7 * 86400));
+    run_query(&state, move |s| s.ai_deep_analytics(since)).await
+}
+
+// ── Browser analytics endpoints ─────────────────────────────────────────────
+
+async fn browser_focus(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    let limit = req.limit.unwrap_or(30);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_focus_by_domain(since, limit)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_distraction(
+    State(state): State<AppState>,
+    Json(req): Json<FlowRequest>,
+) -> BrainResult<serde_json::Value> {
+    let window = req.window_secs.unwrap_or(300);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_distraction_score(window)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_content(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_content_breakdown(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_llm(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_llm_usage(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_research(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_research_patterns(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_domains(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_domain_breakdown(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_learning(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_learning_efficiency(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_optimal_hours(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    let tz = chrono::Local::now().offset().local_minus_utc();
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_optimal_research_hours(since, tz)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_ai_effectiveness(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_ai_effectiveness(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_procrastination(
+    State(state): State<AppState>,
+    Json(req): Json<FlowRequest>,
+) -> BrainResult<serde_json::Value> {
+    let window = req.window_secs.unwrap_or(300);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_procrastination_check(window)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_deep_reading(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_deep_reading_sessions(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_video_roi(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_video_roi(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_email_impact(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_email_impact(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_tab_load(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_tab_cognitive_load(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_weekday(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_weekday_vs_weekend(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_night_owl(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    let tz = chrono::Local::now().offset().local_minus_utc();
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_night_owl_analysis(since, tz)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_copypaste(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_copypaste_patterns(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_post_meeting(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_post_meeting_spiral(since)).unwrap_or_default()
+    })
+    .await
+}
+
+async fn browser_switch_tax(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.browser_switch_tax(since)).unwrap_or_default()
+    })
+    .await
+}
+
+// ── Feedback system ─────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FeedbackRequest {
+    insight: String,
+    correct: bool,
+    score: Option<f64>,
+    context: Option<String>,
+}
+
+async fn submit_feedback(
+    State(state): State<AppState>,
+    Json(req): Json<FeedbackRequest>,
+) -> BrainResult<serde_json::Value> {
+    let (eeg_focus, eeg_mood) = state
+        .latest_bands
+        .lock()
+        .ok()
+        .and_then(|g| {
+            g.as_ref().map(|v| {
+                (
+                    v.get("focus").and_then(|f| f.as_f64()),
+                    v.get("mood").and_then(|m| m.as_f64()),
+                )
+            })
+        })
+        .unwrap_or((None, None));
+    let insight = req.insight;
+    let correct = req.correct;
+    let score = req.score;
+    let context = req.context.unwrap_or_default();
+    run_query(&state, move |s| {
+        s.insert_brain_feedback(&insight, correct, score, eeg_focus, eeg_mood, &context);
+        serde_json::json!({"ok": true})
+    })
+    .await
+}
+
+async fn get_feedback_accuracy(State(state): State<AppState>) -> BrainResult<serde_json::Value> {
+    run_query(&state, |s| {
+        serde_json::to_value(s.brain_feedback_accuracy()).unwrap_or_default()
+    })
+    .await
+}
+
+async fn get_feedback_recent(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let limit = req.limit.unwrap_or(20);
+    run_query(&state, move |s| {
+        serde_json::to_value(s.brain_feedback_recent(limit)).unwrap_or_default()
     })
     .await
 }

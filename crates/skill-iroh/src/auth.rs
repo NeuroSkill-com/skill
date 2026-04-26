@@ -342,6 +342,21 @@ impl IrohAuthStore {
 
     /// Build the combined invite payload for a given TOTP.
     /// The caller supplies the current endpoint_id and relay_url from the running
+    /// Return the raw base32 TOTP secret for the given entry.
+    /// Used by the browser extension pairing page to embed the secret for OTP generation.
+    pub fn totp_secret_b32(&self, totp_id: &str) -> anyhow::Result<String> {
+        let t = self
+            .db
+            .totp
+            .iter()
+            .find(|t| t.id == totp_id)
+            .ok_or_else(|| anyhow::anyhow!("unknown totp id: {totp_id}"))?;
+        if t.revoked_at.is_some() {
+            anyhow::bail!("TOTP credential is revoked");
+        }
+        Ok(t.secret_b32.clone())
+    }
+
     /// iroh tunnel.  The payload contains everything a phone client needs to
     /// connect *and* authenticate in one QR scan.
     pub fn build_invite_payload(

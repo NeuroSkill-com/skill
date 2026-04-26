@@ -724,6 +724,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "复制 auth token",
   "extensions.tokenCopied": "令牌已复制到剪贴板",
   "extensions.tokenFailed": "无法复制令牌",
+  "extensions.pairViaBrowser": "在浏览器中配对",
+  "extensions.pairViaBrowserHint": "在默认浏览器中打开配对页面",
+  "extensions.copyTokenHint": "手动 — 粘贴到扩展设置中",
+  "extensions.pairingOpened": "配对页面已打开 — 扩展将自动连接",
+  "extensions.pairingFailed": "无法生成配对链接",
+  "extensions.pairingInProgress": "正在打开…",
 };
 
 export default settings;

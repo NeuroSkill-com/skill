@@ -93,6 +93,13 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddedCount": "임베딩됨",
   "screenshots.unembeddedCount": "미임베딩",
   "screenshots.staleCount": "오래됨 (다른 모델)",
+
+  "screenshots.userScreenshotToggle": "사용자 스크린샷 추적",
+  "screenshots.userScreenshotDesc":
+    "스크린샷 촬영을 감지하고(macOS에서 Cmd+Shift+3/4, Windows에서 Print Screen) OCR, 검색 및 EEG 상관 분석을 위해 가져옵니다. 원본 파일은 이동하거나 삭제하지 않습니다.",
+  "screenshots.clipboardImageToggle": "클립보드 이미지 추적",
+  "screenshots.clipboardImageDesc":
+    "클립보드에 이미지가 복사되면 다른 스크린샷과 함께 캡처하여 검색 및 분석을 위해 인덱싱합니다.",
 };
 
 export default screenshots;

@@ -371,6 +371,8 @@ pub fn run() {
             open_about_window,
             show_main_window,
             autosize_main_window,
+            install_extension,
+            check_extensions_installed,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

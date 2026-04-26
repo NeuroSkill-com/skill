@@ -11,10 +11,14 @@ interface Props {
   sessionOnly: boolean;
   ocrEnabled: boolean;
   useGpu: boolean;
+  userScreenshotEnabled: boolean;
+  clipboardImageEnabled: boolean;
   onToggleEnabled: () => void | Promise<void>;
   onToggleSessionOnly: () => void | Promise<void>;
   onToggleOcr: () => void | Promise<void>;
   onToggleGpu: () => void | Promise<void>;
+  onToggleUserScreenshot: () => void | Promise<void>;
+  onToggleClipboardImage: () => void | Promise<void>;
 }
 
 let {
@@ -22,10 +26,14 @@ let {
   sessionOnly,
   ocrEnabled,
   useGpu,
+  userScreenshotEnabled,
+  clipboardImageEnabled,
   onToggleEnabled,
   onToggleSessionOnly,
   onToggleOcr,
   onToggleGpu,
+  onToggleUserScreenshot,
+  onToggleClipboardImage,
 }: Props = $props();
 
 const rowClass =
@@ -81,6 +89,32 @@ const rowClass =
       </div>
       <span class="ml-auto text-ui-xs font-bold tracking-widest uppercase shrink-0 {useGpu ? 'text-violet-500' : 'text-muted-foreground/50'}">
         {useGpu ? 'GPU' : 'CPU'}
+      </span>
+    </div>
+
+    <Separator class="bg-border dark:bg-white/[0.04]" />
+
+    <div class={rowClass}>
+      <ToggleSwitch checked={userScreenshotEnabled} label={t("screenshots.userScreenshotToggle")} ontoggle={onToggleUserScreenshot} />
+      <div class="flex flex-col gap-0.5 min-w-0">
+        <span class="text-ui-md font-semibold text-foreground leading-tight">{t("screenshots.userScreenshotToggle")}</span>
+        <span class="text-ui-sm text-muted-foreground leading-tight">{t("screenshots.userScreenshotDesc")}</span>
+      </div>
+      <span class="ml-auto text-ui-xs font-bold tracking-widest uppercase shrink-0 {userScreenshotEnabled ? 'text-violet-500' : 'text-muted-foreground/50'}">
+        {userScreenshotEnabled ? t("common.on") : t("common.off")}
+      </span>
+    </div>
+
+    <Separator class="bg-border dark:bg-white/[0.04]" />
+
+    <div class={rowClass}>
+      <ToggleSwitch checked={clipboardImageEnabled} label={t("screenshots.clipboardImageToggle")} ontoggle={onToggleClipboardImage} />
+      <div class="flex flex-col gap-0.5 min-w-0">
+        <span class="text-ui-md font-semibold text-foreground leading-tight">{t("screenshots.clipboardImageToggle")}</span>
+        <span class="text-ui-sm text-muted-foreground leading-tight">{t("screenshots.clipboardImageDesc")}</span>
+      </div>
+      <span class="ml-auto text-ui-xs font-bold tracking-widest uppercase shrink-0 {clipboardImageEnabled ? 'text-violet-500' : 'text-muted-foreground/50'}">
+        {clipboardImageEnabled ? t("common.on") : t("common.off")}
       </span>
     </div>
   </CardContent>

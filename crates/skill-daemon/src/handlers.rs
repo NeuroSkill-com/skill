@@ -49,12 +49,14 @@ pub(crate) async fn readyz(State(state): State<AppState>) -> Json<serde_json::Va
 /// generates an OTP, and registers via POST /v1/iroh/clients/register —
 /// the same flow as phone pairing.
 pub(crate) async fn pair_generate_code(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let port = 18444u16;
+    let port = daemon_addr().port();
 
     // Create a TOTP entry via the iroh auth store (reuse the same system)
     let result = (|| -> anyhow::Result<(String, String)> {
         let mut auth = state.iroh_auth.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
-        let (totp_view, secret_b32, _) = auth.create_totp("browser-extension")?;
+        let (totp_view, _otpauth_url, _qr) = auth.create_totp("browser-extension")?;
+        // Read the raw base32 secret from the entry (not the otpauth URL)
+        let secret_b32 = auth.totp_secret_b32(&totp_view.id)?;
         Ok((totp_view.id, secret_b32))
     })();
 
@@ -100,11 +102,13 @@ pub(crate) async fn pair_browser_page(
         return pair_error_response("Invalid or expired pairing link. Generate a new one from the NeuroSkill app.");
     };
 
-    let port = 18444u16;
+    let port = daemon_addr().port();
+    let auth_token = state.auth_token.lock().map(|t| t.clone()).unwrap_or_default();
     let html = PAIR_PAGE_TOTP
         .replace("{TOTP_ID}", &totp_id)
         .replace("{SECRET}", &secret_b32)
-        .replace("{PORT}", &port.to_string());
+        .replace("{PORT}", &port.to_string())
+        .replace("{AUTH_TOKEN}", &auth_token);
 
     axum::response::Response::builder()
         .header("Content-Type", "text/html; charset=utf-8")
@@ -155,6 +159,7 @@ p{color:#999;font-size:14px;margin-bottom:16px}
      data-totp-id="{TOTP_ID}"
      data-secret="{SECRET}"
      data-port="{PORT}"
+     data-auth="{AUTH_TOKEN}"
      style="display:none"></div>
 </body></html>"##;
 

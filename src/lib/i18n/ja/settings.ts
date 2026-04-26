@@ -750,6 +750,12 @@ const settings: Record<string, string> = {
   "extensions.copyToken": "auth tokenをコピー",
   "extensions.tokenCopied": "トークンをクリップボードにコピーしました",
   "extensions.tokenFailed": "トークンをコピーできませんでした",
+  "extensions.pairViaBrowser": "ブラウザでペアリング",
+  "extensions.pairViaBrowserHint": "デフォルトブラウザでペアリングページを開きます",
+  "extensions.copyTokenHint": "手動 — 拡張機能の設定に貼り付け",
+  "extensions.pairingOpened": "ペアリングページを開きました — 拡張機能が自動的に接続します",
+  "extensions.pairingFailed": "ペアリングリンクを生成できませんでした",
+  "extensions.pairingInProgress": "開いています…",
 };
 
 export default settings;
