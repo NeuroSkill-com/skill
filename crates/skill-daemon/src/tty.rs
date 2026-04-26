@@ -14,7 +14,7 @@
 
 use std::ffi::CString;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -30,13 +30,20 @@ extern "C" fn on_sigchld(_: libc::c_int) {
     SIGCHLD.store(true, Ordering::Relaxed);
 }
 
-/// Run the shim. Args: `[<log-path>]`.
+/// Run the shim. Optional arg overrides the log path; otherwise the daemon
+/// picks one inside `~/.skill/terminal-logs/`.
 pub fn run(args: &[String]) -> anyhow::Result<()> {
-    let log_path = args
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("usage: skill-daemon tty <log-file>"))?;
+    let log_path = match args.first() {
+        Some(p) => std::path::PathBuf::from(p),
+        None => default_log_path()?,
+    };
+    rotate_logs(log_path.parent(), &log_path);
 
-    let mut log = OpenOptions::new().create(true).append(true).open(log_path)?;
+    // BufWriter cuts syscalls per PTY-read from ~1 to ~0 (8 KB chunks fit
+    // most TUI redraw bursts). Final flush happens via Drop, but we also
+    // call .flush() explicitly before exit to surface I/O errors.
+    let log_file = OpenOptions::new().create(true).append(true).open(&log_path)?;
+    let mut log = BufWriter::with_capacity(8192, log_file);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
 
     let stdin_fd = libc::STDIN_FILENO;
@@ -113,6 +120,23 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
 
     // ── parent ──
     unsafe { libc::close(slave_fd) };
+
+    // Emit OSC 2 immediately so the terminal tab/window title shows the cwd
+    // instead of our argv (which would otherwise expose the log file path).
+    // The inner shell's precmd will keep updating this on each prompt; this
+    // line just covers the brief gap between exec and the first prompt.
+    {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let cwd_str = cwd.to_string_lossy();
+        let home = std::env::var("HOME").unwrap_or_default();
+        let display = if !home.is_empty() && cwd_str.starts_with(&home) {
+            format!("~{}", &cwd_str[home.len()..])
+        } else {
+            cwd_str.into_owned()
+        };
+        let osc = format!("\x1b]2;{display}\x07");
+        let _ = write_all_fd(stdout_fd, osc.as_bytes());
+    }
 
     // Restore original termios on every exit path.
     struct TermiosGuard(libc::termios);
@@ -191,6 +215,8 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
         }
     }
 
+    let _ = log.flush();
+
     let mut status: libc::c_int = 0;
     unsafe { libc::waitpid(pid, &mut status, 0) };
     let exit_code = if libc::WIFEXITED(status) {
@@ -229,7 +255,7 @@ fn write_all_fd(fd: RawFd, mut bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-fn drain_master(master_fd: RawFd, buf: &mut [u8], stdout_fd: RawFd, log: &mut std::fs::File) {
+fn drain_master<W: Write>(master_fd: RawFd, buf: &mut [u8], stdout_fd: RawFd, log: &mut W) {
     // Make master non-blocking so we can drain whatever's pending.
     let flags = unsafe { libc::fcntl(master_fd, libc::F_GETFL) };
     if flags >= 0 {
@@ -248,4 +274,90 @@ fn drain_master(master_fd: RawFd, buf: &mut [u8], stdout_fd: RawFd, log: &mut st
 
 fn last_err() -> String {
     std::io::Error::last_os_error().to_string()
+}
+
+/// Default log path: `~/.skill/terminal-logs/<YYYYMMDD-HHMMSS>-<pid>.log`.
+fn default_log_path() -> anyhow::Result<std::path::PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("no $HOME"))?;
+    let dir = home.join(".skill").join("terminal-logs");
+    std::fs::create_dir_all(&dir)?;
+    let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let pid = std::process::id();
+    Ok(dir.join(format!("{ts}-{pid}.log")))
+}
+
+/// Compress finished logs (whose PID is no longer alive) to `.log.zst`,
+/// then enforce a 100-file retention cap on the combined `.log`/`.log.zst`
+/// set. Skips `current_log` so we never touch the file we're about to write.
+fn rotate_logs(dir: Option<&std::path::Path>, current_log: &std::path::Path) {
+    let Some(dir) = dir else { return };
+
+    // Phase 1: compress every uncompressed log whose owning PID has exited.
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path == current_log {
+            continue;
+        }
+        if path.extension().is_none_or(|e| e != "log") {
+            continue;
+        }
+        if pid_alive_for_log(&path) {
+            continue; // another shim is still appending
+        }
+        let _ = compress_to_zst(&path);
+    }
+
+    // Phase 2: enforce retention. Compressed logs are tiny so we can keep
+    // many more than the old uncompressed cap.
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut all: Vec<(std::path::PathBuf, std::time::SystemTime)> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|ext| ext == "log" || ext == "zst")
+        })
+        .filter_map(|e| Some((e.path(), e.metadata().ok()?.modified().ok()?)))
+        .collect();
+    all.sort_by_key(|(_, m)| std::cmp::Reverse(*m));
+    for (path, _) in all.into_iter().skip(100) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// Filenames are `<YYYYMMDD-HHMMSS>-<pid>.log` — extract the PID and check
+/// whether that process still exists with `kill(pid, 0)`.
+fn pid_alive_for_log(path: &std::path::Path) -> bool {
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    let Some(pid_str) = stem.rsplit('-').next() else {
+        return false;
+    };
+    let Ok(pid) = pid_str.parse::<libc::pid_t>() else {
+        return false;
+    };
+    if pid <= 0 {
+        return false;
+    }
+    // kill(pid, 0) returns 0 when the signal could be delivered (process
+    // exists and we have permission). Errno ESRCH means it's gone.
+    unsafe { libc::kill(pid, 0) == 0 }
+}
+
+/// Stream-compress `src` into a sibling `<src>.zst`, then delete `src`.
+/// Compression level 3 (zstd default) is fast on CPU and still yields ~10×
+/// reduction for ANSI-heavy terminal output.
+fn compress_to_zst(src: &std::path::Path) -> std::io::Result<()> {
+    let dst = src.with_extension("log.zst");
+    let input = std::fs::File::open(src)?;
+    let output = std::fs::File::create(&dst)?;
+    let mut encoder = zstd::Encoder::new(output, 3)?;
+    let mut reader = std::io::BufReader::new(input);
+    std::io::copy(&mut reader, &mut encoder)?;
+    encoder.finish()?;
+    std::fs::remove_file(src)?;
+    Ok(())
 }

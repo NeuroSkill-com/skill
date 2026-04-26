@@ -12323,6 +12323,7 @@ dependencies = [
  "ureq 3.3.0",
  "urlencoding",
  "uuid",
+ "zstd",
  "zuna-rs",
 ]
 

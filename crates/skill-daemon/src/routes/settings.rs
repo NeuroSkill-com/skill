@@ -1284,20 +1284,12 @@ if [[ -n "$NEUROSKILL_RECORDING" ]]; then
 fi
 
 # Session recording. The daemon's `tty` subcommand wraps the shell on a
-# fresh PTY and proxies stdin/stdout while properly forwarding SIGWINCH
-# (unlike macOS `script(1)`), so TUI apps re-render correctly on resize.
-# Set NEUROSKILL_RECORDING=1 in your environment to opt out.
-if [[ -z "$NEUROSKILL_RECORDING" ]]; then
+# fresh PTY and proxies stdin/stdout while forwarding SIGWINCH correctly.
+# Log path is chosen internally (under ~/.skill/terminal-logs/) so it never
+# appears in argv or the terminal title. Set NEUROSKILL_RECORDING=1 to opt out.
+if [[ -z "$NEUROSKILL_RECORDING" && -x "{daemon_path}" ]]; then
   export NEUROSKILL_RECORDING=1
-  _ns_log_dir="$HOME/.skill/terminal-logs"
-  mkdir -p "$_ns_log_dir"
-  # Rotate: keep last 20 logs, drop any over 1MB
-  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
-  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
-  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
-  if [[ -x "{daemon_path}" ]]; then
-    exec "{daemon_path}" tty "$_ns_log"
-  fi
+  exec "{daemon_path}" tty
 fi
 "#
         ),
@@ -1347,16 +1339,10 @@ if [[ -n "$NEUROSKILL_RECORDING" ]]; then
 fi
 
 # Session recording via the daemon's `tty` PTY shim (forwards SIGWINCH).
-if [[ -z "$NEUROSKILL_RECORDING" ]]; then
+# Log path chosen internally — nothing leaks into argv or the tab title.
+if [[ -z "$NEUROSKILL_RECORDING" && -x "{daemon_path}" ]]; then
   export NEUROSKILL_RECORDING=1
-  _ns_log_dir="$HOME/.skill/terminal-logs"
-  mkdir -p "$_ns_log_dir"
-  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
-  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
-  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
-  if [[ -x "{daemon_path}" ]]; then
-    exec "{daemon_path}" tty "$_ns_log"
-  fi
+  exec "{daemon_path}" tty
 fi
 "#
         ),
