@@ -61,7 +61,7 @@ async function refresh() {
     const statuses: ShellStatus[] = [];
     for (const s of SHELLS) {
       try {
-        const status = await daemonPost<any>("/activity/shell-hook-status", { shell: s.shell });
+        const status = await daemonPost<any>("/v1/activity/shell-hook-status", { shell: s.shell });
         statuses.push({
           shell: s.shell,
           label: s.label,
@@ -90,7 +90,7 @@ async function refresh() {
     // Fetch recent terminal commands
     try {
       const now = Math.floor(Date.now() / 1000);
-      recentCommands = await daemonPost<TerminalCommand[]>("/brain/terminal-commands", {
+      recentCommands = await daemonPost<TerminalCommand[]>("/v1/brain/terminal-commands", {
         since: now - 3600,
         limit: 15,
       });
@@ -108,12 +108,17 @@ async function install(shell: string) {
   error = "";
   success = "";
   try {
-    const result = await daemonPost<any>("/activity/install-shell-hook", { shell });
+    const result = await daemonPost<any>("/v1/activity/install-shell-hook", { shell });
     if (result?.ok) {
-      if (result.already_installed) {
-        success = `${shell} hook already installed in ${result.rc_file}`;
+      if (result.instructions) {
+        // PowerShell returns manual setup instructions instead of touching $PROFILE.
+        success = result.instructions;
+      } else if (result.already_installed) {
+        success = result.hook_refreshed
+          ? `${shell} hook refreshed in ${result.rc_file}. Open a new terminal to pick up the latest version.`
+          : `${shell} hook already installed in ${result.rc_file}`;
       } else {
-        success = `${shell} hook installed. Open a new terminal for it to take effect.`;
+        success = `${shell} hook installed in ${result.rc_file ?? result.hook_path}. Open a new terminal for it to take effect.`;
       }
       await refresh();
     } else {
@@ -121,6 +126,7 @@ async function install(shell: string) {
     }
   } catch (e: any) {
     error = e?.message ?? "Installation failed";
+    console.error("install hook failed:", e);
   }
   installing = null;
 }
@@ -130,7 +136,7 @@ async function uninstall(shell: string) {
   error = "";
   success = "";
   try {
-    const result = await daemonPost<any>("/activity/uninstall-shell-hook", { shell });
+    const result = await daemonPost<any>("/v1/activity/uninstall-shell-hook", { shell });
     if (result?.ok) {
       success = `${shell} hook removed. Open a new terminal to apply.`;
       await refresh();
@@ -160,13 +166,14 @@ function categoryColor(cat: string): string {
 {#if loading}
   <div class="flex items-center justify-center py-12"><Spinner /></div>
 {:else}
+<div class="flex flex-col gap-5">
 
   <!-- Status messages -->
   {#if error}
     <div class="rounded-md border border-red-500/30 bg-red-500/5 px-4 py-2 text-sm text-red-400">{error}</div>
   {/if}
   {#if success}
-    <div class="rounded-md border border-green-500/30 bg-green-500/5 px-4 py-2 text-sm text-green-400">{success}</div>
+    <div class="rounded-md border border-green-500/30 bg-green-500/5 px-4 py-2 text-xs text-green-400 whitespace-pre-line break-all font-mono leading-relaxed">{success}</div>
   {/if}
 
   <!-- Shell hooks -->
@@ -177,14 +184,14 @@ function categoryColor(cat: string): string {
     />
     <CardContent class="space-y-3">
       {#each shells as s}
-        <div class="flex items-center justify-between rounded-lg border border-border/50 px-4 py-3">
-          <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-xs font-bold">
+        <div class="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-4 py-3">
+          <div class="flex min-w-0 flex-1 items-center gap-3">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold">
               {s.label.slice(0, 2)}
             </div>
-            <div>
+            <div class="min-w-0 flex-1">
               <div class="text-sm font-medium">{s.label}</div>
-              <div class="text-xs text-muted-foreground">
+              <div class="truncate text-xs text-muted-foreground" title={s.rcFile}>
                 {#if s.installed}
                   <span class="text-green-400">Installed</span> &middot; {s.rcFile}
                 {:else if !s.available}
@@ -195,7 +202,7 @@ function categoryColor(cat: string): string {
               </div>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex shrink-0 items-center gap-2">
             {#if s.installed}
               <!-- Health indicator -->
               {#if s.hookExists && s.rcHasLine}
@@ -259,7 +266,7 @@ function categoryColor(cat: string): string {
       {#if recentCommands.length > 0}
         <div class="space-y-1">
           {#each recentCommands as cmd}
-            <div class="flex items-center gap-2 rounded px-2 py-1 text-xs font-mono hover:bg-muted/50">
+            <div class="flex min-w-0 items-center gap-2 rounded px-2 py-1 text-xs font-mono hover:bg-muted/50">
               <span class="w-16 shrink-0 text-muted-foreground">{fmtTime(cmd.started_at)}</span>
               <span class="w-5 shrink-0 text-center">
                 {#if cmd.exit_code === null}
@@ -271,7 +278,7 @@ function categoryColor(cat: string): string {
                 {/if}
               </span>
               <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] {categoryColor(cmd.category)}">{cmd.category}</span>
-              <span class="truncate" title={cmd.command}>{cmd.command}</span>
+              <span class="min-w-0 flex-1 truncate" title={cmd.command}>{cmd.command}</span>
             </div>
           {/each}
         </div>
@@ -284,4 +291,5 @@ function categoryColor(cat: string): string {
   <div class="flex justify-end">
     <Button variant="outline" size="sm" onclick={refresh}>Refresh</Button>
   </div>
+</div>
 {/if}

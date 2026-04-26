@@ -243,7 +243,6 @@ pub fn router() -> Router<AppState> {
         .route("/activity/install-shell-hook", post(install_shell_hook))
         .route("/activity/uninstall-shell-hook", post(uninstall_shell_hook))
         .route("/activity/shell-hook-status", post(shell_hook_status))
-        .route("/activity/terminal-logs", post(terminal_logs))
         .route("/activity/files-in-range", post(activity_files_in_range))
         .route("/activity/meetings-in-range", post(activity_meetings_in_range))
         .route("/activity/recent-clipboard", post(activity_recent_clipboard))
@@ -1011,7 +1010,6 @@ async fn activity_shell_command(
 /// GET /v1/activity/shell-hook?shell=zsh
 async fn get_shell_hook(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-    State(state): State<AppState>,
 ) -> axum::response::Response {
     let shell = params.get("shell").map(|s| s.as_str()).unwrap_or("zsh");
     let hook = generate_shell_hook(shell);
@@ -1034,7 +1032,15 @@ async fn install_shell_hook(
         let hook_dir = skill_dir.join("shell-hooks");
         std::fs::create_dir_all(&hook_dir).ok();
 
-        // Determine file extension and rc file path
+        // Determine file extension and rc file path.
+        // Fish reads from XDG config dir on every platform (including macOS,
+        // where dirs::config_dir() points to ~/Library/Application Support but
+        // fish ignores that). Resolve fish config explicitly via XDG_CONFIG_HOME
+        // or ~/.config so installs land in a directory fish actually reads.
+        let fish_config = std::env::var_os("XDG_CONFIG_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
+            .map(|c| c.join("fish").join("config.fish"));
         let (ext, rc_paths) = match shell {
             "zsh" => ("zsh", vec![dirs::home_dir().map(|h| h.join(".zshrc"))]),
             "bash" => (
@@ -1044,10 +1050,7 @@ async fn install_shell_hook(
                     dirs::home_dir().map(|h| h.join(".bash_profile")),
                 ],
             ),
-            "fish" => (
-                "fish",
-                vec![dirs::config_dir().map(|c| c.join("fish").join("config.fish"))],
-            ),
+            "fish" => ("fish", vec![fish_config]),
             "powershell" | "pwsh" => ("psm1", vec![]), // PowerShell uses Import-Module
             _ => return serde_json::json!({"ok": false, "error": format!("unsupported shell: {shell}")}),
         };
@@ -1097,7 +1100,11 @@ async fn install_shell_hook(
                     });
                 }
             }
-            // Append to rc file
+            // Append to rc file. Create the parent dir first — fish on a
+            // fresh macOS install has no ~/.config/fish/ directory yet.
+            if let Some(parent) = rc.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
             let line = format!("\n{marker}\n{source_line}\n");
             if let Err(e) = std::fs::OpenOptions::new()
                 .create(true)
@@ -1138,12 +1145,12 @@ async fn shell_hook_status(
         let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
 
         let hook_exists = hook_file.exists();
-        let rc_has_line = rc_path.as_ref().map_or(false, |p| {
-            std::fs::read_to_string(p).map_or(false, |c| c.contains("neuroskill"))
-        });
+        let rc_has_line = rc_path
+            .as_ref()
+            .is_some_and(|p| std::fs::read_to_string(p).is_ok_and(|c| c.contains("neuroskill")));
         let available = match shell {
             "zsh" | "bash" => true,
-            "fish" => dirs::config_dir().map_or(false, |_| true),
+            "fish" => dirs::home_dir().is_some(),
             "powershell" | "pwsh" => true,
             _ => false,
         };
@@ -1210,74 +1217,16 @@ async fn uninstall_shell_hook(
     Json(result)
 }
 
-/// Read the tail of recent terminal session logs.
-async fn terminal_logs(State(state): State<AppState>, Json(body): Json<serde_json::Value>) -> Json<serde_json::Value> {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let tail_bytes = body.get("bytes").and_then(|v| v.as_u64()).unwrap_or(5000) as usize;
-    let result = tokio::task::spawn_blocking(move || {
-        let log_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".skill")
-            .join("terminal-logs");
-        if !log_dir.exists() {
-            return serde_json::json!({"logs": []});
-        }
-        let mut entries: Vec<_> = std::fs::read_dir(&log_dir)
-            .map(|rd| rd.filter_map(|e| e.ok()).collect())
-            .unwrap_or_default();
-        entries.sort_by_key(|e| std::cmp::Reverse(e.metadata().ok().and_then(|m| m.modified().ok())));
-
-        let mut logs = Vec::new();
-        for entry in entries.iter().take(5) {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("log") {
-                continue;
-            }
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            let content = if size > 0 {
-                let file = std::fs::File::open(&path).ok();
-                file.and_then(|mut f| {
-                    use std::io::{Read, Seek, SeekFrom};
-                    let start = if size > tail_bytes as u64 {
-                        size - tail_bytes as u64
-                    } else {
-                        0
-                    };
-                    f.seek(SeekFrom::Start(start)).ok()?;
-                    let mut buf = Vec::new();
-                    f.read_to_end(&mut buf).ok()?;
-                    // Strip ANSI and control chars for readability
-                    let s = String::from_utf8_lossy(&buf);
-                    let clean: String = s
-                        .chars()
-                        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
-                        .collect();
-                    Some(clean)
-                })
-                .unwrap_or_default()
-            } else {
-                String::new()
-            };
-            logs.push(serde_json::json!({
-                "file": name,
-                "size": size,
-                "tail": content,
-            }));
-        }
-        serde_json::json!({"logs": logs})
-    })
-    .await
-    .unwrap_or_else(|e| serde_json::json!({"error": e.to_string()}));
-    Json(result)
-}
-
 /// Get the rc file path for a given shell.
 fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
+    let fish_config = std::env::var_os("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
+        .map(|c| c.join("fish").join("config.fish"));
     match shell {
         "zsh" => ("zsh", dirs::home_dir().map(|h| h.join(".zshrc"))),
         "bash" => ("bash", dirs::home_dir().map(|h| h.join(".bashrc"))),
-        "fish" => ("fish", dirs::config_dir().map(|c| c.join("fish").join("config.fish"))),
+        "fish" => ("fish", fish_config),
         "powershell" | "pwsh" => ("psm1", None),
         _ => ("sh", None),
     }
@@ -1286,6 +1235,13 @@ fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
 /// Generate the hook script content for a given shell. Self-contained — no external file deps.
 pub(crate) fn generate_shell_hook(shell: &str) -> String {
     let port = 18444;
+    // Absolute path to this daemon binary — the hook invokes it as `<daemon> tty <log>`
+    // so the PTY shim handles SIGWINCH propagation correctly. Auto-refresh on
+    // daemon startup re-bakes this path if the user moves/upgrades the app.
+    let daemon_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.to_str().map(String::from))
+        .unwrap_or_else(|| "skill-daemon".to_string());
     match shell {
         "zsh" => format!(
             r#"# NeuroSkill terminal tracking hook (zsh)
@@ -1318,6 +1274,31 @@ _neuroskill_precmd() {{
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec _neuroskill_preexec
 add-zsh-hook precmd _neuroskill_precmd
+
+# Inside the script-wrapped shell, override the terminal tab title so it
+# shows the cwd instead of the `script` command line. Outside the wrapper
+# (e.g. VSCode/tmux/screen), leave the user's existing title behaviour alone.
+if [[ -n "$NEUROSKILL_RECORDING" ]]; then
+  _neuroskill_set_title() {{ print -Pn "\e]2;%~\a"; }}
+  add-zsh-hook precmd _neuroskill_set_title
+fi
+
+# Session recording. The daemon's `tty` subcommand wraps the shell on a
+# fresh PTY and proxies stdin/stdout while properly forwarding SIGWINCH
+# (unlike macOS `script(1)`), so TUI apps re-render correctly on resize.
+# Set NEUROSKILL_RECORDING=1 in your environment to opt out.
+if [[ -z "$NEUROSKILL_RECORDING" ]]; then
+  export NEUROSKILL_RECORDING=1
+  _ns_log_dir="$HOME/.skill/terminal-logs"
+  mkdir -p "$_ns_log_dir"
+  # Rotate: keep last 20 logs, drop any over 1MB
+  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
+  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
+  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
+  if [[ -x "{daemon_path}" ]]; then
+    exec "{daemon_path}" tty "$_ns_log"
+  fi
+fi
 "#
         ),
 
@@ -1357,6 +1338,26 @@ _neuroskill_prompt_cmd() {{
 }}
 trap '_neuroskill_debug_trap' DEBUG
 PROMPT_COMMAND="_neuroskill_prompt_cmd${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
+
+# Inside the script-wrapped shell, set the tab title to the cwd so the
+# terminal doesn't display the `script` command line.
+if [[ -n "$NEUROSKILL_RECORDING" ]]; then
+  _neuroskill_set_title() {{ printf "\e]2;%s\a" "${{PWD/#$HOME/~}}"; }}
+  PROMPT_COMMAND="_neuroskill_set_title;${{PROMPT_COMMAND}}"
+fi
+
+# Session recording via the daemon's `tty` PTY shim (forwards SIGWINCH).
+if [[ -z "$NEUROSKILL_RECORDING" ]]; then
+  export NEUROSKILL_RECORDING=1
+  _ns_log_dir="$HOME/.skill/terminal-logs"
+  mkdir -p "$_ns_log_dir"
+  find "$_ns_log_dir" -name '*.log' -size +1M -delete 2>/dev/null
+  find "$_ns_log_dir" -name '*.log' 2>/dev/null | sort -r | tail -n +20 | xargs rm -f 2>/dev/null || true
+  _ns_log="$_ns_log_dir/$(date +%Y%m%d-%H%M%S)-$$.log"
+  if [[ -x "{daemon_path}" ]]; then
+    exec "{daemon_path}" tty "$_ns_log"
+  fi
+fi
 "#
         ),
 

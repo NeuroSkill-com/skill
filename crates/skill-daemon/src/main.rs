@@ -17,6 +17,8 @@ mod scanner;
 mod service_installer;
 pub(crate) mod session;
 pub(crate) mod session_runner;
+#[cfg(unix)]
+mod tty;
 
 // Re-export from skill-daemon-state for internal use via `crate::` paths
 pub(crate) use skill_daemon_state::auth;
@@ -38,8 +40,20 @@ use tracing::info;
 
 use axum::http::Method;
 
+fn main() -> anyhow::Result<()> {
+    // Synchronous subcommand dispatch. The PTY shim must run *before* tokio
+    // is initialised — it does its own blocking I/O and signal handling, and
+    // tokio's thread pool would interfere.
+    let args: Vec<String> = std::env::args().collect();
+    #[cfg(unix)]
+    if args.get(1).map(String::as_str) == Some("tty") {
+        return tty::run(&args[2..]);
+    }
+    daemon_main()
+}
+
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn daemon_main() -> anyhow::Result<()> {
     // Handle --uninstall flag: remove the OS service and exit immediately.
     if std::env::args().any(|a| a == "--uninstall") {
         let binary_path = std::env::current_exe().unwrap_or_default();
@@ -171,6 +185,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/version", get(handlers::version))
         .route("/log/recent", get(handlers::get_log_recent))
         .route("/pair/generate-code", axum::routing::post(handlers::pair_generate_code))
+        .route("/pair/start", axum::routing::post(handlers::pair_start))
+        .route("/pair/approve", axum::routing::post(handlers::pair_approve))
         .route("/status", get(handlers::status).post(handlers::update_status))
         .route("/devices", get(handlers::devices).post(handlers::update_devices))
         .route(
@@ -305,6 +321,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/readyz", get(handlers::readyz))
         // Public pairing page for browser extensions (code-gated, no bearer auth)
         .route("/pair/browser", get(handlers::pair_browser_page))
+        // Public PIN/token redemption (the PIN is the auth — single-use, 2-min expiry)
+        .route("/pair/redeem", axum::routing::post(handlers::pair_redeem))
+        // Public claim endpoint for deep-link pairing (extension polls after user approval)
+        .route("/pair/claim", axum::routing::post(handlers::pair_claim))
         .merge(authed_root)
         .nest("/v1", v1)
         .merge(root_cmd)

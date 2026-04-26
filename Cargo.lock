@@ -12262,6 +12262,7 @@ dependencies = [
  "half",
  "hex",
  "hf-hub 0.5.0",
+ "libc",
  "luna-rs",
  "mendi",
  "mw75",

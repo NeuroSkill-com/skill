@@ -773,6 +773,7 @@ const settings: Record<string, string> = {
   "extensions.install": "Instalar",
   "extensions.reinstall": "Reinstalar",
   "extensions.installing": "Instalando…",
+  "extensions.noIdeDetected": "No se detectó ningún editor basado en VS Code. Instala VS Code, VSCodium, Cursor, Windsurf u otro editor basado en VS Code para poder instalar la extensión.",
   "extensions.openStore": "Tienda",
   "extensions.pairingTitle": "Emparejar extensión del navegador",
   "extensions.pairingDesc": "Copia tu auth token y pégalo en los ajustes de la extensión del navegador para emparejar.",
@@ -785,6 +786,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "Página de emparejamiento abierta — la extensión se conectará automáticamente",
   "extensions.pairingFailed": "No se pudo generar el enlace de emparejamiento",
   "extensions.pairingInProgress": "Abriendo…",
+  "extensions.copyPairingToken": "Copiar token de emparejamiento",
+  "extensions.copyPairingTokenHint": "Recomendado: abre el popup de la extensión → se empareja automáticamente desde el portapapeles",
+  "extensions.clipboardPairCopied": "Token copiado. Abre el popup de la extensión — se emparejará automáticamente.",
 };
 
 export default settings;

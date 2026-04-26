@@ -2326,7 +2326,7 @@ impl ActivityStore {
             {
                 "install"
             }
-            "cargo" if cmd.contains("install") => "install",
+            // (cargo install is already handled in the "cargo" arm above)
             // Navigation & file ops
             "cd" | "ls" | "ll" | "la" | "find" | "grep" | "rg" | "fd" | "fzf" | "tree" | "cat" | "bat" | "less"
             | "more" | "head" | "tail" | "wc" | "pwd" | "which" | "where" | "file" | "stat" | "du" | "df" | "exa"
@@ -2867,7 +2867,7 @@ impl ActivityStore {
                 avg_reading_secs: read_secs as u64,
                 pages: row.get::<_, i64>(5)? as u64,
                 revisits: revisits as u64,
-                efficiency_score: (score.max(0.0).min(100.0) * 10.0).round() / 10.0,
+                efficiency_score: (score.clamp(0.0, 100.0) * 10.0).round() / 10.0,
             })
         })
         .map(|r| r.filter_map(|r| r.ok()).collect())
@@ -3642,7 +3642,7 @@ impl ActivityStore {
             .unwrap_or_default();
 
         let mut results = Vec::new();
-        for (id, command, category, start, end, _terminal) in &cmds {
+        for (_id, command, category, start, end, _terminal) in &cmds {
             // Round to minute boundaries for input_buckets join
             let start_min = start - (start % 60);
             let end_min = end - (end % 60) + 60;
@@ -4368,6 +4368,7 @@ impl ActivityStore {
     // ── Conversations ─────────────────────────────────────────────────────
 
     /// Insert a conversation message and update the FTS index.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_conversation(
         &self,
         app: &str,

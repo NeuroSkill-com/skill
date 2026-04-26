@@ -761,6 +761,7 @@ const settings: Record<string, string> = {
   "extensions.install": "Встановити",
   "extensions.reinstall": "Перевстановити",
   "extensions.installing": "Встановлення…",
+  "extensions.noIdeDetected": "Не знайдено редактор на основі VS Code. Встановіть VS Code, VSCodium, Cursor, Windsurf або інший редактор на основі VS Code, щоб встановити розширення.",
   "extensions.openStore": "Магазин",
   "extensions.pairingTitle": "Парування розширення браузера",
   "extensions.pairingDesc": "Скопіюйте свій auth token і вставте його в налаштуваннях розширення браузера для парування.",
@@ -773,6 +774,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "Сторінку парування відкрито — розширення підключиться автоматично",
   "extensions.pairingFailed": "Не вдалося створити посилання для парування",
   "extensions.pairingInProgress": "Відкривається…",
+  "extensions.copyPairingToken": "Скопіювати токен парування",
+  "extensions.copyPairingTokenHint": "Рекомендовано: відкрийте спливаюче вікно розширення → автоматичне парування з буфера обміну",
+  "extensions.clipboardPairCopied": "Токен скопійовано. Відкрийте спливаюче вікно розширення — парування відбудеться автоматично.",
 };
 
 export default settings;

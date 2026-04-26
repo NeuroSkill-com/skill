@@ -139,12 +139,17 @@ async function toggleSession(idx: number) {
 let weeklyDigest = $state<WeeklyDigest | null>(null);
 let weeklyLoading = $state(false);
 
+let weeklyError = $state("");
 async function loadWeeklyDigest() {
   weeklyLoading = true;
+  weeklyError = "";
   try {
     const weekStart = todayStart - 7 * 86400;
     weeklyDigest = await getWeeklyDigest(weekStart);
-  } catch {}
+  } catch (e: any) {
+    weeklyError = e?.message ?? "Failed to load weekly report";
+    console.error("loadWeeklyDigest failed:", e);
+  }
   weeklyLoading = false;
 }
 
@@ -1430,6 +1435,11 @@ let heatmapMax = $state(1);
     </div>
     <SettingsCard>
       <CardContent class="py-3">
+        {#if weeklyError}
+          <div class="mb-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+            {weeklyError}
+          </div>
+        {/if}
         {#if !weeklyDigest && !weeklyLoading}
           <Button size="sm" variant="outline" class="w-full" onclick={loadWeeklyDigest}>
             {t("activity.loadWeeklyReport")}

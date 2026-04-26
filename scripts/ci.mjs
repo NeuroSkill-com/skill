@@ -15,6 +15,7 @@
 //   download-llama PLAT TGT FEAT  Download + validate prebuilt llama libs
 //   import-apple-cert        Import .p12 into temporary keychain (macOS)
 //   validate-notarization    Check Apple notarization credentials (macOS)
+//   validate-apple-signing-identity   Assert APPLE_SIGNING_IDENTITY is a Developer ID Application cert
 //   free-disk-space          Remove unused toolchains on Linux runners
 //   install-protoc-windows   Install protoc via choco or direct download (Windows)
 //   self-test                Validate all commands + workflow references
@@ -380,6 +381,36 @@ function findFiles(dir) {
   return results;
 }
 
+// Apple ships several certificate types under "codesigning". Only one of them
+// — `Developer ID Application` — produces binaries Gatekeeper trusts for
+// distribution. The Safari extension wrapper this app builds at runtime is
+// only loaded by Safari when the parent (.app) clears Gatekeeper, so signing
+// the main app with anything else (Apple Development, Mac Developer, ad-hoc,
+// self-signed) silently breaks the Safari extension flow on end-user Macs.
+//
+// Catch the wrong identity here, before a 15-minute build burns a release
+// slot. The check is cheap: just inspect the secret string.
+function cmdValidateAppleSigningIdentity() {
+  const id = process.env.APPLE_SIGNING_IDENTITY || "";
+  if (!id) {
+    error("APPLE_SIGNING_IDENTITY is empty.");
+    process.exit(1);
+  }
+  if (!id.startsWith("Developer ID Application")) {
+    error(`APPLE_SIGNING_IDENTITY must be a 'Developer ID Application' certificate.`);
+    error(`  Got: ${id.replace(/\(.+\)/, "(…)")}`);
+    error(`  Why: only Developer ID Application certs pass Gatekeeper for distribution.`);
+    error(`       Apple Development / Mac Developer certs only work for the signing`);
+    error(`       developer's own Mac via Xcode — Safari refuses to load extensions`);
+    error(`       from apps Gatekeeper rejects on end-user machines.`);
+    error(`  Fix: regenerate the cert at https://developer.apple.com/account/resources/certificates`);
+    error(`       choosing 'Developer ID Application', export to .p12, and update both`);
+    error(`       APPLE_CERTIFICATE and APPLE_SIGNING_IDENTITY secrets.`);
+    process.exit(1);
+  }
+  console.log(`✓ APPLE_SIGNING_IDENTITY is a Developer ID Application certificate.`);
+}
+
 function cmdImportAppleCert() {
   const tmp = process.env.RUNNER_TEMP;
   const keychain = join(tmp, "app-signing.keychain-db");
@@ -481,6 +512,7 @@ function cmdSelfTest() {
     "prepare-changelog": cmdPrepareChangelog, "update-latest-json": cmdUpdateLatestJson,
     "discord-notify": cmdDiscordNotify, "download-llama": cmdDownloadLlama,
     "import-apple-cert": cmdImportAppleCert, "validate-notarization": cmdValidateNotarization,
+    "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
     "free-disk-space": cmdFreeDiskSpace, "install-protoc-windows": cmdInstallProtocWindows,
     "self-test": cmdSelfTest, "dry-run-release": cmdDryRunRelease,
   };
@@ -579,6 +611,7 @@ const COMMANDS = {
   "download-llama": (a) => cmdDownloadLlama(a),
   "import-apple-cert": cmdImportAppleCert,
   "validate-notarization": cmdValidateNotarization,
+  "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
   "free-disk-space": cmdFreeDiskSpace,
   "install-protoc-windows": cmdInstallProtocWindows,
   "self-test": cmdSelfTest,

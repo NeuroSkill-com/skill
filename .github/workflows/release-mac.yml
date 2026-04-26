@@ -100,6 +100,16 @@ jobs:
           APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
           APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY
 
+      # ── Pre-flight: validate APPLE_SIGNING_IDENTITY is the right cert type ───
+      # Only `Developer ID Application` certs pass Gatekeeper for distribution.
+      # Apple Development / Mac Developer / ad-hoc / self-signed all silently
+      # break the runtime Safari extension flow on end-user Macs (Safari refuses
+      # to load extensions from Gatekeeper-rejected apps). Fail fast here.
+      - name: Validate Apple signing identity is Developer ID Application
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: node scripts/ci.mjs validate-apple-signing-identity
+
       # ── Pre-flight: validate Apple notarization credentials ───────────────────
       # xcrun notarytool history authenticates against Apple's API using the same
       # credentials the build will use, but without submitting anything.

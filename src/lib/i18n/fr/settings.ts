@@ -774,6 +774,7 @@ const settings: Record<string, string> = {
   "extensions.install": "Installer",
   "extensions.reinstall": "Réinstaller",
   "extensions.installing": "Installation…",
+  "extensions.noIdeDetected": "Aucun éditeur basé sur VS Code détecté. Installez VS Code, VSCodium, Cursor, Windsurf ou un autre éditeur basé sur VS Code pour installer l'extension.",
   "extensions.openStore": "Store",
   "extensions.pairingTitle": "Appairage de l'extension navigateur",
   "extensions.pairingDesc": "Copiez votre auth token et collez-le dans les paramètres de l'extension navigateur pour l'appairer.",
@@ -786,6 +787,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "Page d'appairage ouverte — l'extension se connectera automatiquement",
   "extensions.pairingFailed": "Impossible de générer le lien d'appairage",
   "extensions.pairingInProgress": "Ouverture…",
+  "extensions.copyPairingToken": "Copier le token d'appairage",
+  "extensions.copyPairingTokenHint": "Recommandé : ouvrir le popup de l'extension → appairage automatique depuis le presse-papiers",
+  "extensions.clipboardPairCopied": "Token copié. Ouvrez le popup de l'extension — l'appairage sera automatique.",
 };
 
 export default settings;

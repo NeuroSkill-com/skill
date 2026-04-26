@@ -771,6 +771,7 @@ const settings: Record<string, string> = {
   "extensions.install": "Installieren",
   "extensions.reinstall": "Neu installieren",
   "extensions.installing": "Wird installiert…",
+  "extensions.noIdeDetected": "Kein VS-Code-Editor erkannt. Installiere VS Code, VSCodium, Cursor, Windsurf oder einen anderen VS-Code-basierten Editor, um die Erweiterung zu installieren.",
   "extensions.openStore": "Store",
   "extensions.pairingTitle": "Browser-Erweiterung koppeln",
   "extensions.pairingDesc": "Kopieren Sie Ihr Auth-Token und fügen Sie es in den Einstellungen der Browser-Erweiterung ein, um sie zu koppeln.",
@@ -783,6 +784,9 @@ const settings: Record<string, string> = {
   "extensions.pairingOpened": "Kopplungsseite geöffnet — die Erweiterung verbindet sich automatisch",
   "extensions.pairingFailed": "Kopplungslink konnte nicht erstellt werden",
   "extensions.pairingInProgress": "Wird geöffnet…",
+  "extensions.copyPairingToken": "Kopplungs-Token kopieren",
+  "extensions.copyPairingTokenHint": "Empfohlen: Erweiterungs-Popup öffnen → koppelt automatisch aus der Zwischenablage",
+  "extensions.clipboardPairCopied": "Token kopiert. Öffnen Sie das Erweiterungs-Popup — es koppelt sich automatisch.",
 };
 
 export default settings;
