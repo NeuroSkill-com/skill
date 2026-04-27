@@ -12,7 +12,7 @@
 
 ```bash
 # Clone
-git clone http://192.168.99.99:3000/NeuroSkill-com/skill.git
+git clone https://github.com/NeuroSkill-com/skill.git
 cd skill
 
 # Install all platform dependencies + JS deps (interactive)
@@ -36,22 +36,59 @@ for optional build acceleration.
 ## Project Structure
 
 ```
-├── crates/              # Rust workspace crates (no Tauri deps)
-│   ├── skill-eeg/       # EEG signal processing
-│   ├── skill-llm/       # Local LLM inference
-│   ├── skill-tools/     # LLM function-calling
-│   └── ...              # See AGENTS.md for full list
-├── src/                 # SvelteKit frontend
-│   ├── lib/             # Shared components & utilities
-│   ├── routes/          # Page routes
-│   └── tests/           # Frontend tests
-├── src-tauri/           # Tauri app shell
-├── scripts/             # Build, CI & test scripts (Node.js + bash, no Python)
-│   ├── ci.mjs           # Cross-platform CI helpers (version, changelog, discord, etc.)
-│   ├── test-picker.mjs  # Interactive test suite picker (npm test)
-│   └── test-all.sh      # Test runner with 17 suites + timing + summary
-└── changes/             # Changelog fragments
+├── crates/                  # Rust workspace crates (Tauri-independent)
+│   ├── skill-daemon/        # Standalone HTTP daemon (sidecar)
+│   ├── skill-daemon-routes/ # Daemon HTTP routes (/v1/...)
+│   ├── skill-daemon-state/  # Daemon shared state + DB
+│   ├── skill-daemon-common/ # Shared daemon types
+│   ├── skill-eeg/           # EEG signal processing
+│   ├── skill-exg/           # ExG (multi-modal biosignal) inference
+│   ├── skill-gpu/           # GPU FFT / UMAP backends (MLX, CUDA, Vulkan)
+│   ├── skill-llm/           # Local LLM inference (llama.cpp, MLX, Burn)
+│   ├── skill-tools/         # LLM function-calling
+│   ├── skill-vision/        # Screen content + camera vision
+│   ├── skill-screenshots/   # Screenshot capture + encoding
+│   ├── skill-history/       # Activity / conversation history
+│   ├── skill-skills/        # Pluggable "skill" runtime
+│   ├── skill-commands/      # Shell command tracking + categorization
+│   ├── skill-tts/           # Text-to-speech (NeuTTS)
+│   ├── skill-tray/          # System tray
+│   ├── skill-headless/      # Headless daemon entrypoint
+│   ├── skill-iroh/          # P2P sync (iroh)
+│   ├── skill-lsl/           # Lab Streaming Layer
+│   ├── skill-oura/          # Oura ring integration
+│   ├── skill-calendar/      # Calendar/meeting sync
+│   ├── skill-location/      # Location context
+│   ├── skill-autostart/     # OS-level autostart
+│   ├── skill-data/          # Data layer (SQLite, FTS5, embeddings)
+│   ├── skill-router/        # Request router
+│   ├── skill-jobs/          # Background job runner
+│   ├── skill-health/        # Health checks
+│   ├── skill-settings/      # Settings store + keychain
+│   ├── skill-label-index/   # HNSW semantic label index
+│   ├── skill-devices/       # EEG/biosignal device drivers
+│   └── skill-constants/     # Shared constants
+├── src/                     # SvelteKit frontend
+├── src-tauri/               # Tauri app shell
+├── neuroskill/              # `neuroskill` CLI (TypeScript)
+├── neuroloop/               # `neuroloop` CLI (TypeScript)
+├── extensions/              # External integrations
+│   ├── vscode/              # VS Code / VSCodium / Cursor extension (submodule)
+│   ├── browser/             # Browser extension
+│   └── widgets/             # macOS WidgetKit extension
+├── skills/                  # Pluggable skill definitions (markdown + manifests)
+├── scripts/                 # Build, CI & test scripts (Node.js + bash, no Python)
+│   ├── ci.mjs               # Cross-platform CI helpers
+│   ├── test-picker.mjs      # Interactive test suite picker
+│   ├── test-all.sh          # Suite runner (fmt, lint, clippy, daemon, e2e, …)
+│   ├── test-fast.sh         # Tiered Rust unit tests
+│   └── shell-hooks/         # zsh/bash/fish/PowerShell preexec hooks
+├── docs/                    # Architecture + coverage docs
+├── Casks/                   # Generated Homebrew cask
+└── changes/                 # Changelog fragments
 ```
+
+See `AGENTS.md` for the authoritative crate inventory and architecture rules.
 
 ## Development Workflow
 
@@ -59,32 +96,40 @@ for optional build acceleration.
 
 ```bash
 # ── Interactive picker (shows all options) ────────────────────────
-npm test                   # Arrow keys + space to pick, enter to run
+npm test                       # Arrow keys + space to pick, enter to run
 
 # ── Quick shortcuts ───────────────────────────────────────────────
-npm run test:fast          # fmt + lint + clippy + vitest + rust + ci + types
-npm run test:all           # everything including deny, smoke, e2e
+npm run test:fast              # fmt + lint + clippy + vitest + rust + ci + types
+npm run test:all               # everything (deny, smoke, daemon, e2e, mlx-e2e, widgets, …)
 
 # ── Individual suites ─────────────────────────────────────────────
-npm run test:fmt           # Rust + frontend formatting
-npm run test:lint          # Frontend lint (biome)
-npm run test:clippy        # Rust clippy
-npm run test:deny          # Dependency audit (cargo deny)
-npm run test:vitest        # Frontend unit tests (vitest)
-npm run test:types         # TypeScript/Svelte type checking
-npm run test:rust          # Tier 1 Rust tests (~5 s warm)
-npm run test:rust:all      # All Rust tiers (~65 s clean)
-npm run test:ci            # CI script self-test
-npm run test:a11y          # Accessibility audit
-npm run test:i18n          # i18n key validation
-npm run test:changelog     # Changelog fragment check
-npm run test:e2e           # LLM E2E (downloads model, ~15 s cached)
-npm run test:smoke         # Build verification
+npm run test:fmt               # Rust + frontend formatting
+npm run test:lint              # Frontend lint (biome)
+npm run test:clippy            # Rust clippy
+npm run test:deny              # Dependency audit (cargo deny)
+npm run test:vitest            # Frontend unit tests (vitest)
+npm run test:types             # TypeScript/Svelte type checking
+npm run test:rust              # Tier 1 Rust tests (~5 s warm)
+npm run test:rust:all          # All Rust tiers (~65 s clean)
+npm run test:ci                # CI script self-test
+npm run test:a11y              # Accessibility audit
+npm run test:i18n              # i18n key validation
+npm run test:changelog         # Changelog fragment check
+npm run test:smoke             # Build verification
+npm run test:e2e               # LLM E2E (downloads model, ~15 s cached)
+npm run test:mlx-e2e           # MLX backend E2E — UMAP + FFT (macOS only)
+npm run test:llm:e2e           # Direct cargo LLM E2E (no shell wrapper)
+
+# ── Daemon packaging (sidecar install/upgrade) ────────────────────
+npm run test:daemon-packaging        # Auto-detects OS
+npm run test:daemon-packaging:mac    # macOS-specific
+npm run test:daemon-packaging:linux  # Linux-specific
+npm run test:daemon-packaging:win    # Windows (PowerShell)
 
 # ── Git hook checks ──────────────────────────────────────────────
-npm run test:hooks         # pre-commit + pre-push (full)
-npm run test:pre-commit    # Just pre-commit checks
-npm run test:pre-push      # Full pre-push suite
+npm run test:hooks             # pre-commit + pre-push (full)
+npm run test:pre-commit        # Just pre-commit checks
+npm run test:pre-push          # Full pre-push suite
 
 # ── Mix and match ─────────────────────────────────────────────────
 bash scripts/test-all.sh clippy vitest ci      # Run specific suites
@@ -128,6 +173,15 @@ npm run check         # Svelte + TypeScript
 # i18n
 npm run sync:i18n:check   # Verify translation keys
 npm run sync:i18n:fix     # Auto-fix missing keys
+npm run audit:i18n        # Find unused / undefined keys
+npm run check:i18n:critical  # Critical-locale coverage
+
+# Catalog + README sync
+npm run sync:llm:catalog:check     # LLM model catalog drift
+npm run sync:readme:supported:check
+
+# Accessibility
+npm run audit:a11y:check
 
 # Dependency audit
 cargo audit
@@ -250,11 +304,87 @@ authorization dialog each time.
 
 ## Architecture Notes
 
+- **Thin client + daemon**: The Tauri app is a UI shell. All persistent business logic
+  (EEG, LLM, history, embeddings, HTTP API) runs in **`skill-daemon`**, a standalone
+  binary shipped as a Tauri sidecar and also installable as a system service.
 - All Rust crates are **Tauri-independent** — they can be tested and used standalone.
 - The workspace shares a single `target/` directory (configured in `.cargo/config.toml`).
 - Frontend uses **SvelteKit** in SPA mode with **Tailwind CSS v4**.
 - EEG processing uses the device's actual sample rate — never hardcode 256 Hz.
-- See `AGENTS.md` for comprehensive rules on encoding, accent colors, session files, and multi-device DSP.
+- GPU backends (CUDA / Vulkan / Metal / MLX / Burn) are feature-gated. The
+  `llm-vulkan` feature is the default for Linux/Windows release builds.
+- See `AGENTS.md` for comprehensive rules on encoding, accent colors, session files,
+  multi-device DSP, and crate boundaries.
+
+### Daemon
+
+```bash
+# Run the daemon manually (dev)
+npm run daemon                 # tsx scripts/daemon.ts
+
+# Stop any running daemon
+npm run stop                   # pkill -f skill-daemon
+
+# Audit daemon HTTP routes vs frontend invokes
+npm run audit:daemon-routes
+npm run check:daemon-invokes
+
+# Health check
+npm run health
+```
+
+On a fresh install (any OS), the installer kills any old daemon, installs the new
+binary, and starts it — never leave two daemons running side by side.
+
+## CLI Tools
+
+Two TypeScript CLIs ship alongside the desktop app:
+
+- **`neuroskill`** — query the daemon for activity, brain state, dev loops, terminal
+  impact, and install shell hooks / VS Code extensions. Top-level subcommands include
+  `activity`, `brain`, `terminal`, and `vscode`.
+- **`neuroloop`** — focus loop / pomodoro CLI driven by EEG state.
+
+```bash
+npm run skill                  # Run neuroskill from source (tsx)
+npm run neuroskill             # Build + run neuroskill
+npm run neuroloop              # Build + run neuroloop
+```
+
+## Extensions
+
+Located under `extensions/`:
+
+- **`extensions/vscode/`** — VS Code / VSCodium / Cursor extension (separate
+  repo, included as a git submodule). Tracks 50+ event types and renders the brain
+  dashboard in the activity bar. Use `git submodule update --init --recursive` after
+  cloning, or run `npm run pull`.
+- **`extensions/browser/`** — browser extension.
+- **`extensions/widgets/`** — macOS WidgetKit extension (built/tested via the
+  `widgets` test suite on macOS).
+
+## Packaging
+
+Cross-platform release builds are produced via `scripts/tauri-build.js`:
+
+```bash
+# macOS
+npm run tauri:build:mac:app           # .app bundle
+npm run tauri:build:mac:dmg           # .app + .dmg
+
+# Linux (native arch)
+npm run tauri:build:linux:arm64       # aarch64 AppImage + Vulkan LLM
+npm run tauri:build:linux:x64:native  # x86_64 AppImage + Vulkan LLM
+npm run package:linux:portable        # Portable tarball
+npm run package:linux:system:arm64:native  # .deb / .rpm
+npm run package:linux:system:x64:native    # .deb / .rpm
+
+# Windows
+npm run tauri:build:win:nsis          # NSIS installer (.exe)
+
+# Homebrew cask (post-release)
+npm run brew:cask:generate
+```
 
 ## Encoding
 
