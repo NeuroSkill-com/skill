@@ -13,6 +13,7 @@ import { CardContent } from "$lib/components/ui/card";
 import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
 import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
 import { Spinner } from "$lib/components/ui/spinner";
+import TerminalSessionsCard from "$lib/settings/TerminalSessionsCard.svelte";
 import { daemonGet, daemonPost } from "$lib/daemon/http";
 import {
   type DailySummaryRow,
@@ -490,6 +491,13 @@ let heatmapMax = $state(1);
     </section>
   {/if}
 
+  <!-- ───────────────────────── Today ───────────────────────── -->
+  <div class="mt-3 border-t border-border/40 pt-3">
+    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+      Today
+    </h2>
+  </div>
+
   <!-- ── Today's Summary ──────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">
     <SectionHeader>{t("activity.todaySummary")}</SectionHeader>
@@ -579,6 +587,13 @@ let heatmapMax = $state(1);
       </SettingsCard>
     </section>
   {/if}
+
+  <!-- ───────────────────────── Code ───────────────────────── -->
+  <div class="mt-3 border-t border-border/40 pt-3">
+    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+      Code
+    </h2>
+  </div>
 
   <!-- ── Top Files ────────────────────────────────────────────────────────── -->
   {#if topFiles.length > 0}
@@ -858,6 +873,18 @@ let heatmapMax = $state(1);
     </section>
   {/if}
 
+  <!-- ───────────────────────── Terminal ───────────────────────── -->
+  <div class="mt-3 border-t border-border/40 pt-3">
+    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+      Terminal
+    </h2>
+  </div>
+
+  <!-- ── Terminal Sessions (recorded shell history with search) ─────────── -->
+  <section class="flex flex-col gap-2">
+    <TerminalSessionsCard />
+  </section>
+
   <!-- ── Terminal Commands ──────────────────────────────────────────────── -->
   {#if terminalCommands.length > 0}
     <section class="flex flex-col gap-2">
@@ -970,6 +997,13 @@ let heatmapMax = $state(1);
       </SettingsCard>
     </section>
   {/if}
+
+  <!-- ───────────────────────── AI &amp; Web ───────────────────────── -->
+  <div class="mt-3 border-t border-border/40 pt-3">
+    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+      AI &amp; Web
+    </h2>
+  </div>
 
   <!-- ── AI Coding Assistants ─────────────────────────────────────────────── -->
   {#if aiUsage && (aiUsage.suggestions_shown > 0 || aiUsage.chat_sessions > 0)}
@@ -1421,6 +1455,13 @@ let heatmapMax = $state(1);
 
     </section>
   {/if}
+
+  <!-- ───────────────────────── Trends ───────────────────────── -->
+  <div class="mt-3 border-t border-border/40 pt-3">
+    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+      Trends
+    </h2>
+  </div>
 
   <!-- ── Weekly Report ────────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">

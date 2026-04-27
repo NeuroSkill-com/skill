@@ -19,6 +19,12 @@ pub(crate) mod session;
 pub(crate) mod session_runner;
 #[cfg(unix)]
 mod tty;
+#[cfg(unix)]
+mod tty_backfill;
+#[cfg(unix)]
+mod tty_embedder;
+#[cfg(unix)]
+mod tty_finalizer;
 
 // Re-export from skill-daemon-state for internal use via `crate::` paths
 pub(crate) use skill_daemon_state::auth;
@@ -132,6 +138,20 @@ async fn daemon_main() -> anyhow::Result<()> {
     }
 
     activity::start_workers(state.clone());
+
+    // One-shot legacy backfill: read every pre-redesign `.log.zst`,
+    // create matching `terminal_sessions` rows with stripped text, link
+    // orphan commands by time range. Idempotent — reruns are no-ops.
+    #[cfg(unix)]
+    tty_backfill::spawn(state.clone());
+    // Process closed PTY-shim sessions: slice each finished `.log` by command
+    // time-range, ANSI-strip, zstd-compress, write to `terminal_outputs`.
+    #[cfg(unix)]
+    tty_finalizer::spawn(state.clone());
+    // Fill in `terminal_outputs.embedding` for finalized rows. Runs every
+    // 30 s, batches of 32, int8-quantised vectors.
+    #[cfg(unix)]
+    tty_embedder::spawn(state.clone());
 
     // Auto-refresh installed shell hooks so upgrades propagate fixes (e.g. the
     // macOS `script` SIGWINCH fix) without requiring manual reinstallation.

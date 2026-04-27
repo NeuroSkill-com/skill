@@ -708,7 +708,8 @@ pub(crate) async fn activity_vscode_events_impl(
                 }
                 "terminal_command_start" if !command.is_empty() => {
                     let source = event.get("source").and_then(|v| v.as_str()).unwrap_or("");
-                    store.insert_terminal_command_start(source, command, path, now, eeg_focus, eeg_mood);
+                    // VSCode-extension-fed commands have no shim session; pass None.
+                    store.insert_terminal_command_start(source, command, path, now, eeg_focus, eeg_mood, None);
                 }
                 "terminal_command_end" => {
                     let exit_code = event.get("exit_code").and_then(|v| v.as_i64());

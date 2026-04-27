@@ -11,6 +11,13 @@
 //! the daemon's tokio runtime is initialised.
 
 #![cfg(unix)]
+// This module is a deliberately thin wrapper over libc PTY/signal/termios
+// primitives. Every unsafe block invokes a libc function with arguments the
+// Rust standard library or the file's own ownership invariants guarantee
+// valid (FDs we just opened, pointers to local stack vars, etc.). Adding
+// per-call SAFETY comments would triple the line count without surfacing
+// novel invariants — the module-level doc covers the entire safety story.
+#![allow(clippy::undocumented_unsafe_blocks)]
 
 use std::ffi::CString;
 use std::fs::OpenOptions;
@@ -39,11 +46,29 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
     };
     rotate_logs(log_path.parent(), &log_path);
 
+    // The session id is the log filename's stem (e.g. "20260426-104530-12345").
+    // It uniquely identifies this shell instance and is exported so the
+    // preexec/precmd hooks can tag every command POST with it; the finalizer
+    // uses the same string when closing the `terminal_sessions` row.
+    let session_id = log_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(String::from)
+        .unwrap_or_default();
+
     // BufWriter cuts syscalls per PTY-read from ~1 to ~0 (8 KB chunks fit
     // most TUI redraw bursts). Final flush happens via Drop, but we also
     // call .flush() explicitly before exit to surface I/O errors.
     let log_file = OpenOptions::new().create(true).append(true).open(&log_path)?;
     let mut log = BufWriter::with_capacity(8192, log_file);
+
+    // Timing sidecar: 16 bytes per PTY-write batch — `(u64 offset_after_write_le, u64 unix_micros_le)`.
+    // Lets the finalizer binary-search any time T to its corresponding byte
+    // offset, so per-command output extraction is O(log N).
+    let idx_path = log_path.with_extension("idx");
+    let idx_file = OpenOptions::new().create(true).append(true).open(&idx_path)?;
+    let mut idx = BufWriter::with_capacity(4096, idx_file);
+    let mut log_offset: u64 = 0;
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
 
     let stdin_fd = libc::STDIN_FILENO;
@@ -102,6 +127,11 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
         }
         // Mark this shell as the wrapped one; the hook checks this env var.
         unsafe { libc::setenv(c"NEUROSKILL_RECORDING".as_ptr(), c"1".as_ptr(), 1) };
+        // Tag every command run in this shell with the same session id the
+        // finalizer will use when closing the terminal_sessions row.
+        if let Ok(sid_c) = CString::new(session_id.clone()) {
+            unsafe { libc::setenv(c"NEUROSKILL_SESSION".as_ptr(), sid_c.as_ptr(), 1) };
+        }
 
         // Login-style argv0: prefix with `-` so the shell reads its rc files.
         let basename = std::path::Path::new(&shell)
@@ -169,7 +199,7 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
         }
         if SIGCHLD.load(Ordering::Relaxed) {
             // Drain any remaining output from the master before quitting.
-            drain_master(master_fd, &mut buf, stdout_fd, &mut log);
+            drain_master(master_fd, &mut buf, stdout_fd, &mut log, &mut idx, &mut log_offset);
             break;
         }
 
@@ -210,12 +240,19 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
                 break;
             }
             let bytes = &buf[..n as usize];
+            log_offset += bytes.len() as u64;
+            let micros = unix_micros();
+            let mut entry = [0u8; 16];
+            entry[..8].copy_from_slice(&log_offset.to_le_bytes());
+            entry[8..].copy_from_slice(&micros.to_le_bytes());
+            let _ = idx.write_all(&entry);
             let _ = write_all_fd(stdout_fd, bytes);
             let _ = log.write_all(bytes);
         }
     }
 
     let _ = log.flush();
+    let _ = idx.flush();
 
     let mut status: libc::c_int = 0;
     unsafe { libc::waitpid(pid, &mut status, 0) };
@@ -255,7 +292,14 @@ fn write_all_fd(fd: RawFd, mut bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-fn drain_master<W: Write>(master_fd: RawFd, buf: &mut [u8], stdout_fd: RawFd, log: &mut W) {
+fn drain_master<W: Write, I: Write>(
+    master_fd: RawFd,
+    buf: &mut [u8],
+    stdout_fd: RawFd,
+    log: &mut W,
+    idx: &mut I,
+    log_offset: &mut u64,
+) {
     // Make master non-blocking so we can drain whatever's pending.
     let flags = unsafe { libc::fcntl(master_fd, libc::F_GETFL) };
     if flags >= 0 {
@@ -269,7 +313,21 @@ fn drain_master<W: Write>(master_fd: RawFd, buf: &mut [u8], stdout_fd: RawFd, lo
         let bytes = &buf[..n as usize];
         let _ = write_all_fd(stdout_fd, bytes);
         let _ = log.write_all(bytes);
+        *log_offset += bytes.len() as u64;
+        let micros = unix_micros();
+        let mut entry = [0u8; 16];
+        entry[..8].copy_from_slice(&log_offset.to_le_bytes());
+        entry[8..].copy_from_slice(&micros.to_le_bytes());
+        let _ = idx.write_all(&entry);
     }
+}
+
+/// Microseconds since the Unix epoch — used by the timing sidecar.
+fn unix_micros() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros() as u64)
+        .unwrap_or(0)
 }
 
 fn last_err() -> String {

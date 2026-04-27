@@ -103,6 +103,12 @@ pub fn router() -> Router<AppState> {
         .route("/brain/context-cost", post(context_cost))
         .route("/brain/terminal-commands", post(terminal_commands))
         .route("/brain/terminal-input", post(terminal_input))
+        .route("/brain/terminal-output", post(terminal_output))
+        .route("/brain/terminal-search", post(terminal_search))
+        .route("/brain/terminal-semantic-search", post(terminal_semantic_search))
+        .route("/brain/terminal-sessions", post(terminal_sessions))
+        .route("/brain/terminal-session-output", post(terminal_session_output))
+        .route("/brain/terminal-session-text", post(terminal_session_text))
         .route("/brain/dev-loops", post(dev_loops))
         .route("/brain/ai-usage", post(ai_usage))
         .route("/brain/search-conversations", post(search_conversations))
@@ -472,6 +478,217 @@ async fn terminal_commands(
     run_query(&state, move |s| {
         serde_json::to_value(s.get_recent_terminal_commands(limit, since)).unwrap_or_default()
     })
+    .await
+}
+
+/// Per-command terminal output. Body: `{ "commandId": <i64>, "raw": <bool> }`.
+/// Returns `{ time_start_us, time_end_us, stripped_text, raw_b64 (if raw=true) }`.
+/// `raw_b64` is base64 of the *decompressed* PTY bytes — useful for full
+/// session replay; omit it when you only need the searchable text.
+async fn terminal_output(
+    State(state): State<AppState>,
+    Json(req): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let command_id = req.get("commandId").and_then(|v| v.as_i64()).unwrap_or(0);
+    let want_raw = req.get("raw").and_then(|v| v.as_bool()).unwrap_or(false);
+    run_query(&state, move |s| {
+        let Some((start, end, raw_zstd, stripped)) = s.get_terminal_output(command_id) else {
+            return serde_json::json!({ "found": false });
+        };
+        let raw_b64 = if want_raw {
+            raw_zstd
+                .as_ref()
+                .and_then(|z| zstd::decode_all(&z[..]).ok())
+                .map(|bytes| {
+                    use base64::Engine as _;
+                    base64::engine::general_purpose::STANDARD.encode(bytes)
+                })
+        } else {
+            None
+        };
+        serde_json::json!({
+            "found": true,
+            "time_start_us": start,
+            "time_end_us": end,
+            "stripped_text": stripped,
+            "raw_b64": raw_b64,
+        })
+    })
+    .await
+}
+
+/// List terminal sessions newest-first with on-the-fly aggregates.
+/// Body: `{ since?: <unix_secs>, limit?: N }`. Each row carries
+/// `(id, started_at, ended_at, shell, initial_cwd, command_count, avg_focus, avg_mood)`
+/// — enough to render a session timeline without joining further.
+async fn terminal_sessions(
+    State(state): State<AppState>,
+    Json(req): Json<SinceRequest>,
+) -> BrainResult<serde_json::Value> {
+    let since = req.since.unwrap_or(0);
+    let limit = req.limit.unwrap_or(50);
+    run_query(&state, move |s| {
+        let rows = s.list_terminal_sessions(limit, since);
+        let json: Vec<_> = rows
+            .into_iter()
+            .map(|(id, started, ended, shell, cwd, count, focus, mood, has_text)| {
+                serde_json::json!({
+                    "id": id,
+                    "started_at": started,
+                    "ended_at": ended,
+                    "shell": shell,
+                    "initial_cwd": cwd,
+                    "command_count": count,
+                    "avg_focus": focus,
+                    "avg_mood": mood,
+                    "has_session_text": has_text,
+                })
+            })
+            .collect();
+        let orphan = s.count_orphan_commands();
+        serde_json::json!({ "sessions": json, "orphan_command_count": orphan })
+    })
+    .await
+}
+
+/// All output from a single session, in chronological order.
+/// Body: `{ "sessionId": "<id>", "raw": <bool> }`. Returns
+/// `{ commands: [{command_id, time_start_us, time_end_us, stripped_text, raw_b64?}, …] }`.
+/// Useful for full session replay or as a context window for an LLM.
+async fn terminal_session_output(
+    State(state): State<AppState>,
+    Json(req): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let session_id = req.get("sessionId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let want_raw = req.get("raw").and_then(|v| v.as_bool()).unwrap_or(false);
+    run_query(&state, move |s| {
+        let cmd_ids = s.session_command_ids(&session_id);
+        let mut commands = Vec::with_capacity(cmd_ids.len());
+        for cmd_id in cmd_ids {
+            if let Some((start, end, raw_zstd, stripped)) = s.get_terminal_output(cmd_id) {
+                let raw_b64 = if want_raw {
+                    raw_zstd
+                        .as_ref()
+                        .and_then(|z| zstd::decode_all(&z[..]).ok())
+                        .map(|bytes| {
+                            use base64::Engine as _;
+                            base64::engine::general_purpose::STANDARD.encode(bytes)
+                        })
+                } else {
+                    None
+                };
+                commands.push(serde_json::json!({
+                    "command_id": cmd_id,
+                    "time_start_us": start,
+                    "time_end_us": end,
+                    "stripped_text": stripped,
+                    "raw_b64": raw_b64,
+                }));
+            }
+        }
+        serde_json::json!({ "commands": commands })
+    })
+    .await
+}
+
+/// Fetch the full stripped session text for sessions that don't have
+/// per-command output rows (i.e. legacy sessions backfilled from `.log.zst`
+/// without an `.idx` sidecar). Body: `{ "sessionId": "..." }`.
+async fn terminal_session_text(
+    State(state): State<AppState>,
+    Json(req): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let session_id = req.get("sessionId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    run_query(&state, move |s| {
+        let Some((blob, original_size)) = s.get_terminal_session_text(&session_id) else {
+            return serde_json::json!({ "found": false });
+        };
+        let text = match zstd::decode_all(&blob[..]) {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+            Err(e) => return serde_json::json!({ "found": false, "error": e.to_string() }),
+        };
+        serde_json::json!({
+            "found": true,
+            "text": text,
+            "original_size": original_size,
+        })
+    })
+    .await
+}
+
+/// Semantic similarity search over terminal outputs. Body:
+/// `{ "query": "...", "limit": N }`. Embeds the query through the same model
+/// that produced row embeddings, dot-products against every row's int8 vector,
+/// returns the top-N command_ids ranked by similarity.
+///
+/// Linear scan up to ~100k rows is well under 50 ms with int8 vectors; we'll
+/// layer HNSW once that ceases to be true.
+async fn terminal_semantic_search(
+    State(state): State<AppState>,
+    Json(req): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let query = req.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let limit = req.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+    let embedder = state.text_embedder.clone();
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+
+    let result = tokio::task::spawn_blocking(move || -> serde_json::Value {
+        let Some(query_vec) = embedder.embed(&query) else {
+            return serde_json::json!({"command_ids": [], "scores": [], "error": "embedder unavailable"});
+        };
+        let Some(store) = ActivityStore::open_readonly(&skill_dir) else {
+            return serde_json::json!({"command_ids": [], "scores": []});
+        };
+        let rows = store.all_terminal_embeddings();
+        // Cosine via L2-normalised dot — normalise the query once and the
+        // dequantised rows on the fly. fastembed already L2-normalises its
+        // outputs, so row vectors are unit-length too.
+        let qn = l2_normalize(query_vec);
+        let mut ranked: Vec<(i64, f32)> = rows
+            .into_iter()
+            .filter_map(|(id, blob)| {
+                let v = crate::tty_embedder::dequantize_int8(&blob)?;
+                if v.len() != qn.len() {
+                    return None;
+                }
+                let dot = v.iter().zip(&qn).map(|(a, b)| a * b).sum::<f32>();
+                Some((id, dot))
+            })
+            .collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.truncate(limit);
+        let (ids, scores): (Vec<i64>, Vec<f32>) = ranked.into_iter().unzip();
+        serde_json::json!({"command_ids": ids, "scores": scores})
+    })
+    .await;
+
+    Ok(Json(
+        result.unwrap_or_else(|e| serde_json::json!({"error": e.to_string()})),
+    ))
+}
+
+fn l2_normalize(mut v: Vec<f32>) -> Vec<f32> {
+    let n = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if n > 0.0 {
+        for x in &mut v {
+            *x /= n;
+        }
+    }
+    v
+}
+
+/// FTS5 search across stripped terminal output. Body: `{ "query": "...", "limit": N }`.
+/// Returns `{ command_ids: [...] }`. Caller joins to `terminal_commands` etc.
+async fn terminal_search(
+    State(state): State<AppState>,
+    Json(req): Json<serde_json::Value>,
+) -> BrainResult<serde_json::Value> {
+    let query = req.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let limit = req.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as u32;
+    run_query(
+        &state,
+        move |s| serde_json::json!({ "command_ids": s.search_terminal_outputs(&query, limit) }),
+    )
     .await
 }
 

@@ -963,10 +963,16 @@ async fn activity_shell_command(
         let cwd = body.get("cwd").and_then(|v| v.as_str()).unwrap_or("");
         let shell = body.get("shell").and_then(|v| v.as_str()).unwrap_or("shell");
         let exit_code = body.get("exit_code").and_then(|v| v.as_i64());
+        let session = body.get("session").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
         if command.is_empty() { return 0; }
 
+        // Lazy-create the session row on first sight. Idempotent.
+        if let Some(sid) = session {
+            store.upsert_terminal_session(sid, now, shell, "", None, cwd);
+        }
+
         if exit_code.is_none() {
-            store.insert_terminal_command_start(shell, command, cwd, now, eeg_focus, None);
+            store.insert_terminal_command_start(shell, command, cwd, now, eeg_focus, None, session);
         } else {
             store.update_terminal_command_end(command, shell, exit_code, now, eeg_focus);
         }
@@ -1262,13 +1268,16 @@ _neuroskill_post() {{
   curl -sf -X POST "http://${{_NEUROSKILL_HOST}}:${{_NEUROSKILL_PORT}}/v1/activity/shell-command" \
     -H "Content-Type: application/json" "${{auth[@]}}" -d "$1" --connect-timeout 1 -m 2 >/dev/null 2>&1 &!
 }}
+_neuroskill_session_field() {{
+  [[ -n "$NEUROSKILL_SESSION" ]] && printf ',"session":"%s"' "$(_neuroskill_escape "$NEUROSKILL_SESSION")"
+}}
 _neuroskill_preexec() {{
   _NEUROSKILL_LAST_CMD="$1"
-  _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$1")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"zsh\"}}"
+  _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$1")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"zsh\"$(_neuroskill_session_field)}}"
 }}
 _neuroskill_precmd() {{
   local ec=$?
-  [[ -n "$_NEUROSKILL_LAST_CMD" ]] && _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"zsh\",\"exit_code\":$ec}}"
+  [[ -n "$_NEUROSKILL_LAST_CMD" ]] && _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"zsh\",\"exit_code\":$ec$(_neuroskill_session_field)}}"
   _NEUROSKILL_LAST_CMD=""
 }}
 autoload -Uz add-zsh-hook
@@ -1316,16 +1325,19 @@ _neuroskill_post() {{
   eval curl -sf -X POST "http://${{_NEUROSKILL_HOST}}:${{_NEUROSKILL_PORT}}/v1/activity/shell-command" \
     -H "'Content-Type: application/json'" $auth_header -d "'$1'" --connect-timeout 1 -m 2 '>/dev/null' '2>&1' '&'
 }}
+_neuroskill_session_field() {{
+  [[ -n "$NEUROSKILL_SESSION" ]] && printf ',"session":"%s"' "$(_neuroskill_escape "$NEUROSKILL_SESSION")"
+}}
 _neuroskill_debug_trap() {{
   [[ -n "$COMP_LINE" ]] && return
   [[ "$BASH_COMMAND" == "$PROMPT_COMMAND" ]] && return
   [[ "$BASH_COMMAND" == _neuroskill_* ]] && return
   _NEUROSKILL_LAST_CMD="$BASH_COMMAND"
-  _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$BASH_COMMAND")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"bash\"}}"
+  _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$BASH_COMMAND")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"bash\"$(_neuroskill_session_field)}}"
 }}
 _neuroskill_prompt_cmd() {{
   local ec=$?
-  [[ -n "$_NEUROSKILL_LAST_CMD" ]] && _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"bash\",\"exit_code\":$ec}}"
+  [[ -n "$_NEUROSKILL_LAST_CMD" ]] && _neuroskill_post "{{\"command\":\"$(_neuroskill_escape "$_NEUROSKILL_LAST_CMD")\",\"cwd\":\"$(_neuroskill_escape "$PWD")\",\"shell\":\"bash\",\"exit_code\":$ec$(_neuroskill_session_field)}}"
   _NEUROSKILL_LAST_CMD=""
 }}
 trap '_neuroskill_debug_trap' DEBUG

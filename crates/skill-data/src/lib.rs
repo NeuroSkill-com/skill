@@ -18,6 +18,7 @@
 
 pub mod active_window;
 pub mod activity_store;
+pub mod ansi;
 pub mod device;
 pub mod dnd;
 pub mod eeg_scores;

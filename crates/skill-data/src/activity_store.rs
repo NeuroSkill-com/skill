@@ -208,6 +208,58 @@ CREATE TABLE IF NOT EXISTS terminal_commands (
 CREATE INDEX IF NOT EXISTS idx_tc_started ON terminal_commands (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tc_category ON terminal_commands (category);
 CREATE INDEX IF NOT EXISTS idx_tc_binary ON terminal_commands (binary);
+CREATE INDEX IF NOT EXISTS idx_tc_session ON terminal_commands (session_id);
+
+-- Terminal session: one row per shell instance from launch to exit. The
+-- shim mints `id` from its own `<YYYYMMDD-HHMMSS>-<pid>` (same string as the
+-- log filename) and exports it as $NEUROSKILL_SESSION so the preexec/precmd
+-- hooks tag every command back to it. Aggregates are recomputed lazily on
+-- read so we never have to rewrite this row on every command.
+CREATE TABLE IF NOT EXISTS terminal_sessions (
+    id            TEXT    PRIMARY KEY,
+    started_at    INTEGER NOT NULL,
+    ended_at      INTEGER,
+    shell         TEXT    NOT NULL DEFAULT '',
+    terminal_name TEXT    NOT NULL DEFAULT '',
+    pid           INTEGER,
+    initial_cwd   TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_ts_started ON terminal_sessions (started_at DESC);
+
+-- Per-command terminal output. The session finalizer slices each PTY log by
+-- (started_at, ended_at) using a timing sidecar, ANSI-strips the result,
+-- zstd-compresses the raw bytes for full-fidelity replay, and stores the
+-- stripped text for FTS / future embedding. JOIN on command_id ties this
+-- back to the multi-modal context (EEG, browser, edits, screenshots).
+CREATE TABLE IF NOT EXISTS terminal_outputs (
+    command_id     INTEGER PRIMARY KEY REFERENCES terminal_commands(id) ON DELETE CASCADE,
+    time_start_us  INTEGER NOT NULL,
+    time_end_us    INTEGER NOT NULL,
+    raw_zstd       BLOB,            -- zstd-compressed raw PTY bytes (NULL = stripped only)
+    raw_size       INTEGER NOT NULL DEFAULT 0,
+    stripped_text  TEXT    NOT NULL DEFAULT '',
+    embedding      BLOB             -- int8-quantised vector, populated lazily by the embed worker
+);
+CREATE INDEX IF NOT EXISTS idx_to_time ON terminal_outputs (time_start_us);
+
+-- FTS5 over stripped_text. content='terminal_outputs' is a contentless index
+-- so we don't double-store the text; keep the index in sync via triggers.
+CREATE VIRTUAL TABLE IF NOT EXISTS terminal_outputs_fts USING fts5(
+    stripped_text,
+    content='terminal_outputs',
+    content_rowid='command_id',
+    tokenize='porter unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS terminal_outputs_ai AFTER INSERT ON terminal_outputs BEGIN
+    INSERT INTO terminal_outputs_fts(rowid, stripped_text) VALUES (new.command_id, new.stripped_text);
+END;
+CREATE TRIGGER IF NOT EXISTS terminal_outputs_ad AFTER DELETE ON terminal_outputs BEGIN
+    INSERT INTO terminal_outputs_fts(terminal_outputs_fts, rowid, stripped_text) VALUES('delete', old.command_id, old.stripped_text);
+END;
+CREATE TRIGGER IF NOT EXISTS terminal_outputs_au AFTER UPDATE ON terminal_outputs BEGIN
+    INSERT INTO terminal_outputs_fts(terminal_outputs_fts, rowid, stripped_text) VALUES('delete', old.command_id, old.stripped_text);
+    INSERT INTO terminal_outputs_fts(rowid, stripped_text) VALUES (new.command_id, new.stripped_text);
+END;
 
 -- Dev loops: edit → build/test → result cycles.
 CREATE TABLE IF NOT EXISTS dev_loops (
@@ -425,6 +477,14 @@ impl ActivityStore {
             // terminal_commands — binary/args extraction
             "ALTER TABLE terminal_commands ADD COLUMN binary TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE terminal_commands ADD COLUMN args TEXT NOT NULL DEFAULT ''",
+            // terminal_commands — session linkage. NULL for legacy rows and
+            // any shell that wasn't started under the PTY shim.
+            "ALTER TABLE terminal_commands ADD COLUMN session_id TEXT",
+            // terminal_sessions — full-session stripped text for sessions
+            // that lack per-command timing (legacy .log.zst, or any case
+            // where the .idx sidecar is unavailable). zstd-compressed.
+            "ALTER TABLE terminal_sessions ADD COLUMN session_text_zstd BLOB",
+            "ALTER TABLE terminal_sessions ADD COLUMN session_text_size INTEGER",
             // conversations — EEG columns
             "ALTER TABLE conversations ADD COLUMN eeg_focus REAL",
             "ALTER TABLE conversations ADD COLUMN eeg_mood REAL",
@@ -2384,6 +2444,7 @@ impl ActivityStore {
         started_at: u64,
         eeg_focus: Option<f64>,
         eeg_mood: Option<f64>,
+        session_id: Option<&str>,
     ) -> i64 {
         let category = Self::categorize_command(command);
         // Extract binary name (first word) and args (rest)
@@ -2392,8 +2453,8 @@ impl ActivityStore {
         let args = parts.next().unwrap_or("").trim();
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO terminal_commands (terminal_name, command, binary, args, cwd, started_at, category, eeg_focus, eeg_mood)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO terminal_commands (terminal_name, command, binary, args, cwd, started_at, category, eeg_focus, eeg_mood, session_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 terminal_name,
                 command,
@@ -2403,10 +2464,304 @@ impl ActivityStore {
                 started_at as i64,
                 category,
                 eeg_focus,
-                eeg_mood
+                eeg_mood,
+                session_id
             ],
         );
         c.last_insert_rowid()
+    }
+
+    /// Lazy-create a `terminal_sessions` row on first sight. Subsequent calls
+    /// for the same `id` are no-ops, so this can run on every shell command
+    /// without rewriting the row.
+    pub fn upsert_terminal_session(
+        &self,
+        id: &str,
+        started_at: u64,
+        shell: &str,
+        terminal_name: &str,
+        pid: Option<i64>,
+        initial_cwd: &str,
+    ) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT OR IGNORE INTO terminal_sessions
+             (id, started_at, shell, terminal_name, pid, initial_cwd)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, started_at as i64, shell, terminal_name, pid, initial_cwd],
+        );
+    }
+
+    /// Attach session-level text to a session row. Used by the legacy-log
+    /// backfill and by future flows where we have the whole session output
+    /// but no per-command slicing (no `.idx` sidecar).
+    pub fn set_terminal_session_text(&self, id: &str, text_zstd: &[u8], original_size: u64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "UPDATE terminal_sessions
+             SET session_text_zstd = ?1, session_text_size = ?2
+             WHERE id = ?3",
+            params![text_zstd, original_size as i64, id],
+        );
+    }
+
+    /// Fetch the (zstd-compressed) session text for one session.
+    pub fn get_terminal_session_text(&self, id: &str) -> Option<(Vec<u8>, u64)> {
+        let c = self.conn.lock_or_recover();
+        c.query_row(
+            "SELECT session_text_zstd, session_text_size FROM terminal_sessions WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get::<_, Option<Vec<u8>>>(0)?, row.get::<_, Option<i64>>(1)?)),
+        )
+        .ok()
+        .and_then(|(blob, size)| match (blob, size) {
+            (Some(b), Some(s)) if !b.is_empty() => Some((b, s as u64)),
+            _ => None,
+        })
+    }
+
+    /// One-shot bulk linkage: set `session_id` on every command whose
+    /// `started_at` falls inside `[start_s, end_s]` and currently has no
+    /// session. Returns rows affected. Used by the legacy backfill.
+    pub fn link_commands_to_session(&self, session_id: &str, start_s: u64, end_s: u64) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.execute(
+            "UPDATE terminal_commands
+             SET session_id = ?1
+             WHERE session_id IS NULL
+               AND started_at >= ?2 AND started_at <= ?3",
+            params![session_id, start_s as i64, end_s as i64],
+        )
+        .map(|n| n as u64)
+        .unwrap_or(0)
+    }
+
+    /// Total commands lacking a session_id (orphan stat for the UI).
+    pub fn count_orphan_commands(&self) -> u64 {
+        let c = self.conn.lock_or_recover();
+        c.query_row(
+            "SELECT COUNT(*) FROM terminal_commands WHERE session_id IS NULL",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|n| n as u64)
+        .unwrap_or(0)
+    }
+
+    /// Mark a session as ended. The finalizer calls this when it processes
+    /// the session's log file (PID is dead).
+    pub fn close_terminal_session(&self, id: &str, ended_at: u64) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "UPDATE terminal_sessions SET ended_at = ?1 WHERE id = ?2 AND ended_at IS NULL",
+            params![ended_at as i64, id],
+        );
+    }
+
+    /// List sessions newest-first with live aggregates and a flag indicating
+    /// whether session-level text is available (for legacy/no-idx sessions).
+    /// Returns: `(id, started_at, ended_at, shell, initial_cwd, command_count, avg_focus, avg_mood, has_session_text)`.
+    #[allow(clippy::type_complexity)]
+    pub fn list_terminal_sessions(
+        &self,
+        limit: u32,
+        since: u64,
+    ) -> Vec<(
+        String,
+        u64,
+        Option<u64>,
+        String,
+        String,
+        u64,
+        Option<f64>,
+        Option<f64>,
+        bool,
+    )> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT s.id, s.started_at, s.ended_at, s.shell, s.initial_cwd,
+                    COUNT(tc.id) AS cmd_count,
+                    AVG(tc.eeg_focus) AS avg_focus,
+                    AVG(tc.eeg_mood)  AS avg_mood,
+                    CASE WHEN s.session_text_zstd IS NOT NULL AND length(s.session_text_zstd) > 0
+                         THEN 1 ELSE 0 END AS has_text
+             FROM terminal_sessions s
+             LEFT JOIN terminal_commands tc ON tc.session_id = s.id
+             WHERE s.started_at >= ?1
+             GROUP BY s.id
+             ORDER BY s.started_at DESC
+             LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![since as i64, limit as i64], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)? as u64,
+                row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)? as u64,
+                row.get::<_, Option<f64>>(6)?,
+                row.get::<_, Option<f64>>(7)?,
+                row.get::<_, i64>(8)? != 0,
+            ))
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Fetch all command_ids in a session in chronological order. Caller can
+    /// then look up each command's output via `get_terminal_output`.
+    pub fn session_command_ids(&self, session_id: &str) -> Vec<i64> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt =
+            match c.prepare_cached("SELECT id FROM terminal_commands WHERE session_id = ?1 ORDER BY started_at ASC") {
+                Ok(s) => s,
+                Err(_) => return vec![],
+            };
+        stmt.query_map(params![session_id], |row| row.get::<_, i64>(0))
+            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Insert one row into `terminal_outputs`. Idempotent — if a row already
+    /// exists for this `command_id` (e.g. on finalizer retry), it's replaced.
+    pub fn insert_terminal_output(
+        &self,
+        command_id: i64,
+        time_start_us: u64,
+        time_end_us: u64,
+        raw_zstd: Option<&[u8]>,
+        raw_size: u64,
+        stripped_text: &str,
+    ) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "INSERT OR REPLACE INTO terminal_outputs
+             (command_id, time_start_us, time_end_us, raw_zstd, raw_size, stripped_text)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                command_id,
+                time_start_us as i64,
+                time_end_us as i64,
+                raw_zstd,
+                raw_size as i64,
+                stripped_text
+            ],
+        );
+    }
+
+    /// Look up the most recent N terminal commands missing `terminal_outputs`
+    /// rows but already finalized (have a non-null `ended_at`). The session
+    /// finalizer uses this to find work to do.
+    pub fn pending_terminal_outputs(&self, limit: u32) -> Vec<(i64, u64, u64)> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT tc.id, tc.started_at, tc.ended_at
+             FROM terminal_commands tc
+             LEFT JOIN terminal_outputs tout ON tout.command_id = tc.id
+             WHERE tc.ended_at IS NOT NULL AND tout.command_id IS NULL
+             ORDER BY tc.started_at DESC
+             LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![limit as i64], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)? as u64,
+                row.get::<_, i64>(2)? as u64,
+            ))
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Fetch one terminal output row. Returns `(time_start_us, time_end_us,
+    /// raw_zstd, stripped_text)` so callers can decompress raw bytes on demand.
+    pub fn get_terminal_output(&self, command_id: i64) -> Option<(u64, u64, Option<Vec<u8>>, String)> {
+        let c = self.conn.lock_or_recover();
+        c.query_row(
+            "SELECT time_start_us, time_end_us, raw_zstd, stripped_text
+             FROM terminal_outputs WHERE command_id = ?1",
+            params![command_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u64,
+                    row.get::<_, i64>(1)? as u64,
+                    row.get::<_, Option<Vec<u8>>>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            },
+        )
+        .ok()
+    }
+
+    /// Find rows ready for embedding (have stripped_text, no embedding yet).
+    /// Returns `(command_id, stripped_text)`. The embedder writes back via
+    /// `set_terminal_embedding` once it's processed each row.
+    pub fn pending_terminal_embeddings(&self, limit: u32) -> Vec<(i64, String)> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT command_id, stripped_text FROM terminal_outputs
+             WHERE embedding IS NULL AND length(stripped_text) > 0
+             ORDER BY command_id ASC
+             LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![limit as i64], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    pub fn set_terminal_embedding(&self, command_id: i64, blob: &[u8]) {
+        let c = self.conn.lock_or_recover();
+        let _ = c.execute(
+            "UPDATE terminal_outputs SET embedding = ?1 WHERE command_id = ?2",
+            params![blob, command_id],
+        );
+    }
+
+    /// Iterate every embedded row for the semantic-search endpoint.
+    /// Returns `(command_id, embedding_blob)` so the caller can dequantise
+    /// and rank in memory. Up to ~100k rows is fine without HNSW.
+    pub fn all_terminal_embeddings(&self) -> Vec<(i64, Vec<u8>)> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT command_id, embedding FROM terminal_outputs
+             WHERE embedding IS NOT NULL AND length(embedding) > 0",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?)))
+            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Full-text search over stripped terminal output. Returns command_ids
+    /// (joined back to `terminal_commands` and other modalities by caller).
+    pub fn search_terminal_outputs(&self, query: &str, limit: u32) -> Vec<i64> {
+        let c = self.conn.lock_or_recover();
+        let mut stmt = match c.prepare_cached(
+            "SELECT rowid FROM terminal_outputs_fts
+             WHERE terminal_outputs_fts MATCH ?1
+             ORDER BY rank
+             LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        stmt.query_map(params![query, limit as i64], |row| row.get::<_, i64>(0))
+            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default()
     }
 
     /// Update a terminal command with its end time and exit code.
