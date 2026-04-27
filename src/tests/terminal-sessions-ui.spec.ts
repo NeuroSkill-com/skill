@@ -165,8 +165,57 @@ test.describe("TerminalSessionsCard", () => {
         console.log("=== expanded backfilled session (first 1000 chars) ===");
         console.log(expandedText.slice(0, 1000));
         expect(expandedText).toContain("Stripped session text");
+        // Collapse so it doesn't pollute the next assertion block.
+        await row.click();
       }
     }
+
+    // 5. Day buckets render with at least one bucket header.
+    const buckets = card.locator("[data-testid='day-bucket']");
+    const bucketCount = await buckets.count();
+    console.log(`[ui] day buckets visible: ${bucketCount}`);
+    expect(bucketCount).toBeGreaterThan(0);
+    // Header is uppercased via CSS — case-insensitive match.
+    const firstBucketText = await buckets.first().innerText();
+    expect(firstBucketText).toMatch(
+      /(today|yesterday|mon|tue|wed|thu|fri|sat|sun)/i,
+    );
+
+    // 6. Filter chips: clicking "Live" should reduce visible rows to live ones.
+    const liveCount = apiData.sessions.filter((s) => s.ended_at == null).length;
+    const liveChip = card.locator("[data-filter='live']").first();
+    if (await liveChip.count() > 0) {
+      await liveChip.click();
+      await page.waitForTimeout(150); // svelte derives reflow
+      const visibleRows = await card.locator("[data-testid='session-row']").count();
+      console.log(`[ui] rows visible after Live filter: ${visibleRows} (expected ${liveCount})`);
+      expect(visibleRows).toBe(liveCount);
+      // Reset to All for subsequent assertions.
+      await card.locator("[data-filter='all']").first().click();
+      await page.waitForTimeout(150);
+    }
+
+    // 7. F/M columns conditional rendering: if no row in the visible filter
+    //    has avg_focus or avg_mood, the columns shouldn't be in the DOM.
+    const anyEeg = apiData.sessions.some((s) => s.avg_focus != null || s.avg_mood != null);
+    const eegCols = await card.locator("[data-testid='eeg-cols']").count();
+    console.log(`[ui] anyEegInData=${anyEeg}, F/M-column elements rendered=${eegCols}`);
+    if (!anyEeg) {
+      expect(eegCols).toBe(0);
+    } else {
+      expect(eegCols).toBeGreaterThan(0);
+    }
+
+    // 8. Day-bucket collapse toggle works.
+    const firstBucketHeader = buckets.first().locator("button").first();
+    const beforeRows = await buckets.first().locator("[data-testid='session-row']").count();
+    await firstBucketHeader.click();
+    await page.waitForTimeout(150);
+    const afterRows = await buckets.first().locator("[data-testid='session-row']").count();
+    console.log(`[ui] day collapse: ${beforeRows} → ${afterRows}`);
+    expect(afterRows).toBe(0);
+    // Re-expand for screenshot.
+    await firstBucketHeader.click();
 
     await page.screenshot({ path: "test-results/terminal-sessions-card.png", fullPage: false });
     expect(consoleErrors).toEqual([]);
