@@ -5,8 +5,9 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm", "embed-exg"]
+default = ["llm", "embed-exg", "mw75-rfcomm"]
 llm = ["skill-llm/llm"]
+mw75-rfcomm = ["mw75/rfcomm", "skill-devices/mw75-rfcomm"]
 llm-metal = ["llm", "skill-llm/llm-metal"]
 llm-cuda = ["llm", "skill-llm/llm-cuda"]
 llm-vulkan = ["llm", "skill-llm/llm-vulkan"]

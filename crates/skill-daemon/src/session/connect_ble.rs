@@ -76,8 +76,25 @@ pub(super) async fn connect_mw75(paired_name: Option<String>) -> anyhow::Result<
     info!(name_pattern = %config.name_pattern, "connecting to MW75 Neuro");
     let client = Mw75Client::new(config);
     let (rx, handle) = client.connect().await.context("MW75 connect")?;
+    handle.start().await.context("MW75 activation")?;
+
+    #[cfg(feature = "mw75-rfcomm")]
+    let addr = handle.peripheral_id();
+    #[cfg(feature = "mw75-rfcomm")]
+    handle.disconnect_ble().await.ok();
+
     let handle = std::sync::Arc::new(handle);
-    Ok(Box::new(Mw75Adapter::new(rx, handle, None)))
+
+    #[cfg(feature = "mw75-rfcomm")]
+    let rfcomm = skill_devices::mw75::rfcomm::start_rfcomm_stream(handle.clone(), &addr)
+        .await
+        .context("MW75 RFCOMM open")?;
+
+    #[cfg_attr(not(feature = "mw75-rfcomm"), allow(unused_mut))]
+    let mut adapter = Mw75Adapter::new(rx, handle, None);
+    #[cfg(feature = "mw75-rfcomm")]
+    adapter.set_rfcomm(rfcomm);
+    Ok(Box::new(adapter))
 }
 
 // ── Hermes V1 (BLE) ─────────────────────────────────────────────────────────
