@@ -119,14 +119,19 @@ pub(crate) async fn set_openbci_config(
 
 pub(crate) async fn get_device_api_config(State(state): State<AppState>) -> Json<serde_json::Value> {
     let c = load_user_settings(&state).device_api;
+    let (emotiv_client_id, emotiv_client_secret) = skill_settings::keychain::get_emotiv_credentials();
+    let idun_api_token = skill_settings::keychain::get_idun_api_token();
+    let oura_access_token = skill_settings::keychain::get_oura_access_token();
+    let (neurosity_email, neurosity_password, neurosity_device_id) =
+        skill_settings::keychain::get_neurosity_credentials();
     Json(serde_json::json!({
-        "emotiv_client_id": c.emotiv_client_id,
-        "emotiv_client_secret": c.emotiv_client_secret,
-        "idun_api_token": c.idun_api_token,
-        "oura_access_token": c.oura_access_token,
-        "neurosity_email": c.neurosity_email,
-        "neurosity_password": c.neurosity_password,
-        "neurosity_device_id": c.neurosity_device_id,
+        "emotiv_client_id": emotiv_client_id,
+        "emotiv_client_secret": emotiv_client_secret,
+        "idun_api_token": idun_api_token,
+        "oura_access_token": oura_access_token,
+        "neurosity_email": neurosity_email,
+        "neurosity_password": neurosity_password,
+        "neurosity_device_id": neurosity_device_id,
         "brainmaster_model": c.brainmaster_model,
     }))
 }
@@ -138,6 +143,16 @@ pub(crate) async fn set_device_api_config(
     let mut settings = load_user_settings(&state);
     settings.device_api = config.clone();
     save_user_settings(&state, &settings);
+    skill_settings::keychain::save_device_api_secrets(&skill_settings::keychain::Secrets {
+        api_token: String::new(),
+        emotiv_client_id: config.emotiv_client_id.clone(),
+        emotiv_client_secret: config.emotiv_client_secret.clone(),
+        idun_api_token: config.idun_api_token.clone(),
+        oura_access_token: config.oura_access_token.clone(),
+        neurosity_email: config.neurosity_email.clone(),
+        neurosity_password: config.neurosity_password.clone(),
+        neurosity_device_id: config.neurosity_device_id.clone(),
+    });
     if let Ok(mut cortex) = state.scanner_cortex_config.lock() {
         cortex.emotiv_client_id = config.emotiv_client_id;
         cortex.emotiv_client_secret = config.emotiv_client_secret;

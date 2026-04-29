@@ -90,6 +90,14 @@ pub fn enrich_band_snapshot(snap: &mut BandSnapshot, ctx: &SnapshotContext) {
     let drowsiness = compute_drowsiness(snap);
     snap.drowsiness = Some((drowsiness * 10.0).round() / 10.0);
 
+    // Canonical engagement / relaxation / focus — single source of truth.
+    let engagement = compute_engagement(snap);
+    snap.engagement = Some((engagement * 10.0).round() / 10.0);
+    let relaxation = compute_relaxation(snap);
+    snap.relaxation = Some((relaxation * 10.0).round() / 10.0);
+    let focus = compute_focus(snap);
+    snap.focus = Some((focus * 10.0).round() / 10.0);
+
     // GPU stats
     if let Some(ref gpu) = ctx.gpu {
         snap.gpu_overall = Some(gpu.overall as f64);
@@ -217,6 +225,67 @@ pub fn compute_engagement_raw(snap: &BandSnapshot) -> f32 {
 /// `100 / (1 + exp(−2 × (raw − 0.8)))`
 pub fn focus_score(engagement_raw: f32) -> f64 {
     (100.0_f32 / (1.0 + (-2.0 * (engagement_raw - 0.8)).exp())) as f64
+}
+
+// ── Canonical engagement / relaxation / focus ────────────────────────────────
+//
+// Single source of truth for these three composite scores. Every consumer
+// (live `latest_bands`, persisted `metrics_json`, time-series cache, websocket
+// broadcasts, frontend, VS Code extension, widgets) reads identical values via
+// `enrich_band_snapshot` populating `snap.engagement` / `snap.relaxation` /
+// `snap.focus`. Do not re-derive these in caller code — read the snapshot.
+
+/// Sigmoid (0,∞) → (0,100): `100 / (1 + exp(−k·(x − mid)))`.
+///
+/// Shared by both `compute_engagement` and `compute_relaxation`. Identical
+/// shape to `EpochMetrics::sigmoid100` — duplicated only to keep this crate
+/// dependency-free of `skill-exg`.
+fn sigmoid_0_100(x: f32, k: f32, mid: f32) -> f64 {
+    (100.0_f32 / (1.0 + (-k * (x - mid)).exp())) as f64
+}
+
+/// Engagement score (0–100) — final, sigmoided.
+///
+/// Per-channel β / (α + θ), with a `0.5` neutral fallback for channels whose
+/// (α + θ) collapses to zero (poor electrode contact, missing band power, …).
+/// Without the fallback, low-signal channels would drag the average toward
+/// zero and pin the score at a constant ~16.8 — the historical "engagement
+/// doesn't move" bug.
+pub fn compute_engagement(snap: &BandSnapshot) -> f64 {
+    sigmoid_0_100(compute_engagement_raw(snap), 2.0, 0.8)
+}
+
+/// Relaxation score (0–100) — final, sigmoided.
+///
+/// Per-channel α / (β + θ), with the same `0.5` neutral fallback for
+/// degenerate channels. Theta is in the denominator (matches Putman 2010 /
+/// Angelidis 2016) — earlier sites that used `α / (α + β)` are deprecated.
+pub fn compute_relaxation(snap: &BandSnapshot) -> f64 {
+    if snap.channels.is_empty() {
+        return sigmoid_0_100(0.5, 2.5, 1.0);
+    }
+    let n = snap.channels.len() as f32;
+    let raw: f32 = snap
+        .channels
+        .iter()
+        .map(|ch| {
+            let d = ch.rel_beta + ch.rel_theta;
+            if d > 1e-6 {
+                ch.rel_alpha / d
+            } else {
+                0.5
+            }
+        })
+        .sum::<f32>()
+        / n;
+    sigmoid_0_100(raw, 2.5, 1.0)
+}
+
+/// Focus score (0–100). Currently the same as engagement; kept distinct so
+/// the UI can surface a "focus" label and so the formula can diverge later
+/// without another rename across consumers.
+pub fn compute_focus(snap: &BandSnapshot) -> f64 {
+    focus_score(compute_engagement_raw(snap))
 }
 
 // ── Battery EMA ───────────────────────────────────────────────────────────────
@@ -534,6 +603,9 @@ mod tests {
             meditation: None,
             cognitive_load: None,
             drowsiness: None,
+            engagement: None,
+            relaxation: None,
+            focus: None,
             temperature_raw: None,
             gpu_overall: None,
             gpu_render: None,
@@ -571,6 +643,97 @@ mod tests {
         assert!(focus_score(0.0) >= 0.0);
         assert!(focus_score(1.0) <= 100.0);
     }
+
+    /// End-to-end sanity: enriching a snapshot must populate engagement /
+    /// relaxation / focus, and the values must equal the canonical compute_*
+    /// functions. Locks down the single-source-of-truth contract so any future
+    /// regression where a caller computes its own metric will fail loudly.
+    #[test]
+    fn enrich_populates_canonical_engagement_relaxation_focus() {
+        let mut snap = test_snap();
+        let ctx = SnapshotContext {
+            ppg: None,
+            artifacts: None,
+            head_pose: None,
+            temperature_raw: 0,
+            gpu: None,
+        };
+        // Canonical values, computed *before* enrichment so the snapshot is
+        // unmutated — proves the enrich path doesn't have hidden state.
+        let want_engagement = compute_engagement(&snap);
+        let want_relaxation = compute_relaxation(&snap);
+        let want_focus = compute_focus(&snap);
+
+        enrich_band_snapshot(&mut snap, &ctx);
+
+        let got_e = snap.engagement.expect("engagement populated");
+        let got_r = snap.relaxation.expect("relaxation populated");
+        let got_f = snap.focus.expect("focus populated");
+
+        // Snapshot values are rounded to 1 decimal; canonical values are not.
+        assert!(
+            (got_e - want_engagement).abs() < 0.05,
+            "engagement mismatch: {got_e} vs {want_engagement}"
+        );
+        assert!(
+            (got_r - want_relaxation).abs() < 0.05,
+            "relaxation mismatch: {got_r} vs {want_relaxation}"
+        );
+        assert!(
+            (got_f - want_focus).abs() < 0.05,
+            "focus mismatch: {got_f} vs {want_focus}"
+        );
+
+        // Sanity: scores are 0–100.
+        for (name, v) in [("engagement", got_e), ("relaxation", got_r), ("focus", got_f)] {
+            assert!((0.0..=100.0).contains(&v), "{name}={v} out of range");
+        }
+    }
+
+    /// Reproduces the stuck-engagement failure mode: channels with
+    /// `rel_alpha + rel_theta ≈ 0`. Pre-refactor this drove engagement to a
+    /// constant ~16.8. Post-refactor the per-channel 0.5 fallback keeps the
+    /// score at the neutral midpoint and — critically — makes it *move* when
+    /// other channels recover signal.
+    #[test]
+    fn engagement_does_not_collapse_on_zero_alpha_theta() {
+        // All channels: alpha=0, theta=0, beta>0. Pre-refactor: stuck-low ~16.8.
+        let mut snap = test_snap();
+        for ch in &mut snap.channels {
+            ch.alpha = 0.0;
+            ch.theta = 0.0;
+            ch.beta = 1.0;
+            ch.rel_alpha = 0.0;
+            ch.rel_theta = 0.0;
+            ch.rel_beta = 1.0;
+        }
+
+        let stuck_low = compute_engagement(&snap);
+        // Should be at the neutral-fallback midpoint, not pinned at ~16.8.
+        assert!(
+            stuck_low > 30.0,
+            "engagement collapsed to {stuck_low} on zero-α+θ channels"
+        );
+
+        // Now flip one channel to a high-engagement profile and verify the
+        // score *moves* — the original bug was that it didn't.
+        snap.channels[0].rel_alpha = 0.10;
+        snap.channels[0].rel_theta = 0.10;
+        // Same rel_beta=1.0 → β/(α+θ) = 5 → strong engagement signal.
+        let moved = compute_engagement(&snap);
+        assert!(
+            moved > stuck_low + 1.0,
+            "engagement did not move: {stuck_low} -> {moved}"
+        );
+    }
+
+    /// Storage-side parity: `EpochMetrics::from_snapshot` (in `skill-exg`)
+    /// must produce the same engagement/relaxation as the canonical compute
+    /// functions. We can't import skill-exg here without a dep cycle, so this
+    /// test lives in `skill-exg`'s own test suite — see
+    /// `crates/skill-exg/src/lib.rs::tests::epoch_metrics_match_canonical`.
+    #[test]
+    fn _see_epoch_metrics_match_canonical_in_skill_exg() {}
 
     #[test]
     fn battery_ema_first_reading() {

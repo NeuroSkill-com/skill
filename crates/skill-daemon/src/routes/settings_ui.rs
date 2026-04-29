@@ -235,18 +235,15 @@ pub(crate) async fn test_location() -> Json<serde_json::Value> {
     Json(v)
 }
 
-pub(crate) async fn get_api_token(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.api_token}))
+pub(crate) async fn get_api_token(State(_state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({"value": skill_settings::keychain::get_api_token()}))
 }
 
 pub(crate) async fn set_api_token(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(req): Json<StringValueRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.api_token = req.value;
-    save_user_settings(&state, &settings);
+    skill_settings::keychain::set_api_token(&req.value);
     Json(serde_json::json!({"ok": true}))
 }
 

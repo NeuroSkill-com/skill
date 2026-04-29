@@ -169,10 +169,8 @@ pub(super) async fn cmd_health_metric_types(state: &AppState) -> Result<Value, S
     Ok(json!({ "types": types }))
 }
 
-pub(super) async fn cmd_oura_status(state: &AppState) -> Result<Value, String> {
-    let skill_dir = skill_dir(state);
-    let settings = skill_settings::load_settings(&skill_dir);
-    let has_token = !settings.device_api.oura_access_token.is_empty();
+pub(super) async fn cmd_oura_status(_state: &AppState) -> Result<Value, String> {
+    let has_token = !skill_settings::keychain::get_oura_access_token().is_empty();
     Ok(json!({
         "connected": has_token,
         "has_token": has_token,
@@ -183,8 +181,7 @@ pub(super) async fn cmd_oura_sync(state: &AppState, msg: &Value) -> Result<Value
     let start_date = str_field(msg, "start_date");
     let end_date = str_field(msg, "end_date");
     let skill_dir = skill_dir(state);
-    let settings = skill_settings::load_settings(&skill_dir);
-    let token = settings.device_api.oura_access_token.clone();
+    let token = skill_settings::keychain::get_oura_access_token();
 
     if token.is_empty() {
         return Err("Oura access token not configured".into());

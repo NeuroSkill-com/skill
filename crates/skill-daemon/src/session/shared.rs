@@ -66,14 +66,17 @@ pub fn broadcast_event(tx: &broadcast::Sender<EventEnvelope>, event_type: &str, 
 
 // ── Band snapshot enrichment ──────────────────────────────────────────────────
 
-/// Enrich a `BandSnapshot` with composite scores (focus, relaxation, engagement,
-/// artifacts) and return the result as JSON.
+/// Enrich a `BandSnapshot` with composite scores and return the result as JSON.
+///
+/// All composite-score math (engagement / relaxation / focus / meditation /
+/// cognitive_load / drowsiness) lives in `skill_devices` and is written
+/// directly onto the snapshot fields by `skill_devices::enrich_band_snapshot`.
+/// This wrapper only adds the daemon-side context (artifacts, GPU stats) and
+/// serializes — every consumer reads identical values from the snapshot.
 pub fn enrich_band_snapshot(
     snap: &mut skill_eeg::eeg_bands::BandSnapshot,
     artifacts: Option<&skill_eeg::artifact_detection::ArtifactMetrics>,
 ) -> serde_json::Value {
-    // Use skill_devices::enrich_band_snapshot for the full enrichment
-    // (blink_count, blink_rate, head_pose, composite scores).
     let ctx = skill_devices::SnapshotContext {
         ppg: None,
         artifacts: artifacts.copied(),
@@ -82,26 +85,7 @@ pub fn enrich_band_snapshot(
         gpu: skill_data::gpu_stats::read(),
     };
     skill_devices::enrich_band_snapshot(snap, &ctx);
-
-    // Add composite scores derived from band power.
-    let mut val = serde_json::to_value(&*snap).unwrap_or_default();
-    if let Some(obj) = val.as_object_mut() {
-        let engage_raw = skill_devices::compute_engagement_raw(snap);
-        let focus = skill_devices::focus_score(engage_raw);
-        let nch = snap.channels.len().max(1) as f64;
-        let avg_alpha = snap.channels.iter().map(|c| c.rel_alpha as f64).sum::<f64>() / nch;
-        let avg_beta = snap.channels.iter().map(|c| c.rel_beta as f64).sum::<f64>() / nch;
-        let relaxation = if (avg_alpha + avg_beta) > 0.0 {
-            (avg_alpha / (avg_alpha + avg_beta)) * 100.0
-        } else {
-            0.0
-        };
-        let engagement = 100.0 / (1.0 + (-2.0 * (engage_raw as f64 - 0.8)).exp());
-        obj.insert("focus".into(), serde_json::json!(focus));
-        obj.insert("relaxation".into(), serde_json::json!(relaxation));
-        obj.insert("engagement".into(), serde_json::json!(engagement));
-    }
-    val
+    serde_json::to_value(&*snap).unwrap_or_default()
 }
 
 // ── Session metadata ──────────────────────────────────────────────────────────

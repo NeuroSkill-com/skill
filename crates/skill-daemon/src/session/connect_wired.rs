@@ -538,33 +538,32 @@ impl skill_devices::session::DeviceAdapter for NeuroSkyAdapter {
 
 // ── Neurosity Crown/Notion (Cloud API) ─────────────────────────────────────
 
-pub(super) async fn connect_neurosity(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+pub(super) async fn connect_neurosity(_state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use neurosity::prelude::*;
 
     let requested_device_id = target.strip_prefix("neurosity:").unwrap_or("").trim().to_string();
 
     let (device_id, email, password) = {
-        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-        let settings = skill_settings::load_settings(&skill_dir);
+        let (kc_email, kc_password, kc_device_id) = skill_settings::keychain::get_neurosity_credentials();
 
         let device_id = if requested_device_id.is_empty() {
-            settings.device_api.neurosity_device_id.clone()
+            kc_device_id
         } else {
             requested_device_id
         };
-        let email = if settings.device_api.neurosity_email.trim().is_empty() {
+        let email = if kc_email.trim().is_empty() {
             std::env::var("SKILL_NEUROSITY_EMAIL")
                 .or_else(|_| std::env::var("NEUROSITY_EMAIL"))
                 .unwrap_or_default()
         } else {
-            settings.device_api.neurosity_email.clone()
+            kc_email
         };
-        let password = if settings.device_api.neurosity_password.trim().is_empty() {
+        let password = if kc_password.trim().is_empty() {
             std::env::var("SKILL_NEUROSITY_PASSWORD")
                 .or_else(|_| std::env::var("NEUROSITY_PASSWORD"))
                 .unwrap_or_default()
         } else {
-            settings.device_api.neurosity_password.clone()
+            kc_password
         };
 
         (device_id, email, password)
@@ -913,18 +912,11 @@ pub(super) async fn connect_antneuro(state: &AppState, target: &str) -> anyhow::
 
 // ── Emotiv (Cortex WebSocket API) ────────────────────────────────────────────
 
-pub(super) async fn connect_emotiv(state: &AppState) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+pub(super) async fn connect_emotiv(_state: &AppState) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::emotiv::prelude::*;
     use skill_devices::session::emotiv::EmotivAdapter;
 
-    let (client_id, client_secret) = {
-        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-        let settings = skill_settings::load_settings(&skill_dir);
-        (
-            settings.device_api.emotiv_client_id.clone(),
-            settings.device_api.emotiv_client_secret.clone(),
-        )
-    };
+    let (client_id, client_secret) = skill_settings::keychain::get_emotiv_credentials();
 
     if client_id.trim().is_empty() || client_secret.trim().is_empty() {
         anyhow::bail!("Emotiv client_id/client_secret not configured in Settings → Device API");

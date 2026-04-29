@@ -601,12 +601,8 @@ pub(crate) fn detect_manual_device_hints(state: &AppState) -> Vec<DiscoveredDevi
         },
     ];
 
-    let settings_device_id = state
-        .skill_dir
-        .lock()
-        .ok()
-        .map(|d| skill_settings::load_settings(&d).device_api.neurosity_device_id)
-        .filter(|s| !s.trim().is_empty());
+    let _ = state;
+    let settings_device_id = Some(skill_settings::keychain::get_neurosity_device_id()).filter(|s| !s.trim().is_empty());
 
     let neurosity_device_id = settings_device_id
         .or_else(|| {
