@@ -203,7 +203,8 @@ CREATE TABLE IF NOT EXISTS terminal_commands (
     project       TEXT    NOT NULL DEFAULT '',
     eeg_focus     REAL,
     eeg_focus_end REAL,
-    eeg_mood      REAL
+    eeg_mood      REAL,
+    session_id    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tc_started ON terminal_commands (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tc_category ON terminal_commands (category);
@@ -1297,6 +1298,10 @@ impl ActivityStore {
                 |row| row.get(0),
             )
             .unwrap_or(0);
+
+        // Drop the connection guard before calling brain_feedback_weight,
+        // which re-acquires the same Mutex (std::sync::Mutex is not re-entrant).
+        drop(c);
 
         let minutes = window_secs as f32 / 60.0;
         let tab_rate = if minutes > 0.0 {
@@ -2436,6 +2441,7 @@ impl ActivityStore {
     }
 
     /// Insert a terminal command start event. Returns the row id.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_terminal_command_start(
         &self,
         terminal_name: &str,
@@ -7002,7 +7008,7 @@ mod tests {
         domain: &str,
         category: &str,
         content_type: &str,
-        focus: Option<f64>,
+        _focus: Option<f64>,
         extras: serde_json::Value,
     ) -> serde_json::Value {
         let mut v = serde_json::json!({
@@ -7491,7 +7497,7 @@ mod tests {
     #[test]
     fn flow_state_penalized_by_tab_switching() {
         let store = open_temp();
-        let now = 100_000u64;
+        let now = now_secs();
         // Create file activity for base flow score
         store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", now - 200, Some(80.0), None);
         store.insert_file_interaction("/a.rs", "code", "proj", "rust", "", "", now - 100, Some(80.0), None);

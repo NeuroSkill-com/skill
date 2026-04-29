@@ -1,4 +1,4 @@
-### Reliability
+### Bugfixes
 
 - **Worker thread panic recovery with auto-restart**: all 4 activity worker threads (poller, input monitor, file watcher, clipboard monitor) now wrapped in `catch_unwind` via `spawn_resilient`. On panic, the worker logs the error and restarts after 5 s with freshly cloned `AppState` and `Arc<ActivityStore>`.
 - **osascript timeout**: all `osascript` calls (active window poll, secondary windows, clipboard monitor) now use a 3-second timeout via `run_osascript` helper. Previously, a hung app could block the poller thread indefinitely, silently killing all activity tracking.

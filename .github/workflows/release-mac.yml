@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   workflow_dispatch:
 
 permissions:
@@ -402,6 +403,12 @@ jobs:
           generate_release_notes: false
           body_path:              release-notes.md
           fail_on_unmatched_files: true
+          # `prerelease` is derived from the version string: any `-rc.N` suffix
+          # marks the build as a release candidate. GitHub treats prereleases
+          # specially — `releases/latest/download/...` URLs skip them — so the
+          # stable update channel automatically ignores RCs without any client
+          # configuration. RC users hit the rc-latest mirror updated below.
+          prerelease:             ${{ steps.version_meta.outputs.prerelease == 'true' }}
           files: |
             ${{ steps.artifacts.outputs.dmg }}
             ${{ steps.artifacts.outputs.app_tar }}
@@ -425,6 +432,11 @@ jobs:
         if: steps.version_meta.outputs.is_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+        # `--mirror-to-rc-latest` also pushes the manifest to the mutable
+        # `rc-latest` GitHub Release, which is the URL the RC update channel
+        # polls. Both stable and RC builds mirror, so RC opt-in users always
+        # see the most recent build of either kind. The release is bootstrapped
+        # automatically on the first run via cmdEnsureRcLatestRelease.
         run: >-
           node scripts/ci.mjs update-latest-json
           --platform darwin-aarch64
@@ -433,6 +445,7 @@ jobs:
           --tag "${{ steps.version_meta.outputs.tag }}"
           --version "${{ steps.version_meta.outputs.version }}"
           --upload
+          --mirror-to-rc-latest
 
       # ── Upload CI artifacts (manual / on-demand builds only) ────────────────
       - name: Upload build artifacts

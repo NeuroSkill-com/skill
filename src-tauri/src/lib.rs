@@ -80,6 +80,7 @@ mod tray;
 mod about;
 mod active_window;
 mod shortcut_cmds;
+mod update_channel;
 
 mod window_cmds;
 
@@ -141,6 +142,9 @@ use tts::{
     tts_get_voice, tts_init, tts_list_neutts_voices, tts_list_voices, tts_set_voice, tts_speak,
     tts_unload,
 };
+use update_channel::{
+    channel_check_for_update, channel_download_and_install, get_update_channel, set_update_channel,
+};
 use window_cmds::{
     autosize_main_window, check_accessibility_permission, check_automation_permission,
     check_bluetooth_power, check_screen_recording_permission, close_calibration_window,
@@ -148,10 +152,10 @@ use window_cmds::{
     delete_calibration_profile, dismiss_whats_new, get_active_calibration, get_app_name,
     get_app_version, get_calendar_events, get_calendar_permission_status, get_calibration_config,
     get_calibration_profile, get_data_dir, get_location_permission_status, get_onboarding_complete,
-    get_onboarding_model_download_order, get_whats_new_seen_version, is_session_live,
-    list_calibration_profiles, open_accessibility_settings, open_and_start_calibration,
-    open_api_window, open_automation_settings, open_bt_settings, open_calendar_settings,
-    open_calibration_window, open_focus_settings, open_focus_timer_window,
+    get_onboarding_model_download_order, get_onboarding_status, get_whats_new_seen_version,
+    is_session_live, list_calibration_profiles, open_accessibility_settings,
+    open_and_start_calibration, open_api_window, open_automation_settings, open_bt_settings,
+    open_calendar_settings, open_calibration_window, open_focus_settings, open_focus_timer_window,
     open_full_disk_access_settings, open_help_window, open_input_monitoring_settings,
     open_label_window, open_label_window_at, open_labels_window, open_latest_log,
     open_location_settings, open_model_tab, open_notifications_settings, open_onboarding_window,
@@ -189,6 +193,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // The plugin's static endpoint comes from tauri.conf.json (stable URL).
+        // Channel-aware checks go through update_channel::build_updater, which
+        // overrides via the runtime UpdaterBuilder. The plugin-level Builder
+        // doesn't expose endpoints in v2.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
@@ -299,6 +307,10 @@ pub fn run() {
             set_autostart_enabled,
             get_update_check_interval,
             set_update_check_interval,
+            get_update_channel,
+            set_update_channel,
+            channel_check_for_update,
+            channel_download_and_install,
             pick_ref_wav_file,
             get_recent_active_windows,
             get_recent_input_activity,
@@ -350,6 +362,7 @@ pub fn run() {
             get_onboarding_model_download_order,
             complete_onboarding,
             get_onboarding_complete,
+            get_onboarding_status,
             open_session_window,
             open_api_window,
             open_whats_new_window,
@@ -359,6 +372,7 @@ pub fn run() {
             get_onboarding_model_download_order,
             complete_onboarding,
             get_onboarding_complete,
+            get_onboarding_status,
             session_connect::connect_openbci,
             tts_init,
             tts_speak,

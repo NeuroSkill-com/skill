@@ -7,6 +7,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   workflow_dispatch:
 
 permissions:
@@ -386,6 +387,7 @@ jobs:
           generate_release_notes:  false
           body_path:               release-notes.md
           fail_on_unmatched_files: true
+          prerelease:              ${{ steps.version_meta.outputs.prerelease == 'true' }}
           files: |
             ${{ steps.artifacts.outputs.deb }}
             ${{ steps.artifacts.outputs.rpm }}
@@ -412,6 +414,7 @@ jobs:
           --tag "${{ steps.version_meta.outputs.tag }}"
           --version "${{ steps.version_meta.outputs.version }}"
           --upload
+          --mirror-to-rc-latest
 
       # ── Upload CI artifacts (on-demand builds only) ──────────────────────────
       - name: Upload build artifacts

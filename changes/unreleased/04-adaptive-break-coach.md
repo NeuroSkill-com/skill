@@ -1,6 +1,6 @@
-# Adaptive Break Coach
+### Features
 
-Personalized break timing based on the developer's actual EEG focus cycle — not generic Pomodoro.
+- **Adaptive Break Coach**: personalized break timing based on the developer's actual EEG focus cycle (via `/brain/break-timing`), not generic Pomodoro. Status bar countdown `$(clock) Break in 8m`, max one notification per cycle, auto-resets when fatigue indicates idleness. `NeuroSkill: Take a Break` resets the timer manually. Toggle via `neuroskill.breakCoach`.
 
 ## How it works
 

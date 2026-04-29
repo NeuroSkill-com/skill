@@ -20,3 +20,4 @@ pub(crate) mod settings_screenshots;
 pub(crate) mod settings_ui;
 #[cfg(debug_assertions)]
 pub(crate) mod test_mode;
+pub mod validation;

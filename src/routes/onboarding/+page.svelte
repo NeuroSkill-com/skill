@@ -16,11 +16,28 @@ import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
 import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { Progress } from "$lib/components/ui/progress";
+import { ToggleRow } from "$lib/components/ui/toggle-row";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { daemonPost } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import {
+  getActiveWindowTracking,
+  getCalendarTracking,
+  getClipboardTracking,
+  getFileActivityTracking,
+  getInputActivityTracking,
+  getLocationEnabled,
+  setActiveWindowTracking,
+  setCalendarTracking,
+  setClipboardTracking,
+  setFileActivityTracking,
+  setInputActivityTracking,
+  setLocationEnabled,
+} from "$lib/daemon/settings";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { openSettings } from "$lib/navigation";
+import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { DeviceStatus } from "$lib/types";
 
@@ -100,14 +117,97 @@ async function toggleMaximizeWindow() {
 }
 
 // ── Steps ──────────────────────────────────────────────────────────────────
-type Step = "welcome" | "enable_bluetooth" | "bluetooth" | "fit" | "calibration" | "models" | "tray" | "done";
-const STEPS: Step[] = ["welcome", "enable_bluetooth", "bluetooth", "fit", "calibration", "models", "tray", "done"];
+type Step =
+  | "welcome"
+  | "enable_bluetooth"
+  | "bluetooth"
+  | "fit"
+  | "calibration"
+  | "models"
+  | "tray"
+  | "permissions"
+  | "extensions"
+  | "done";
+
+// Each step records the wizard schema version it was introduced in. Compared
+// against the user's last-completed version to decide if a NEW badge should
+// appear in the progress nav and on the step itself. Bump
+// `CURRENT_ONBOARDING_VERSION` in skill-constants whenever a new step is
+// added, and set `addedIn` here to that same number.
+interface StepMeta {
+  id: Step;
+  addedIn: number;
+}
+const STEP_META: StepMeta[] = [
+  { id: "welcome", addedIn: 1 },
+  { id: "enable_bluetooth", addedIn: 1 },
+  { id: "bluetooth", addedIn: 1 },
+  { id: "fit", addedIn: 1 },
+  { id: "calibration", addedIn: 1 },
+  { id: "models", addedIn: 1 },
+  { id: "tray", addedIn: 1 },
+  { id: "permissions", addedIn: 2 },
+  { id: "extensions", addedIn: 2 },
+  { id: "done", addedIn: 1 },
+];
+const STEPS: Step[] = STEP_META.map((s) => s.id);
 
 let step = $state<Step>("welcome");
+
+// ── Onboarding version status (drives "what's new" banner + NEW badges) ────
+interface OnboardingStatus {
+  completedVersion: number;
+  currentVersion: number;
+  isReturning: boolean;
+}
+let onboardingStatus = $state<OnboardingStatus>({
+  completedVersion: 0,
+  currentVersion: 0,
+  isReturning: false,
+});
+function isNewStep(id: Step): boolean {
+  const meta = STEP_META.find((m) => m.id === id);
+  if (!meta) return false;
+  // Only flag steps as NEW once the user has at least one prior completion;
+  // first-run users see every step for the first time, so badges would be noise.
+  return onboardingStatus.completedVersion > 0 && meta.addedIn > onboardingStatus.completedVersion;
+}
 
 // ── Bluetooth adapter check (OS-level)
 let btEnabled = $state<boolean | null>(null);
 let stepIdx = $derived(STEPS.indexOf(step));
+
+// ── Font-size A−/A+ control (in top bar) ──────────────────────────────────
+//
+// Exposes the same global font-size scale as Settings → Appearance, but
+// reachable from the top bar of every onboarding step so a low-vision user
+// who can't read step 1 can fix it without first navigating Settings.
+// The setter persists to localStorage; changes survive into the main app.
+let fontSizePct = $state<number>(getFontSize());
+const minFontPct = FONT_SIZE_PRESETS[0].value;
+const maxFontPct = FONT_SIZE_PRESETS[FONT_SIZE_PRESETS.length - 1].value;
+function bumpFontSize(direction: 1 | -1) {
+  const idx = FONT_SIZE_PRESETS.findIndex((p) => p.value === fontSizePct);
+  // If the current value isn't a preset (e.g. user-set custom from elsewhere),
+  // snap to the closest preset before stepping.
+  const startIdx = idx >= 0 ? idx : nearestFontPresetIdx(fontSizePct);
+  const nextIdx = Math.max(0, Math.min(FONT_SIZE_PRESETS.length - 1, startIdx + direction));
+  if (nextIdx === startIdx && idx >= 0) return;
+  fontSizePct = FONT_SIZE_PRESETS[nextIdx].value;
+  setFontSize(fontSizePct);
+}
+function nearestFontPresetIdx(pct: number): number {
+  let best = 0;
+  let bestDist = Infinity;
+  FONT_SIZE_PRESETS.forEach((p, i) => {
+    const d = Math.abs(p.value - pct);
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  });
+  return best;
+}
 
 // ── Reactive status ────────────────────────────────────────────────────────
 let status = $state<DeviceStatus>({
@@ -154,6 +254,206 @@ let ocrDlState = $state<"idle" | "downloading" | "ready" | "error">("idle");
 let ocrDlError = $state("");
 let screenRecPerm = $state<boolean | null>(null);
 const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+
+// ── Activity tracking opt-in state (permissions step) ─────────────────────
+//
+// Each toggle here mirrors a single persistent flag in the daemon settings.
+// The toggle handler optimistically updates the local state and persists in
+// the background; failures are swallowed so a flaky daemon connection
+// doesn't make the wizard feel broken (the next step's load will re-sync).
+let trackActiveWindow = $state(false);
+let trackInputActivity = $state(true);
+let trackFileActivity = $state(false);
+let trackClipboard = $state(false);
+let trackScreenshots = $state(false);
+let trackLocation = $state(false);
+let trackCalendar = $state(false);
+let permissionsLoaded = $state(false);
+
+interface ScreenshotConfig {
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+async function loadPermissionsState() {
+  if (permissionsLoaded) return;
+  try {
+    [trackActiveWindow, trackInputActivity, trackFileActivity, trackClipboard, trackLocation, trackCalendar] =
+      await Promise.all([
+        getActiveWindowTracking(),
+        getInputActivityTracking(),
+        getFileActivityTracking(),
+        getClipboardTracking(),
+        getLocationEnabled().catch(() => false),
+        getCalendarTracking().catch(() => false),
+      ]);
+  } catch {}
+  // Screenshots have a richer config object; we only care about the enabled bit.
+  try {
+    const cfg = await daemonInvoke<ScreenshotConfig>("get_screenshot_config");
+    trackScreenshots = !!cfg.enabled;
+  } catch {}
+  permissionsLoaded = true;
+}
+
+async function toggleTrackActiveWindow() {
+  trackActiveWindow = !trackActiveWindow;
+  try {
+    await setActiveWindowTracking(trackActiveWindow);
+  } catch {}
+}
+async function toggleTrackInputActivity() {
+  trackInputActivity = !trackInputActivity;
+  try {
+    await setInputActivityTracking(trackInputActivity);
+  } catch {}
+}
+async function toggleTrackFileActivity() {
+  trackFileActivity = !trackFileActivity;
+  try {
+    await setFileActivityTracking(trackFileActivity);
+  } catch {}
+}
+async function toggleTrackClipboard() {
+  trackClipboard = !trackClipboard;
+  try {
+    await setClipboardTracking(trackClipboard);
+  } catch {}
+}
+async function toggleTrackScreenshots() {
+  trackScreenshots = !trackScreenshots;
+  try {
+    // Read-modify-write: the screenshot config has many other tunables
+    // (interval, OCR, image size). We only flip `enabled` and preserve the rest.
+    const cfg = await daemonInvoke<ScreenshotConfig>("get_screenshot_config");
+    cfg.enabled = trackScreenshots;
+    await daemonInvoke("set_screenshot_config", { config: cfg });
+  } catch {}
+}
+async function toggleTrackLocation() {
+  trackLocation = !trackLocation;
+  try {
+    await setLocationEnabled(trackLocation);
+  } catch {}
+}
+async function toggleTrackCalendar() {
+  trackCalendar = !trackCalendar;
+  try {
+    await setCalendarTracking(trackCalendar);
+  } catch {}
+  // First-time enable: trigger the macOS Calendar permission prompt now so the
+  // user doesn't get a surprise dialog the first time some other screen tries
+  // to read events.
+  if (trackCalendar) {
+    try {
+      await invoke("request_calendar_permission");
+    } catch {}
+  }
+}
+
+$effect(() => {
+  if (step === "permissions") loadPermissionsState();
+  if (step === "extensions") loadExtensionsState();
+});
+
+// ── Extensions opt-in state (extensions step) ─────────────────────────────
+//
+// Three opt-in installers, each backed by infrastructure that already exists
+// in Settings → Extensions / Settings → Terminal. We surface a single primary
+// install per category and link out to the full Settings tab for variants
+// (multiple VS Code forks, multiple browsers, multiple shells).
+type InstallState = "idle" | "installing" | "installed" | "error";
+interface VsCodeFork {
+  id: string;
+  name: string;
+  available: boolean;
+  installed: boolean;
+}
+interface ExtensionsCheck {
+  vscode_forks: VsCodeFork[];
+  vscode: boolean;
+  chrome: boolean;
+  firefox: boolean;
+  safari: boolean;
+  edge: boolean;
+}
+let extensionsChecked = $state(false);
+let extensionsCheck = $state<ExtensionsCheck | null>(null);
+let vsCodeInstall = $state<InstallState>("idle");
+let vsCodeMessage = $state("");
+let vsCodePickedFork = $state<string>("vscode");
+let browserInstall = $state<InstallState>("idle");
+let browserMessage = $state("");
+// Default browser pick: Safari on Mac, Chrome elsewhere.
+let browserPicked = $state<"chrome" | "firefox" | "safari" | "edge">(isMac ? "safari" : "chrome");
+let shellInstall = $state<InstallState>("idle");
+let shellMessage = $state("");
+// Default shell pick: best-effort guess from navigator.userAgent / platform.
+const isWindows = typeof navigator !== "undefined" && /Win/i.test(navigator.platform);
+let shellPicked = $state<"zsh" | "bash" | "fish" | "powershell">(isWindows ? "powershell" : "zsh");
+
+async function loadExtensionsState() {
+  if (extensionsChecked) return;
+  try {
+    const c = await invoke<ExtensionsCheck>("check_extensions_installed");
+    extensionsCheck = c;
+    // Pick the first installed VS Code fork as the default install target,
+    // otherwise the first available fork, otherwise leave the default.
+    const installed = c.vscode_forks?.find((f) => f.installed);
+    const available = c.vscode_forks?.find((f) => f.available);
+    if (installed) vsCodePickedFork = installed.id;
+    else if (available) vsCodePickedFork = available.id;
+    if (installed) vsCodeInstall = "installed";
+  } catch {}
+  extensionsChecked = true;
+}
+
+async function installVsCode() {
+  vsCodeInstall = "installing";
+  vsCodeMessage = "";
+  try {
+    const r = await invoke<{ ok: boolean; message: string }>("install_extension", {
+      extensionId: vsCodePickedFork,
+    });
+    vsCodeInstall = r.ok ? "installed" : "error";
+    vsCodeMessage = r.message ?? "";
+  } catch (e) {
+    vsCodeInstall = "error";
+    vsCodeMessage = String(e);
+  }
+}
+async function installBrowser() {
+  browserInstall = "installing";
+  browserMessage = "";
+  try {
+    const r = await invoke<{ ok: boolean; message: string }>("install_extension", {
+      extensionId: browserPicked,
+    });
+    browserInstall = r.ok ? "installed" : "error";
+    browserMessage = r.message ?? "";
+  } catch (e) {
+    browserInstall = "error";
+    browserMessage = String(e);
+  }
+}
+async function installShell() {
+  shellInstall = "installing";
+  shellMessage = "";
+  try {
+    const r = await daemonPost<{
+      ok: boolean;
+      installed?: boolean;
+      already_installed?: boolean;
+      instructions?: string;
+      note?: string;
+    }>("/v1/activity/install-shell-hook", { shell: shellPicked });
+    shellInstall = r.ok && (r.installed || r.already_installed) ? "installed" : "error";
+    shellMessage = r.instructions ?? r.note ?? "";
+  } catch (e) {
+    shellInstall = "error";
+    shellMessage = String(e);
+  }
+}
 let onboardingDownloadOrder = $state<OnboardingModelKey[]>(["zuna", "kitten", "neutts", "llm", "ocr"]);
 type AutoModelStage = OnboardingModelKey | "done";
 let autoModelStage = $state<AutoModelStage>("zuna");
@@ -480,6 +780,14 @@ async function cancelCalibration() {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 const unsubs: UnlistenFn[] = [];
 onMount(async () => {
+  window.addEventListener("keydown", onArrowKey);
+
+  // Load onboarding status (drives "what's new" banner + per-step NEW badges).
+  // Best-effort: if the call fails the wizard still works, just without badges.
+  try {
+    onboardingStatus = await invoke<OnboardingStatus>("get_onboarding_status");
+  } catch {}
+
   status = await daemonInvoke<DeviceStatus>("get_status");
   unsubs.push(
     await listen<DeviceStatus>("status", (ev) => {
@@ -602,6 +910,11 @@ onMount(async () => {
           screenRecPerm = v;
         })
         .catch((_e) => {});
+    invoke<boolean>("check_bluetooth_power")
+      .then((v) => {
+        btEnabled = v;
+      })
+      .catch((_e) => {});
   }, 2000);
 });
 
@@ -631,6 +944,7 @@ async function openBt() {
 }
 
 onDestroy(async () => {
+  window.removeEventListener("keydown", onArrowKey);
   // biome-ignore lint/suspicious/useIterableCallbackReturn: unlisten fns return void-Promise, not a value
   unsubs.forEach((u) => u());
   unlistenTts?.();
@@ -664,6 +978,18 @@ function prev() {
   const i = stepIdx;
   if (i > 0) step = STEPS[i - 1];
 }
+
+function onArrowKey(e: KeyboardEvent) {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target as HTMLElement | null;
+  const tag = t?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (t?.isContentEditable) return;
+  e.preventDefault();
+  if (e.key === "ArrowRight") next();
+  else prev();
+}
 async function startScan() {
   await daemonInvoke("retry_connect");
 }
@@ -682,6 +1008,39 @@ useWindowTitle("window.title.onboarding");
   <div class="flex items-center gap-2 px-4 pt-3 pb-1.5 shrink-0" data-tauri-drag-region
        ondblclick={toggleMaximizeWindow}>
     <span class="text-ui-lg font-bold tracking-tight flex-1">{t("onboarding.title")}</span>
+
+    <!-- ── Accessibility: text-size A−/A+ (always visible) ───────────────── -->
+    <!-- The wrapper opts out of the parent drag-region so buttons are clickable. -->
+    <div data-tauri-drag-region="false"
+         class="flex items-center gap-0.5 rounded-md border border-border/60 bg-surface-2/60
+                dark:bg-white/[0.04] px-0.5 py-0.5 select-none shrink-0"
+         role="group" aria-label={t("onboarding.fontSizeLabel")}>
+      <button
+        type="button"
+        onclick={() => bumpFontSize(-1)}
+        disabled={fontSizePct <= minFontPct}
+        title={t("onboarding.fontSizeDecrease")}
+        aria-label={t("onboarding.fontSizeDecrease")}
+        class="w-6 h-6 flex items-center justify-center rounded text-ui-base font-semibold
+               text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors
+               disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+        A−
+      </button>
+      <span class="w-10 text-center text-ui-2xs font-mono tabular-nums text-muted-foreground"
+            aria-live="polite">{fontSizePct}%</span>
+      <button
+        type="button"
+        onclick={() => bumpFontSize(1)}
+        disabled={fontSizePct >= maxFontPct}
+        title={t("onboarding.fontSizeIncrease")}
+        aria-label={t("onboarding.fontSizeIncrease")}
+        class="w-6 h-6 flex items-center justify-center rounded text-ui-lg font-semibold
+               text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors
+               disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+        A+
+      </button>
+    </div>
+
     <!-- TTS readiness indicator (shown on calibration step) -->
     {#if step === "calibration" && !ttsReady}
       <span class="flex items-center gap-1 text-ui-xs text-amber-600 dark:text-amber-400
@@ -705,9 +1064,17 @@ useWindowTitle("window.title.onboarding");
       {#each STEPS as s, i}
         <button
           onclick={() => { if (i <= stepIdx && !calRunning) step = s; }}
-          class="text-ui-2xs font-medium transition-colors
+          class="relative text-ui-2xs font-medium transition-colors
                  {i <= stepIdx ? 'text-foreground cursor-pointer' : 'text-muted-foreground/40 cursor-default'}">
           {t(`onboarding.step.${s}`)}
+          {#if isNewStep(s)}
+            <span class="absolute -top-1.5 -right-1.5 text-[0.55rem] font-bold tracking-widest
+                         px-1 py-px rounded-sm bg-violet-500 text-white shadow-sm uppercase
+                         leading-none"
+                  aria-label={t("onboarding.newBadge")}>
+              {t("onboarding.newBadge")}
+            </span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -720,19 +1087,57 @@ useWindowTitle("window.title.onboarding");
     {#if step === "welcome"}
       <div class="flex flex-col items-center gap-3 pt-4 text-center" in:fly={{ x: 30, duration: 200 }}>
         <span class="text-4xl">🧠</span>
-        <h2 class="text-[1.05rem] font-bold">{t("onboarding.welcomeTitle")}</h2>
+        <h2 class="text-[1.05rem] font-bold">
+          {onboardingStatus.isReturning ? t("onboarding.welcomeBackTitle") : t("onboarding.welcomeTitle")}
+        </h2>
         <p class="text-ui-md text-muted-foreground leading-relaxed max-w-[320px]">
           {t("onboarding.welcomeBody")}
         </p>
-        <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
-          {#each ["bluetooth", "fit", "calibration", "models"] as s}
-            <div class="flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
+
+        {#if onboardingStatus.isReturning}
+          <!-- "Why you're seeing this again" banner — only for users who already onboarded
+               at an earlier wizard version. Lists which steps are new since their last run. -->
+          <div class="w-full max-w-[340px] rounded-lg border border-violet-500/25 bg-violet-500/[0.06]
+                      px-3 py-2.5 flex flex-col gap-1.5 text-left">
+            <div class="flex items-center gap-2">
+              <span class="text-base">✨</span>
+              <span class="text-ui-base font-semibold text-violet-700 dark:text-violet-300">
+                {t("onboarding.whatsNewTitle")}
+              </span>
+            </div>
+            <p class="text-ui-sm text-violet-700/90 dark:text-violet-300/90 leading-relaxed">
+              {t("onboarding.whatsNewBody")}
+            </p>
+            <ul class="text-ui-sm text-violet-700/90 dark:text-violet-300/90 leading-relaxed list-disc pl-5 mt-0.5">
+              {#each STEP_META.filter((m) => m.addedIn > onboardingStatus.completedVersion && m.id !== "done" && m.id !== "welcome") as m}
+                <li>{t(`onboarding.step.${m.id}`)}</li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+        <div class="flex flex-col gap-1.5 w-full max-w-[320px] mt-1">
+          {#each [
+            { id: "bluetooth",   icon: "📡" },
+            { id: "fit",         icon: "🎧" },
+            { id: "calibration", icon: "🎯" },
+            { id: "models",      icon: "⬇️" },
+            { id: "tray",        icon: "🖥" },
+            { id: "permissions", icon: "🔒" },
+            { id: "extensions",  icon: "🧩" },
+          ] as s}
+            <div class="relative flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
                         bg-muted dark:bg-surface-2 px-3 py-2">
-              <span class="text-base">{s === "bluetooth" ? "📡" : s === "fit" ? "🎧" : s === "calibration" ? "🎯" : "⬇️"}</span>
-              <div class="flex flex-col text-left">
-                <span class="text-ui-base font-semibold">{t(`onboarding.step.${s}`)}</span>
-                <span class="text-ui-xs text-muted-foreground">{t(`onboarding.${s}Hint`)}</span>
+              <span class="text-base">{s.icon}</span>
+              <div class="flex flex-col text-left flex-1 min-w-0">
+                <span class="text-ui-base font-semibold">{t(`onboarding.step.${s.id}`)}</span>
+                <span class="text-ui-xs text-muted-foreground">{t(`onboarding.${s.id}Hint`)}</span>
               </div>
+              {#if isNewStep(s.id as Step)}
+                <span class="text-[0.55rem] font-bold tracking-widest px-1 py-px rounded-sm
+                             bg-violet-500 text-white shadow-sm uppercase leading-none shrink-0">
+                  {t("onboarding.newBadge")}
+                </span>
+              {/if}
             </div>
           {/each}
         </div>
@@ -1192,6 +1597,271 @@ useWindowTitle("window.title.onboarding");
             <p class="text-ui-sm text-muted-foreground leading-relaxed">{t("onboarding.tray.menu")}</p>
           </div>
         </div>
+      </div>
+
+    <!-- ════ PERMISSIONS (optional activity tracking) ════════════════════════ -->
+    {:else if step === "permissions"}
+      <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-3xl">🔒</span>
+        <h2 class="text-ui-xl font-bold">{t("onboarding.permissionsTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[360px]">
+          {t("onboarding.permissionsBody")}
+        </p>
+
+        <!-- Privacy callout (always visible, sets the tone) -->
+        <div class="w-full max-w-[360px] rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06]
+                    px-3 py-2.5 flex items-start gap-2.5 text-left">
+          <span class="text-base shrink-0 mt-0.5">🛡️</span>
+          <p class="text-ui-sm text-emerald-700 dark:text-emerald-300/90 leading-relaxed">
+            {t("onboarding.permissionsPrivacy")}
+          </p>
+        </div>
+
+        <!-- Three opt-in toggles -->
+        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
+          <CardContent class="px-0 py-0">
+            <ToggleRow
+              checked={trackActiveWindow}
+              label={t("settings.activeWindowToggle")}
+              description={t("onboarding.permissionsActiveWindowDesc")}
+              ontoggle={toggleTrackActiveWindow}
+            />
+            <div class="border-t border-border dark:border-white/[0.06]"></div>
+            <ToggleRow
+              checked={trackInputActivity}
+              label={t("settings.inputActivityToggle")}
+              description={t("onboarding.permissionsInputDesc")}
+              ontoggle={toggleTrackInputActivity}
+            />
+            <div class="border-t border-border dark:border-white/[0.06]"></div>
+            <ToggleRow
+              checked={trackFileActivity}
+              label={t("settings.fileActivityToggle")}
+              description={t("onboarding.permissionsFileDesc")}
+              ontoggle={toggleTrackFileActivity}
+            />
+            {#if isMac}
+              <div class="border-t border-border dark:border-white/[0.06]"></div>
+              <ToggleRow
+                checked={trackClipboard}
+                label={t("settings.clipboardToggle")}
+                description={t("onboarding.permissionsClipboardDesc")}
+                ontoggle={toggleTrackClipboard}
+              />
+            {/if}
+            <div class="border-t border-border dark:border-white/[0.06]"></div>
+            <ToggleRow
+              checked={trackScreenshots}
+              label={t("settings.screenshotsToggle")}
+              description={t("onboarding.permissionsScreenshotsDesc")}
+              ontoggle={toggleTrackScreenshots}
+            />
+            <div class="border-t border-border dark:border-white/[0.06]"></div>
+            <ToggleRow
+              checked={trackLocation}
+              label={t("settings.locationToggle")}
+              description={t("onboarding.permissionsLocationDesc")}
+              ontoggle={toggleTrackLocation}
+            />
+            <div class="border-t border-border dark:border-white/[0.06]"></div>
+            <ToggleRow
+              checked={trackCalendar}
+              label={t("settings.calendarToggle")}
+              description={t("onboarding.permissionsCalendarDesc")}
+              ontoggle={toggleTrackCalendar}
+            />
+          </CardContent>
+        </Card>
+
+        <p class="text-ui-sm text-muted-foreground/60 max-w-[340px] leading-relaxed">
+          {t("onboarding.permissionsSkip")}
+        </p>
+      </div>
+
+    <!-- ════ EXTENSIONS (opt-in companion installers) ═══════════════════════ -->
+    {:else if step === "extensions"}
+      <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-3xl">🧩</span>
+        <h2 class="text-ui-xl font-bold">{t("onboarding.extensionsTitle")}</h2>
+        <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[360px]">
+          {t("onboarding.extensionsBody")}
+        </p>
+
+        <!-- Same privacy callout as the permissions step — these all feed local activity.sqlite. -->
+        <div class="w-full max-w-[360px] rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06]
+                    px-3 py-2.5 flex items-start gap-2.5 text-left">
+          <span class="text-base shrink-0 mt-0.5">🛡️</span>
+          <p class="text-ui-sm text-emerald-700 dark:text-emerald-300/90 leading-relaxed">
+            {t("onboarding.extensionsPrivacy")}
+          </p>
+        </div>
+
+        <!-- ── VS Code card ─────────────────────────────────────────────── -->
+        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-3 flex flex-col gap-2 text-left">
+            <div class="flex items-center gap-2">
+              <span class="text-base">💻</span>
+              <span class="text-ui-base font-semibold flex-1">{t("onboarding.extensions.vscodeTitle")}</span>
+              {#if vsCodeInstall === "installed"}
+                <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30
+                             bg-emerald-500/15 px-2 py-0.5 text-ui-xs font-semibold
+                             text-emerald-700 dark:text-emerald-400">
+                  ✓ {t("extensions.installed")}
+                </span>
+              {/if}
+            </div>
+            <p class="text-ui-sm text-muted-foreground/85 leading-relaxed">
+              {t("onboarding.extensions.vscodeDesc")}
+            </p>
+
+            {#if extensionsCheck && extensionsCheck.vscode_forks?.filter((f) => f.available).length > 1}
+              <!-- Multiple VS Code forks detected — let the user pick which one to install into. -->
+              <div class="flex flex-wrap gap-1.5">
+                {#each extensionsCheck.vscode_forks.filter((f) => f.available) as fork}
+                  <button
+                    onclick={() => { vsCodePickedFork = fork.id; }}
+                    class="text-ui-xs px-2 py-0.5 rounded-full border transition-colors cursor-pointer
+                           {vsCodePickedFork === fork.id
+                             ? 'border-violet-500/60 bg-violet-500/15 text-violet-700 dark:text-violet-300'
+                             : 'border-border bg-surface-2 text-muted-foreground hover:bg-accent/50'}">
+                    {fork.name}{fork.installed ? " ✓" : ""}
+                  </button>
+                {/each}
+              </div>
+            {:else if extensionsCheck && extensionsCheck.vscode_forks?.filter((f) => f.available).length === 0}
+              <p class="text-ui-xs text-amber-600 dark:text-amber-400 leading-relaxed">
+                {t("extensions.noIdeDetected")}
+              </p>
+            {/if}
+
+            {#if vsCodeMessage}
+              <p class="text-ui-xs leading-relaxed
+                        {vsCodeInstall === 'error' ? 'text-destructive/90' : 'text-muted-foreground/70'}">
+                {vsCodeMessage}
+              </p>
+            {/if}
+
+            <div class="flex justify-end">
+              <Button size="sm" class="h-7 text-ui-sm px-3"
+                      disabled={vsCodeInstall === "installing"
+                                || (extensionsCheck?.vscode_forks?.filter((f) => f.available).length === 0)}
+                      onclick={installVsCode}>
+                {vsCodeInstall === "installing"
+                  ? t("extensions.installing")
+                  : vsCodeInstall === "installed"
+                    ? t("extensions.reinstall")
+                    : t("extensions.install")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- ── Browser card ─────────────────────────────────────────────── -->
+        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-3 flex flex-col gap-2 text-left">
+            <div class="flex items-center gap-2">
+              <span class="text-base">🌐</span>
+              <span class="text-ui-base font-semibold flex-1">{t("onboarding.extensions.browserTitle")}</span>
+              {#if browserInstall === "installed"}
+                <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30
+                             bg-emerald-500/15 px-2 py-0.5 text-ui-xs font-semibold
+                             text-emerald-700 dark:text-emerald-400">
+                  ✓ {t("extensions.installed")}
+                </span>
+              {/if}
+            </div>
+            <p class="text-ui-sm text-muted-foreground/85 leading-relaxed">
+              {t("onboarding.extensions.browserDesc")}
+            </p>
+
+            <div class="flex flex-wrap gap-1.5">
+              {#each (isMac ? ["safari", "chrome", "firefox", "edge"] : ["chrome", "firefox", "edge"]) as id}
+                <button
+                  onclick={() => { browserPicked = id as typeof browserPicked; }}
+                  class="text-ui-xs px-2 py-0.5 rounded-full border transition-colors cursor-pointer capitalize
+                         {browserPicked === id
+                           ? 'border-violet-500/60 bg-violet-500/15 text-violet-700 dark:text-violet-300'
+                           : 'border-border bg-surface-2 text-muted-foreground hover:bg-accent/50'}">
+                  {t(`extensions.${id}`)}
+                </button>
+              {/each}
+            </div>
+
+            {#if browserMessage}
+              <p class="text-ui-xs leading-relaxed
+                        {browserInstall === 'error' ? 'text-destructive/90' : 'text-muted-foreground/70'}">
+                {browserMessage}
+              </p>
+            {/if}
+
+            <div class="flex justify-end">
+              <Button size="sm" class="h-7 text-ui-sm px-3"
+                      disabled={browserInstall === "installing"}
+                      onclick={installBrowser}>
+                {browserInstall === "installing"
+                  ? t("extensions.installing")
+                  : browserInstall === "installed"
+                    ? t("extensions.reinstall")
+                    : t("extensions.install")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- ── Terminal / shell hooks card ──────────────────────────────── -->
+        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-3 flex flex-col gap-2 text-left">
+            <div class="flex items-center gap-2">
+              <span class="text-base">⌨️</span>
+              <span class="text-ui-base font-semibold flex-1">{t("onboarding.extensions.terminalTitle")}</span>
+              {#if shellInstall === "installed"}
+                <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30
+                             bg-emerald-500/15 px-2 py-0.5 text-ui-xs font-semibold
+                             text-emerald-700 dark:text-emerald-400">
+                  ✓ {t("extensions.installed")}
+                </span>
+              {/if}
+            </div>
+            <p class="text-ui-sm text-muted-foreground/85 leading-relaxed">
+              {t("onboarding.extensions.terminalDesc")}
+            </p>
+
+            <div class="flex flex-wrap gap-1.5">
+              {#each ["zsh", "bash", "fish", "powershell"] as id}
+                <button
+                  onclick={() => { shellPicked = id as typeof shellPicked; }}
+                  class="text-ui-xs px-2 py-0.5 rounded-full border transition-colors cursor-pointer
+                         {shellPicked === id
+                           ? 'border-violet-500/60 bg-violet-500/15 text-violet-700 dark:text-violet-300'
+                           : 'border-border bg-surface-2 text-muted-foreground hover:bg-accent/50'}">
+                  {id === "powershell" ? "PowerShell" : id.charAt(0).toUpperCase() + id.slice(1)}
+                </button>
+              {/each}
+            </div>
+
+            {#if shellMessage}
+              <p class="text-ui-xs text-muted-foreground/70 leading-relaxed font-mono whitespace-pre-wrap">
+                {shellMessage}
+              </p>
+            {/if}
+
+            <div class="flex justify-end">
+              <Button size="sm" class="h-7 text-ui-sm px-3"
+                      disabled={shellInstall === "installing"}
+                      onclick={installShell}>
+                {shellInstall === "installing"
+                  ? t("extensions.installing")
+                  : shellInstall === "installed"
+                    ? t("extensions.reinstall")
+                    : t("extensions.install")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <p class="text-ui-sm text-muted-foreground/60 max-w-[340px] leading-relaxed">
+          {t("onboarding.extensionsSkip")}
+        </p>
       </div>
 
     <!-- ════ DONE ═════════════════════════════════════════════════════════════ -->

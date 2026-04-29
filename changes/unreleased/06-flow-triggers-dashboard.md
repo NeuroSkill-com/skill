@@ -1,6 +1,6 @@
-# Personal Flow Triggers Dashboard
+### Features
 
-A sidebar section showing the developer's personal flow patterns mined from their EEG + activity history.
+- **Personal Flow Triggers dashboard**: collapsible "Your Flow Recipe" sidebar section mining 7-day EEG + activity history — best language (`/brain/code-eeg`), peak hours (`/brain/optimal-hours`), natural cycle length (`/brain/break-timing`), top flow killer (`/brain/context-cost`). Toggle via `neuroskill.flowTriggers`.
 
 ## What you see
 

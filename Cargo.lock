@@ -12197,6 +12197,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "ureq 3.3.0",
+ "url",
  "zip 7.2.0",
 ]
 
@@ -12358,6 +12359,7 @@ dependencies = [
  "sha2 0.10.9",
  "skill-constants",
  "skill-daemon-common",
+ "skill-data",
  "skill-devices",
  "skill-eeg",
  "skill-iroh",
@@ -12413,6 +12415,7 @@ dependencies = [
  "muse-rs",
  "mw75",
  "openbci",
+ "rusb",
  "serde",
  "serde_json",
  "skill-constants",

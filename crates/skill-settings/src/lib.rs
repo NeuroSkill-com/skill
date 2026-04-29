@@ -835,6 +835,13 @@ pub struct UserSettings {
     pub active_calibration_id: String,
     #[serde(default)]
     pub onboarding_complete: bool,
+    /// Schema version of the onboarding wizard the user last completed. Compared
+    /// at startup against `skill_constants::CURRENT_ONBOARDING_VERSION` to decide
+    /// whether to show the wizard again after a build that introduced new steps.
+    /// `0` means the user has never completed onboarding (or completed only the
+    /// pre-versioning legacy flow — see migration in `setup.rs`).
+    #[serde(default)]
+    pub onboarding_completed_version: u32,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
@@ -913,6 +920,13 @@ pub struct UserSettings {
     /// macOS only.  Default: `false`.
     #[serde(default)]
     pub track_clipboard: bool,
+    /// When true, the app may query the OS calendar (macOS Calendar app) for
+    /// event metadata to correlate focus state with meeting density. The
+    /// system-level Calendar permission prompt is triggered the first time
+    /// the daemon actually fetches events; toggling this off stops further
+    /// queries. Default false.
+    #[serde(default)]
+    pub track_calendar: bool,
     /// Auto-fit the main dashboard window height to content.
     #[serde(default = "default_main_window_auto_fit")]
     pub main_window_auto_fit: bool,
@@ -1099,13 +1113,13 @@ pub fn default_llm_gpu_layers_saved() -> u32 {
     u32::MAX
 }
 pub fn default_track_active_window() -> bool {
-    true
+    false
 }
 pub fn default_track_input_activity() -> bool {
     true
 }
 pub fn default_track_file_activity() -> bool {
-    true
+    false
 }
 pub fn default_file_retention_days() -> u32 {
     90
@@ -1213,6 +1227,7 @@ impl Default for UserSettings {
             calibration_profiles: Vec::new(),
             active_calibration_id: String::new(),
             onboarding_complete: false,
+            onboarding_completed_version: 0,
             theme: default_theme(),
             language: String::new(),
             daily_goal_min: default_daily_goal_min(),
@@ -1235,6 +1250,7 @@ impl Default for UserSettings {
             file_exclude_patterns: Vec::new(),
             file_retention_days: default_file_retention_days(),
             track_clipboard: false,
+            track_calendar: false,
             main_window_auto_fit: default_main_window_auto_fit(),
             do_not_disturb: DoNotDisturbConfig::default(),
             last_seen_whats_new_version: String::new(),

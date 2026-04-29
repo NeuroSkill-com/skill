@@ -21,7 +21,16 @@ const roleKeys: Record<string, string> = {
 
 interface AboutInfo {
   name: string;
+  /** Raw bundle version; may carry an `-rc.N` suffix on promoted builds. */
   version: string;
+  /** Bundle version with any `-rc.N` suffix stripped, for display. */
+  displayVersion: string;
+  /** "stable" or "rc" — drives whether the (RC · {commit}) marker is shown. */
+  channel: string;
+  /** First seven chars of the build's git commit; empty when unavailable. */
+  commitShort: string;
+  /** Full `git describe --tags --always --dirty` for crash reports. */
+  buildTag: string;
   tagline: string;
   website: string;
   websiteLabel: string;
@@ -57,7 +66,10 @@ onMount(async () => {
              class="w-14 h-14 shrink-0 object-contain" />
         <div class="flex flex-col items-center gap-0.5">
           <h1 class="text-[1.1rem] font-bold tracking-tight leading-tight">{info.name}</h1>
-          <span class="text-ui-base font-mono text-muted-foreground/45">v{info.version}</span>
+          <span class="text-ui-base font-mono text-muted-foreground/45"
+                title={info.buildTag || `v${info.version}`}>
+            v{info.displayVersion}{#if info.channel === "rc"} {t("about.rcMarker", { commit: info.commitShort })}{/if}
+          </span>
         </div>
         <p class="text-ui-md text-muted-foreground/75 max-w-sm leading-snug">
           {t("about.tagline")}

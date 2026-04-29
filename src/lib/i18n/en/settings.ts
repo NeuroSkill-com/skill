@@ -455,10 +455,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggleDesc":
     "Expands or contracts the main window to match dashboard content, clamped to screen height.",
 
+  "settings.reopenOnboarding": "Onboarding",
+  "settings.reopenOnboardingDesc":
+    "Re-open the first-run setup wizard to revisit Bluetooth, calibration, model downloads, and the optional activity-tracking permissions step.",
+  "settings.reopenOnboardingBtn": "Re-open Wizard",
+
   "settings.activityTracking": "Activity Tracking",
+  "settings.activityTrackingIntro":
+    "All of these are optional and off by default (except keyboard & mouse, which needs no permission). They add context to your EEG/focus data so you can see what you were working on during a focus dip or flow state. Everything below is recorded only on this computer, written to activity.sqlite, and is never sent to any server — not to NeuroSkill, not to anyone. You can turn each one off at any time and the recorded data stays on disk until you delete it.",
   "settings.activeWindowToggle": "Track Active Window",
   "settings.activeWindowToggleDesc":
-    "Record which app and window is in focus. Stored locally in activity.sqlite, never uploaded.",
+    'Records which app and window is in focus, plus the active browser tab title (Chrome, Safari, Firefox, Edge) and the open file path in editors like VS Code. Why it\'s useful: lets you correlate focus state with what you were actually doing — "I lost focus while writing this PR" rather than just "I lost focus at 3pm." Permission needed: macOS will ask for Accessibility / Automation access for each browser and editor it queries — that is normal. Privacy: the captured app names, window titles and paths are stored locally in activity.sqlite and never uploaded.',
   "settings.activeWindowCurrent": "Current Window",
   "settings.activeWindowApp": "App",
   "settings.activeWindowPath": "Path",
@@ -468,7 +475,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "No active window detected",
   "settings.inputActivityToggle": "Track Keyboard & Mouse Activity",
   "settings.inputActivityToggleDesc":
-    "Record when keyboard and mouse are used, by second. No special OS permissions required. Stored locally in activity.sqlite.",
+    'Records when the keyboard or mouse was last used, second by second — never which keys, never cursor positions, never content. Why it\'s useful: distinguishes "deep focus" from "away from keyboard" so your EEG focus score isn\'t skewed by breaks. Permission needed: none — uses a built-in OS idle-time API that requires no Accessibility access. Privacy: only timestamps are stored, locally in activity.sqlite, never uploaded.',
   "settings.inputActivityKeyboard": "Last keyboard",
   "settings.inputActivityMouse": "Last mouse",
   "settings.inputActivityNever": "never",
@@ -476,12 +483,20 @@ const settings: Record<string, string> = {
   "settings.inputActivityNoData": "Move mouse or press a key to verify tracking is working.",
   "settings.inputActivityPermNote":
     "No special permissions required — uses a built-in OS idle-time API that works without Accessibility access.",
+  "settings.fileActivityToggle": "Track File Changes",
+  "settings.fileActivityToggleDesc":
+    'Watches your common dev / document folders (Documents, Desktop, Downloads, Projects, Developer, code, src) and records create / modify / delete events with timestamps and paths. Why it\'s useful: lets you see what you actually saved or downloaded during a focus block, and lets you search history by "the file I edited around 3pm." Permission needed: macOS may prompt for Full Disk Access to watch some folders. Privacy: only paths and event timestamps are stored — file contents are never read or copied — locally in activity.sqlite, never uploaded.',
   "settings.activityDb": "Stored in activity.sqlite",
   "settings.clipboardToggle": "Track Clipboard Activity",
   "settings.clipboardToggleDesc":
-    "Record clipboard changes (metadata only — content is never stored). Tracks which app copied, content type and size. macOS only.",
+    "Records when the clipboard changes — which app copied, the content type, and its size. The clipboard contents themselves are never read or stored. Why it's useful: copy/paste bursts are a strong signal of context-switching, and pairing them with EEG can show when juggling sources is breaking your flow. Permission needed: macOS will ask for Automation access to read clipboard metadata. Privacy: only metadata is stored, locally in activity.sqlite, never uploaded. macOS only.",
   "settings.clipboardPermDenied": "Automation permission not granted.",
   "settings.clipboardPermAction": "Click to open System Settings and allow clipboard access.",
+  "settings.screenshotsToggle": "Take Periodic Screenshots",
+  "settings.locationToggle": "Track Location",
+  "settings.calendarToggle": "Track Calendar Events",
+  "settings.calendarToggleDesc":
+    "Reads metadata of your upcoming and recent calendar events (title, time, duration, attendee count) so the app can correlate focus dips with meeting density. Why it's useful: shows whether back-to-back meetings are eroding your deep work blocks. Permission needed: macOS will show a Calendar Access prompt the first time it's queried. Privacy: events are read on-demand and used to render correlation views — only aggregate counts are persisted to activity.sqlite, and nothing is uploaded.",
 
   // ── Activity dashboard ─────────────────────────────────────────────────────
   "activity.todaySummary": "Today's Activity",
@@ -730,7 +745,8 @@ const settings: Record<string, string> = {
   "settingsTabs.extensions": "Extensions",
   "extensions.ideTitle": "IDE Extensions",
   "extensions.browserTitle": "Browser Extensions",
-  "extensions.browserDesc": "Track browsing patterns and correlate with EEG brain state. All data stays on your machine.",
+  "extensions.browserDesc":
+    "Track browsing patterns and correlate with EEG brain state. All data stays on your machine.",
   "extensions.vscode": "VS Code",
   "extensions.vscodeDesc": "Terminal commands, AI suggestions, dev loops, and file activity tracking.",
   "extensions.chrome": "Chrome",
@@ -746,7 +762,8 @@ const settings: Record<string, string> = {
   "extensions.install": "Install",
   "extensions.reinstall": "Reinstall",
   "extensions.installing": "Installing...",
-  "extensions.noIdeDetected": "No VS Code-family editor detected. Install VS Code, VSCodium, Cursor, Windsurf, or another VS Code-based editor to enable extension installation.",
+  "extensions.noIdeDetected":
+    "No VS Code-family editor detected. Install VS Code, VSCodium, Cursor, Windsurf, or another VS Code-based editor to enable extension installation.",
   "extensions.openStore": "Store",
   "extensions.pairingTitle": "Browser Extension Pairing",
   "extensions.pairingDesc": "Copy your auth token and paste it in the browser extension settings to pair.",

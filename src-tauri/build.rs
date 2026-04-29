@@ -6,6 +6,8 @@
 #![allow(clippy::panic, clippy::expect_used, clippy::unwrap_used)]
 
 fn main() {
+    emit_build_info();
+
     // ── macOS / Linux: increase main-thread stack size (binary only) ─────
     //
     // The Tauri `run()` function has an enormous stack frame because
@@ -42,6 +44,52 @@ fn main() {
     #[cfg(not(target_os = "windows"))]
     {
         tauri_build::build();
+    }
+}
+
+// ── Build-info env vars ───────────────────────────────────────────────────────
+//
+// Bake git identity into the binary so the About page can show a stable
+// commit/tag pair regardless of the version field in tauri.conf.json.
+// The version string is reserved for the Tauri updater's SemVer ordering;
+// these values are what humans look at.
+//
+// Failures are non-fatal: if git is unavailable (e.g. building from a tarball)
+// the env vars come out empty and the runtime falls back to the package
+// version. CI shallow checkouts work fine because the workflows already do
+// fetch-depth: 0.
+
+fn emit_build_info() {
+    // Re-run when the current ref changes so cached builds pick up new commits.
+    println!("cargo:rerun-if-changed=../.git/HEAD");
+    println!("cargo:rerun-if-changed=../.git/refs");
+
+    let tag = git(&["describe", "--tags", "--always", "--dirty"]).unwrap_or_default();
+    let commit = git(&["rev-parse", "HEAD"]).unwrap_or_default();
+    let branch = git(&["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_default();
+    let date = git(&["log", "-1", "--format=%cI"]).unwrap_or_default();
+
+    println!("cargo:rustc-env=BUILD_INFO_TAG={tag}");
+    println!("cargo:rustc-env=BUILD_INFO_COMMIT={commit}");
+    println!("cargo:rustc-env=BUILD_INFO_BRANCH={branch}");
+    println!("cargo:rustc-env=BUILD_INFO_DATE={date}");
+}
+
+fn git(args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(args)
+        // Run from the repo root (one above src-tauri) so describe finds tags.
+        .current_dir("..")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
     }
 }
 

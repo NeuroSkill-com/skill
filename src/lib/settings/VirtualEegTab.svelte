@@ -147,7 +147,6 @@ async function start() {
       await lslStopVirtualSource().catch(() => {});
       running = false;
     }
-    console.error("[VirtualEegTab] start failed:", e);
   } finally {
     busy = false;
   }
@@ -162,7 +161,6 @@ async function stop() {
     running = false;
     emitVirtualStatus(config, false);
   } catch (e: unknown) {
-    console.error("[VirtualEegTab] stop failed:", e);
   } finally {
     busy = false;
   }

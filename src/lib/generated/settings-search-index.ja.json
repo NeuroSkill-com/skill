@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "アクティブウィンドウを追跡",
-    "desc": "フォーカスされているアプリとウィンドウを記録します。activity.sqliteにローカル保存、アップロードされません。"
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "API認証",
     "desc": "設定すると、すべてのHTTPおよびWebSocket APIリクエストにAuthorizationヘッダーにこのトークンが必要です。空にすると認証が無効になります。"
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "カレンダーイベントを追跡",
+    "desc": "今後および最近のカレンダーイベントのメタデータ（タイトル、時間、所要時間、参加者数）を読み取り、集中力の低下を会議の密度と関連付けます。役立つ理由：連続した会議があなたのディープワークブロックを侵食しているかどうかを示します。必要な権限：macOS は初回クエリ時にカレンダーアクセスのプロンプトを表示します。プライバシー：イベントはオンデマンドで読み取られ、集計カウントのみが activity.sqlite に保存され、何もアップロードされません。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "クリップボードアクティビティを追跡",
-    "desc": "クリップボードの変更を記録（メタデータのみ — コンテンツは保存されません）。どのアプリがコピーしたか、コンテンツの種類とサイズを追跡します。macOSのみ。"
+    "desc": "クリップボードが変更されたタイミングを記録します — どのアプリがコピーしたか、コンテンツの種類、サイズ。クリップボードの内容自体は決して読み取られず、保存もされません。役立つ理由：コピー＆ペーストの連続はコンテキストスイッチの強い信号で、EEG と組み合わせることで複数のソースを行き来することがフローを断ち切るタイミングを把握できます。必要な権限：macOS はクリップボードのメタデータを読むためにオートメーションアクセスを要求します。プライバシー：メタデータのみが保存され、activity.sqlite にローカル保存、決してアップロードされません。macOS のみ。"
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "推論デバイス",
     "desc": "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。"
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "キーボード＆マウスの活動を追跡",
-    "desc": "キーボードとマウスの使用を秒単位で記録します。特別なOS権限は不要です。activity.sqliteにローカル保存。"
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "別のBCIデバイスと一緒に、または代わりにOpenBCIボードを設定します。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "初期セットアップ",
+    "desc": "初回セットアップウィザードを再度開いて、Bluetooth、キャリブレーション、モデルのダウンロード、およびオプションの活動トラッキング権限ステップを再確認します。"
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "確認頻度",
     "desc": "バックグラウンドで自動アップデートを確認する頻度。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "プレリリースを受け取る",
+    "desc": "安定版リリースより前にリリース候補を受け取ります。手動とバックグラウンドのどちらの更新チェックもこの設定を即座に反映します。"
   }
 ]

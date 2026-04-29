@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "활성 창 추적",
-    "desc": "어떤 앱과 창이 포커스에 있는지 기록합니다. activity.sqlite에 로컬로 저장되며 업로드되지 않습니다."
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "API 인증",
     "desc": "설정하면 모든 HTTP 및 WebSocket API 요청에 이 토큰이 Authorization 헤더에 필요합니다. 인증을 비활성화하려면 비워 두세요."
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "캘린더 이벤트 추적",
+    "desc": "다가오는 캘린더 이벤트와 최근 이벤트의 메타데이터(제목, 시간, 지속 시간, 참석자 수)를 읽어 앱이 집중력 저하를 회의 밀도와 연관시킬 수 있도록 합니다. 유용한 이유: 연이은 회의가 깊은 작업 블록을 침식하는지 보여줍니다. 필요한 권한: macOS는 처음 조회할 때 캘린더 접근 프롬프트를 표시합니다. 개인정보: 이벤트는 요청 시 읽히고, 집계 카운트만 activity.sqlite에 저장되며 아무것도 업로드되지 않습니다."
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "클립보드 활동 추적",
-    "desc": "클립보드 변경 사항을 기록합니다 (메타데이터만 — 콘텐츠는 저장되지 않음). 어떤 앱이 복사했는지, 콘텐츠 유형 및 크기를 추적합니다. macOS 전용."
+    "desc": "클립보드가 변경되는 시점을 기록합니다 — 어떤 앱이 복사했는지, 콘텐츠 유형과 크기. 클립보드 내용 자체는 절대 읽거나 저장하지 않습니다. 유용한 이유: 잦은 복사/붙여넣기는 컨텍스트 전환의 강한 신호이며, EEG와 결합하면 여러 출처를 오가는 것이 몰입을 깨뜨리는 시점을 보여줄 수 있습니다. 필요한 권한: macOS는 클립보드 메타데이터를 읽기 위해 자동화 접근을 요청합니다. 개인정보: 메타데이터만 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다. macOS 전용."
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "추론 기기",
     "desc": "AI 추론이 실행되는 위치. GPU가 빠르고, CPU는 모든 기기에서 작동하며 VRAM 부담을 줄입니다. 변경 후 LLM 서버를 재시작하세요."
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "키보드 & 마우스 활동 추적",
-    "desc": "키보드와 마우스가 사용된 시간을 초 단위로 기록합니다. 특별한 OS 권한이 필요하지 않습니다. activity.sqlite에 로컬로 저장됩니다."
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "다른 BCI 기기와 함께 또는 대신 OpenBCI 보드를 연결하도록 구성합니다."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "초기 설정",
+    "desc": "처음 실행 설정 마법사를 다시 열어 Bluetooth, 보정, 모델 다운로드 및 선택적 활동 추적 권한 단계를 다시 진행합니다."
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "확인 빈도",
     "desc": "앱이 백그라운드에서 자동으로 업데이트를 확인하는 빈도."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "프리릴리스 받기",
+    "desc": "안정 릴리스 전에 릴리스 후보를 받습니다. 수동 및 백그라운드 업데이트 확인 모두 이 설정을 즉시 반영합니다."
   }
 ]

@@ -42,8 +42,16 @@ import {
   setStorageFormat,
   setWsConfig,
 } from "$lib/daemon/client";
-import { getClipboardTracking, setClipboardTracking } from "$lib/daemon/settings";
+import {
+  getCalendarTracking,
+  getClipboardTracking,
+  getFileActivityTracking,
+  setCalendarTracking,
+  setClipboardTracking,
+  setFileActivityTracking,
+} from "$lib/daemon/settings";
 import { t } from "$lib/i18n/index.svelte";
+import { openOnboarding } from "$lib/navigation";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface LogConfig {
@@ -123,7 +131,9 @@ interface ActiveWindowInfo {
 let trackActiveWindow = $state(true);
 let currentActiveWindow = $state<ActiveWindowInfo | null>(null);
 let trackInputActivity = $state(true);
+let trackFileActivity = $state(false);
 let trackClipboard = $state(false);
+let trackCalendar = $state(false);
 let clipboardPermission = $state(true); // assume granted until checked
 let mainWindowAutoFit = $state(true);
 // [kbd_ts, mouse_ts] in unix seconds; 0 = never
@@ -202,9 +212,19 @@ onMount(async () => {
   trackActiveWindow = await getActiveWindowTracking();
   currentActiveWindow = await getActiveWindow();
   trackInputActivity = await getInputActivityTracking();
+  try {
+    trackFileActivity = await getFileActivityTracking();
+  } catch {
+    /* default false */
+  }
   // Load clipboard tracking setting from daemon.
   try {
     trackClipboard = await getClipboardTracking();
+  } catch {
+    /* default false */
+  }
+  try {
+    trackCalendar = await getCalendarTracking();
   } catch {
     /* default false */
   }
@@ -527,6 +547,13 @@ onDestroy(() => {
     <span class="ml-auto text-ui-xs text-muted-foreground/50">{t("settings.activityDb")}</span>
   </div>
 
+  <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] px-3 py-2.5 flex items-start gap-2.5">
+    <span class="text-base shrink-0 mt-0.5">🔒</span>
+    <p class="text-ui-sm text-muted-foreground leading-relaxed">
+      {t("settings.activityTrackingIntro")}
+    </p>
+  </div>
+
   <SettingsCard>
     <CardContent class="py-0 px-0">
 
@@ -630,6 +657,19 @@ onDestroy(() => {
 
       <Separator class="bg-border dark:bg-white/[0.04]" />
 
+      <!-- ── File-activity toggle ────────────────────────────────────────── -->
+      <ToggleRow
+        checked={trackFileActivity}
+        label={t("settings.fileActivityToggle")}
+        description={t("settings.fileActivityToggleDesc")}
+        ontoggle={async () => {
+          trackFileActivity = !trackFileActivity;
+          try { await setFileActivityTracking(trackFileActivity); } catch {}
+        }}
+      />
+
+      <Separator class="bg-border dark:bg-white/[0.04]" />
+
       <!-- ── Clipboard tracking toggle (macOS only) ──────────────────────── -->
       <ToggleRow
         checked={trackClipboard}
@@ -653,6 +693,23 @@ onDestroy(() => {
           <span class="ml-1">{t("settings.clipboardPermAction")}</span>
         </button>
       {/if}
+
+      <Separator class="bg-border dark:bg-white/[0.04]" />
+
+      <!-- ── Calendar tracking toggle ──────────────────────────────────── -->
+      <ToggleRow
+        checked={trackCalendar}
+        label={t("settings.calendarToggle")}
+        description={t("settings.calendarToggleDesc")}
+        ontoggle={async () => {
+          trackCalendar = !trackCalendar;
+          try { await setCalendarTracking(trackCalendar); } catch {}
+          // First-time enable triggers the macOS Calendar permission prompt.
+          if (trackCalendar) {
+            try { await invoke("request_calendar_permission"); } catch {}
+          }
+        }}
+      />
 
     </CardContent>
   </SettingsCard>
@@ -942,6 +999,22 @@ onDestroy(() => {
           </p>
         {/if}
       </div>
+    </CardContent>
+  </SettingsCard>
+</section>
+
+<!-- ── Re-run Onboarding ───────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <SectionHeader>{t("settings.reopenOnboarding")}</SectionHeader>
+
+  <SettingsCard>
+    <CardContent class="flex items-center justify-between gap-3 py-3">
+      <p class="text-ui-sm text-muted-foreground leading-relaxed flex-1">
+        {t("settings.reopenOnboardingDesc")}
+      </p>
+      <Button variant="outline" size="sm" class="h-7 text-ui-sm px-3 shrink-0" onclick={openOnboarding}>
+        {t("settings.reopenOnboardingBtn")}
+      </Button>
     </CardContent>
   </SettingsCard>
 </section>

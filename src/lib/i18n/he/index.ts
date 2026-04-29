@@ -21,6 +21,7 @@ import search from "./search";
 import settings from "./settings";
 import tts from "./tts";
 import ui from "./ui";
+import validation from "./validation";
 import virtualEeg from "./virtual-eeg";
 
 const all: Record<string, string> = {
@@ -39,6 +40,7 @@ const all: Record<string, string> = {
   ...help,
   ...helpRef,
   ...ui,
+  ...validation,
   ...virtualEeg,
 };
 

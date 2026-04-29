@@ -7,6 +7,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -854,6 +855,7 @@ jobs:
           generate_release_notes:  false
           body_path:               release-notes.md
           fail_on_unmatched_files: true
+          prerelease:              ${{ steps.version_meta.outputs.prerelease == 'true' }}
           files: |
             ${{ steps.artifacts.outputs.nsis_exe }}
             ${{ steps.artifacts.outputs.nsis_zip }}
@@ -877,6 +879,7 @@ jobs:
           --tag "${{ steps.version_meta.outputs.tag }}"
           --version "${{ steps.version_meta.outputs.version }}"
           --upload
+          --mirror-to-rc-latest
 
       # ── Upload CI artifacts (on-demand / dry-run builds only) ────────────────
       - name: Upload build artifacts

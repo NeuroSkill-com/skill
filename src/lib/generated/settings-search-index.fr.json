@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "Suivre la fenêtre active",
-    "desc": "Enregistrer quelle application et quelle fenêtre est au premier plan. Stocké localement dans activity.sqlite, jamais transmis."
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "Authentification API",
     "desc": "Lorsqu'il est défini, toutes les requêtes API HTTP et WebSocket doivent inclure ce jeton dans l'en-tête Authorization. Laissez vide pour désactiver l'authentification."
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "Suivre les événements du calendrier",
+    "desc": "Lit les métadonnées de vos événements de calendrier à venir et récents (titre, heure, durée, nombre de participants) afin que l'app puisse corréler les baisses de concentration avec la densité de réunions. Pourquoi c'est utile : montre si des réunions enchaînées érodent vos blocs de travail profond. Permission requise : macOS affichera une demande d'Accès au Calendrier la première fois. Confidentialité : les événements sont lus à la demande, seuls des comptages agrégés sont enregistrés dans activity.sqlite, rien n'est transmis."
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Suivre l'activité du presse-papiers",
-    "desc": "Enregistrer les changements du presse-papiers (métadonnées uniquement — le contenu n'est jamais stocké). Suit quelle app a copié, le type et la taille du contenu. macOS uniquement."
+    "desc": "Enregistre quand le presse-papiers change — quelle app a copié, le type de contenu et sa taille. Le contenu du presse-papiers lui-même n'est jamais lu ni stocké. Pourquoi c'est utile : les rafales de copier/coller sont un signal fort de changement de contexte, et les associer à l'EEG peut révéler quand jongler entre les sources brise votre flow. Permission requise : macOS demandera un accès Automatisation pour lire les métadonnées du presse-papiers. Confidentialité : seules les métadonnées sont stockées, localement dans activity.sqlite, jamais transmises. macOS uniquement."
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "Périphérique d’inférence",
     "desc": "Où l’inférence IA s’exécute. Le GPU est plus rapide ; le CPU fonctionne sur n’importe quelle machine sans pression sur la VRAM. Redémarrez le serveur LLM après modification."
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "Suivre l'activité clavier et souris",
-    "desc": "Enregistrer l'activité clavier et souris à la seconde près. Aucune permission spéciale requise. Stocké dans activity.sqlite."
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Configurez une carte OpenBCI pour vous connecter à côté ou à la place d'un autre appareil BCI."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "Configuration initiale",
+    "desc": "Rouvre l'assistant de configuration pour revoir le Bluetooth, la calibration, le téléchargement des modèles et l'étape facultative des permissions de suivi d'activité."
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "Fréquence de vérification",
     "desc": "À quelle fréquence l'application vérifie automatiquement les mises à jour en arrière-plan."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "Recevoir les versions candidates",
+    "desc": "Recevez les versions candidates avant les versions stables. Les vérifications manuelles et automatiques prennent en compte ce réglage immédiatement."
   }
 ]

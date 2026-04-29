@@ -1,0 +1,73 @@
+name: Promote RC to stable
+
+# Fired when a release PR is merged to main using rebase or squash merge.
+# bump.js commits with the version string as the message (e.g. "0.5.1-rc.3"),
+# and rebase/squash preserves that commit hash + message on main. We detect it
+# here and promote the matching RC release: clear the prerelease flag and mark
+# it as latest. The promoted artifacts are byte-identical to the tested RC —
+# no rebuild, no re-notarization. GitHub's `releases/latest` URL semantics do
+# the rest, and stable channel users see the new version on their next poll.
+#
+# A regular merge commit creates a different head SHA whose message doesn't
+# match the version regex, so promote silently skips. The companion workflow
+# (pr-checks.yml) flags release PRs that would create such a merge commit.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # needed to edit release metadata
+
+jobs:
+  promote:
+    name: Promote matching RC tag
+    runs-on: ubuntu-latest
+    # Cheap pre-filter: head commit message must contain `-rc.` somewhere.
+    # The strict regex check happens in the step below.
+    if: contains(github.event.head_commit.message, '-rc.')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Identify the RC to promote
+        id: rc
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+
+          # bump.js commits exactly the version string. We accept both the bare
+          # message and an optional leading "v" out of paranoia; nothing else.
+          if [[ "$HEAD_MSG" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+            echo "should_promote=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Detected RC promotion target: v$VERSION"
+          else
+            echo "should_promote=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Head commit message is not a release-bump commit, skipping promotion."
+            echo "  message: $HEAD_MSG"
+          fi
+
+      - name: Verify the release exists
+        if: steps.rc.outputs.should_promote == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "${{ steps.rc.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::Release ${{ steps.rc.outputs.tag }} does not exist. Did the build workflow finish?"
+            exit 1
+          fi
+
+      - name: Clear prerelease flag and mark as latest
+        if: steps.rc.outputs.should_promote == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release edit "${{ steps.rc.outputs.tag }}" \
+            --prerelease=false \
+            --latest
+          echo "::notice::Promoted ${{ steps.rc.outputs.tag }} to stable. The releases/latest/download/latest.json URL now resolves here."

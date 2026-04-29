@@ -439,10 +439,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggleDesc":
     "ダッシュボードの内容に合わせてメインウィンドウを拡大/縮小します。画面の高さでクランプされます。",
 
+  "settings.reopenOnboarding": "初期セットアップ",
+  "settings.reopenOnboardingDesc":
+    "初回セットアップウィザードを再度開いて、Bluetooth、キャリブレーション、モデルのダウンロード、およびオプションの活動トラッキング権限ステップを再確認します。",
+  "settings.reopenOnboardingBtn": "ウィザードを再度開く",
+
   "settings.activityTracking": "活動トラッキング",
+  "settings.activityTrackingIntro":
+    "以下はすべて任意で、デフォルトでオフです（権限不要のキーボード＆マウスを除く）。EEG／フォーカスデータに文脈を追加することで、集中力が落ちた時やフロー状態の時に何に取り組んでいたかが分かります。以下の項目はすべてこのコンピューター上にのみ記録され、activity.sqlite に書き込まれ、いかなるサーバーにも送信されません — NeuroSkill にも、他のどこにも送られません。各項目はいつでもオフにでき、記録されたデータは削除するまでディスクに残ります。",
   "settings.activeWindowToggle": "アクティブウィンドウを追跡",
   "settings.activeWindowToggleDesc":
-    "フォーカスされているアプリとウィンドウを記録します。activity.sqliteにローカル保存、アップロードされません。",
+    "フォーカス中のアプリとウィンドウ、加えてアクティブなブラウザタブのタイトル（Chrome、Safari、Firefox、Edge）と VS Code などのエディタで開いているファイルパスを記録します。役立つ理由：集中状態と実際にしていたことを関連付けられます — 「午後 3 時に集中力が落ちた」だけでなく「この PR を書いている時に集中力が落ちた」とわかります。必要な権限：macOS は問い合わせる各ブラウザとエディタについてアクセシビリティ／オートメーションのアクセスを要求します — これは正常です。プライバシー：取得したアプリ名、ウィンドウタイトル、パスは activity.sqlite にローカル保存され、決してアップロードされません。",
   "settings.activeWindowCurrent": "現在のウィンドウ",
   "settings.activeWindowApp": "アプリ",
   "settings.activeWindowPath": "パス",
@@ -452,7 +459,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "アクティブウィンドウが検出されません",
   "settings.inputActivityToggle": "キーボード＆マウスの活動を追跡",
   "settings.inputActivityToggleDesc":
-    "キーボードとマウスの使用を秒単位で記録します。特別なOS権限は不要です。activity.sqliteにローカル保存。",
+    "キーボードまたはマウスが最後に使用された時刻を秒単位で記録します — どのキーかは決して、カーソル位置も決して、内容も決して記録しません。役立つ理由：「深い集中」と「キーボードから離れている」を区別し、休憩によって EEG 集中スコアが歪まないようにします。必要な権限：なし — アクセシビリティアクセスを必要としない、OS 内蔵のアイドルタイム API を使用します。プライバシー：タイムスタンプのみが保存され、activity.sqlite にローカル保存、決してアップロードされません。",
   "settings.inputActivityKeyboard": "最後のキーボード",
   "settings.inputActivityMouse": "最後のマウス",
   "settings.inputActivityNever": "なし",
@@ -460,10 +467,18 @@ const settings: Record<string, string> = {
   "settings.inputActivityNoData": "マウスを動かすかキーを押してトラッキングの動作を確認してください。",
   "settings.inputActivityPermNote":
     "特別な権限は不要です — アクセシビリティアクセスなしで動作する組み込みOSアイドルタイムAPIを使用します。",
+  "settings.fileActivityToggle": "ファイル変更を追跡",
+  "settings.fileActivityToggleDesc":
+    "よく使う開発／ドキュメントフォルダ（Documents、Desktop、Downloads、Projects、Developer、code、src）を監視し、作成／変更／削除イベントをタイムスタンプとパス付きで記録します。役立つ理由：集中ブロック中に実際に保存またはダウンロードしたファイルが分かり、「午後 3 時頃に編集したファイル」のように履歴を検索できます。必要な権限：macOS は一部のフォルダを監視するためにフルディスクアクセスを要求する場合があります。プライバシー：パスとイベントタイムスタンプのみが保存され — ファイルの内容は決して読み取られず、コピーもされません — activity.sqlite にローカル保存、決してアップロードされません。",
   "settings.activityDb": "activity.sqliteに保存",
   "settings.clipboardToggle": "クリップボードアクティビティを追跡",
   "settings.clipboardToggleDesc":
-    "クリップボードの変更を記録（メタデータのみ — コンテンツは保存されません）。どのアプリがコピーしたか、コンテンツの種類とサイズを追跡します。macOSのみ。",
+    "クリップボードが変更されたタイミングを記録します — どのアプリがコピーしたか、コンテンツの種類、サイズ。クリップボードの内容自体は決して読み取られず、保存もされません。役立つ理由：コピー＆ペーストの連続はコンテキストスイッチの強い信号で、EEG と組み合わせることで複数のソースを行き来することがフローを断ち切るタイミングを把握できます。必要な権限：macOS はクリップボードのメタデータを読むためにオートメーションアクセスを要求します。プライバシー：メタデータのみが保存され、activity.sqlite にローカル保存、決してアップロードされません。macOS のみ。",
+  "settings.screenshotsToggle": "定期的なスクリーンショット",
+  "settings.locationToggle": "位置情報を追跡",
+  "settings.calendarToggle": "カレンダーイベントを追跡",
+  "settings.calendarToggleDesc":
+    "今後および最近のカレンダーイベントのメタデータ（タイトル、時間、所要時間、参加者数）を読み取り、集中力の低下を会議の密度と関連付けます。役立つ理由：連続した会議があなたのディープワークブロックを侵食しているかどうかを示します。必要な権限：macOS は初回クエリ時にカレンダーアクセスのプロンプトを表示します。プライバシー：イベントはオンデマンドで読み取られ、集計カウントのみが activity.sqlite に保存され、何もアップロードされません。",
   "settings.clipboardPermDenied": "自動化の許可が付与されていません。",
   "settings.clipboardPermAction": "クリックしてシステム設定を開き、クリップボードへのアクセスを許可してください。",
 
@@ -731,7 +746,8 @@ const settings: Record<string, string> = {
   "settingsTabs.extensions": "拡張機能",
   "extensions.ideTitle": "IDE拡張機能",
   "extensions.browserTitle": "ブラウザ拡張機能",
-  "extensions.browserDesc": "ブラウジングパターンを追跡し、EEG脳波状態と相関させます。すべてのデータはお使いのマシンに保存されます。",
+  "extensions.browserDesc":
+    "ブラウジングパターンを追跡し、EEG脳波状態と相関させます。すべてのデータはお使いのマシンに保存されます。",
   "extensions.vscode": "VS Code",
   "extensions.vscodeDesc": "ターミナルコマンド、AI提案、開発ループ、ファイルアクティビティの追跡。",
   "extensions.chrome": "Chrome",
@@ -744,7 +760,8 @@ const settings: Record<string, string> = {
   "extensions.install": "インストール",
   "extensions.reinstall": "再インストール",
   "extensions.installing": "インストール中…",
-  "extensions.noIdeDetected": "VS Code 系のエディタが検出されませんでした。VS Code、VSCodium、Cursor、Windsurf などをインストールすると拡張機能をインストールできます。",
+  "extensions.noIdeDetected":
+    "VS Code 系のエディタが検出されませんでした。VS Code、VSCodium、Cursor、Windsurf などをインストールすると拡張機能をインストールできます。",
   "extensions.openStore": "ストア",
   "extensions.pairingTitle": "ブラウザ拡張機能のペアリング",
   "extensions.pairingDesc": "auth tokenをコピーしてブラウザ拡張機能の設定に貼り付けるとペアリングできます。",
@@ -759,7 +776,35 @@ const settings: Record<string, string> = {
   "extensions.pairingInProgress": "開いています…",
   "extensions.copyPairingToken": "ペアリングトークンをコピー",
   "extensions.copyPairingTokenHint": "推奨: 拡張機能のポップアップを開く → クリップボードから自動ペアリング",
-  "extensions.clipboardPairCopied": "トークンをコピーしました。拡張機能のポップアップを開いてください — 自動的にペアリングされます。",
+  "extensions.clipboardPairCopied":
+    "トークンをコピーしました。拡張機能のポップアップを開いてください — 自動的にペアリングされます。",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc": "タブアクティビティ、閲覧パターン、スクロール深度、検索行動。（Chrome ビルドを使用します。）",
+  "extensions.allowUnsigned": "署名なしを許可",
+  "activity.browserTitle": "ブラウザアクティビティ",
+  "activity.browserFocus": "ドメイン別の集中度",
+  "activity.browserDistraction": "気が散りスコア",
+  "activity.browserContent": "コンテンツの内訳",
+  "activity.browserResearch": "リサーチパターン",
+  "activity.browserLlm": "AI チャット利用状況",
+  "activity.browserDomains": "上位ドメイン",
+  "activity.browserNoData":
+    "ブラウザのデータはまだありません — トラッキングを開始するにはブラウザ拡張機能をインストールしてください。",
+  "activity.distractionLow": "集中",
+  "activity.distractionMedium": "ふつう",
+  "activity.distractionHigh": "気が散っている",
+  "activity.searches": "検索回数",
+  "activity.refinementRate": "検索の絞り込み率",
+  "activity.revisits": "再訪問",
+  "activity.stuck": "行き詰まり気味",
+  "activity.notStuck": "生産的なリサーチ",
+  "activity.tabSwitchesPerMin": "タブ切替/分",
+  "activity.socialPct": "ソーシャル %",
+  "activity.productivePct": "生産的 %",
+  "activity.totalReadingTime": "閲覧時間",
+  "activity.avgScrollDepth": "平均スクロール深度",
 };
 
 export default settings;

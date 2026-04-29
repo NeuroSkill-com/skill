@@ -189,7 +189,7 @@ function loadTranslations(locale: string): Record<string, string> {
 
   for (const file of files) {
     const content = fs.readFileSync(path.join(dir, file), "utf-8");
-    const re = /"([^"]+)":\s*(?:"([^"]*(?:\\.[^"]*)*)"|`([^`]*)`|"([^"]*)")/g;
+    const re = /"([^"]+)":\s*(?:"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/g;
     let m: RegExpExecArray | null = re.exec(content);
     while (m) {
       const key = m[1];

@@ -96,8 +96,7 @@ const screenshots: Record<string, string> = {
   "screenshots.userScreenshotDesc":
     "检测用户截图操作（macOS上Cmd+Shift+3/4，Windows上Print Screen），并导入进行OCR、搜索和EEG关联分析。原始文件不会被移动或删除。",
   "screenshots.clipboardImageToggle": "追踪剪贴板图片",
-  "screenshots.clipboardImageDesc":
-    "当图片被复制到剪贴板时，将其捕获并与其他截图一起索引，用于搜索和分析。",
+  "screenshots.clipboardImageDesc": "当图片被复制到剪贴板时，将其捕获并与其他截图一起索引，用于搜索和分析。",
 };
 
 export default screenshots;

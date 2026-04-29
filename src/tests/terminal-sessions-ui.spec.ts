@@ -9,10 +9,11 @@
  *
  * Run: npx playwright test src/tests/terminal-sessions-ui.spec.ts --reporter=list
  */
-import { expect, test } from "@playwright/test";
+
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { expect, test } from "@playwright/test";
 
 // Read the running daemon's auth token from the standard location so the
 // in-page fetch can authenticate.
@@ -78,23 +79,18 @@ test.describe("TerminalSessionsCard", () => {
     await groupHeader.scrollIntoViewIfNeeded({ timeout: 10_000 });
 
     // Find the description paragraph, then walk up to its parent card.
-    const descLine = page
-      .getByText("Each shell from launch to exit", { exact: false })
-      .first();
+    const descLine = page.getByText("Each shell from launch to exit", { exact: false }).first();
     await expect(descLine).toBeVisible({ timeout: 10_000 });
     // The enclosing <section> wraps both the description and all session rows.
     const card = descLine.locator("xpath=ancestor::section[1]").first();
     await expect(card).toBeVisible({ timeout: 5_000 });
 
     // Capture API truth so we can compare to what's rendered.
-    const apiResp = await fetch(
-      `http://127.0.0.1:${PORT}/v1/brain/terminal-sessions`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
-        body: JSON.stringify({ limit: 30 }),
-      },
-    );
+    const apiResp = await fetch(`http://127.0.0.1:${PORT}/v1/brain/terminal-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ limit: 30 }),
+    });
     const apiData = (await apiResp.json()) as {
       sessions: Array<{
         id: string;
@@ -143,18 +139,15 @@ test.describe("TerminalSessionsCard", () => {
     const backfilledCount = apiData.sessions.filter((s) => s.has_session_text).length;
     if (backfilledCount > 0) {
       // At least one row should show the new descriptor or legacy badge.
-      const hasLegacyMarker =
-        cardText.includes("legacy") || cardText.includes("session text only");
+      const hasLegacyMarker = cardText.includes("legacy") || cardText.includes("session text only");
       expect(hasLegacyMarker).toBe(true);
     }
 
     // 4. Click a backfilled session and verify its text renders.
     const backfilled = apiData.sessions.find((s) => s.has_session_text);
     if (backfilled) {
-      const row = card
-        .locator("[role='button']", { hasText: /legacy/i })
-        .first();
-      if (await row.count() > 0) {
+      const row = card.locator("[role='button']", { hasText: /legacy/i }).first();
+      if ((await row.count()) > 0) {
         await row.click();
         // The expanded panel labels the content as stripped session text.
         await page
@@ -177,14 +170,12 @@ test.describe("TerminalSessionsCard", () => {
     expect(bucketCount).toBeGreaterThan(0);
     // Header is uppercased via CSS — case-insensitive match.
     const firstBucketText = await buckets.first().innerText();
-    expect(firstBucketText).toMatch(
-      /(today|yesterday|mon|tue|wed|thu|fri|sat|sun)/i,
-    );
+    expect(firstBucketText).toMatch(/(today|yesterday|mon|tue|wed|thu|fri|sat|sun)/i);
 
     // 6. Filter chips: clicking "Live" should reduce visible rows to live ones.
     const liveCount = apiData.sessions.filter((s) => s.ended_at == null).length;
     const liveChip = card.locator("[data-filter='live']").first();
-    if (await liveChip.count() > 0) {
+    if ((await liveChip.count()) > 0) {
       await liveChip.click();
       await page.waitForTimeout(150); // svelte derives reflow
       const visibleRows = await card.locator("[data-testid='session-row']").count();

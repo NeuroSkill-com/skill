@@ -320,6 +320,11 @@ const ui: Record<string, string> = {
   "invite.linkHint": "如果无法扫描二维码，请在手机上打开此链接",
 
   "cmdK.sectionSettings": "设置",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "updates.receivePrereleases": "接收预发布版本",
+  "updates.receivePrereleasesDesc": "在稳定版本之前接收候选版本。手动和后台更新检查都会立即遵循此设置。",
+  "about.rcMarker": "(RC · {commit})",
 };
 
 export default ui;

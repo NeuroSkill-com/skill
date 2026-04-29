@@ -214,6 +214,15 @@ export async function setClipboardTracking(enabled: boolean): Promise<void> {
   await daemonPost("/v1/activity/tracking/clipboard", { value: enabled });
 }
 
+export async function getCalendarTracking(): Promise<boolean> {
+  const r = await daemonGet<{ value: boolean }>("/v1/activity/tracking/calendar");
+  return r.value;
+}
+
+export async function setCalendarTracking(enabled: boolean): Promise<void> {
+  await daemonPost("/v1/activity/tracking/calendar", { value: enabled });
+}
+
 export function getRecentFiles(limit?: number, since?: number): Promise<FileInteractionRow[]> {
   return daemonPost<FileInteractionRow[]>("/v1/activity/recent-files", {
     limit,

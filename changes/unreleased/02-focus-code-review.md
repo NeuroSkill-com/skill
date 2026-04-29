@@ -1,6 +1,6 @@
-# Focus-Aware Code Review Flags
+### Features
 
-CodeLens annotations appear at the top of files showing the developer's focus level when the file was last edited.
+- **Focus-aware code review CodeLens**: annotations at the top of each file show the developer's focus level when the file was last edited (`⚠ Low Focus (42)`, `ℹ Focus: 65/100`, `🤖 AI-Assisted (85%)`, or none for high focus). `NeuroSkill: Show Files Needing Review` command lists low-focus human-authored files. Toggle via `neuroskill.focusCodeLens`.
 
 ## What you see
 

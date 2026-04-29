@@ -1,6 +1,6 @@
-# Human vs AI Activity Tracking
+### Features
 
-Every edit and commit is now classified as **human-authored** or **AI-assisted** in real-time.
+- **Human vs AI activity tracking**: every edit and commit is now classified as `source: "human"` or `source: "ai"` in real-time. `AIActivityTracker` watches VSCode commands (Copilot/Codeium completions, inline chat, AI-generated commit messages) to tag subsequent edits/commits, exposes `getAIRatioForFile()` (rolling 5-minute ratio) for CodeLens + sidebar, and forwards the `source` field to the daemon for `build_events` / `ai_events` storage.
 
 ## How it works
 

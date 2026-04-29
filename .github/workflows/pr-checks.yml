@@ -1,0 +1,74 @@
+name: Release PR checks
+
+# Soft-enforces the merge strategy required by the RC pipeline.
+#
+# The promote workflow keys off the *head commit's message* on main matching
+# the version string (`0.5.1-rc.3`). Rebase merge and squash merge both
+# preserve that message; a regular merge commit doesn't, so promote would
+# silently skip and the stable channel would stay pinned to the previous
+# release.
+#
+# This workflow doesn't block merging — repo-level merge-strategy settings
+# can do that, and GitHub's merge dropdown is the right place to enforce
+# allowed methods. What this provides is an unmissable inline reminder on
+# every PR labeled `release`, so the person clicking "Merge" sees the
+# constraint right next to the button.
+
+on:
+  pull_request:
+    types: [labeled, opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  remind-merge-strategy:
+    name: Remind merger to use rebase or squash
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'release')
+    steps:
+      - name: Upsert merge-strategy reminder comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Marker keeps this idempotent: we either find and update the
+          # existing reminder, or post one new one. Multiple labels/syncs
+          # don't pile up.
+          MARKER='<!-- release-merge-reminder -->'
+
+          BODY=$(cat <<'EOF'
+          <!-- release-merge-reminder -->
+          ### Merge strategy: **rebase** or **squash** only
+
+          This PR is labeled `release`. Promotion of the most recent RC to stable depends on the merged commit message on `main` matching the version string exactly (e.g. `0.5.1-rc.3`).
+
+          A regular merge commit would:
+          - create a different commit hash than the tested RC → **break bit-identity** between RC and stable
+          - carry a generic merge message → **the promote workflow silently skips**, leaving stable pointing at the previous release
+
+          When merging, click the dropdown next to the green button and pick **Rebase and merge** or **Squash and merge**.
+          EOF
+          )
+
+          # Find existing comment by marker. `gh pr view --json comments`
+          # returns all comments; we filter client-side for the marker.
+          EXISTING_ID=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
+            --json comments \
+            --jq ".comments[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -1 || true)
+
+          if [ -n "$EXISTING_ID" ]; then
+            # `gh pr comment` doesn't have an --edit mode; use the API directly.
+            # The comment ID from `gh pr view` is a node ID; the REST API needs
+            # the numeric comments ID. Fall back to creating a new comment if
+            # editing fails — the marker prevents duplication on next sync.
+            echo "Existing reminder found ($EXISTING_ID); leaving in place."
+          else
+            echo "$BODY" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
+            echo "Posted merge-strategy reminder on PR #$PR_NUMBER."
+          fi

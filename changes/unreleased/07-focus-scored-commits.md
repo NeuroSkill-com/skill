@@ -1,6 +1,6 @@
-# Focus-Scored Git Commits
+### Features
 
-Git commits in the sidebar show the developer's focus level at commit time and whether the commit was human-authored or AI-assisted.
+- **Focus-scored git commits in sidebar**: collapsible "Recent Commits" section shows the last 8 commits with author marker (👤 human / 🤖 AI) and a color-coded focus badge captured at commit time via `/brain/flow-state`. AI-assisted commits show "AI" instead of a focus score. Toggle via `neuroskill.focusCommits`.
 
 ## What you see
 

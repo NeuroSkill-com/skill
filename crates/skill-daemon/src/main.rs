@@ -282,7 +282,8 @@ async fn daemon_main() -> anyhow::Result<()> {
         .merge(routes::analysis::router())
         .merge(routes::search::router())
         .merge(routes::iroh::router())
-        .merge(routes::brain::router());
+        .merge(routes::brain::router())
+        .merge(routes::validation::router());
 
     // Test-mode endpoints — debug builds only
     #[cfg(debug_assertions)]
@@ -311,7 +312,14 @@ async fn daemon_main() -> anyhow::Result<()> {
     // origin check adds no security value.
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers(Any)
         .expose_headers(Any);
 

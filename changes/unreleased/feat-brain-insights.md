@@ -15,13 +15,10 @@
 - **Window focus tracking**: `window_focus` events sent when VS Code gains/loses focus. EEG not attributed to coding when VS Code is in background.
 - **Live EEG attachment**: `latest_bands` focus/mood injected at event storage time for terminal commands, zone switches, and conversations.
 
-### Tauri UI
+### UI
 
-- **Brain Insights section** in Activity tab: test failure rates by focus level, focus by language bars, AI impact delta, tool focus grid, hourly productivity chart.
-- **EEG focus inline**: terminal commands and conversation messages show EEG focus score (green/yellow/red) at the moment they occurred.
-
-### VS Code Sidebar
-
-- **Brain Insights card**: test failure by focus chips, focus by language bars, tool impact chips. Only shown when EEG data is available.
-- **Struggle card**: hidden when no EEG recording (focus is EEG-only, not activity-based).
-- **Flow gauge label**: shows "focus" with EEG, "activity" without — no false claim of brain measurement.
+- **Tauri Brain Insights section** in Activity tab: test failure rates by focus level, focus by language bars, AI impact delta, tool focus grid, hourly productivity chart.
+- **Tauri EEG focus inline**: terminal commands and conversation messages show EEG focus score (green/yellow/red) at the moment they occurred.
+- **VS Code Brain Insights card**: test failure by focus chips, focus by language bars, tool impact chips. Only shown when EEG data is available.
+- **VS Code Struggle card**: hidden when no EEG recording (focus is EEG-only, not activity-based).
+- **VS Code Flow gauge label**: shows "focus" with EEG, "activity" without — no false claim of brain measurement.

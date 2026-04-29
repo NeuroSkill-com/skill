@@ -268,6 +268,11 @@ pub struct UiPrefsState {
     pub daily_goal_min: u32,
     pub goal_notified_date: String,
     pub onboarding_complete: bool,
+    /// Schema version of the onboarding wizard the user last completed.
+    /// `0` = never finished (or pre-versioning legacy run before migration).
+    /// Compared against `skill_constants::CURRENT_ONBOARDING_VERSION` on
+    /// startup to decide whether to re-launch the wizard.
+    pub onboarding_completed_version: u32,
     pub last_seen_whats_new_version: String,
     pub text_embedding_model: String,
     pub main_window_auto_fit: bool,
@@ -282,6 +287,7 @@ impl Default for UiPrefsState {
             daily_goal_min: default_daily_goal_min(),
             goal_notified_date: String::new(),
             onboarding_complete: false,
+            onboarding_completed_version: 0,
             last_seen_whats_new_version: String::new(),
             text_embedding_model: default_embedding_model(),
             main_window_auto_fit: true,

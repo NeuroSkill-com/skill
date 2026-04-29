@@ -527,7 +527,9 @@ pub fn show_main_window(win: tauri::WebviewWindow, state: tauri::State<'_, Mutex
     if win.label() != "main" {
         return;
     }
-    if !state.lock_or_recover().ui.onboarding_complete {
+    if state.lock_or_recover().ui.onboarding_completed_version
+        < skill_constants::CURRENT_ONBOARDING_VERSION
+    {
         return;
     }
     let _ = win.show();
@@ -595,24 +597,19 @@ macro_rules! window_tab_cmd {
 
 // ── Bluetooth & utility windows ───────────────────────────────────────────────
 
-/// Open the OS Bluetooth settings pane.
+/// Open the per-app Bluetooth permission pane (Privacy & Security → Bluetooth).
 ///
-/// macOS 13+: `com.apple.settings.Bluetooth`
-/// macOS 12−: `com.apple.Bluetooth-Settings.extension`
-/// Windows 11: `ms-settings:bluetooth` + `ms-settings:privacy-bluetooth`
+/// macOS: `com.apple.preference.security?Privacy_Bluetooth` — the legacy
+/// anchor-based URL still resolves on Ventura/Sonoma/Sequoia/Tahoe.
+/// Windows 11: `ms-settings:privacy-bluetooth` + `ms-settings:bluetooth`
 /// Linux: gnome-control-center or blueman-manager
 #[tauri::command]
 pub fn open_bt_settings() {
     #[cfg(target_os = "macos")]
     {
-        let modern = std::process::Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.settings.Bluetooth")
-            .output();
-        if modern.is_err() || modern.is_ok_and(|o| !o.status.success()) {
-            let _ = std::process::Command::new("open")
-                .arg("x-apple.systempreferences:com.apple.Bluetooth-Settings.extension")
-                .spawn();
-        }
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth")
+            .spawn();
     }
     #[cfg(target_os = "windows")]
     {
@@ -652,12 +649,13 @@ pub fn check_bluetooth_power() -> bool {
         // on macOS by default.
         match Command::new("sh")
             .arg("-c")
-            .arg("system_profiler SPBluetoothDataType -detailLevel mini | grep 'Bluetooth Power' || true")
+            .arg("system_profiler SPBluetoothDataType -detailLevel mini")
             .output()
         {
             Ok(out) => {
                 let s = String::from_utf8_lossy(&out.stdout).to_lowercase();
-                // Some macOS versions print "Bluetooth Power: On" while others use "State: On".
+                // Some macOS versions print "Bluetooth Power: On" while others
+                // (Sonoma+) print "State: On" under "Bluetooth Controller:".
                 s.contains("bluetooth power: on") || s.contains("state: on")
             }
             Err(_) => true,
@@ -676,7 +674,7 @@ window_cmd!(open_settings_window, "settings", "settings",
 window_tab_cmd!(open_model_tab, "settings", "settings?tab=exg",
     "NeuroSkill™ – EXG",
     size: (760.0, 720.0), min: (580.0, 560.0),
-    event: "switch-tab", payload: "model");
+    event: "switch-tab", payload: "exg");
 
 window_tab_cmd!(open_updates_window, "settings", "settings?tab=updates",
     "NeuroSkill™ – Updates",
@@ -850,7 +848,7 @@ window_cmd!(open_whats_new_window, "whats-new", "whats-new",
 
 window_cmd!(open_onboarding_window, "onboarding", "onboarding",
     "NeuroSkill™ – Welcome",
-    size: (680.0, 760.0), min: (560.0, 620.0));
+    size: (680.0, 880.0), min: (560.0, 720.0));
 
 #[tauri::command]
 pub fn get_onboarding_model_download_order() -> Vec<String> {
@@ -862,7 +860,10 @@ pub fn get_onboarding_model_download_order() -> Vec<String> {
 
 #[tauri::command]
 pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    mutate_and_save(&app, |s| s.ui.onboarding_complete = true);
+    mutate_and_save(&app, |s| {
+        s.ui.onboarding_complete = true;
+        s.ui.onboarding_completed_version = skill_constants::CURRENT_ONBOARDING_VERSION;
+    });
     if let Some(win) = app.get_webview_window("onboarding") {
         let _ = win.close();
     }
@@ -902,7 +903,24 @@ pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<Ap
 
 #[tauri::command]
 pub fn get_onboarding_complete(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
-    state.lock_or_recover().ui.onboarding_complete
+    state.lock_or_recover().ui.onboarding_completed_version
+        >= skill_constants::CURRENT_ONBOARDING_VERSION
+}
+
+/// Returns the user's onboarding state — what version of the wizard they last
+/// completed and what the current build expects. The frontend uses this to:
+///   - render a "what's new since you last set up" banner on the welcome step
+///     (when `completed_version > 0` and `< current_version`)
+///   - tag individual steps with a NEW badge (any step whose `addedIn` version
+///     is greater than `completed_version`).
+#[tauri::command]
+pub fn get_onboarding_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> serde_json::Value {
+    let completed = state.lock_or_recover().ui.onboarding_completed_version;
+    serde_json::json!({
+        "completedVersion": completed,
+        "currentVersion": skill_constants::CURRENT_ONBOARDING_VERSION,
+        "isReturning": completed > 0 && completed < skill_constants::CURRENT_ONBOARDING_VERSION,
+    })
 }
 
 // ── Calibration window ────────────────────────────────────────────────────────

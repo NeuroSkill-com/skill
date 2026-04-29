@@ -261,10 +261,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggle": "התאמה אוטומטית של גובה לוח המחוונים",
   "settings.autoFitToggleDesc": "מרחיב או מכווץ את החלון הראשי בהתאם לתוכן לוח המחוונים, מוגבל לגובה המסך.",
 
+  "settings.reopenOnboarding": "הגדרה ראשונית",
+  "settings.reopenOnboardingDesc":
+    "פתח מחדש את אשף ההתקנה הראשונית כדי לחזור על Bluetooth, כיול, הורדת מודלים והשלב האופציונלי של הרשאות מעקב פעילות.",
+  "settings.reopenOnboardingBtn": "פתח אשף מחדש",
+
   "settings.activityTracking": "מעקב פעילות",
+  "settings.activityTrackingIntro":
+    "כל אלה אופציונליים וכבויים כברירת מחדל (חוץ ממקלדת ועכבר, שלא דורשים הרשאה). הם מוסיפים הקשר לנתוני ה-EEG והפוקוס שלך, כך שתוכל לראות במה עבדת בזמן ירידת ריכוז או מצב זרימה. כל מה שלמטה מתועד רק במחשב הזה, נכתב ל-activity.sqlite, ולעולם לא נשלח לשום שרת — לא ל-NeuroSkill, לא לאף אחד. אפשר לכבות כל אפשרות בכל עת; הנתונים שכבר נרשמו נשארים על הדיסק עד שתמחק אותם.",
   "settings.activeWindowToggle": "עקוב אחר החלון הפעיל",
   "settings.activeWindowToggleDesc":
-    "תיעוד איזו אפליקציה וחלון נמצאים בחזית. מאוחסן מקומית ב-activity.sqlite בלבד, לא מועלה.",
+    'מתעד איזו אפליקציה וחלון בחזית, וגם את כותרת לשונית הדפדפן הפעילה (Chrome, Safari, Firefox, Edge) ואת נתיב הקובץ הפתוח בעורכים כמו VS Code. למה זה שימושי: מאפשר לקשר את מצב הריכוז שלך עם מה שעשית בפועל — "איבדתי ריכוז בזמן כתיבת ה-PR הזה" במקום סתם "איבדתי ריכוז ב-15:00". הרשאה נדרשת: macOS תבקש גישת נגישות / אוטומציה לכל דפדפן ועורך — זה תקין. פרטיות: שמות אפליקציות, כותרות חלון ונתיבים נשמרים מקומית ב-activity.sqlite ולעולם לא מועלים.',
   "settings.activeWindowCurrent": "חלון נוכחי",
   "settings.activeWindowApp": "אפליקציה",
   "settings.activeWindowPath": "נתיב",
@@ -274,17 +281,25 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "לא זוהה חלון פעיל",
   "settings.inputActivityToggle": "עקוב אחר פעילות מקלדת ועכבר",
   "settings.inputActivityToggleDesc":
-    "תיעוד פעילות מקלדת ועכבר ברמת שניות. לא נדרשות הרשאות מיוחדות. מאוחסן ב-activity.sqlite.",
+    'מתעד מתי המקלדת או העכבר היו בשימוש לאחרונה, שנייה אחר שנייה — לעולם לא אילו מקשים, לעולם לא מיקום הסמן, לעולם לא תוכן. למה זה שימושי: מבדיל בין "ריכוז עמוק" לבין "רחוק מהמקלדת" כדי שציון הריכוז EEG שלך לא יוטה על ידי הפסקות. הרשאה נדרשת: אין — משתמש ב-API מערכתי לזמן סרק שלא דורש גישת נגישות. פרטיות: רק חותמות זמן נשמרות, מקומית ב-activity.sqlite, לעולם לא מועלות.',
   "settings.inputActivityKeyboard": "מקלדת אחרונה",
   "settings.inputActivityMouse": "עכבר אחרון",
   "settings.inputActivityNever": "מעולם לא",
   "settings.inputActivityActive": "מעקב פעיל",
   "settings.inputActivityNoData": "הזז את העכבר או לחץ על מקש כלשהו כדי לאמת שהמעקב פועל.",
   "settings.inputActivityPermNote": "לא נדרשות הרשאות מיוחדות — משתמש ב-API מערכתי לזמן סרק שפועל ללא גישת נגישות.",
+  "settings.fileActivityToggle": "מעקב אחר שינויי קבצים",
+  "settings.fileActivityToggleDesc":
+    'צופה בתיקיות הפיתוח / המסמכים הנפוצות שלך (Documents, Desktop, Downloads, Projects, Developer, code, src) ומתעד אירועי יצירה / שינוי / מחיקה עם חותמות זמן ונתיבים. למה זה שימושי: מראה אילו קבצים באמת שמרת או הורדת במהלך בלוק ריכוז, ומאפשר לחפש היסטוריה לפי "הקובץ שערכתי בסביבות 15:00". הרשאה נדרשת: macOS עשויה לבקש גישה מלאה לדיסק כדי לצפות בתיקיות מסוימות. פרטיות: רק נתיבים וחותמות זמן של אירועים נשמרים — תוכן הקבצים לעולם לא נקרא או מועתק — מקומית ב-activity.sqlite, לעולם לא מועלה.',
   "settings.activityDb": "מאוחסן ב-activity.sqlite",
   "settings.clipboardToggle": "מעקב אחר פעילות לוח הגזירה",
   "settings.clipboardToggleDesc":
-    "רישום שינויים בלוח הגזירה (מטא-נתונים בלבד — תוכן לעולם לא נשמר). עוקב אחר איזו אפליקציה העתיקה, סוג תוכן וגודל. macOS בלבד.",
+    "מתעד מתי לוח הגזירה משתנה — איזו אפליקציה העתיקה, סוג התוכן וגודלו. תוכן לוח הגזירה עצמו לעולם לא נקרא או נשמר. למה זה שימושי: התפרצויות העתק/הדבק הן אות חזק להחלפת הקשר, ושילובן עם EEG יכול להראות מתי ז'נגול בין מקורות שובר את הזרימה שלך. הרשאה נדרשת: macOS תבקש גישת אוטומציה כדי לקרוא את המטא-נתונים של לוח הגזירה. פרטיות: רק מטא-נתונים נשמרים, מקומית ב-activity.sqlite, לעולם לא מועלים. macOS בלבד.",
+  "settings.screenshotsToggle": "צילומי מסך תקופתיים",
+  "settings.locationToggle": "מעקב מיקום",
+  "settings.calendarToggle": "מעקב אחר אירועי לוח שנה",
+  "settings.calendarToggleDesc":
+    "קורא את המטא-נתונים של אירועי לוח השנה הקרובים והאחרונים שלך (כותרת, זמן, משך, מספר משתתפים) כדי שהאפליקציה תוכל לקשר ירידות ריכוז עם צפיפות פגישות. למה זה שימושי: מראה אם פגישות רצופות שוחקות את בלוקי העבודה העמוקה שלך. הרשאה נדרשת: macOS תציג בקשת גישה ללוח שנה בפעם הראשונה. פרטיות: האירועים נקראים לפי דרישה, רק ספירות מצטברות נשמרות ב-activity.sqlite, שום דבר לא מועלה.",
   "settings.clipboardPermDenied": "הרשאת אוטומציה לא ניתנה.",
   "settings.clipboardPermAction": "לחץ כדי לפתוח את הגדרות המערכת ולאפשר גישה ללוח הגזירה.",
 
@@ -732,7 +747,8 @@ const settings: Record<string, string> = {
   "extensions.install": "התקן",
   "extensions.reinstall": "התקן מחדש",
   "extensions.installing": "מתקין…",
-  "extensions.noIdeDetected": "לא זוהה עורך מבוסס VS Code. התקן את VS Code, VSCodium, Cursor, Windsurf או עורך אחר מבוסס VS Code כדי להתקין את ההרחבה.",
+  "extensions.noIdeDetected":
+    "לא זוהה עורך מבוסס VS Code. התקן את VS Code, VSCodium, Cursor, Windsurf או עורך אחר מבוסס VS Code כדי להתקין את ההרחבה.",
   "extensions.openStore": "חנות",
   "extensions.pairingTitle": "שיוך הרחבת דפדפן",
   "extensions.pairingDesc": "העתק את ה-auth token שלך והדבק אותו בהגדרות הרחבת הדפדפן כדי לשייך.",
@@ -748,6 +764,32 @@ const settings: Record<string, string> = {
   "extensions.copyPairingToken": "העתק טוקן שיוך",
   "extensions.copyPairingTokenHint": "מומלץ: פתח את חלון ההרחבה ← שיוך אוטומטי מהלוח",
   "extensions.clipboardPairCopied": "הטוקן הועתק. פתח את חלון ההרחבה — השיוך יתבצע אוטומטית.",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc": "פעילות בלשוניות, דפוסי קריאה, עומק גלילה והתנהגות חיפוש. (משתמש בגרסת Chrome.)",
+  "extensions.allowUnsigned": "אפשר לא חתומות",
+  "activity.browserTitle": "פעילות דפדפן",
+  "activity.browserFocus": "מיקוד לפי דומיין",
+  "activity.browserDistraction": "ציון הסחת דעת",
+  "activity.browserContent": "פילוח תוכן",
+  "activity.browserResearch": "דפוסי מחקר",
+  "activity.browserLlm": "שימוש בצ׳אט בינה מלאכותית",
+  "activity.browserDomains": "דומיינים מובילים",
+  "activity.browserNoData": "אין עדיין נתוני דפדפן — התקן את הרחבת הדפדפן כדי להתחיל במעקב.",
+  "activity.distractionLow": "ממוקד",
+  "activity.distractionMedium": "בינוני",
+  "activity.distractionHigh": "מוסח",
+  "activity.searches": "חיפושים",
+  "activity.refinementRate": "שיעור עידון",
+  "activity.revisits": "ביקורים חוזרים",
+  "activity.stuck": "יתכן שתקוע",
+  "activity.notStuck": "מחקר פרודוקטיבי",
+  "activity.tabSwitchesPerMin": "החלפות לשונית/דק׳",
+  "activity.socialPct": "% חברתי",
+  "activity.productivePct": "% פרודוקטיבי",
+  "activity.totalReadingTime": "זמן קריאה",
+  "activity.avgScrollDepth": "עומק גלילה ממוצע",
 };
 
 export default settings;

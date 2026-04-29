@@ -280,11 +280,24 @@ At release time, `npm run bump` compiles fragments into versioned release notes.
 npm run bump --force
 ```
 
-After bumping, always create and push the version tag:
+### Cutting a release
+
+Releases are PR-driven. Cutting an RC opens a release PR; merging the PR (rebase or squash) promotes the most recent RC to stable with no rebuild.
 
 ```bash
-npm run tag
+# Cut the first RC for the next release (run from main)
+npm run release -- --rc
+
+# Iterate as bugs surface (from the release/X.Y.Z branch)
+npm run release -- --rc
+
+# Approve and merge the PR with rebase or squash merge.
+# promote.yml flips the matching tag to "latest" automatically.
 ```
+
+See [docs/DEVELOPMENT.md → Release](docs/DEVELOPMENT.md#release) for the full flow, channel system (stable / rc), and the moving parts.
+
+For emergency hotfixes that must skip RC, the low-level `bump` + `tag` primitives still work (also in `docs/DEVELOPMENT.md`).
 
 ## Secrets & Keychain
 

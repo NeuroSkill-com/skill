@@ -1,6 +1,6 @@
-# Struggle to AI Assist Bridge
+### Features
 
-When struggle is detected on a specific file, proactively offers to open AI assistance with one click.
+- **Struggle → AI assist bridge**: when `/brain/struggle-predict` flags a file (EEG focus + undo rate + velocity drop + time-on-file), shows an actionable notification with **Open Copilot Chat**, **Open Terminal**, and **Step Back** buttons. Debounced to one suggestion per file per 10 minutes. Toggle via `neuroskill.struggleBridge`.
 
 ## How it works
 

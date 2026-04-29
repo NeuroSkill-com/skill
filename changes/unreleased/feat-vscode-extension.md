@@ -23,7 +23,7 @@
 - **Open NeuroSkill button**: launches native app from sidebar (cross-platform: `open -a` macOS, `start` Windows, `xdg-open` Linux). Also in command palette.
 - **Command palette → sidebar**: `Show Brain Status`, `Today's Report`, `Am I Stuck?`, `Best Time to Code` now open sidebar and scroll to relevant section instead of showing toast notifications.
 
-### Daemon
+### Server
 
 - **`terminal_commands` table**: shell command text, cwd, exit code, duration, auto-categorized (50+ patterns: build/test/run/git/docker/deploy/install/navigate/debug/network/other), EEG focus at start and end for delta calculation.
 - **`dev_loops` table**: edit→build/test cycle tracking with iteration count, pass/fail rate, avg cycle time, focus trend (rising/falling/stable).
@@ -48,7 +48,7 @@
 - **`neuroskill vscode` CLI**: auto-install extension to VS Code, VSCodium, or Cursor on macOS, Linux, and Windows.
 - **Meeting nodes in search graph**: meetings appear as amber nodes in the interactive 3D search graph linked by `meeting_prox` edges.
 
-### Brain Insights (EEG + Activity Fusion)
+### Features
 
 - **Developer insights endpoint**: `POST /v1/brain/developer-insights` returns 7 actionable insights in one call.
 - **Test failure by focus level**: correlates build/test exit codes with EEG focus (high/mid/low) — "your tests fail 45% more when focus is low."
@@ -59,7 +59,7 @@
 - **Dev loop efficiency by hour**: build/test cycle time + pass rate by time of day.
 - **Tool focus impact**: avg focus when using each command category (docker, git, deploy, etc.).
 
-### Data Architecture
+### Refactor
 
 - **Conversations table + FTS5**: full-text search on all AI conversation messages (user/assistant/tool). Three search modes: FTS, fuzzy, structured.
 - **EEG timeseries table**: periodic JSON snapshots of all brain metrics. Extensible — new metrics without schema changes. Join-at-query-time correlation with any event.
@@ -69,7 +69,7 @@
 - **EEG attachment**: live focus/mood from `latest_bands` injected at event storage time.
 - **EEG timeseries worker**: writes full band powers to `eeg_timeseries` every 5s during recording.
 
-### Design System
+### UI
 
 - **Design tokens** (`tokens.css`): 30+ CSS custom properties — palette, surfaces, backgrounds, borders, semantic, typography. Zero inline rgba() in sidebar.
 - **7 reusable Svelte components**: Card, MetricRow, Chevron, ProgressBar, Gauge, Badge, Callout.

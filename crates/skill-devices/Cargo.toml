@@ -45,6 +45,16 @@ cognionics = { version = "0.0.1", default-features = false }
 
 # ANT Neuro eego amplifiers (USB, native pure-Rust backend)
 antneuro = { version = "0.0.1", default-features = false, features = ["native"] }
+# Force libusb to be built from source and statically linked.
+# antneuro pulls in rusb → libusb1-sys, which by default uses pkg-config to
+# find a system libusb-1.0.dylib. On the macOS-26 build runner that resolves
+# to /opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib (Homebrew), so the
+# released skill-daemon fails at launch on end-user Macs without Homebrew:
+#   dyld: Library not loaded: /opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib
+# Declaring rusb here with `vendored` activates libusb1-sys/vendored via
+# Cargo feature unification, which compiles libusb from source and links it
+# statically into the binary.
+rusb = { version = "0.9", features = ["vendored"] }
 
 # AWEAR EEG wearable (BLE, LUCA protocol)
 awear = { version = "0.2.0", default-features = false }

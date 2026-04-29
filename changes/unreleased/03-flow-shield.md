@@ -1,6 +1,6 @@
-# Smart Interruption Shield
+### Features
 
-Automatically suppresses notifications when the developer enters a flow state.
+- **Smart Interruption Shield**: when `/brain/flow-state` reports `in_flow: true`, VS Code's Do Not Disturb mode auto-enables and the status bar shows `$(shield) In Flow 12m`. `NeuroSkill: Toggle Flow Shield` cycles Auto / Forced-on / Forced-off. Toggle via `neuroskill.flowShield`.
 
 ## How it works
 

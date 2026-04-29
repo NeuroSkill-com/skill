@@ -11,11 +11,8 @@
 - **Session tracking**: messages grouped by JSONL filename (session ID). Timestamps from app's own data (ISO 8601 UTC), not extension read time.
 - **Embedding settings**: `neuroskill.embedding.maxInputLength` (default 1000 chars) and `neuroskill.embedding.enableConversations` (default true) in VS Code settings.
 
-### Tauri UI
+### UI
 
-- **AI Conversations section** in Activity tab: timestamped message thread with role icons (user/assistant/tool), app name, EEG focus score, scrollable.
-
-### VS Code Sidebar
-
-- **Conversations card**: timestamped messages with role icons, app badge, collapsible.
-- **AI Usage card**: Copilot/Codeium acceptance rate bar, suggestion count, source breakdown chips.
+- **Tauri AI Conversations section** in Activity tab: timestamped message thread with role icons (user/assistant/tool), app name, EEG focus score, scrollable.
+- **VS Code Conversations card**: timestamped messages with role icons, app badge, collapsible.
+- **VS Code AI Usage card**: Copilot/Codeium acceptance rate bar, suggestion count, source breakdown chips.

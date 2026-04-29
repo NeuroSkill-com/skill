@@ -20,7 +20,7 @@
 - **Info toggles**: every card has a `?` button explaining how metrics are calculated.
 - **Dual-speed updates**: local data every 5s (visible), brain data every 30s. Pauses when sidebar hidden.
 
-### UX
+### UI
 
 - **Configurable alerts**: `neuroskill.alerts.focusLow` (warn when EEG focus drops below threshold), `neuroskill.alerts.continuousWorkMins` (warn after N minutes continuous work).
 - **Daily digest notification**: at configurable time (default 17:30), shows productivity score + stats. "Full Report" button opens detail panel.

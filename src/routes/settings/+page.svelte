@@ -16,8 +16,8 @@ import CalibrationTab from "$lib/settings/CalibrationTab.svelte";
 import ClientsTab from "$lib/settings/ClientsTab.svelte";
 import DevicesTab from "$lib/settings/DevicesTab.svelte";
 import EmbeddingsTab from "$lib/settings/EmbeddingsTab.svelte";
-import ExtensionsTab from "$lib/settings/ExtensionsTab.svelte";
 import ExgTab from "$lib/settings/ExgTab.svelte";
+import ExtensionsTab from "$lib/settings/ExtensionsTab.svelte";
 import GoalsTab from "$lib/settings/GoalsTab.svelte";
 import HooksTab from "$lib/settings/HooksTab.svelte";
 import LlmTab from "$lib/settings/LlmTab.svelte";
@@ -33,6 +33,7 @@ import ToolsTab from "$lib/settings/ToolsTab.svelte";
 import TtsTab from "$lib/settings/TtsTab.svelte";
 import UmapTab from "$lib/settings/UmapTab.svelte";
 import UpdatesTab from "$lib/settings/UpdatesTab.svelte";
+import ValidationTab from "$lib/settings/ValidationTab.svelte";
 
 type Tab =
   | "goals"
@@ -57,7 +58,8 @@ type Tab =
   | "activity"
   | "terminal"
   | "extensions"
-  | "tokens";
+  | "tokens"
+  | "validation";
 let tab = $state<Tab>("activity");
 
 const TAB_IDS: Tab[] = [
@@ -84,6 +86,7 @@ const TAB_IDS: Tab[] = [
   "tokens",
   "terminal",
   "extensions",
+  "validation",
 ];
 const TAB_LABELS: Record<Tab, () => string> = {
   goals: () => t("settingsTabs.goals"),
@@ -110,6 +113,7 @@ const TAB_LABELS: Record<Tab, () => string> = {
   permissions: () => t("settingsTabs.permissions"),
   screenshots: () => t("settingsTabs.screenshots"),
   tokens: () => t("settingsTabs.tokens"),
+  validation: () => t("settingsTabs.validation"),
 };
 
 // ── Icons per tab (16×16 stroked) ────────────────────────────────────────
@@ -137,6 +141,7 @@ const TAB_ICONS: Record<Tab, string> = {
   permissions: `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
   screenshots: `<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>`,
   tokens: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/>`,
+  validation: `<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>`,
 };
 
 const tabLabel = (id: Tab) => TAB_LABELS[id]();
@@ -471,6 +476,8 @@ $effect(() => {
         <ExtensionsTab />
       {:else if tab === "tokens"}
         <TokensTab />
+      {:else if tab === "validation"}
+        <ValidationTab />
       {/if}
 
       <DisclaimerFooter />

@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "Aktives Fenster verfolgen",
-    "desc": "Aufzeichnen, welche App und welches Fenster im Vordergrund ist. Lokal in activity.sqlite gespeichert, nie hochgeladen."
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "API-Authentifizierung",
     "desc": "Wenn gesetzt, müssen alle HTTP- und WebSocket-API-Anfragen dieses Token im Authorization-Header enthalten. Leer lassen, um die Authentifizierung zu deaktivieren."
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "Kalenderereignisse verfolgen",
+    "desc": "Liest die Metadaten deiner anstehenden und kürzlichen Kalenderereignisse (Titel, Zeit, Dauer, Teilnehmerzahl), damit die App Konzentrationseinbrüche mit Meeting-Dichte korrelieren kann. Nutzen: Zeigt, ob Back-to-Back-Meetings deine Deep-Work-Blöcke aushöhlen. Berechtigung: macOS zeigt beim ersten Zugriff einen Kalender-Berechtigungsdialog. Datenschutz: Ereignisse werden on-demand gelesen und nur Aggregat-Zahlen werden in activity.sqlite gespeichert, nichts wird hochgeladen."
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Zwischenablage-Aktivität verfolgen",
-    "desc": "Zwischenablage-Änderungen aufzeichnen (nur Metadaten — Inhalte werden nie gespeichert). Verfolgt welche App kopiert hat, Inhaltstyp und Größe. Nur macOS."
+    "desc": "Erfasst, wann sich die Zwischenablage ändert — welche App kopiert hat, Inhaltstyp und Größe. Der Inhalt selbst wird niemals gelesen oder gespeichert. Nutzen: Häufiges Kopieren/Einfügen ist ein starkes Signal für Kontextwechsel; in Kombination mit dem EEG erkennt man, wann das Jonglieren mit Quellen den Flow bricht. Berechtigung: macOS fragt nach Automatisierungszugriff, um die Zwischenablage-Metadaten zu lesen. Datenschutz: nur Metadaten werden gespeichert, lokal in activity.sqlite, nie hochgeladen. Nur macOS."
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "Inferenzgerät",
     "desc": "Wo KI-Inferenz ausgeführt wird. GPU ist schneller; CPU funktioniert auf jedem Gerät ohne VRAM-Druck. Nach der Änderung den LLM-Server neu starten."
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "Tastatur- & Mausaktivität verfolgen",
-    "desc": "Sekundengenaue Aufzeichnung der Tastatur- und Mausaktivität. Keine Sonderberechtigung erforderlich. Lokal in activity.sqlite gespeichert."
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines anderen BCI-Geräts."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "Einrichtung",
+    "desc": "Den Einrichtungs-Assistenten erneut öffnen, um Bluetooth, Kalibrierung, Modell-Downloads und den optionalen Schritt zur Aktivitätsverfolgung erneut durchzugehen."
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "Prüfintervall",
     "desc": "Wie oft die App im Hintergrund automatisch auf Updates prüft."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "Vorabversionen empfangen",
+    "desc": "Erhalte Release-Kandidaten vor den stabilen Versionen. Manuelle und automatische Prüfungen berücksichtigen diese Einstellung sofort."
   }
 ]

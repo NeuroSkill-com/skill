@@ -36,5 +36,6 @@ pub mod session_parquet;
 pub mod session_paths;
 pub mod session_writer;
 pub mod util;
+pub mod validation_store;
 
 pub use error::{SessionError, StoreError};

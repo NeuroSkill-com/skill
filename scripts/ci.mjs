@@ -172,12 +172,27 @@ function cmdResolveVersion() {
     }
   }
 
-  for (const [k, v] of [["is_release", isRelease], ["version", version], ["tag", tag], ["dry_run", dryRun]]) {
+  // Channel is derived from the version string itself: a `-rc.N` suffix marks
+  // a release candidate. The CI workflow uses `prerelease` to set the GitHub
+  // Release flag, and `channel` to decide whether to mirror latest.json into
+  // the `rc-latest` mutable release.
+  const isRc = /-rc\.\d+$/.test(version);
+  const channel = isRc ? "rc" : "stable";
+  const prerelease = isRc ? "true" : "false";
+
+  for (const [k, v] of [
+    ["is_release", isRelease],
+    ["version", version],
+    ["tag", tag],
+    ["dry_run", dryRun],
+    ["channel", channel],
+    ["prerelease", prerelease],
+  ]) {
     ghOutput(k, v);
   }
   ghEnv("VERSION", version);
   ghEnv("TAG", tag);
-  console.log(`✓ Version: ${version} (release=${isRelease}, dry_run=${dryRun})`);
+  console.log(`✓ Version: ${version} (release=${isRelease}, channel=${channel}, dry_run=${dryRun})`);
 }
 
 function cmdVerifySecrets(args) {
@@ -240,6 +255,7 @@ function cmdPrepareChangelog(args) {
 
 function cmdUpdateLatestJson(args) {
   const { platform, url, "sig-file": sigFile, tag, version, upload } = args;
+  const mirrorToRcLatest = args["mirror-to-rc-latest"] || false;
   const signature = readFileSync(sigFile, "utf8").trim();
 
   // Try to download existing manifest
@@ -274,6 +290,37 @@ function cmdUpdateLatestJson(args) {
     run(["gh", "release", "upload", tag, "latest.json", "--clobber"], { check: true });
     console.log(`✓ latest.json uploaded to release ${tag}`);
   }
+
+  // The `rc-latest` release is a mutable pointer used by the RC update channel.
+  // Both stable and RC builds mirror their latest.json here so opted-in users
+  // always receive the most recent build of either kind. Stable users hit
+  // `releases/latest/download/latest.json` instead, which GitHub auto-resolves
+  // to the most recent non-prerelease release (skipping RCs).
+  if (mirrorToRcLatest) {
+    ensureRcLatestRelease();
+    run(["gh", "release", "upload", "rc-latest", "latest.json", "--clobber"], { check: true });
+    console.log("✓ latest.json mirrored to rc-latest");
+  }
+}
+
+/**
+ * Ensure the `rc-latest` GitHub Release exists. It's a mutable pointer release
+ * tagged at whatever commit was current when first created — the tag itself
+ * doesn't matter because the URL clients use is
+ *   https://github.com/<repo>/releases/download/rc-latest/latest.json
+ * which is asset-based, not commit-based. Marked `prerelease` so it never
+ * becomes "latest" in GitHub's auto-resolution.
+ */
+function ensureRcLatestRelease() {
+  const view = run(["gh", "release", "view", "rc-latest"], { capture: true });
+  if (view.status === 0) return;
+  log("rc-latest release does not exist — creating");
+  run([
+    "gh", "release", "create", "rc-latest",
+    "--prerelease",
+    "--title", "RC channel pointer",
+    "--notes", "Mutable release that always carries the latest latest.json (RC or stable build). Used by users opted into the rc update channel. Do not delete.",
+  ], { check: true });
 }
 
 function cmdDiscordNotify(args) {
@@ -638,6 +685,7 @@ async function main() {
   const args = parseArgs(argv.slice(1), {
     "--platform": "platform", "--url": "url", "--sig-file": "sig-file",
     "--tag": "tag", "--version": "version", "--upload": true,
+    "--mirror-to-rc-latest": true,
     "--status": "status", "--title": "title", "--release-url": "release-url",
     "--run-url": "run-url", "--target": "target", "--skip-compile": true,
   });

@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "跟踪活动窗口",
-    "desc": "记录当前焦点所在的应用和窗口。本地存储在 activity.sqlite 中，从不上传。"
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "API 认证",
     "desc": "设置后，所有 HTTP 和 WebSocket API 请求必须在 Authorization 头中包含此令牌。留空以禁用认证。"
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "跟踪日历事件",
+    "desc": "读取你即将到来和最近的日历事件元数据（标题、时间、持续时间、参与人数），以便应用将专注力下降与会议密度相关联。为什么有用：显示连续会议是否在侵蚀你的深度工作块。需要的权限：macOS 在首次查询时会显示日历访问提示。隐私：事件按需读取，仅汇总计数保存到 activity.sqlite，不上传任何内容。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "跟踪剪贴板活动",
-    "desc": "记录剪贴板更改（仅元数据 — 内容永远不会被存储）。跟踪哪个应用进行了复制、内容类型和大小。仅限 macOS。"
+    "desc": "记录剪贴板何时变化 — 哪个应用进行了复制、内容类型和大小。剪贴板内容本身从不被读取或存储。为什么有用：频繁的复制／粘贴是上下文切换的强烈信号，与 EEG 结合使用可以显示在多个来源之间切换何时打断你的心流。需要的权限：macOS 会请求自动化访问权限以读取剪贴板元数据。隐私：仅存储元数据，本地存储在 activity.sqlite 中，从不上传。仅限 macOS。"
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "推理设备",
     "desc": "AI 推理运行的位置。GPU 更快；CPU 适用于任何机器且避免 VRAM 压力。更改后重启 LLM 服务器。"
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "跟踪键盘和鼠标活动",
-    "desc": "按秒记录键盘和鼠标的使用情况。无需特殊操作系统权限。本地存储在 activity.sqlite 中。"
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "配置 OpenBCI 板以替代或补充另一个 BCI 设备进行连接。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "初始设置",
+    "desc": "重新打开首次运行设置向导，以重新查看 Bluetooth、校准、模型下载和可选的活动跟踪权限步骤。"
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "检查频率",
     "desc": "应用在后台自动检查更新的频率。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "接收预发布版本",
+    "desc": "在稳定版本之前接收候选版本。手动和后台更新检查都会立即遵循此设置。"
   }
 ]

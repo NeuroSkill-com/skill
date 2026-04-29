@@ -251,4 +251,5 @@ allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/eugenehp/cubek.git",
     "https://github.com/eugenehp/btleplug.git",
+    "https://github.com/eugenehp/gtk-rs-core.git",
 ]

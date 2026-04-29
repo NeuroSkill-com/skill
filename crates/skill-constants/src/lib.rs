@@ -140,6 +140,7 @@ pub mod prelude {
         // Data files
         SQLITE_FILE,
         UMAP_CONFIG_FILE,
+        VALIDATION_FILE,
         WS_BROADCAST_CAPACITY,
         WS_DEFAULT_PORT,
         // WebSocket
@@ -700,6 +701,24 @@ pub const CALIBRATION_BREAK_DURATION_SECS: u32 = 5;
 pub const CALIBRATION_LOOP_COUNT: u32 = 3;
 pub const CALIBRATION_AUTO_START: bool = true;
 
+// ── Onboarding versioning ─────────────────────────────────────────────────────
+
+/// Schema version of the first-run onboarding wizard. Bump this whenever a
+/// new step is added that existing users should also see (e.g. a new
+/// permissions card, a new extension installer, a new privacy disclosure).
+///
+/// On startup, if the user's saved `onboarding_completed_version` is below
+/// this value, the wizard is shown again — even if they've onboarded before.
+/// Returning users get a "what's new" banner on the welcome step, and any
+/// step whose `addedIn` version is greater than their saved version is
+/// flagged with a NEW badge so they can find the new content quickly.
+///
+/// Version history:
+///   1 — original first-run flow (BT, fit, calibration, models, tray).
+///   2 — added optional Activity-Tracking permissions step and
+///       Companion Extensions step (VS Code, browser, terminal hooks).
+pub const CURRENT_ONBOARDING_VERSION: u32 = 2;
+
 // ── Settings & logging ────────────────────────────────────────────────────────
 
 /// Filename of all user-configured app settings.
@@ -751,6 +770,10 @@ pub const ACTIVITY_FILE: &str = "activity.sqlite";
 
 /// Hooks audit-log database filename.
 pub const HOOKS_LOG_FILE: &str = "hooks.sqlite";
+
+/// Validation / fatigue-research database filename — KSS, NASA-TLX, PVT
+/// responses plus the persistent validation config.
+pub const VALIDATION_FILE: &str = "validation.sqlite";
 
 // ── mDNS / Bonjour ────────────────────────────────────────────────────────────
 

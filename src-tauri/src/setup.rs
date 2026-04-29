@@ -370,6 +370,18 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.shortcuts.chat_shortcut = data.chat_shortcut;
         s.shortcuts.compare_shortcut = data.compare_shortcut;
         s.ui.onboarding_complete = data.onboarding_complete;
+        // Migrate legacy boolean flag to versioned field. Users who completed
+        // the pre-versioning wizard get pinned to version 1; the next bump to
+        // CURRENT_ONBOARDING_VERSION will re-trigger the wizard for them so
+        // they see new steps (e.g. extensions, permissions) introduced after
+        // their original run.
+        s.ui.onboarding_completed_version = if data.onboarding_completed_version > 0 {
+            data.onboarding_completed_version
+        } else if data.onboarding_complete {
+            1
+        } else {
+            0
+        };
         s.ui.last_seen_whats_new_version = data.last_seen_whats_new_version;
         s.ui.theme = data.theme;
         s.ui.language = data.language;

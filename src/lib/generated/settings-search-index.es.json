@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "Seguimiento de ventana activa",
-    "desc": "Registre qué aplicación y ventana están enfocadas. Almacenado localmente en Activity.sqlite, nunca cargado."
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "Autenticación API",
     "desc": "Cuando se establece, todas las solicitudes de API HTTP y WebSocket deben incluir este token en el encabezado de Autorización. Déjelo vacío para deshabilitar la autenticación."
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "Rastrear eventos del calendario",
+    "desc": "Lee los metadatos de tus eventos próximos y recientes del calendario (título, hora, duración, cantidad de asistentes) para que la app pueda correlacionar caídas de concentración con la densidad de reuniones. Por qué es útil: muestra si reuniones consecutivas están erosionando tus bloques de trabajo profundo. Permiso necesario: macOS mostrará un aviso de acceso al Calendario la primera vez que se consulte. Privacidad: los eventos se leen bajo demanda y solo se guardan recuentos agregados en activity.sqlite, nada se carga."
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Rastrear actividad del portapapeles",
-    "desc": "Registrar cambios del portapapeles (solo metadatos — el contenido nunca se almacena). Rastrea qué app copió, tipo de contenido y tamaño. Solo macOS."
+    "desc": "Registra cuándo cambia el portapapeles — qué app copió, el tipo de contenido y su tamaño. El contenido del portapapeles nunca se lee ni se almacena. Por qué es útil: las ráfagas de copiar/pegar son una señal fuerte de cambio de contexto, y combinarlas con el EEG puede mostrar cuándo malabarear fuentes está rompiendo tu concentración. Permiso necesario: macOS pedirá acceso de Automatización para leer los metadatos del portapapeles. Privacidad: solo se almacenan metadatos, localmente en activity.sqlite, nunca cargados. Solo macOS."
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "Dispositivo de inferencia",
     "desc": "Dónde se ejecuta la inferencia de IA. La GPU es más rápida; la CPU funciona en cualquier máquina sin presionar la VRAM. Reinicia el servidor LLM tras cambiar."
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "Seguimiento de la actividad del teclado y el mouse",
-    "desc": "Registre cuándo se utilizan el teclado y el mouse, por segundo. No se requieren permisos especiales del sistema operativo. Almacenado localmente en Activity.sqlite."
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Configure una placa OpenBCI para conectarse junto con otro dispositivo BCI o en lugar de él."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "Configuración inicial",
+    "desc": "Reabre el asistente de configuración inicial para revisar Bluetooth, calibración, descarga de modelos y el paso opcional de permisos de seguimiento de actividad."
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "Verificar frecuencia",
     "desc": "Con qué frecuencia la aplicación busca actualizaciones automáticamente en segundo plano."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "Recibir versiones preliminares",
+    "desc": "Recibe candidatos a versión antes de las versiones estables. Las comprobaciones manuales y automáticas respetan esta opción al instante."
   }
 ]

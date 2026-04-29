@@ -25,6 +25,7 @@ tracing    = "0.1"
 
 skill-constants     = { path = "../skill-constants" }
 skill-daemon-common = { path = "../skill-daemon-common" }
+skill-data          = { path = "../skill-data" }
 skill-devices       = { path = "../skill-devices" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-iroh          = { path = "../skill-iroh" }

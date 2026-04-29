@@ -294,6 +294,7 @@ export const EXEMPT_KEYS = new Set([
   "settings.supportedDevices.company.oura", // brand name "Ōura"
   "settings.supportedDevices.device.ouraRing", // product name "Oura Ring (Gen 3 / Gen 4)"
   "about.copyright", // "© 2025–2026 NeuroSkill.com" — same in all locales
+  "about.rcMarker", // "(RC · {commit})" — release-candidate marker template
   "dashboard.rec", // "● REC" — universal recording indicator
   "ttsTab.apiExampleWs", // API code example — language-neutral
   "ttsTab.apiExampleHttp", // API code example — language-neutral
@@ -302,6 +303,14 @@ export const EXEMPT_KEYS = new Set([
   "vdev.cfgAmplitude", // "Amplitude (µV)" — identical in DE/FR
   "veeg.amplitudeUv", // "Amplitude (µV)" — identical in DE/FR
   "vdev.statusSession", // "Session" — identical in FR
+  "extensions.vscode", // brand name "VS Code"
+  "extensions.chrome", // brand name "Chrome"
+  "extensions.firefox", // brand name "Firefox"
+  "extensions.edge", // brand name "Microsoft Edge"
+  "extensions.safari", // brand name "Safari"
+  "settingsTabs.extensions", // "Extensions" — identical in FR/DE
+  "onboarding.step.permissions", // "Permissions" — identical in FR
+  "onboarding.step.extensions", // "Extensions" — identical in FR
 ]);
 
 /** Patterns for values that are inherently language-neutral. */

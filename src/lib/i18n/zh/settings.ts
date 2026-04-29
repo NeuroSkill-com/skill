@@ -422,9 +422,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggle": "自动适应仪表板高度",
   "settings.autoFitToggleDesc": "根据仪表板内容扩展或收缩主窗口，受屏幕高度限制。",
 
+  "settings.reopenOnboarding": "初始设置",
+  "settings.reopenOnboardingDesc":
+    "重新打开首次运行设置向导，以重新查看 Bluetooth、校准、模型下载和可选的活动跟踪权限步骤。",
+  "settings.reopenOnboardingBtn": "重新打开向导",
+
   "settings.activityTracking": "活动跟踪",
+  "settings.activityTrackingIntro":
+    "下面所有项目都是可选的，默认关闭（无需权限的键盘和鼠标除外）。它们为你的 EEG／专注数据增加上下文，让你能够看到在专注力下降或心流状态时正在做什么。下面的所有内容只记录在这台电脑上，写入 activity.sqlite，从不发送到任何服务器 — 不发送到 NeuroSkill，也不发送到任何人。你可以随时关闭每一项；已记录的数据会保留在磁盘上，直到你删除它。",
   "settings.activeWindowToggle": "跟踪活动窗口",
-  "settings.activeWindowToggleDesc": "记录当前焦点所在的应用和窗口。本地存储在 activity.sqlite 中，从不上传。",
+  "settings.activeWindowToggleDesc":
+    '记录当前焦点所在的应用和窗口，以及活动浏览器标签页标题（Chrome、Safari、Firefox、Edge）和 VS Code 等编辑器中打开的文件路径。为什么有用：让你将专注状态与实际正在做的事情关联起来 — "我在写这个 PR 时分心了"，而不仅仅是"下午 3 点分心了"。需要的权限：macOS 会针对每个被查询的浏览器和编辑器请求辅助功能 / 自动化访问权限 — 这是正常的。隐私：捕获的应用名称、窗口标题和路径本地存储在 activity.sqlite 中，从不上传。',
   "settings.activeWindowCurrent": "当前窗口",
   "settings.activeWindowApp": "应用",
   "settings.activeWindowPath": "路径",
@@ -434,17 +442,25 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "未检测到活动窗口",
   "settings.inputActivityToggle": "跟踪键盘和鼠标活动",
   "settings.inputActivityToggleDesc":
-    "按秒记录键盘和鼠标的使用情况。无需特殊操作系统权限。本地存储在 activity.sqlite 中。",
+    '按秒记录键盘或鼠标最后一次使用的时间 — 从不记录按了哪些键、光标位置或内容。为什么有用：区分"深度专注"和"离开键盘"，避免休息时间影响 EEG 专注分数。需要的权限：无 — 使用内置的操作系统空闲时间 API，无需辅助功能访问权限。隐私：仅存储时间戳，本地存储在 activity.sqlite 中，从不上传。',
   "settings.inputActivityKeyboard": "上次键盘",
   "settings.inputActivityMouse": "上次鼠标",
   "settings.inputActivityNever": "从未",
   "settings.inputActivityActive": "跟踪已启用",
   "settings.inputActivityNoData": "移动鼠标或按键以验证跟踪是否正常工作。",
   "settings.inputActivityPermNote": "无需特殊权限 — 使用内置操作系统空闲时间 API，无需辅助功能访问权限。",
+  "settings.fileActivityToggle": "跟踪文件变更",
+  "settings.fileActivityToggleDesc":
+    '监视你常用的开发／文档文件夹（Documents、Desktop、Downloads、Projects、Developer、code、src），并记录创建／修改／删除事件，包括时间戳和路径。为什么有用：显示你在专注期间实际保存或下载的文件，让你可以按"下午 3 点左右编辑的文件"搜索历史记录。需要的权限：macOS 可能会请求完全磁盘访问权限以监视某些文件夹。隐私：仅存储路径和事件时间戳 — 文件内容从不被读取或复制 — 本地存储在 activity.sqlite 中，从不上传。',
   "settings.activityDb": "存储在 activity.sqlite 中",
   "settings.clipboardToggle": "跟踪剪贴板活动",
   "settings.clipboardToggleDesc":
-    "记录剪贴板更改（仅元数据 — 内容永远不会被存储）。跟踪哪个应用进行了复制、内容类型和大小。仅限 macOS。",
+    "记录剪贴板何时变化 — 哪个应用进行了复制、内容类型和大小。剪贴板内容本身从不被读取或存储。为什么有用：频繁的复制／粘贴是上下文切换的强烈信号，与 EEG 结合使用可以显示在多个来源之间切换何时打断你的心流。需要的权限：macOS 会请求自动化访问权限以读取剪贴板元数据。隐私：仅存储元数据，本地存储在 activity.sqlite 中，从不上传。仅限 macOS。",
+  "settings.screenshotsToggle": "定期截屏",
+  "settings.locationToggle": "跟踪位置",
+  "settings.calendarToggle": "跟踪日历事件",
+  "settings.calendarToggleDesc":
+    "读取你即将到来和最近的日历事件元数据（标题、时间、持续时间、参与人数），以便应用将专注力下降与会议密度相关联。为什么有用：显示连续会议是否在侵蚀你的深度工作块。需要的权限：macOS 在首次查询时会显示日历访问提示。隐私：事件按需读取，仅汇总计数保存到 activity.sqlite，不上传任何内容。",
   "settings.clipboardPermDenied": "未授予自动化权限。",
   "settings.clipboardPermAction": "点击打开系统设置并允许访问剪贴板。",
 
@@ -718,7 +734,8 @@ const settings: Record<string, string> = {
   "extensions.install": "安装",
   "extensions.reinstall": "重新安装",
   "extensions.installing": "安装中…",
-  "extensions.noIdeDetected": "未检测到任何基于 VS Code 的编辑器。请安装 VS Code、VSCodium、Cursor、Windsurf 等基于 VS Code 的编辑器以安装扩展。",
+  "extensions.noIdeDetected":
+    "未检测到任何基于 VS Code 的编辑器。请安装 VS Code、VSCodium、Cursor、Windsurf 等基于 VS Code 的编辑器以安装扩展。",
   "extensions.openStore": "商店",
   "extensions.pairingTitle": "浏览器扩展配对",
   "extensions.pairingDesc": "复制您的 auth token 并粘贴到浏览器扩展设置中以完成配对。",
@@ -734,6 +751,32 @@ const settings: Record<string, string> = {
   "extensions.copyPairingToken": "复制配对令牌",
   "extensions.copyPairingTokenHint": "推荐：打开扩展弹窗 → 自动从剪贴板配对",
   "extensions.clipboardPairCopied": "令牌已复制。打开扩展弹窗 — 将自动完成配对。",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc": "标签页活动、阅读模式、滚动深度和搜索行为。（使用 Chrome 构建版本。）",
+  "extensions.allowUnsigned": "允许未签名",
+  "activity.browserTitle": "浏览器活动",
+  "activity.browserFocus": "按域名查看专注度",
+  "activity.browserDistraction": "分心评分",
+  "activity.browserContent": "内容分布",
+  "activity.browserResearch": "研究模式",
+  "activity.browserLlm": "AI 聊天使用情况",
+  "activity.browserDomains": "热门域名",
+  "activity.browserNoData": "暂无浏览器数据 — 安装浏览器扩展以开始追踪。",
+  "activity.distractionLow": "专注",
+  "activity.distractionMedium": "一般",
+  "activity.distractionHigh": "分心",
+  "activity.searches": "搜索",
+  "activity.refinementRate": "搜索精炼率",
+  "activity.revisits": "回访",
+  "activity.stuck": "可能受阻",
+  "activity.notStuck": "高效研究",
+  "activity.tabSwitchesPerMin": "标签页切换/分钟",
+  "activity.socialPct": "社交 %",
+  "activity.productivePct": "高效 %",
+  "activity.totalReadingTime": "阅读时间",
+  "activity.avgScrollDepth": "平均滚动深度",
 };
 
 export default settings;

@@ -237,6 +237,11 @@ const DEVICE_TABS: ActiveTab[] = [
 ];
 let system: ElectrodeSystem = $derived(DEVICE_TABS.includes(activeTab) ? "10-10" : (activeTab as ElectrodeSystem));
 
+// Picker partitioning: devices go in the dropdown, generic atlases stay as pills.
+const deviceTabs = $derived(TABS.filter((tab) => DEVICE_TABS.includes(tab.id)));
+const genericTabs = $derived(TABS.filter((tab) => !DEVICE_TABS.includes(tab.id)));
+const isDeviceTab = $derived(DEVICE_TABS.includes(activeTab));
+
 // Electrodes shown in the 3D view
 const electrodes3D = $derived(
   activeTab === "muse"
@@ -330,12 +335,45 @@ function qualityBg(val: number): string {
 
 <div class="flex flex-col items-center gap-3">
 
-  <!-- ── System tabs ─────────────────────────────────────────────────────── -->
-  <div class="flex flex-wrap items-center gap-1 self-start w-full max-w-[480px]">
-    {#each TABS as tab}
+  <!-- ── Device picker (dropdown) + generic 10/10 systems (pills) ────────── -->
+  <!--
+    Devices are dropdown'd because there are 13 of them and they share one
+    conceptual axis ("which headset is on your head"). The three generic
+    montages (10-20/10-10/10-5) remain as inline pills — they're a different
+    concept (reference grids), there's only 3, and they're the natural
+    "show me the full atlas" affordance.
+
+    `activeTab` is auto-selected by the parent $effect from the connected
+    device's `device_kind`; if nothing is connected the fallback is "muse".
+  -->
+  <div class="flex flex-wrap items-center gap-1.5 self-start w-full max-w-[480px]">
+    <select
+      aria-label="Headset"
+      value={isDeviceTab ? activeTab : "muse"}
+      onchange={(e) => {
+        activeTab = (e.currentTarget as HTMLSelectElement).value as ActiveTab;
+        selectedElectrode = null;
+      }}
+      class="flex-1 min-w-[180px] h-7 rounded-md border px-2 text-ui-xs font-semibold
+             transition-colors cursor-pointer appearance-none bg-no-repeat
+             pr-7 truncate
+             {isDeviceTab
+               ? 'bg-foreground text-background border-transparent'
+               : 'bg-surface-1 text-foreground border-border dark:border-white/[0.06] hover:border-foreground/30'}"
+      style="background-image: url(&quot;data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 5 6 8 9 5'/></svg>&quot;);
+              background-position: right 0.4rem center;
+              background-size: 0.7rem 0.7rem;"
+    >
+      {#each deviceTabs as tab}
+        <option value={tab.id}>{tab.label} · {tab.count()} ch</option>
+      {/each}
+    </select>
+
+    <!-- Generic 10-20 / 10-10 / 10-5 atlases -->
+    {#each genericTabs as tab}
       <button
         onclick={() => { activeTab = tab.id; selectedElectrode = null; }}
-        class="flex items-center gap-1 rounded-md px-2 py-1 text-ui-xs font-semibold
+        class="flex items-center gap-1 rounded-md px-2 h-7 text-ui-xs font-semibold
                transition-all border whitespace-nowrap
                {activeTab === tab.id
                  ? 'bg-foreground text-background border-transparent'

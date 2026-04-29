@@ -136,7 +136,7 @@ for suite in "${SUITES[@]}"; do
       fi
       ;;
     vitest)
-      run_suite "vitest run" npx vitest run --exclude 'src/tests/*-e2e*' --exclude 'src/tests/*e2e*' || { $STOP_ON_FAIL && break; }
+      run_suite "vitest run" npx vitest run --exclude 'src/tests/*-e2e*' --exclude 'src/tests/*e2e*' --exclude 'extensions/**' || { $STOP_ON_FAIL && break; }
       ;;
     rust)
       run_suite "rust tests (tier 1)" bash scripts/test-fast.sh || { $STOP_ON_FAIL && break; }

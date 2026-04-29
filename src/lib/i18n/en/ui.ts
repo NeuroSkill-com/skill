@@ -119,6 +119,9 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "Automatic update checks are disabled. Use the button above to check manually.",
   "updates.autostart": "Launch at Login",
   "updates.autostartDesc": "Start automatically when you log in to your computer.",
+  "updates.receivePrereleases": "Receive pre-releases",
+  "updates.receivePrereleasesDesc":
+    "Opt into release candidates ahead of stable releases. Both manual and background update checks honor this setting live.",
   "updates.footer": "Updates are downloaded automatically. Restart when you're ready to apply.",
 
   "whatsNew.title": "What's New",
@@ -279,6 +282,7 @@ const ui: Record<string, string> = {
   "about.copyright": "© 2025–2026 NeuroSkill.com",
   "about.role.eugene": "Lead developer & EEG signal processing",
   "about.role.nataliya": "Neuroscience and Brain Computer Interfaces",
+  "about.rcMarker": "(RC · {commit})",
   "about.ack":
     "Built with Tauri, SvelteKit, and the ZUNA EEG foundation model by Zyphra. EEG band-power research based on work by Klimesch (1999), Pope et al. (1995), and Kosmyna & Maes (2019).",
 

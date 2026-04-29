@@ -79,6 +79,10 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-opener          = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater         = "2"
+# Used to construct typed URLs for the updater's channel-aware endpoint
+# (see src/update_channel.rs). Version pinned to match the one already in
+# the dep graph via tauri-plugin-updater → reqwest.
+url                          = "2"
 tauri-plugin-process         = "2"
 tauri-plugin-notification    = "2"
 libc                         = "0.2"

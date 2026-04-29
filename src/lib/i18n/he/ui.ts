@@ -319,6 +319,12 @@ const ui: Record<string, string> = {
   "invite.linkHint": "פתח את הקישור הזה בטלפון אם אינך יכול לסרוק את קוד ה-QR",
 
   "cmdK.sectionSettings": "הגדרות",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "updates.receivePrereleases": "קבל גרסאות מקדימות",
+  "updates.receivePrereleasesDesc":
+    "קבל מועמדי גרסה לפני הגרסאות היציבות. בדיקות ידניות ואוטומטיות מתחשבות בהגדרה זו באופן מיידי.",
+  "about.rcMarker": "(RC · {commit})",
 };
 
 export default ui;

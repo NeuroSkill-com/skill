@@ -224,10 +224,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggleDesc":
     "Vergrößert oder verkleinert das Hauptfenster passend zum Dashboard-Inhalt, begrenzt auf die Bildschirmhöhe.",
 
+  "settings.reopenOnboarding": "Einrichtung",
+  "settings.reopenOnboardingDesc":
+    "Den Einrichtungs-Assistenten erneut öffnen, um Bluetooth, Kalibrierung, Modell-Downloads und den optionalen Schritt zur Aktivitätsverfolgung erneut durchzugehen.",
+  "settings.reopenOnboardingBtn": "Assistent erneut öffnen",
+
   "settings.activityTracking": "Aktivitätsverfolgung",
+  "settings.activityTrackingIntro":
+    "All das ist optional und standardmäßig deaktiviert (außer Tastatur & Maus, das keine Berechtigung benötigt). Es ergänzt deine EEG-/Fokusdaten um Kontext, sodass du sehen kannst, woran du gearbeitet hast, als die Konzentration nachließ oder du im Flow warst. Alles unten wird nur auf diesem Computer in activity.sqlite gespeichert und niemals an einen Server gesendet — weder an NeuroSkill noch an irgendjemand sonst. Du kannst jede Option jederzeit ausschalten; die aufgezeichneten Daten bleiben auf der Festplatte, bis du sie löschst.",
   "settings.activeWindowToggle": "Aktives Fenster verfolgen",
   "settings.activeWindowToggleDesc":
-    "Aufzeichnen, welche App und welches Fenster im Vordergrund ist. Lokal in activity.sqlite gespeichert, nie hochgeladen.",
+    'Erfasst, welche App und welches Fenster im Vordergrund sind, plus den aktiven Browser-Tab-Titel (Chrome, Safari, Firefox, Edge) und den geöffneten Dateipfad in Editoren wie VS Code. Nutzen: Du kannst deinen Fokuszustand mit dem korrelieren, was du tatsächlich getan hast — "Ich habe beim Schreiben dieses PRs den Fokus verloren" statt nur "Ich habe um 15 Uhr den Fokus verloren". Berechtigung: macOS fragt nach Bedienungshilfen-/Automatisierungszugriff für jeden abgefragten Browser und Editor — das ist normal. Datenschutz: App-Namen, Fenstertitel und Pfade werden lokal in activity.sqlite gespeichert und nie hochgeladen.',
   "settings.activeWindowCurrent": "Aktuelles Fenster",
   "settings.activeWindowApp": "App",
   "settings.activeWindowPath": "Pfad",
@@ -237,7 +244,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "Kein aktives Fenster erkannt",
   "settings.inputActivityToggle": "Tastatur- & Mausaktivität verfolgen",
   "settings.inputActivityToggleDesc":
-    "Sekundengenaue Aufzeichnung der Tastatur- und Mausaktivität. Keine Sonderberechtigung erforderlich. Lokal in activity.sqlite gespeichert.",
+    'Erfasst sekundengenau, wann Tastatur oder Maus zuletzt benutzt wurden — niemals welche Tasten, niemals Cursorpositionen, niemals Inhalte. Nutzen: Unterscheidet "tiefer Fokus" von "weg vom Schreibtisch", damit dein EEG-Fokuswert nicht durch Pausen verfälscht wird. Berechtigung: keine — verwendet eine system-eigene Leerlaufzeit-API, die keinen Bedienungshilfen-Zugriff braucht. Datenschutz: nur Zeitstempel werden gespeichert, lokal in activity.sqlite, nie hochgeladen.',
   "settings.inputActivityKeyboard": "Letzte Tastatur",
   "settings.inputActivityMouse": "Letzte Maus",
   "settings.inputActivityNever": "nie",
@@ -245,10 +252,18 @@ const settings: Record<string, string> = {
   "settings.inputActivityNoData": "Maus bewegen oder Taste drücken, um die Aufzeichnung zu prüfen.",
   "settings.inputActivityPermNote":
     "Keine Sonderberechtigung nötig — verwendet eine system-eigene Leerlaufzeit-API, die ohne Bedienungshilfen-Zugriff funktioniert.",
+  "settings.fileActivityToggle": "Dateiänderungen verfolgen",
+  "settings.fileActivityToggleDesc":
+    'Beobachtet deine üblichen Entwicklungs-/Dokumentenordner (Dokumente, Schreibtisch, Downloads, Projects, Developer, code, src) und erfasst Erstellungs-/Änderungs-/Löschereignisse mit Zeitstempeln und Pfaden. Nutzen: Du siehst, welche Dateien du während einer Fokusphase tatsächlich gespeichert oder heruntergeladen hast und kannst die Historie nach „der Datei, die ich um 15 Uhr bearbeitet habe" durchsuchen. Berechtigung: macOS fragt eventuell nach „Vollständiger Festplattenzugriff" für bestimmte Ordner. Datenschutz: nur Pfade und Ereigniszeitstempel werden gespeichert — Dateiinhalte werden nie gelesen oder kopiert — lokal in activity.sqlite, nie hochgeladen.',
   "settings.activityDb": "Gespeichert in activity.sqlite",
   "settings.clipboardToggle": "Zwischenablage-Aktivität verfolgen",
   "settings.clipboardToggleDesc":
-    "Zwischenablage-Änderungen aufzeichnen (nur Metadaten — Inhalte werden nie gespeichert). Verfolgt welche App kopiert hat, Inhaltstyp und Größe. Nur macOS.",
+    "Erfasst, wann sich die Zwischenablage ändert — welche App kopiert hat, Inhaltstyp und Größe. Der Inhalt selbst wird niemals gelesen oder gespeichert. Nutzen: Häufiges Kopieren/Einfügen ist ein starkes Signal für Kontextwechsel; in Kombination mit dem EEG erkennt man, wann das Jonglieren mit Quellen den Flow bricht. Berechtigung: macOS fragt nach Automatisierungszugriff, um die Zwischenablage-Metadaten zu lesen. Datenschutz: nur Metadaten werden gespeichert, lokal in activity.sqlite, nie hochgeladen. Nur macOS.",
+  "settings.screenshotsToggle": "Periodische Screenshots aufnehmen",
+  "settings.locationToggle": "Standort verfolgen",
+  "settings.calendarToggle": "Kalenderereignisse verfolgen",
+  "settings.calendarToggleDesc":
+    "Liest die Metadaten deiner anstehenden und kürzlichen Kalenderereignisse (Titel, Zeit, Dauer, Teilnehmerzahl), damit die App Konzentrationseinbrüche mit Meeting-Dichte korrelieren kann. Nutzen: Zeigt, ob Back-to-Back-Meetings deine Deep-Work-Blöcke aushöhlen. Berechtigung: macOS zeigt beim ersten Zugriff einen Kalender-Berechtigungsdialog. Datenschutz: Ereignisse werden on-demand gelesen und nur Aggregat-Zahlen werden in activity.sqlite gespeichert, nichts wird hochgeladen.",
   "settings.clipboardPermDenied": "Automatisierungsberechtigung nicht erteilt.",
   "settings.clipboardPermAction":
     "Klicken Sie, um die Systemeinstellungen zu öffnen und den Zugriff auf die Zwischenablage zu erlauben.",
@@ -758,7 +773,8 @@ const settings: Record<string, string> = {
   "settingsTabs.extensions": "Erweiterungen",
   "extensions.ideTitle": "IDE-Erweiterungen",
   "extensions.browserTitle": "Browser-Erweiterungen",
-  "extensions.browserDesc": "Surfverhalten erfassen und mit dem EEG-Hirnzustand korrelieren. Alle Daten bleiben auf Ihrem Gerät.",
+  "extensions.browserDesc":
+    "Surfverhalten erfassen und mit dem EEG-Hirnzustand korrelieren. Alle Daten bleiben auf Ihrem Gerät.",
   "extensions.vscode": "VS Code",
   "extensions.vscodeDesc": "Terminalbefehle, KI-Vorschläge, Entwicklungsschleifen und Dateiaktivitäts-Tracking.",
   "extensions.chrome": "Chrome",
@@ -771,10 +787,12 @@ const settings: Record<string, string> = {
   "extensions.install": "Installieren",
   "extensions.reinstall": "Neu installieren",
   "extensions.installing": "Wird installiert…",
-  "extensions.noIdeDetected": "Kein VS-Code-Editor erkannt. Installiere VS Code, VSCodium, Cursor, Windsurf oder einen anderen VS-Code-basierten Editor, um die Erweiterung zu installieren.",
+  "extensions.noIdeDetected":
+    "Kein VS-Code-Editor erkannt. Installiere VS Code, VSCodium, Cursor, Windsurf oder einen anderen VS-Code-basierten Editor, um die Erweiterung zu installieren.",
   "extensions.openStore": "Store",
   "extensions.pairingTitle": "Browser-Erweiterung koppeln",
-  "extensions.pairingDesc": "Kopieren Sie Ihr Auth-Token und fügen Sie es in den Einstellungen der Browser-Erweiterung ein, um sie zu koppeln.",
+  "extensions.pairingDesc":
+    "Kopieren Sie Ihr Auth-Token und fügen Sie es in den Einstellungen der Browser-Erweiterung ein, um sie zu koppeln.",
   "extensions.copyToken": "Auth-Token kopieren",
   "extensions.tokenCopied": "Token in die Zwischenablage kopiert",
   "extensions.tokenFailed": "Token konnte nicht kopiert werden",
@@ -785,8 +803,36 @@ const settings: Record<string, string> = {
   "extensions.pairingFailed": "Kopplungslink konnte nicht erstellt werden",
   "extensions.pairingInProgress": "Wird geöffnet…",
   "extensions.copyPairingToken": "Kopplungs-Token kopieren",
-  "extensions.copyPairingTokenHint": "Empfohlen: Erweiterungs-Popup öffnen → koppelt automatisch aus der Zwischenablage",
+  "extensions.copyPairingTokenHint":
+    "Empfohlen: Erweiterungs-Popup öffnen → koppelt automatisch aus der Zwischenablage",
   "extensions.clipboardPairCopied": "Token kopiert. Öffnen Sie das Erweiterungs-Popup — es koppelt sich automatisch.",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc": "Tab-Aktivität, Lesemuster, Scrolltiefe und Suchverhalten. (Verwendet den Chrome-Build.)",
+  "extensions.allowUnsigned": "Unsignierte zulassen",
+  "activity.browserTitle": "Browser-Aktivität",
+  "activity.browserFocus": "Fokus nach Domain",
+  "activity.browserDistraction": "Ablenkungs-Score",
+  "activity.browserContent": "Inhaltsaufschlüsselung",
+  "activity.browserResearch": "Recherchemuster",
+  "activity.browserLlm": "KI-Chat-Nutzung",
+  "activity.browserDomains": "Top-Domains",
+  "activity.browserNoData":
+    "Noch keine Browserdaten — installieren Sie die Browser-Erweiterung, um mit der Erfassung zu beginnen.",
+  "activity.distractionLow": "Konzentriert",
+  "activity.distractionMedium": "Mittel",
+  "activity.distractionHigh": "Abgelenkt",
+  "activity.searches": "Suchen",
+  "activity.refinementRate": "Verfeinerungsrate",
+  "activity.revisits": "Wiederbesuche",
+  "activity.stuck": "Möglicherweise blockiert",
+  "activity.notStuck": "Produktive Recherche",
+  "activity.tabSwitchesPerMin": "Tab-Wechsel/Min",
+  "activity.socialPct": "sozial %",
+  "activity.productivePct": "produktiv %",
+  "activity.totalReadingTime": "Lesezeit",
+  "activity.avgScrollDepth": "Ø Scrolltiefe",
 };
 
 export default settings;

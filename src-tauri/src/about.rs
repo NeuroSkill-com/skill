@@ -29,7 +29,21 @@ use crate::constants::{
 #[serde(rename_all = "camelCase")]
 pub struct AboutInfo {
     pub name: String,
+    /// Raw version from the bundle's CFBundleShortVersionString (e.g.
+    /// `0.5.1-rc.3` for an RC build that was promoted to stable).
     pub version: String,
+    /// User-facing version with any RC suffix stripped (e.g. `0.5.1`).
+    /// The "is this an RC?" signal belongs in [`channel`], not the version.
+    pub display_version: String,
+    /// User's selected update channel: `"stable"` or `"rc"`. Drives whether
+    /// the frontend appends a `(RC · {commit})` marker.
+    pub channel: String,
+    /// First seven characters of the build's git commit, baked in by
+    /// `build.rs`. Empty when the build wasn't done from a git checkout.
+    pub commit_short: String,
+    /// Full `git describe --tags --always --dirty` output for the build —
+    /// useful in crash reports and bug filings, not displayed by default.
+    pub build_tag: String,
     pub tagline: String,
     pub website: String,
     pub website_label: String,
@@ -82,9 +96,25 @@ fn icon_data_url() -> Option<String> {
 #[tauri::command]
 pub fn get_about_info(app: AppHandle) -> AboutInfo {
     let version = app.package_info().version.to_string();
+    let display_version = strip_rc_suffix(&version);
+    let channel = crate::update_channel::read_channel(&app)
+        .as_str()
+        .to_string();
+    let commit_full = env!("BUILD_INFO_COMMIT");
+    let commit_short = if commit_full.len() >= 7 {
+        commit_full[..7].to_string()
+    } else {
+        commit_full.to_string()
+    };
+    let build_tag = env!("BUILD_INFO_TAG").to_string();
+
     AboutInfo {
         name: APP_DISPLAY_NAME.into(),
         version,
+        display_version,
+        channel,
+        commit_short,
+        build_tag,
         tagline: APP_TAGLINE.into(),
         website: APP_WEBSITE.into(),
         website_label: APP_WEBSITE_LABEL.into(),
@@ -100,6 +130,30 @@ pub fn get_about_info(app: AppHandle) -> AboutInfo {
             .collect(),
         acknowledgements: APP_ACKNOWLEDGEMENTS.into(),
         icon_data_url: icon_data_url(),
+    }
+}
+
+/// Strip a SemVer pre-release suffix matching `-rc.N` from the version
+/// string. Anything else is returned unchanged. Bit-identical promotion
+/// means `0.5.1-rc.3` is what stable users actually run, so the About
+/// page normalises it for display.
+fn strip_rc_suffix(version: &str) -> String {
+    match version.find("-rc.") {
+        Some(i) => version[..i].to_string(),
+        None => version.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_rc_suffix;
+
+    #[test]
+    fn strips_rc_suffix() {
+        assert_eq!(strip_rc_suffix("0.5.1-rc.3"), "0.5.1");
+        assert_eq!(strip_rc_suffix("0.5.1-rc.42"), "0.5.1");
+        assert_eq!(strip_rc_suffix("0.5.1"), "0.5.1");
+        assert_eq!(strip_rc_suffix("1.0.0"), "1.0.0");
     }
 }
 

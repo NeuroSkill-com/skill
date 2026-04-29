@@ -226,10 +226,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggleDesc":
     "Agrandit ou réduit la fenêtre principale pour correspondre au contenu du tableau de bord, limité à la hauteur de l'écran.",
 
+  "settings.reopenOnboarding": "Configuration initiale",
+  "settings.reopenOnboardingDesc":
+    "Rouvre l'assistant de configuration pour revoir le Bluetooth, la calibration, le téléchargement des modèles et l'étape facultative des permissions de suivi d'activité.",
+  "settings.reopenOnboardingBtn": "Rouvrir l'assistant",
+
   "settings.activityTracking": "Suivi d'activité",
+  "settings.activityTrackingIntro":
+    "Tout ceci est facultatif et désactivé par défaut (sauf clavier & souris, qui ne nécessite aucune permission). Cela ajoute du contexte à vos données EEG/concentration pour voir sur quoi vous travailliez lors d'une baisse d'attention ou d'un état de flow. Tout ce qui suit est enregistré uniquement sur cet ordinateur, écrit dans activity.sqlite, et n'est jamais envoyé à un serveur — ni à NeuroSkill, ni à personne. Vous pouvez désactiver chaque option à tout moment ; les données enregistrées restent sur le disque jusqu'à ce que vous les supprimiez.",
   "settings.activeWindowToggle": "Suivre la fenêtre active",
   "settings.activeWindowToggleDesc":
-    "Enregistrer quelle application et quelle fenêtre est au premier plan. Stocké localement dans activity.sqlite, jamais transmis.",
+    "Enregistre quelle application et fenêtre sont au premier plan, ainsi que le titre de l'onglet de navigateur actif (Chrome, Safari, Firefox, Edge) et le chemin du fichier ouvert dans des éditeurs comme VS Code. Pourquoi c'est utile : permet de corréler votre état de concentration avec ce que vous faisiez réellement — \"j'ai perdu le focus en écrivant cette PR\" plutôt que simplement \"j'ai perdu le focus à 15 h\". Permission requise : macOS demandera l'accès Accessibilité / Automatisation pour chaque navigateur et éditeur interrogé — c'est normal. Confidentialité : noms d'applications, titres de fenêtres et chemins sont stockés localement dans activity.sqlite et jamais transmis.",
   "settings.activeWindowCurrent": "Fenêtre actuelle",
   "settings.activeWindowApp": "Application",
   "settings.activeWindowPath": "Chemin",
@@ -239,7 +246,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "Aucune fenêtre active détectée",
   "settings.inputActivityToggle": "Suivre l'activité clavier et souris",
   "settings.inputActivityToggleDesc":
-    "Enregistrer l'activité clavier et souris à la seconde près. Aucune permission spéciale requise. Stocké dans activity.sqlite.",
+    'Enregistre quand le clavier ou la souris ont été utilisés pour la dernière fois, à la seconde près — jamais quelles touches, jamais les positions du curseur, jamais le contenu. Pourquoi c\'est utile : distingue "focus profond" de "absent du clavier" pour que votre score de concentration EEG ne soit pas faussé par les pauses. Permission requise : aucune — utilise une API système de temps d\'inactivité qui ne nécessite aucun accès Accessibilité. Confidentialité : seuls les horodatages sont stockés, localement dans activity.sqlite, jamais transmis.',
   "settings.inputActivityKeyboard": "Dernier clavier",
   "settings.inputActivityMouse": "Dernière souris",
   "settings.inputActivityNever": "jamais",
@@ -247,10 +254,18 @@ const settings: Record<string, string> = {
   "settings.inputActivityNoData": "Déplacez la souris ou appuyez sur une touche pour vérifier que le suivi fonctionne.",
   "settings.inputActivityPermNote":
     "Aucune permission spéciale requise - utilise une API système de temps d'inactivité qui fonctionne sans accès Accessibilité.",
+  "settings.fileActivityToggle": "Suivre les modifications de fichiers",
+  "settings.fileActivityToggleDesc":
+    "Surveille vos dossiers de développement / documents habituels (Documents, Bureau, Téléchargements, Projects, Developer, code, src) et enregistre les événements création / modification / suppression avec horodatage et chemins. Pourquoi c'est utile : vous montre ce que vous avez réellement enregistré ou téléchargé pendant un bloc de concentration, et vous permet de chercher l'historique par « le fichier modifié vers 15 h ». Permission requise : macOS peut demander un Accès complet au disque pour surveiller certains dossiers. Confidentialité : seuls les chemins et horodatages d'événements sont stockés — le contenu des fichiers n'est jamais lu ni copié — localement dans activity.sqlite, jamais transmis.",
   "settings.activityDb": "Stocké dans activity.sqlite",
   "settings.clipboardToggle": "Suivre l'activité du presse-papiers",
   "settings.clipboardToggleDesc":
-    "Enregistrer les changements du presse-papiers (métadonnées uniquement — le contenu n'est jamais stocké). Suit quelle app a copié, le type et la taille du contenu. macOS uniquement.",
+    "Enregistre quand le presse-papiers change — quelle app a copié, le type de contenu et sa taille. Le contenu du presse-papiers lui-même n'est jamais lu ni stocké. Pourquoi c'est utile : les rafales de copier/coller sont un signal fort de changement de contexte, et les associer à l'EEG peut révéler quand jongler entre les sources brise votre flow. Permission requise : macOS demandera un accès Automatisation pour lire les métadonnées du presse-papiers. Confidentialité : seules les métadonnées sont stockées, localement dans activity.sqlite, jamais transmises. macOS uniquement.",
+  "settings.screenshotsToggle": "Prendre des captures d'écran périodiques",
+  "settings.locationToggle": "Suivre la localisation",
+  "settings.calendarToggle": "Suivre les événements du calendrier",
+  "settings.calendarToggleDesc":
+    "Lit les métadonnées de vos événements de calendrier à venir et récents (titre, heure, durée, nombre de participants) afin que l'app puisse corréler les baisses de concentration avec la densité de réunions. Pourquoi c'est utile : montre si des réunions enchaînées érodent vos blocs de travail profond. Permission requise : macOS affichera une demande d'Accès au Calendrier la première fois. Confidentialité : les événements sont lus à la demande, seuls des comptages agrégés sont enregistrés dans activity.sqlite, rien n'est transmis.",
   "settings.clipboardPermDenied": "Permission d'automatisation non accordée.",
   "settings.clipboardPermAction": "Cliquez pour ouvrir les Réglages Système et autoriser l'accès au presse-papiers.",
 
@@ -761,23 +776,30 @@ const settings: Record<string, string> = {
   "settingsTabs.extensions": "Extensions",
   "extensions.ideTitle": "Extensions IDE",
   "extensions.browserTitle": "Extensions de navigateur",
-  "extensions.browserDesc": "Suivez vos habitudes de navigation et corrélez-les avec l'état cérébral EEG. Toutes les données restent sur votre machine.",
+  "extensions.browserDesc":
+    "Suivez vos habitudes de navigation et corrélez-les avec l'état cérébral EEG. Toutes les données restent sur votre machine.",
   "extensions.vscode": "VS Code",
-  "extensions.vscodeDesc": "Commandes du terminal, suggestions IA, boucles de développement et suivi de l'activité des fichiers.",
+  "extensions.vscodeDesc":
+    "Commandes du terminal, suggestions IA, boucles de développement et suivi de l'activité des fichiers.",
   "extensions.chrome": "Chrome",
-  "extensions.chromeDesc": "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
+  "extensions.chromeDesc":
+    "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
   "extensions.firefox": "Firefox",
-  "extensions.firefoxDesc": "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
+  "extensions.firefoxDesc":
+    "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
   "extensions.safari": "Safari",
-  "extensions.safariDesc": "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
+  "extensions.safariDesc":
+    "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche.",
   "extensions.installed": "Installé",
   "extensions.install": "Installer",
   "extensions.reinstall": "Réinstaller",
   "extensions.installing": "Installation…",
-  "extensions.noIdeDetected": "Aucun éditeur basé sur VS Code détecté. Installez VS Code, VSCodium, Cursor, Windsurf ou un autre éditeur basé sur VS Code pour installer l'extension.",
+  "extensions.noIdeDetected":
+    "Aucun éditeur basé sur VS Code détecté. Installez VS Code, VSCodium, Cursor, Windsurf ou un autre éditeur basé sur VS Code pour installer l'extension.",
   "extensions.openStore": "Store",
   "extensions.pairingTitle": "Appairage de l'extension navigateur",
-  "extensions.pairingDesc": "Copiez votre auth token et collez-le dans les paramètres de l'extension navigateur pour l'appairer.",
+  "extensions.pairingDesc":
+    "Copiez votre auth token et collez-le dans les paramètres de l'extension navigateur pour l'appairer.",
   "extensions.copyToken": "Copier l'auth token",
   "extensions.tokenCopied": "Token copié dans le presse-papiers",
   "extensions.tokenFailed": "Impossible de copier le token",
@@ -788,8 +810,37 @@ const settings: Record<string, string> = {
   "extensions.pairingFailed": "Impossible de générer le lien d'appairage",
   "extensions.pairingInProgress": "Ouverture…",
   "extensions.copyPairingToken": "Copier le token d'appairage",
-  "extensions.copyPairingTokenHint": "Recommandé : ouvrir le popup de l'extension → appairage automatique depuis le presse-papiers",
+  "extensions.copyPairingTokenHint":
+    "Recommandé : ouvrir le popup de l'extension → appairage automatique depuis le presse-papiers",
   "extensions.clipboardPairCopied": "Token copié. Ouvrez le popup de l'extension — l'appairage sera automatique.",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc":
+    "Activité des onglets, habitudes de lecture, profondeur de défilement et comportement de recherche. (Utilise la version Chrome.)",
+  "extensions.allowUnsigned": "Autoriser non signées",
+  "activity.browserTitle": "Activité du navigateur",
+  "activity.browserFocus": "Concentration par domaine",
+  "activity.browserDistraction": "Score de distraction",
+  "activity.browserContent": "Répartition du contenu",
+  "activity.browserResearch": "Schémas de recherche",
+  "activity.browserLlm": "Utilisation du chat IA",
+  "activity.browserDomains": "Principaux domaines",
+  "activity.browserNoData":
+    "Pas encore de données de navigateur — installez l'extension de navigateur pour commencer le suivi.",
+  "activity.distractionLow": "Concentré",
+  "activity.distractionMedium": "Modéré",
+  "activity.distractionHigh": "Distrait",
+  "activity.searches": "recherches",
+  "activity.refinementRate": "taux d'affinement",
+  "activity.revisits": "revisites",
+  "activity.stuck": "Possiblement bloqué",
+  "activity.notStuck": "Recherche productive",
+  "activity.tabSwitchesPerMin": "changements d'onglet/min",
+  "activity.socialPct": "% social",
+  "activity.productivePct": "productif %",
+  "activity.totalReadingTime": "temps de lecture",
+  "activity.avgScrollDepth": "profondeur moy.",
 };
 
 export default settings;

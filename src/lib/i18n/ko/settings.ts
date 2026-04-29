@@ -427,10 +427,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggle": "대시보드 높이 자동 맞춤",
   "settings.autoFitToggleDesc": "대시보드 콘텐츠에 맞게 메인 창을 확장/축소합니다. 화면 높이로 제한.",
 
+  "settings.reopenOnboarding": "초기 설정",
+  "settings.reopenOnboardingDesc":
+    "처음 실행 설정 마법사를 다시 열어 Bluetooth, 보정, 모델 다운로드 및 선택적 활동 추적 권한 단계를 다시 진행합니다.",
+  "settings.reopenOnboardingBtn": "마법사 다시 열기",
+
   "settings.activityTracking": "활동 추적",
+  "settings.activityTrackingIntro":
+    "아래 항목은 모두 선택 사항이며 기본적으로 꺼져 있습니다(권한이 필요 없는 키보드 및 마우스 제외). EEG/집중 데이터에 맥락을 추가하여 집중력이 떨어지거나 몰입 상태일 때 무엇을 작업하고 있었는지 확인할 수 있습니다. 아래 모든 항목은 이 컴퓨터에만 기록되어 activity.sqlite에 저장되며 어떤 서버에도 — NeuroSkill에도, 다른 누구에게도 — 전송되지 않습니다. 언제든 각 항목을 끌 수 있으며, 기록된 데이터는 삭제할 때까지 디스크에 남아 있습니다.",
   "settings.activeWindowToggle": "활성 창 추적",
   "settings.activeWindowToggleDesc":
-    "어떤 앱과 창이 포커스에 있는지 기록합니다. activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.",
+    '어떤 앱과 창이 포커스 중인지, 그리고 활성 브라우저 탭 제목(Chrome, Safari, Firefox, Edge)과 VS Code 같은 편집기에서 열린 파일 경로를 기록합니다. 유용한 이유: 집중 상태를 실제로 하던 일과 연결할 수 있습니다 — 단순히 "오후 3시에 집중력이 떨어졌다"가 아니라 "이 PR을 작성하다가 집중력을 잃었다"고 알 수 있습니다. 필요한 권한: macOS가 조회하는 각 브라우저와 편집기에 대해 손쉬운 사용 / 자동화 접근을 요청합니다 — 이는 정상입니다. 개인정보: 캡처된 앱 이름, 창 제목, 경로는 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.',
   "settings.activeWindowCurrent": "현재 창",
   "settings.activeWindowApp": "앱",
   "settings.activeWindowPath": "경로",
@@ -440,7 +447,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "활성 창이 감지되지 않음",
   "settings.inputActivityToggle": "키보드 & 마우스 활동 추적",
   "settings.inputActivityToggleDesc":
-    "키보드와 마우스가 사용된 시간을 초 단위로 기록합니다. 특별한 OS 권한이 필요하지 않습니다. activity.sqlite에 로컬로 저장됩니다.",
+    '키보드 또는 마우스가 마지막으로 사용된 시점을 초 단위로 기록합니다 — 어떤 키였는지, 커서 위치, 내용은 절대 기록하지 않습니다. 유용한 이유: "깊은 집중"과 "키보드에서 떨어진 상태"를 구분하여 EEG 집중 점수가 휴식 시간으로 인해 왜곡되지 않게 합니다. 필요한 권한: 없음 — 손쉬운 사용 접근 없이 작동하는 OS 내장 유휴 시간 API를 사용합니다. 개인정보: 타임스탬프만 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.',
   "settings.inputActivityKeyboard": "마지막 키보드",
   "settings.inputActivityMouse": "마지막 마우스",
   "settings.inputActivityNever": "없음",
@@ -448,10 +455,18 @@ const settings: Record<string, string> = {
   "settings.inputActivityNoData": "추적이 작동하는지 확인하려면 마우스를 움직이거나 키를 누르세요.",
   "settings.inputActivityPermNote":
     "특별한 권한이 필요 없음 — 손쉬운 사용 접근 없이 작동하는 내장 OS 유휴 시간 API를 사용합니다.",
+  "settings.fileActivityToggle": "파일 변경 추적",
+  "settings.fileActivityToggleDesc":
+    '자주 사용하는 개발/문서 폴더(Documents, Desktop, Downloads, Projects, Developer, code, src)를 감시하고 생성/수정/삭제 이벤트를 타임스탬프와 경로와 함께 기록합니다. 유용한 이유: 집중 블록 동안 실제로 저장하거나 다운로드한 파일이 무엇인지 보여주며, "오후 3시쯤 편집한 파일" 같은 방식으로 기록을 검색할 수 있습니다. 필요한 권한: macOS는 일부 폴더를 감시하기 위해 전체 디스크 접근을 요청할 수 있습니다. 개인정보: 경로와 이벤트 타임스탬프만 저장되며 — 파일 내용은 절대 읽거나 복사되지 않음 — activity.sqlite에 로컬로 저장되고 업로드되지 않습니다.',
   "settings.activityDb": "activity.sqlite에 저장됨",
   "settings.clipboardToggle": "클립보드 활동 추적",
   "settings.clipboardToggleDesc":
-    "클립보드 변경 사항을 기록합니다 (메타데이터만 — 콘텐츠는 저장되지 않음). 어떤 앱이 복사했는지, 콘텐츠 유형 및 크기를 추적합니다. macOS 전용.",
+    "클립보드가 변경되는 시점을 기록합니다 — 어떤 앱이 복사했는지, 콘텐츠 유형과 크기. 클립보드 내용 자체는 절대 읽거나 저장하지 않습니다. 유용한 이유: 잦은 복사/붙여넣기는 컨텍스트 전환의 강한 신호이며, EEG와 결합하면 여러 출처를 오가는 것이 몰입을 깨뜨리는 시점을 보여줄 수 있습니다. 필요한 권한: macOS는 클립보드 메타데이터를 읽기 위해 자동화 접근을 요청합니다. 개인정보: 메타데이터만 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다. macOS 전용.",
+  "settings.screenshotsToggle": "주기적으로 스크린샷 촬영",
+  "settings.locationToggle": "위치 추적",
+  "settings.calendarToggle": "캘린더 이벤트 추적",
+  "settings.calendarToggleDesc":
+    "다가오는 캘린더 이벤트와 최근 이벤트의 메타데이터(제목, 시간, 지속 시간, 참석자 수)를 읽어 앱이 집중력 저하를 회의 밀도와 연관시킬 수 있도록 합니다. 유용한 이유: 연이은 회의가 깊은 작업 블록을 침식하는지 보여줍니다. 필요한 권한: macOS는 처음 조회할 때 캘린더 접근 프롬프트를 표시합니다. 개인정보: 이벤트는 요청 시 읽히고, 집계 카운트만 activity.sqlite에 저장되며 아무것도 업로드되지 않습니다.",
   "settings.clipboardPermDenied": "자동화 권한이 부여되지 않았습니다.",
   "settings.clipboardPermAction": "클릭하여 시스템 설정을 열고 클립보드 접근을 허용하세요.",
 
@@ -717,7 +732,8 @@ const settings: Record<string, string> = {
   "settingsTabs.extensions": "확장 프로그램",
   "extensions.ideTitle": "IDE 확장 프로그램",
   "extensions.browserTitle": "브라우저 확장 프로그램",
-  "extensions.browserDesc": "브라우징 패턴을 추적하고 EEG 뇌 상태와 상관관계를 분석합니다. 모든 데이터는 사용자의 기기에 저장됩니다.",
+  "extensions.browserDesc":
+    "브라우징 패턴을 추적하고 EEG 뇌 상태와 상관관계를 분석합니다. 모든 데이터는 사용자의 기기에 저장됩니다.",
   "extensions.vscode": "VS Code",
   "extensions.vscodeDesc": "터미널 명령, AI 제안, 개발 루프 및 파일 활동 추적.",
   "extensions.chrome": "Chrome",
@@ -730,7 +746,8 @@ const settings: Record<string, string> = {
   "extensions.install": "설치",
   "extensions.reinstall": "재설치",
   "extensions.installing": "설치 중…",
-  "extensions.noIdeDetected": "VS Code 계열 에디터가 감지되지 않았습니다. VS Code, VSCodium, Cursor, Windsurf 등 VS Code 기반 에디터를 설치하면 확장을 설치할 수 있습니다.",
+  "extensions.noIdeDetected":
+    "VS Code 계열 에디터가 감지되지 않았습니다. VS Code, VSCodium, Cursor, Windsurf 등 VS Code 기반 에디터를 설치하면 확장을 설치할 수 있습니다.",
   "extensions.openStore": "스토어",
   "extensions.pairingTitle": "브라우저 확장 프로그램 페어링",
   "extensions.pairingDesc": "auth token을 복사하여 브라우저 확장 프로그램 설정에 붙여넣으면 페어링됩니다.",
@@ -746,6 +763,32 @@ const settings: Record<string, string> = {
   "extensions.copyPairingToken": "페어링 토큰 복사",
   "extensions.copyPairingTokenHint": "권장: 확장 프로그램 팝업 열기 → 클립보드에서 자동 페어링",
   "extensions.clipboardPairCopied": "토큰이 복사되었습니다. 확장 프로그램 팝업을 여세요 — 자동으로 페어링됩니다.",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc": "탭 활동, 읽기 패턴, 스크롤 깊이 및 검색 행동. (Chrome 빌드를 사용합니다.)",
+  "extensions.allowUnsigned": "서명되지 않은 항목 허용",
+  "activity.browserTitle": "브라우저 활동",
+  "activity.browserFocus": "도메인별 집중도",
+  "activity.browserDistraction": "산만도 점수",
+  "activity.browserContent": "콘텐츠 분석",
+  "activity.browserResearch": "리서치 패턴",
+  "activity.browserLlm": "AI 채팅 사용량",
+  "activity.browserDomains": "상위 도메인",
+  "activity.browserNoData": "아직 브라우저 데이터가 없습니다 — 추적을 시작하려면 브라우저 확장 프로그램을 설치하세요.",
+  "activity.distractionLow": "집중",
+  "activity.distractionMedium": "보통",
+  "activity.distractionHigh": "산만",
+  "activity.searches": "검색",
+  "activity.refinementRate": "검색 정제 비율",
+  "activity.revisits": "재방문",
+  "activity.stuck": "막힌 듯함",
+  "activity.notStuck": "생산적인 리서치",
+  "activity.tabSwitchesPerMin": "탭 전환/분",
+  "activity.socialPct": "소셜 %",
+  "activity.productivePct": "생산적 %",
+  "activity.totalReadingTime": "읽기 시간",
+  "activity.avgScrollDepth": "평균 스크롤 깊이",
 };
 
 export default settings;

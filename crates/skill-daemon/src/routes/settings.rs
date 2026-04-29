@@ -266,6 +266,10 @@ pub fn router() -> Router<AppState> {
             "/activity/tracking/clipboard",
             get(get_clipboard_tracking).post(set_clipboard_tracking),
         )
+        .route(
+            "/activity/tracking/calendar",
+            get(get_calendar_tracking).post(set_calendar_tracking),
+        )
         .route("/activity/current-window", get(get_current_active_window))
         .route("/activity/last-input", get(get_last_input_activity))
         .route("/activity/latest-bands", get(get_latest_bands))
@@ -1503,6 +1507,21 @@ async fn set_clipboard_tracking(
 ) -> Json<serde_json::Value> {
     let mut settings = load_user_settings(&state);
     settings.track_clipboard = req.value;
+    save_user_settings(&state, &settings);
+    Json(serde_json::json!({"value": req.value}))
+}
+
+async fn get_calendar_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let settings = load_user_settings(&state);
+    Json(serde_json::json!({"value": settings.track_calendar}))
+}
+
+async fn set_calendar_tracking(
+    State(state): State<AppState>,
+    Json(req): Json<BoolValueRequest>,
+) -> Json<serde_json::Value> {
+    let mut settings = load_user_settings(&state);
+    settings.track_calendar = req.value;
     save_user_settings(&state, &settings);
     Json(serde_json::json!({"value": req.value}))
 }

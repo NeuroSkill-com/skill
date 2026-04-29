@@ -256,6 +256,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
 
     // UI preferences
     data.onboarding_complete = s.ui.onboarding_complete;
+    data.onboarding_completed_version = s.ui.onboarding_completed_version;
     data.last_seen_whats_new_version = s.ui.last_seen_whats_new_version.clone();
     data.theme = s.ui.theme.clone();
     data.language = s.ui.language.clone();

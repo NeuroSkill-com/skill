@@ -466,10 +466,17 @@ const settings: Record<string, string> = {
   "settings.autoFitToggleDesc":
     "Expande o contrae la ventana principal para ajustarse al contenido del panel, limitado a la altura de la pantalla.",
 
+  "settings.reopenOnboarding": "Configuración inicial",
+  "settings.reopenOnboardingDesc":
+    "Reabre el asistente de configuración inicial para revisar Bluetooth, calibración, descarga de modelos y el paso opcional de permisos de seguimiento de actividad.",
+  "settings.reopenOnboardingBtn": "Reabrir asistente",
+
   "settings.activityTracking": "Seguimiento de actividad",
+  "settings.activityTrackingIntro":
+    "Todo esto es opcional y está desactivado de forma predeterminada (excepto teclado y ratón, que no requiere permisos). Aporta contexto a tus datos de EEG/concentración para que veas en qué estabas trabajando durante una caída de foco o un estado de flujo. Todo lo de abajo se registra solo en este ordenador, se escribe en activity.sqlite y nunca se envía a ningún servidor — ni a NeuroSkill, ni a nadie. Puedes desactivar cada opción en cualquier momento; los datos registrados permanecen en disco hasta que los borres.",
   "settings.activeWindowToggle": "Seguimiento de ventana activa",
   "settings.activeWindowToggleDesc":
-    "Registre qué aplicación y ventana están enfocadas. Almacenado localmente en Activity.sqlite, nunca cargado.",
+    'Registra qué aplicación y ventana están en primer plano, además del título de la pestaña activa del navegador (Chrome, Safari, Firefox, Edge) y la ruta del archivo abierto en editores como VS Code. Por qué es útil: te permite correlacionar tu estado de concentración con lo que estabas haciendo realmente — "perdí el foco escribiendo este PR" en lugar de solo "perdí el foco a las 3 pm". Permiso necesario: macOS pedirá acceso de Accesibilidad / Automatización para cada navegador y editor consultado — es normal. Privacidad: los nombres de apps, títulos de ventana y rutas se almacenan localmente en activity.sqlite y nunca se cargan.',
   "settings.activeWindowCurrent": "Ventana actual",
   "settings.activeWindowApp": "Aplicación",
   "settings.activeWindowPath": "Ruta",
@@ -479,7 +486,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "No se detectó ninguna ventana activa",
   "settings.inputActivityToggle": "Seguimiento de la actividad del teclado y el mouse",
   "settings.inputActivityToggleDesc":
-    "Registre cuándo se utilizan el teclado y el mouse, por segundo. No se requieren permisos especiales del sistema operativo. Almacenado localmente en Activity.sqlite.",
+    'Registra cuándo se usaron por última vez el teclado o el ratón, segundo a segundo — nunca qué teclas, nunca posiciones del cursor, nunca contenido. Por qué es útil: distingue "foco profundo" de "lejos del teclado" para que tu puntuación de concentración EEG no se distorsione por las pausas. Permiso necesario: ninguno — usa una API de tiempo de inactividad incorporada en el sistema operativo, sin necesidad de Accesibilidad. Privacidad: solo se almacenan marcas de tiempo, localmente en activity.sqlite, nunca cargadas.',
   "settings.inputActivityKeyboard": "Último teclado",
   "settings.inputActivityMouse": "Último ratón",
   "settings.inputActivityNever": "nunca",
@@ -488,10 +495,18 @@ const settings: Record<string, string> = {
     "Mueva el mouse o presione una tecla para verificar que el seguimiento esté funcionando.",
   "settings.inputActivityPermNote":
     "No se requieren permisos especiales: utiliza una API de tiempo de inactividad incorporada en el sistema operativo que funciona sin acceso de Accesibilidad.",
+  "settings.fileActivityToggle": "Rastrear cambios de archivos",
+  "settings.fileActivityToggleDesc":
+    'Vigila tus carpetas habituales de desarrollo / documentos (Documentos, Escritorio, Descargas, Projects, Developer, code, src) y registra eventos de creación / modificación / eliminación con marcas de tiempo y rutas. Por qué es útil: te muestra qué archivos guardaste o descargaste realmente durante un bloque de concentración y te permite buscar el historial por "el archivo que edité hacia las 3 pm". Permiso necesario: macOS puede pedir Acceso completo al disco para vigilar algunas carpetas. Privacidad: solo se almacenan rutas y marcas de tiempo de eventos — el contenido de los archivos nunca se lee ni se copia — localmente en activity.sqlite, nunca cargado.',
   "settings.activityDb": "Almacenado en Activity.sqlite",
   "settings.clipboardToggle": "Rastrear actividad del portapapeles",
   "settings.clipboardToggleDesc":
-    "Registrar cambios del portapapeles (solo metadatos — el contenido nunca se almacena). Rastrea qué app copió, tipo de contenido y tamaño. Solo macOS.",
+    "Registra cuándo cambia el portapapeles — qué app copió, el tipo de contenido y su tamaño. El contenido del portapapeles nunca se lee ni se almacena. Por qué es útil: las ráfagas de copiar/pegar son una señal fuerte de cambio de contexto, y combinarlas con el EEG puede mostrar cuándo malabarear fuentes está rompiendo tu concentración. Permiso necesario: macOS pedirá acceso de Automatización para leer los metadatos del portapapeles. Privacidad: solo se almacenan metadatos, localmente en activity.sqlite, nunca cargados. Solo macOS.",
+  "settings.screenshotsToggle": "Tomar capturas de pantalla periódicas",
+  "settings.locationToggle": "Rastrear ubicación",
+  "settings.calendarToggle": "Rastrear eventos del calendario",
+  "settings.calendarToggleDesc":
+    "Lee los metadatos de tus eventos próximos y recientes del calendario (título, hora, duración, cantidad de asistentes) para que la app pueda correlacionar caídas de concentración con la densidad de reuniones. Por qué es útil: muestra si reuniones consecutivas están erosionando tus bloques de trabajo profundo. Permiso necesario: macOS mostrará un aviso de acceso al Calendario la primera vez que se consulte. Privacidad: los eventos se leen bajo demanda y solo se guardan recuentos agregados en activity.sqlite, nada se carga.",
   "settings.clipboardPermDenied": "Permiso de automatización no concedido.",
   "settings.clipboardPermAction": "Haz clic para abrir Configuración del Sistema y permitir el acceso al portapapeles.",
 
@@ -760,20 +775,26 @@ const settings: Record<string, string> = {
   "settingsTabs.extensions": "Extensiones",
   "extensions.ideTitle": "Extensiones de IDE",
   "extensions.browserTitle": "Extensiones de navegador",
-  "extensions.browserDesc": "Rastrea patrones de navegación y correlácionlos con el estado cerebral EEG. Todos los datos permanecen en tu máquina.",
+  "extensions.browserDesc":
+    "Rastrea patrones de navegación y correlácionlos con el estado cerebral EEG. Todos los datos permanecen en tu máquina.",
   "extensions.vscode": "VS Code",
-  "extensions.vscodeDesc": "Comandos de terminal, sugerencias de IA, bucles de desarrollo y seguimiento de actividad de archivos.",
+  "extensions.vscodeDesc":
+    "Comandos de terminal, sugerencias de IA, bucles de desarrollo y seguimiento de actividad de archivos.",
   "extensions.chrome": "Chrome",
-  "extensions.chromeDesc": "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
+  "extensions.chromeDesc":
+    "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
   "extensions.firefox": "Firefox",
-  "extensions.firefoxDesc": "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
+  "extensions.firefoxDesc":
+    "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
   "extensions.safari": "Safari",
-  "extensions.safariDesc": "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
+  "extensions.safariDesc":
+    "Actividad de pestañas, patrones de lectura, profundidad de scroll y comportamiento de búsqueda.",
   "extensions.installed": "Instalado",
   "extensions.install": "Instalar",
   "extensions.reinstall": "Reinstalar",
   "extensions.installing": "Instalando…",
-  "extensions.noIdeDetected": "No se detectó ningún editor basado en VS Code. Instala VS Code, VSCodium, Cursor, Windsurf u otro editor basado en VS Code para poder instalar la extensión.",
+  "extensions.noIdeDetected":
+    "No se detectó ningún editor basado en VS Code. Instala VS Code, VSCodium, Cursor, Windsurf u otro editor basado en VS Code para poder instalar la extensión.",
   "extensions.openStore": "Tienda",
   "extensions.pairingTitle": "Emparejar extensión del navegador",
   "extensions.pairingDesc": "Copia tu auth token y pégalo en los ajustes de la extensión del navegador para emparejar.",
@@ -787,8 +808,37 @@ const settings: Record<string, string> = {
   "extensions.pairingFailed": "No se pudo generar el enlace de emparejamiento",
   "extensions.pairingInProgress": "Abriendo…",
   "extensions.copyPairingToken": "Copiar token de emparejamiento",
-  "extensions.copyPairingTokenHint": "Recomendado: abre el popup de la extensión → se empareja automáticamente desde el portapapeles",
+  "extensions.copyPairingTokenHint":
+    "Recomendado: abre el popup de la extensión → se empareja automáticamente desde el portapapeles",
   "extensions.clipboardPairCopied": "Token copiado. Abre el popup de la extensión — se emparejará automáticamente.",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "extensions.edge": "Microsoft Edge",
+  "extensions.edgeDesc":
+    "Actividad de pestañas, patrones de lectura, profundidad de desplazamiento y comportamiento de búsqueda. (Usa la versión de Chrome.)",
+  "extensions.allowUnsigned": "Permitir sin firmar",
+  "activity.browserTitle": "Actividad del navegador",
+  "activity.browserFocus": "Concentración por dominio",
+  "activity.browserDistraction": "Puntuación de distracción",
+  "activity.browserContent": "Desglose de contenido",
+  "activity.browserResearch": "Patrones de investigación",
+  "activity.browserLlm": "Uso del chat de IA",
+  "activity.browserDomains": "Dominios principales",
+  "activity.browserNoData":
+    "Aún no hay datos del navegador — instala la extensión del navegador para empezar a registrar.",
+  "activity.distractionLow": "Concentrado",
+  "activity.distractionMedium": "Moderado",
+  "activity.distractionHigh": "Distraído",
+  "activity.searches": "búsquedas",
+  "activity.refinementRate": "tasa de refinamiento",
+  "activity.revisits": "revisitas",
+  "activity.stuck": "Posiblemente atascado",
+  "activity.notStuck": "Investigación productiva",
+  "activity.tabSwitchesPerMin": "cambios de pestaña/min",
+  "activity.socialPct": "% social",
+  "activity.productivePct": "% productivo",
+  "activity.totalReadingTime": "tiempo de lectura",
+  "activity.avgScrollDepth": "profundidad media",
 };
 
 export default settings;

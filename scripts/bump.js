@@ -3,6 +3,7 @@ import { execSync, spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
+import { bumpVersion, validateVersion } from "./version-utils.mjs";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -14,21 +15,8 @@ function writeText(path, content) {
   writeFileSync(path, content, "utf8");
 }
 
-function bumpPatch(version) {
-  const parts = version.split(".").map(Number);
-  if (parts.length !== 3 || parts.some(Number.isNaN)) {
-    throw new Error(`Invalid version "${version}"`);
-  }
-  parts[2] += 1;
-  return parts.join(".");
-}
-
-function validateVersion(v) {
-  if (!/^\d+\.\d+\.\d+$/.test(v)) {
-    throw new Error(`Version must be in x.x.x format, got "${v}"`);
-  }
-  return v;
-}
+// Version helpers live in scripts/version-utils.mjs so bump.js, release.js,
+// and the test suite share the same implementation.
 
 function hasPkgConfig(packageName) {
   try {
@@ -524,6 +512,7 @@ function parseArgs() {
   let clean = false;
   let versionArg = null;
   let force = false;
+  let rc = false;
 
   for (const a of args) {
     if (a === "--dry-run") {
@@ -532,14 +521,22 @@ function parseArgs() {
       clean = true;
     } else if (a === "--force") {
       force = true;
+    } else if (a === "--rc") {
+      rc = true;
     } else if (a === "--help" || a === "-h") {
       console.log(`
-Usage: npm run bump [version] [--dry-run] [--clean] [--force]
+Usage: npm run bump [version] [--rc] [--dry-run] [--clean] [--force]
 
 Arguments:
-  version       Optional specific version (e.g., 1.2.3). If not provided, patches current version.
+  version       Optional specific version (e.g., 1.2.3 or 1.2.3-rc.1).
+                If not provided, derives the next version from the current one.
 
 Flags:
+  --rc          Bump to a release candidate.
+                  Stable → next-patch-rc.1   (e.g., 0.5.0 → 0.5.1-rc.1)
+                  RC     → next RC iteration (e.g., 0.5.1-rc.1 → 0.5.1-rc.2)
+                Without --rc, RC versions advance to the next stable patch
+                (e.g., 0.5.1-rc.3 → 0.5.2), starting a fresh stable cycle.
   --dry-run     Run all checks without making any changes
   --clean       Clean Rust build artifacts after successful bump
   --force       Bypass version tag check (use with caution)
@@ -556,7 +553,7 @@ Note: By default, bump will refuse to run if the current version is not tagged
     }
   }
 
-  return { dryRun, clean, versionArg, force };
+  return { dryRun, clean, versionArg, force, rc };
 }
 
 // ── auto-generate changelog fragment from git log ────────────────────────────
@@ -649,7 +646,7 @@ function generateFragmentFromGitLog(currentVersion) {
 // ── main (async) ─────────────────────────────────────────────────────────────
 
 async function main() {
-  const { dryRun, clean, versionArg, force } = parseArgs();
+  const { dryRun, clean, versionArg, force, rc } = parseArgs();
 
   // ── resolve new version ─────────────────────────────────────────────────────
 
@@ -663,7 +660,7 @@ async function main() {
     console.log("[bump] --force flag used: skipping version tag check");
   }
 
-  const newVersion = versionArg ? validateVersion(versionArg) : bumpPatch(currentVersion);
+  const newVersion = versionArg ? validateVersion(versionArg) : bumpVersion(currentVersion, { rc });
 
   // ── Prevent accidental overwrite of an existing archived release ───────────
 

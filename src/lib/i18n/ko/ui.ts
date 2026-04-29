@@ -322,6 +322,12 @@ const ui: Record<string, string> = {
   "invite.linkHint": "QR 코드를 스캔할 수 없으면 이 링크를 휴대폰에서 열어보세요",
 
   "cmdK.sectionSettings": "설정",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "updates.receivePrereleases": "프리릴리스 받기",
+  "updates.receivePrereleasesDesc":
+    "안정 릴리스 전에 릴리스 후보를 받습니다. 수동 및 백그라운드 업데이트 확인 모두 이 설정을 즉시 반영합니다.",
+  "about.rcMarker": "(RC · {commit})",
 };
 
 export default ui;

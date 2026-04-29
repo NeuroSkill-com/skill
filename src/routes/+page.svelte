@@ -1167,11 +1167,11 @@ onMount(async () => {
     const lastCheck = Number(localStorage.getItem("lastUpdateCheckUtc") || "0");
     const nowSecs = Math.floor(Date.now() / 1000);
     if (autoCheck && nowSecs - lastCheck >= 86400) {
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const update = await check();
+      // Channel-aware: route through the Rust command so the rc/stable
+      // selection takes effect immediately when the user toggles it.
+      const meta = await invoke<{ version: string } | null>("channel_check_for_update");
       localStorage.setItem("lastUpdateCheckUtc", String(nowSecs));
-      if (update) {
-        // Update available — open the updates tab so user sees it
+      if (meta) {
         await openUpdates();
       }
     }

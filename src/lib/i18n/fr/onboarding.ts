@@ -13,8 +13,21 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Calibration",
   "onboarding.step.models": "Modèles",
   "onboarding.step.tray": "Icône",
+  "onboarding.step.permissions": "Permissions",
+  "onboarding.step.extensions": "Extensions",
   "onboarding.step.enable_bluetooth": "Activer Bluetooth",
   "onboarding.step.done": "Terminé",
+  "onboarding.newBadge": "Nouveau",
+  "onboarding.fontSizeLabel": "Taille du texte",
+  "onboarding.fontSizeDecrease": "Réduire la taille du texte",
+  "onboarding.fontSizeIncrease": "Augmenter la taille du texte",
+  "onboarding.welcomeBackTitle": "Bon retour dans {app}",
+  "onboarding.whatsNewTitle": "Nouveautés depuis votre dernière configuration",
+  "onboarding.whatsNewBody":
+    "Quelques nouvelles étapes ont été ajoutées depuis votre dernière exécution de cet assistant. Votre configuration existante (Bluetooth, calibration, modèles) est inchangée — vous pouvez la parcourir rapidement. Les nouvelles étapes sont signalées ici et marquées « NOUVEAU » dans la barre de progression :",
+  "onboarding.trayHint": "Trouvez l'icône de l'app dans la barre de menus / la zone de notification",
+  "onboarding.permissionsHint": "Optionnel : autoriser la capture de l'app active, des fichiers et du presse-papiers",
+  "onboarding.extensionsHint": "Optionnel : installer les helpers VS Code, navigateur et shell",
   "onboarding.welcomeTitle": "Bienvenue dans {app}",
   "onboarding.welcomeBody":
     "{app} enregistre, analyse et indexe vos données EEG depuis tout appareil BCI pris en charge. Configurons tout en quelques étapes rapides.",
@@ -98,6 +111,44 @@ const onboarding: Record<string, string> = {
   "onboarding.tray.open": "Cliquez sur l'icône à tout moment pour afficher ou masquer le tableau de bord.",
   "onboarding.tray.menu":
     "Clic droit (ou clic gauche sous Windows/Linux) pour les actions rapides - connecter, étiqueter, calibrer, et plus.",
+  "onboarding.extensionsTitle": "Extensions complémentaires",
+  "onboarding.extensionsBody":
+    "{app} peut récupérer du contexte supplémentaire depuis votre éditeur, navigateur et terminal. Chaque intégration est indépendante : vous pouvez l'installer ou l'ignorer séparément, aucune n'est requise pour le fonctionnement EEG.",
+  "onboarding.extensionsPrivacy":
+    "Même garantie de confidentialité que pour le reste : chaque extension communique avec le démon local via un port localhost, et ces données sont écrites dans activity.sqlite sur cet ordinateur. Rien n'est envoyé à NeuroSkill ni à qui que ce soit d'autre.",
+  "onboarding.extensionsSkip":
+    "Tout est facultatif. Vous pouvez installer, mettre à jour ou supprimer chacune de ces options plus tard dans Réglages → Extensions et Réglages → Terminal.",
+  "onboarding.extensions.vscodeTitle": "Éditeur basé sur VS Code",
+  "onboarding.extensions.vscodeDesc":
+    "Ajoute le suivi d'édition par fichier, les suggestions IA en ligne et l'intégration avec la boucle de développement. Fonctionne avec VS Code, VSCodium, Cursor, Windsurf, Trae, Positron — tout fork installé est détecté automatiquement.",
+  "onboarding.extensions.browserTitle": "Extension de navigateur",
+  "onboarding.extensions.browserDesc":
+    "Enregistre l'onglet actif, le temps de focus et les habitudes de lecture du navigateur. Sideload pris en charge pour Chrome, Firefox, Edge et Safari (Safari nécessite une étape de signature supplémentaire).",
+  "onboarding.extensions.terminalTitle": "Hooks terminal / shell",
+  "onboarding.extensions.terminalDesc":
+    "Ajoute un petit hook preexec/precmd à votre shell pour que l'app puisse corréler le moment des commandes avec votre état de concentration. Choisissez zsh, bash, fish ou PowerShell — modifie votre fichier rc avec une seule ligne source, entièrement réversible plus tard.",
+
+  "onboarding.permissionsTitle": "Suivi d'activité facultatif",
+  "onboarding.permissionsBody":
+    '{app} peut enregistrer ce sur quoi vous travailliez afin de corréler vos données EEG/concentration avec le contexte réel — "j\'ai perdu le focus en écrivant cette PR" plutôt que simplement "j\'ai perdu le focus à 15 h". Désactivé par défaut et entièrement facultatif.',
+  "onboarding.permissionsPrivacy":
+    "Tout reste sur cet ordinateur. L'activité enregistrée est écrite dans un fichier local activity.sqlite et n'est jamais envoyée à un serveur — ni à NeuroSkill, ni à personne. Vous pouvez désactiver chaque option à tout moment ; les données enregistrées restent sur le disque jusqu'à ce que vous les supprimiez.",
+  "onboarding.permissionsSkip":
+    "Tout désactivé par défaut. Vous pouvez activer chacune de ces options plus tard dans Réglages → Suivi d'activité.",
+  "onboarding.permissionsActiveWindowDesc":
+    "Capture l'application au premier plan, le titre de la fenêtre, l'onglet de navigateur actif et le chemin du fichier ouvert dans l'éditeur. macOS demandera un accès Accessibilité / Automatisation pour chaque navigateur et éditeur.",
+  "onboarding.permissionsInputDesc":
+    "N'enregistre que les horodatages d'utilisation du clavier/souris — jamais quelles touches, jamais les positions, jamais le contenu. Aucune permission OS requise.",
+  "onboarding.permissionsFileDesc":
+    "Surveille Documents, Bureau, Téléchargements et les dossiers de développement habituels pour les événements création/modification/suppression. N'enregistre que chemins et horodatages — le contenu des fichiers n'est jamais lu. macOS peut demander un Accès complet au disque.",
+  "onboarding.permissionsScreenshotsDesc":
+    "Capture l'écran à intervalle régulier, applique l'OCR au texte et indexe le tout pour la recherche visuelle et les requêtes type « qu'y avait-il à l'écran à 15 h ? ». macOS demande l'Enregistrement de l'écran. Réglez l'intervalle, la qualité et l'OCR dans Réglages → Captures.",
+  "onboarding.permissionsLocationDesc":
+    "Enregistre la localisation de l'appareil avec vos blocs de concentration (maison vs bureau vs café) pour corréler les changements de lieu avec votre état de focus. macOS demande les Services de localisation. Stocké localement ; jamais transmis.",
+  "onboarding.permissionsCalendarDesc":
+    "Lit les métadonnées des événements du calendrier (titre, heure, durée, nombre de participants) pour corréler la densité de réunions avec les baisses de concentration. macOS demande l'Accès au Calendrier à la première utilisation. Le contenu des événements n'est jamais transmis.",
+  "onboarding.permissionsClipboardDesc":
+    "Enregistre les changements du presse-papiers (quelle app, type de contenu, taille). Le contenu n'est jamais lu. macOS uniquement ; demandera un accès Automatisation.",
   "onboarding.downloadsComplete": "Tous les téléchargements terminés !",
   "onboarding.downloadsCompleteBody":
     "Les modèles recommandés sont téléchargés et prêts à l'emploi. Pour télécharger d'autres modèles ou en utiliser d'autres, ouvrez",

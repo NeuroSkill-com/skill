@@ -10,7 +10,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
 import { onDestroy, onMount } from "svelte";
 import { Button } from "$lib/components/ui/button";
 import { CardContent } from "$lib/components/ui/card";
@@ -48,6 +47,11 @@ let autostartError = $state("");
 // Update-check interval (backend-persisted)
 let checkIntervalSecs = $state(3600);
 let intervalSaving = $state(false);
+
+// Update channel (backend-persisted as "stable" | "rc")
+let updateChannelRc = $state(false);
+let channelSaving = $state(false);
+let channelError = $state("");
 
 // ── Interval options ──────────────────────────────────────────────────────
 const INTERVAL_OPTIONS: [number, string][] = [
@@ -129,10 +133,20 @@ async function openOnlineDownload() {
 }
 
 // ── Core update logic ─────────────────────────────────────────────────────
+//
+// Both `check` and `downloadAndInstall` go through channel-aware Rust
+// commands so toggling the "Receive pre-releases" setting takes effect
+// immediately. Progress streams back as `update-download-progress` events
+// whose payload mirrors the JS plugin's `DownloadEvent` shape.
 
-/** Download + install a known Update object.
- *  Sets phase to "downloading" → "ready" on success, "error" on failure.  */
-async function doInstall(update: Update) {
+interface UpdateMeta {
+  version: string;
+  date?: string;
+  body?: string;
+}
+
+/** Download + install the (already-detected) update. */
+async function doInstall(_meta: UpdateMeta) {
   phase = "downloading";
   progress = 0;
   error = "";
@@ -140,23 +154,24 @@ async function doInstall(update: Update) {
   let downloaded = 0;
   let totalLength = 0;
 
-  try {
-    await update.downloadAndInstall((event) => {
-      switch (event.event) {
-        case "Started":
-          totalLength = event.data.contentLength ?? 0;
-          break;
-        case "Progress":
-          downloaded += event.data.chunkLength;
-          progress = totalLength > 0 ? Math.min(99, Math.round((downloaded / totalLength) * 100)) : 0;
-          break;
-        case "Finished":
-          progress = 100;
-          break;
+  // Listen for progress while the install runs — unlisten on completion.
+  const unlisten = await listen<{ event: string; data: { contentLength?: number; chunkLength?: number } | null }>(
+    "update-download-progress",
+    (ev) => {
+      const { event, data } = ev.payload;
+      if (event === "Started") {
+        totalLength = data?.contentLength ?? 0;
+      } else if (event === "Progress") {
+        downloaded += data?.chunkLength ?? 0;
+        progress = totalLength > 0 ? Math.min(99, Math.round((downloaded / totalLength) * 100)) : 0;
+      } else if (event === "Finished") {
+        progress = 100;
       }
-    });
+    },
+  );
 
-    // Install complete — wait for user to confirm restart.
+  try {
+    await invoke("channel_download_and_install");
     phase = "ready";
     await invoke("set_update_ready", { ready: true });
     startSessionPoll();
@@ -164,45 +179,30 @@ async function doInstall(update: Update) {
     phase = "error";
     error = `${String(e)}\n${t("updates.autoUpdateFailedOnline")}`;
     await openOnlineDownload();
+  } finally {
+    unlisten();
   }
 }
 
 /** Check the update endpoint, store the result, and immediately download
  *  if an update is found.  Safe to call when phase is "idle" or "error".
- *
- *  @param hint  Metadata pre-fetched by the background Rust task.  When
- *               present the UI keeps showing the known version while we
- *               obtain a fresh Update object (which carries download
- *               capability).  If check() then returns null — e.g. because
- *               CDN edge nodes haven't propagated latest.json yet — we
- *               surface an error instead of silently going back to "idle".
  */
-async function checkAndDownload(hint?: { version: string; date?: string; body?: string }) {
+async function checkAndDownload(hint?: UpdateMeta) {
   if (phase === "checking" || phase === "downloading" || phase === "ready") return;
 
   stopCountdown();
   phase = "checking";
   error = "";
-  // Preserve any hint metadata so the UI shows the version during the
-  // network round-trip.  Only wipe available for a manual "Check Now".
   if (!hint) available = null;
 
   try {
-    const update = await check();
+    const meta = await invoke<UpdateMeta | null>("channel_check_for_update");
     saveLastChecked();
 
-    if (update) {
-      available = {
-        version: update.version,
-        date: update.date ?? undefined,
-        body: update.body ?? undefined,
-      };
-      // Immediately start downloading — no "Download Now" click needed.
-      await doInstall(update);
+    if (meta) {
+      available = meta;
+      await doInstall(meta);
     } else if (hint) {
-      // The background task detected an update but check() now disagrees —
-      // most likely a CDN propagation race (latest.json not yet on all
-      // edges).  Surface an actionable error rather than silently dropping.
       phase = "error";
       error = `Update v${hint.version} was detected but could not be prepared (CDN may still be propagating). Click "Retry" in a moment.`;
     } else {
@@ -240,6 +240,27 @@ async function toggleAutostart() {
   }
 }
 
+// ── Update channel ────────────────────────────────────────────────────────
+//
+// Toggling here takes effect on the next *background* update poll
+// immediately. The frontend's manual "Check for updates" button uses the
+// channel that was active at app startup (Tauri's updater plugin reads
+// endpoints once during init), so a restart is required for manual checks
+// to honor the new channel.
+async function toggleChannel() {
+  channelError = "";
+  channelSaving = true;
+  const next = updateChannelRc ? "stable" : "rc";
+  try {
+    await invoke("set_update_channel", { channel: next });
+    updateChannelRc = next === "rc";
+  } catch (e) {
+    channelError = String(e);
+  } finally {
+    channelSaving = false;
+  }
+}
+
 // ── Update-check interval ─────────────────────────────────────────────────
 async function setCheckInterval(secs: number) {
   intervalSaving = true;
@@ -258,12 +279,14 @@ onMount(async () => {
   loadLastChecked();
   appVersion = await invoke<string>("get_app_version");
 
-  const [autoEnabled, intervalSecs] = await Promise.all([
+  const [autoEnabled, intervalSecs, savedChannel] = await Promise.all([
     invoke<boolean>("get_autostart_enabled").catch(() => false),
     invoke<number>("get_update_check_interval").catch(() => 3600),
+    invoke<string>("get_update_channel").catch(() => "stable"),
   ]);
   autostartEnabled = autoEnabled;
   checkIntervalSecs = intervalSecs;
+  updateChannelRc = savedChannel === "rc";
 
   unlisteners.push(
     // Background Rust task found an update — kick off download automatically.
@@ -537,6 +560,52 @@ onDestroy(() => {
       {#if autostartError}
         <div class="border-t border-border dark:border-white/[0.06] px-4 py-2">
           <span class="text-ui-sm text-red-600 dark:text-red-400 break-all">{autostartError}</span>
+        </div>
+      {/if}
+    </CardContent>
+  </SettingsCard>
+
+  <!-- ── Receive pre-releases (RC channel) ─────────────────────────────────── -->
+  <SettingsCard>
+    <CardContent class="py-0 px-0">
+      <button
+        role="switch" aria-checked={updateChannelRc}
+        aria-label="Toggle receive pre-releases"
+        onclick={toggleChannel}
+        disabled={channelSaving}
+        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
+               hover:bg-accent/50 dark:hover:bg-white/[0.02] disabled:opacity-50">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {updateChannelRc ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
+          {#if channelSaving}
+            <div class="absolute inset-0 flex items-center justify-center">
+              <svg class="w-2.5 h-2.5 text-white/80 animate-spin" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+              </svg>
+            </div>
+          {:else}
+            <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                        {updateChannelRc ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+          {/if}
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-ui-md font-semibold text-foreground leading-tight">
+            {t("updates.receivePrereleases")}
+          </span>
+          <span class="text-ui-sm text-muted-foreground leading-tight">
+            {t("updates.receivePrereleasesDesc")}
+          </span>
+        </div>
+        <span class="ml-auto text-ui-xs font-bold tracking-widest uppercase shrink-0
+                     {updateChannelRc ? 'text-emerald-500' : 'text-muted-foreground/40'}">
+          {updateChannelRc ? t("common.on") : t("common.off")}
+        </span>
+      </button>
+
+      {#if channelError}
+        <div class="border-t border-border dark:border-white/[0.06] px-4 py-2">
+          <span class="text-ui-sm text-red-600 dark:text-red-400 break-all">{channelError}</span>
         </div>
       {/if}
     </CardContent>

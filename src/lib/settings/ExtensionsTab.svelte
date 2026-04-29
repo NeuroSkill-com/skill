@@ -7,12 +7,12 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
 import { SettingsCard } from "$lib/components/ui/settings-card";
-import { CardContent } from "$lib/components/ui/card";
-import { Button } from "$lib/components/ui/button";
-import { Badge } from "$lib/components/ui/badge";
+import { t } from "$lib/i18n/index.svelte";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,12 +107,15 @@ async function installExtension(ext: ExtensionInfo): Promise<void> {
     } else {
       extMessage[ext.id] = { text: result.message, type: "error" };
     }
-  } catch (e: any) {
-    extMessage[ext.id] = { text: e.message ?? String(e), type: "error" };
+  } catch (e) {
+    extMessage[ext.id] = { text: e instanceof Error ? e.message : String(e), type: "error" };
   }
   extensions[idx].installing = false;
   // Auto-clear after 8 seconds
-  setTimeout(() => { delete extMessage[ext.id]; extMessage = { ...extMessage }; }, 8000);
+  setTimeout(() => {
+    delete extMessage[ext.id];
+    extMessage = { ...extMessage };
+  }, 8000);
 }
 
 async function openStore(ext: ExtensionInfo): Promise<void> {
@@ -123,10 +126,12 @@ async function openStore(ext: ExtensionInfo): Promise<void> {
 
 async function checkInstalled(): Promise<void> {
   try {
-    const result = await invoke<{
-      vscode?: boolean;
-      vscode_forks?: Array<{ id: string; name: string; available: boolean; installed: boolean }>;
-    } & Record<string, boolean>>("check_extensions_installed");
+    const result = await invoke<
+      {
+        vscode?: boolean;
+        vscode_forks?: Array<{ id: string; name: string; available: boolean; installed: boolean }>;
+      } & Record<string, boolean>
+    >("check_extensions_installed");
 
     // VS Code forks: keep only ones the user actually has installed (available),
     // so the UI doesn't list 7 editors for someone who runs only one.
@@ -151,9 +156,7 @@ async function checkInstalled(): Promise<void> {
       const v = (result as Record<string, boolean>)[extensions[i].id];
       if (v !== undefined) extensions[i].installed = v;
     }
-  } catch (e) {
-    console.error("checkInstalled failed:", e);
-  }
+  } catch (e) {}
 }
 
 async function installFork(fork: VsForkUI): Promise<void> {
@@ -171,12 +174,14 @@ async function installFork(fork: VsForkUI): Promise<void> {
     } else {
       extMessage[fork.id] = { text: result.message, type: "error" };
     }
-  } catch (e: any) {
-    extMessage[fork.id] = { text: e.message ?? String(e), type: "error" };
-    console.error("installFork failed:", e);
+  } catch (e) {
+    extMessage[fork.id] = { text: e instanceof Error ? e.message : String(e), type: "error" };
   }
   vsForks[idx].installing = false;
-  setTimeout(() => { delete extMessage[fork.id]; extMessage = { ...extMessage }; }, 8000);
+  setTimeout(() => {
+    delete extMessage[fork.id];
+    extMessage = { ...extMessage };
+  }, 8000);
 }
 
 async function copyAuthToken(): Promise<void> {
@@ -190,7 +195,9 @@ async function copyAuthToken(): Promise<void> {
     statusMessage = t("extensions.tokenFailed");
     statusType = "error";
   }
-  setTimeout(() => { statusMessage = ""; }, 3000);
+  setTimeout(() => {
+    statusMessage = "";
+  }, 3000);
 }
 
 /**
@@ -211,7 +218,9 @@ async function copyPairingToken(): Promise<void> {
     statusMessage = t("extensions.tokenFailed");
     statusType = "error";
   }
-  setTimeout(() => { statusMessage = ""; }, 5000);
+  setTimeout(() => {
+    statusMessage = "";
+  }, 5000);
 }
 
 let pairingInProgress = $state(false);
@@ -231,27 +240,35 @@ async function pairViaBrowser(): Promise<void> {
     statusType = "error";
   }
   pairingInProgress = false;
-  setTimeout(() => { statusMessage = ""; }, 5000);
+  setTimeout(() => {
+    statusMessage = "";
+  }, 5000);
 }
 
 /** Enable Safari's Develop menu and try to toggle "Allow Unsigned Extensions". */
 let enablingUnsigned = $state(false);
 async function enableSafariUnsignedExtensions(): Promise<void> {
   enablingUnsigned = true;
-  extMessage["safari"] = { text: "Enabling Develop menu…", type: "success" };
+  extMessage.safari = { text: "Enabling Develop menu…", type: "success" };
   try {
-    const result = await invoke<{ ok: boolean; message: string; needs_accessibility?: boolean; auto_clicked?: boolean }>(
-      "enable_safari_unsigned_extensions",
-    );
-    extMessage["safari"] = {
+    const result = await invoke<{
+      ok: boolean;
+      message: string;
+      needs_accessibility?: boolean;
+      auto_clicked?: boolean;
+    }>("enable_safari_unsigned_extensions");
+    extMessage.safari = {
       text: result.message,
       type: result.ok ? "success" : "error",
     };
-  } catch (e: any) {
-    extMessage["safari"] = { text: e.message ?? String(e), type: "error" };
+  } catch (e) {
+    extMessage.safari = { text: e instanceof Error ? e.message : String(e), type: "error" };
   }
   enablingUnsigned = false;
-  setTimeout(() => { delete extMessage["safari"]; extMessage = { ...extMessage }; }, 12000);
+  setTimeout(() => {
+    delete extMessage.safari;
+    extMessage = { ...extMessage };
+  }, 12000);
 }
 
 // Check status on mount

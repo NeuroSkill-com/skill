@@ -1,6 +1,6 @@
-# Shared Daemon Client
+### Refactor
 
-Extracted the repeated fetch + auth token + timeout pattern into a shared `DaemonClient` class used by all features.
+- **Shared `DaemonClient` for VS Code extension**: extracted the repeated `fetch` + auth-token + port-discovery + 3 s timeout pattern into one class. All features now use `client.post<T>(path, body)`. Returns `null` on failure (never throws), with `setToken()` for refresh on reconnect.
 
 ## Before
 

@@ -335,6 +335,12 @@ const ui: Record<string, string> = {
   "invite.linkHint": "Ouvrez ce lien sur le téléphone si vous ne pouvez pas scanner le code QR",
 
   "cmdK.sectionSettings": "Paramètres",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "updates.receivePrereleases": "Recevoir les versions candidates",
+  "updates.receivePrereleasesDesc":
+    "Recevez les versions candidates avant les versions stables. Les vérifications manuelles et automatiques prennent en compte ce réglage immédiatement.",
+  "about.rcMarker": "(RC · {commit})",
 };
 
 export default ui;

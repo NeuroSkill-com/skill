@@ -127,7 +127,7 @@ function copyMessage(msg: Message) {
               {t("chat.btn.startServer")}
             </button>
             <button
-              onclick={() => invoke("open_settings_window").then(() => invoke("open_model_tab")).catch(e => console.warn("[chat] open_model_tab failed:", e))}
+              onclick={() => invoke("open_model_tab").catch(e => console.warn("[chat] open_model_tab failed:", e))}
               class="px-4 py-2 rounded-xl border border-violet-500/40
                      text-violet-600 dark:text-violet-400 text-ui-md font-semibold
                      hover:bg-violet-500/10 transition-colors cursor-pointer">

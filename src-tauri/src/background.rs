@@ -192,7 +192,7 @@ fn spawn_onboarding_check(handle: &AppHandle) {
         let done = {
             let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
-            g.ui.onboarding_complete
+            g.ui.onboarding_completed_version >= skill_constants::CURRENT_ONBOARDING_VERSION
         };
         if !done {
             let _ = crate::window_cmds::open_onboarding_window(app).await;
@@ -203,16 +203,22 @@ fn spawn_onboarding_check(handle: &AppHandle) {
 fn spawn_updater_poll(handle: &AppHandle) {
     let app = handle.clone();
     tauri::async_runtime::spawn(async move {
-        use tauri_plugin_updater::UpdaterExt;
         let mut updater_platform_unsupported = false;
         tokio::time::sleep(Duration::from_secs(30)).await;
         loop {
             if updater_platform_unsupported {
                 break;
             }
-            eprintln!("[updater] running background update check");
-            match app.updater() {
-                Err(e) => eprintln!("[updater] cannot get updater: {e}"),
+            // Reconstruct the updater every iteration so toggling the
+            // "Receive pre-releases" setting takes effect on the next poll
+            // without requiring a restart.
+            let channel = crate::update_channel::read_channel(&app);
+            eprintln!(
+                "[updater] running background update check (channel: {})",
+                channel.as_str()
+            );
+            match crate::update_channel::build_updater(&app) {
+                Err(e) => eprintln!("[updater] cannot build updater: {e}"),
                 Ok(updater) => {
                     let result =
                         tokio::time::timeout(Duration::from_secs(30), updater.check()).await;

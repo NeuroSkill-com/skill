@@ -56,12 +56,16 @@ export async function daemonPut<T>(path: string, body?: unknown): Promise<T> {
   return daemonRequest<T>("PUT", path, body);
 }
 
+export async function daemonPatch<T>(path: string, body?: unknown): Promise<T> {
+  return daemonRequest<T>("PATCH", path, body);
+}
+
 export async function daemonDelete<T>(path: string, body?: unknown): Promise<T> {
   return daemonRequest<T>("DELETE", path, body);
 }
 
 async function daemonRequest<T>(
-  method: "GET" | "POST" | "PUT" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
   timeoutMs = 10_000,

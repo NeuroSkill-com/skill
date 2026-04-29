@@ -13,8 +13,21 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "校准",
   "onboarding.step.models": "模型",
   "onboarding.step.tray": "托盘",
+  "onboarding.step.permissions": "权限",
+  "onboarding.step.extensions": "扩展",
   "onboarding.step.enable_bluetooth": "启用 Bluetooth",
   "onboarding.step.done": "完成",
+  "onboarding.newBadge": "新",
+  "onboarding.fontSizeLabel": "文字大小",
+  "onboarding.fontSizeDecrease": "缩小文字",
+  "onboarding.fontSizeIncrease": "放大文字",
+  "onboarding.welcomeBackTitle": "欢迎回到 {app}",
+  "onboarding.whatsNewTitle": "自上次设置以来的新内容",
+  "onboarding.whatsNewBody":
+    '自从你上次运行此向导以来，我们添加了一些新步骤。你现有的设置（Bluetooth、校准、模型）保持不变 — 可以快速浏览。新步骤在此处标记，并在进度条中标有"新"标签：',
+  "onboarding.trayHint": "在菜单栏 / 托盘中找到应用图标",
+  "onboarding.permissionsHint": "可选：允许捕获活动应用、文件、剪贴板",
+  "onboarding.extensionsHint": "可选：安装 VS Code、浏览器和 shell 助手",
   "onboarding.welcomeTitle": "欢迎使用 {app}",
   "onboarding.welcomeBody":
     "{app} 可以记录、分析和索引来自任何受支持 BCI 设备的 EEG 数据。让我们通过几个简单的步骤完成设置。",
@@ -90,6 +103,42 @@ const onboarding: Record<string, string> = {
   "onboarding.tray.red": "红色 — Bluetooth 已关闭",
   "onboarding.tray.open": "随时点击托盘图标即可显示或隐藏主仪表板。",
   "onboarding.tray.menu": "右键点击图标（或在 Windows/Linux 上左键点击）可快速操作——连接、标注、校准等。",
+  "onboarding.extensionsTitle": "配套扩展",
+  "onboarding.extensionsBody":
+    "{app} 可以从你的编辑器、浏览器和终端中获取额外的上下文。每个集成都是可独立安装或跳过的单独组件 — EEG 功能的运行不需要其中任何一个。",
+  "onboarding.extensionsPrivacy":
+    "与其他所有内容相同的隐私保证：每个扩展通过 localhost 端口向本地守护进程报告，这些数据写入这台电脑上的 activity.sqlite。不会上传到 NeuroSkill 或其他任何人。",
+  "onboarding.extensionsSkip": "全部可选。你可以稍后在 设置 → 扩展 和 设置 → 终端 中安装、更新或移除任何扩展。",
+  "onboarding.extensions.vscodeTitle": "VS Code 系列编辑器",
+  "onboarding.extensions.vscodeDesc":
+    "添加按文件的编辑跟踪、AI 内联建议以及与开发循环的集成。适用于 VS Code、VSCodium、Cursor、Windsurf、Trae、Positron — 自动检测已安装的分支。",
+  "onboarding.extensions.browserTitle": "浏览器扩展",
+  "onboarding.extensions.browserDesc":
+    "记录浏览器中的活动标签页、页面焦点时间和阅读模式。支持 Chrome、Firefox、Edge 和 Safari 旁加载（Safari 需要额外的签名步骤）。",
+  "onboarding.extensions.terminalTitle": "终端 / Shell 钩子",
+  "onboarding.extensions.terminalDesc":
+    "向你的 shell 添加一个小的 preexec/precmd 钩子，让应用能够将命令时间与专注状态关联起来。可选 zsh、bash、fish 或 PowerShell — 在 rc 文件中只添加一行 source，之后可以完全移除。",
+
+  "onboarding.permissionsTitle": "可选的活动跟踪",
+  "onboarding.permissionsBody":
+    '{app} 可以记录你正在做什么，将 EEG／专注数据与实际上下文关联起来 — "我在写这个 PR 时分心了"，而不仅仅是"下午 3 点分心了"。默认关闭，完全可选。',
+  "onboarding.permissionsPrivacy":
+    "所有内容都保留在这台电脑上。记录的活动写入本地 activity.sqlite 文件，从不发送到任何服务器 — 不发送到 NeuroSkill，也不发送到任何人。你可以随时关闭每一项；已记录的数据会保留在磁盘上，直到你删除它。",
+  "onboarding.permissionsSkip": "默认全部关闭。你可以稍后在 设置 → 活动跟踪 中启用任何选项。",
+  "onboarding.permissionsActiveWindowDesc":
+    "捕获前台应用、窗口标题、活动浏览器标签页和编辑器中打开的文件路径。macOS 会针对每个浏览器和编辑器请求辅助功能 / 自动化访问权限。",
+  "onboarding.permissionsInputDesc":
+    "仅记录键盘／鼠标使用的时间戳 — 从不记录按了哪些键、位置或内容。无需操作系统权限。",
+  "onboarding.permissionsFileDesc":
+    "监视 Documents、Desktop、Downloads 和常用开发文件夹的创建/修改/删除事件。仅记录路径和时间戳 — 文件内容从不被读取。macOS 可能会请求完全磁盘访问权限。",
+  "onboarding.permissionsScreenshotsDesc":
+    '按间隔捕获屏幕，对文本运行 OCR，并将两者编入索引以进行视觉搜索和"下午 3 点屏幕上有什么"查询。macOS 会请求屏幕录制。在 设置 → 截屏 中调整间隔、质量和 OCR。',
+  "onboarding.permissionsLocationDesc":
+    "将设备位置与专注块一起记录（家与办公室与咖啡厅），以便将场所切换与你的专注状态相关联。macOS 会请求位置服务。本地存储，从不上传。",
+  "onboarding.permissionsCalendarDesc":
+    "读取日历事件元数据（标题、时间、持续时间、参与人数），将会议密度与专注力下降相关联。macOS 在首次使用时会请求日历访问。事件内容从不上传。",
+  "onboarding.permissionsClipboardDesc":
+    "记录剪贴板何时变化（哪个应用、内容类型、大小）。内容本身从不被读取。仅限 macOS；将请求自动化访问权限。",
   "onboarding.downloadsComplete": "所有下载已完成！",
   "onboarding.downloadsCompleteBody": "推荐模型已下载完毕，可以使用。如需下载更多模型或切换到其他模型，请打开",
   "onboarding.downloadMoreSettings": "应用设置",

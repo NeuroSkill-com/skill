@@ -1,6 +1,6 @@
-# EEG Focus Timeline Heatmap
+### UI
 
-A compact SVG sparkline in the sidebar showing focus level across the current day.
+- **EEG focus timeline heatmap**: collapsible "Focus Timeline" sidebar section renders a ~280×36 px SVG sparkline of today's EEG focus (`/brain/eeg-range`, max 120 points), color-graded green/yellow/red, with hour labels and file-name annotations at peaks/valleys (merged from `/activity/timeline`). Toggle via `neuroskill.eegHeatmap`.
 
 ## What you see
 

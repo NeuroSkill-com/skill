@@ -13,8 +13,21 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Calibración",
   "onboarding.step.models": "Modelos",
   "onboarding.step.tray": "Bandeja",
+  "onboarding.step.permissions": "Permisos",
+  "onboarding.step.extensions": "Extensiones",
   "onboarding.step.enable_bluetooth": "Habilitar Bluetooth",
   "onboarding.step.done": "Hecho",
+  "onboarding.newBadge": "Nuevo",
+  "onboarding.fontSizeLabel": "Tamaño del texto",
+  "onboarding.fontSizeDecrease": "Reducir el tamaño del texto",
+  "onboarding.fontSizeIncrease": "Aumentar el tamaño del texto",
+  "onboarding.welcomeBackTitle": "Bienvenido de nuevo a {app}",
+  "onboarding.whatsNewTitle": "Novedades desde tu última configuración",
+  "onboarding.whatsNewBody":
+    'Hemos añadido algunos pasos nuevos desde la última vez que ejecutaste este asistente. Tu configuración existente (Bluetooth, calibración, modelos) no ha cambiado — siéntete libre de revisarla rápidamente. Los nuevos pasos están marcados aquí y etiquetados como "NUEVO" en la barra de progreso:',
+  "onboarding.trayHint": "Encuentra el icono de la app en la barra de menús / bandeja",
+  "onboarding.permissionsHint": "Opcional: permitir capturar app activa, archivos y portapapeles",
+  "onboarding.extensionsHint": "Opcional: instalar ayudantes de VS Code, navegador y shell",
   "onboarding.welcomeTitle": "Bienvenido a {app}",
   "onboarding.welcomeBody":
     "{app} registra, analiza e indexa sus datos de EEG desde cualquier dispositivo BCI compatible. Vamos a configurarlo en unos pocos pasos rápidos.",
@@ -105,6 +118,44 @@ const onboarding: Record<string, string> = {
     "Haga clic en el icono de la bandeja en cualquier momento para mostrar u ocultar el panel principal.",
   "onboarding.tray.menu":
     "Haga clic derecho en el icono (o haga clic izquierdo en Windows/Linux) para realizar acciones rápidas: conectar, etiquetar, calibrar y más.",
+  "onboarding.extensionsTitle": "Extensiones complementarias",
+  "onboarding.extensionsBody":
+    "{app} puede obtener contexto adicional de tu editor, navegador y terminal. Cada integración es independiente: puedes instalarla u omitirla por separado, ninguna es obligatoria para que funcionen las funciones de EEG.",
+  "onboarding.extensionsPrivacy":
+    "Misma garantía de privacidad que el resto: cada extensión informa al daemon local por un puerto localhost, y esos datos se escriben en activity.sqlite en este ordenador. Nada se envía a NeuroSkill ni a nadie más.",
+  "onboarding.extensionsSkip":
+    "Todo es opcional. Puedes instalar, actualizar o eliminar cualquiera de estas más tarde en Ajustes → Extensiones y Ajustes → Terminal.",
+  "onboarding.extensions.vscodeTitle": "Editor basado en VS Code",
+  "onboarding.extensions.vscodeDesc":
+    "Añade seguimiento de edición por archivo, sugerencias inline de IA e integración con el bucle de desarrollo. Funciona con VS Code, VSCodium, Cursor, Windsurf, Trae, Positron — los forks instalados se detectan automáticamente.",
+  "onboarding.extensions.browserTitle": "Extensión del navegador",
+  "onboarding.extensions.browserDesc":
+    "Registra la pestaña activa, el tiempo de foco y los patrones de lectura del navegador. Carga lateral compatible con Chrome, Firefox, Edge y Safari (Safari requiere un paso de firma adicional).",
+  "onboarding.extensions.terminalTitle": "Hooks de terminal / shell",
+  "onboarding.extensions.terminalDesc":
+    "Añade un pequeño hook preexec/precmd a tu shell para que la app pueda correlacionar el momento de los comandos con tu estado de concentración. Elige zsh, bash, fish o PowerShell — modifica tu archivo rc con una sola línea source, totalmente reversible más tarde.",
+
+  "onboarding.permissionsTitle": "Seguimiento de actividad opcional",
+  "onboarding.permissionsBody":
+    '{app} puede registrar en qué estabas trabajando para correlacionar tus datos de EEG/concentración con el contexto real — "perdí el foco escribiendo este PR" en vez de solo "perdí el foco a las 3 pm". Está desactivado por defecto y es totalmente opcional.',
+  "onboarding.permissionsPrivacy":
+    "Todo permanece en este ordenador. La actividad registrada se escribe en un archivo local activity.sqlite y nunca se envía a ningún servidor — ni a NeuroSkill, ni a nadie. Puedes desactivar cada opción en cualquier momento; los datos registrados permanecen en disco hasta que los borres.",
+  "onboarding.permissionsSkip":
+    "Todo desactivado por defecto. Puedes activar cualquiera de estos más tarde en Ajustes → Seguimiento de actividad.",
+  "onboarding.permissionsActiveWindowDesc":
+    "Captura la app en primer plano, el título de la ventana, la pestaña activa del navegador y la ruta del archivo abierto en el editor. macOS pedirá acceso de Accesibilidad / Automatización para cada navegador y editor.",
+  "onboarding.permissionsInputDesc":
+    "Solo registra marcas de tiempo del uso del teclado/ratón — nunca qué teclas, nunca posiciones, nunca contenido. No requiere permisos del sistema.",
+  "onboarding.permissionsFileDesc":
+    "Vigila Documentos, Escritorio, Descargas y carpetas de desarrollo habituales para eventos de creación/modificación/eliminación. Solo registra rutas y marcas de tiempo — el contenido de los archivos nunca se lee. macOS puede pedir Acceso completo al disco.",
+  "onboarding.permissionsScreenshotsDesc":
+    'Captura la pantalla a intervalos, ejecuta OCR sobre el texto e indexa ambas cosas para búsqueda visual y consultas tipo "qué había en pantalla a las 3 pm". macOS pide Grabación de pantalla. Ajusta intervalo, calidad y OCR en Ajustes → Capturas.',
+  "onboarding.permissionsLocationDesc":
+    "Registra la ubicación del dispositivo junto con bloques de concentración (casa vs oficina vs cafetería) para correlacionar cambios de lugar con tu estado de foco. macOS pide Servicios de Ubicación. Almacenado localmente; nunca cargado.",
+  "onboarding.permissionsCalendarDesc":
+    "Lee los metadatos de eventos del calendario (título, hora, duración, cantidad de asistentes) para correlacionar densidad de reuniones con caídas de concentración. macOS pide Acceso al Calendario al primer uso. El contenido de los eventos nunca se carga.",
+  "onboarding.permissionsClipboardDesc":
+    "Registra cuándo cambia el portapapeles (qué app, tipo de contenido, tamaño). El contenido nunca se lee. Solo macOS; pedirá acceso de Automatización.",
   "onboarding.downloadsComplete": "¡Todas las descargas completas!",
   "onboarding.downloadsCompleteBody":
     "Los modelos recomendados están descargados y listos para usar. Para descargar más modelos o cambiar a otros diferentes, abra",

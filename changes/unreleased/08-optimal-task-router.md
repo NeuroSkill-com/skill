@@ -1,6 +1,6 @@
-# Optimal Task Router
+### Features
 
-Suggests task types that match the developer's current cognitive state when focus level changes significantly.
+- **Optimal Task Router**: monitors flow score every 30 s and, when it changes by >20 points, suggests an appropriate task type (refactoring/new features at high focus, code review at moderate, docs/routine at low). Debounced to one suggestion per 15 minutes. Toggle via `neuroskill.taskRouter`.
 
 ## How it works
 

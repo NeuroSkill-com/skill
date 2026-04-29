@@ -325,6 +325,12 @@ const ui: Record<string, string> = {
   "invite.linkHint": "QRコードをスキャンできない場合は、このリンクを携帯電話で開いてください",
 
   "cmdK.sectionSettings": "設定",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "updates.receivePrereleases": "プレリリースを受け取る",
+  "updates.receivePrereleasesDesc":
+    "安定版リリースより前にリリース候補を受け取ります。手動とバックグラウンドのどちらの更新チェックもこの設定を即座に反映します。",
+  "about.rcMarker": "(RC · {commit})",
 };
 
 export default ui;

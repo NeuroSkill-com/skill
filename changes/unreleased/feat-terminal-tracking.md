@@ -12,7 +12,7 @@
 - **`neuroskill terminal` CLI**: `status` (hook health per shell), `install [shell]`, `uninstall [shell]`, `commands` (recent tracked), `impact` (focus delta by category), `loops` (dev loop detection).
 - **Tauri Terminal settings tab**: per-shell install/uninstall/repair buttons with health indicators (green/yellow/red dot), recent commands preview, "How it works" documentation.
 
-### Daemon
+### Server
 
 - **`POST /v1/activity/shell-command`**: receives commands from shell hooks with command text, cwd, shell type, exit code.
 - **`POST /v1/brain/terminal-commands`**: query recent commands with exit codes, durations, categories, EEG correlation.

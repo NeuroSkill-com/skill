@@ -153,6 +153,11 @@ pub struct AppState {
     /// Short-lived pairing codes for browser extension setup.
     /// Maps code → (auth_token, expires_unix_secs).
     pub pairing_codes: Arc<Mutex<HashMap<String, (String, u64)>>>,
+    /// In-memory runtime state for the validation/research-instrument scheduler:
+    /// per-channel snoozes and "disable today" gates.  Persistent config lives
+    /// in `~/.skill/validation.sqlite`; this struct only holds ephemeral state
+    /// that should reset on daemon restart.
+    pub validation_runtime: Arc<Mutex<skill_data::validation_store::ValidationRuntime>>,
 }
 
 /// Observable state of the daemon-driven calibration session.
@@ -276,6 +281,7 @@ impl AppState {
             calibration_running: Arc::new(AtomicBool::new(false)),
             calibration_phase: Arc::new(Mutex::new(CalibrationPhaseSnapshot::default())),
             pairing_codes: Arc::new(Mutex::new(HashMap::new())),
+            validation_runtime: Arc::new(Mutex::new(skill_data::validation_store::ValidationRuntime::default())),
         }
     }
 }

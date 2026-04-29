@@ -13,8 +13,21 @@ const onboarding: Record<string, string> = {
   "onboarding.step.calibration": "Kalibrierung",
   "onboarding.step.models": "Modelle",
   "onboarding.step.tray": "Tray",
+  "onboarding.step.permissions": "Berechtigungen",
+  "onboarding.step.extensions": "Erweiterungen",
   "onboarding.step.enable_bluetooth": "Bluetooth aktivieren",
   "onboarding.step.done": "Fertig",
+  "onboarding.newBadge": "Neu",
+  "onboarding.fontSizeLabel": "Textgröße",
+  "onboarding.fontSizeDecrease": "Textgröße verkleinern",
+  "onboarding.fontSizeIncrease": "Textgröße vergrößern",
+  "onboarding.welcomeBackTitle": "Willkommen zurück bei {app}",
+  "onboarding.whatsNewTitle": "Neu seit deiner letzten Einrichtung",
+  "onboarding.whatsNewBody":
+    'Seit du den Assistenten zuletzt durchlaufen hast, sind ein paar neue Schritte hinzugekommen. Deine bestehende Einrichtung (Bluetooth, Kalibrierung, Modelle) bleibt unverändert — du kannst sie überfliegen. Die neuen Schritte sind hier markiert und in der Fortschrittsleiste mit „NEU" gekennzeichnet:',
+  "onboarding.trayHint": "Finde das App-Symbol in der Menüleiste / im Tray",
+  "onboarding.permissionsHint": "Optional: aktive App, Dateien und Zwischenablage erfassen",
+  "onboarding.extensionsHint": "Optional: VS Code-, Browser- und Shell-Helfer installieren",
   "onboarding.welcomeTitle": "Willkommen bei {app}",
   "onboarding.welcomeBody": "{app} zeichnet EEG-Daten deines BCI-Geräts auf, analysiert und indexiert sie.",
   "onboarding.bluetoothHint": "BCI-Gerät verbinden",
@@ -101,6 +114,44 @@ const onboarding: Record<string, string> = {
   "onboarding.tray.open": "Klicke jederzeit auf das Tray-Symbol, um das Dashboard ein- oder auszublenden.",
   "onboarding.tray.menu":
     "Rechtsklick (oder Linksklick unter Windows/Linux) öffnet das Schnellmenü — verbinden, beschriften, kalibrieren und mehr.",
+  "onboarding.extensionsTitle": "Begleit-Erweiterungen",
+  "onboarding.extensionsBody":
+    "{app} kann zusätzlichen Kontext von deinem Editor, Browser und Terminal abrufen. Jede Integration ist ein eigenes Stück, das du unabhängig installieren oder überspringen kannst — keine ist für die EEG-Funktionen erforderlich.",
+  "onboarding.extensionsPrivacy":
+    "Gleiche Datenschutz-Garantie wie bei allem anderen: jede Erweiterung meldet an den lokalen Daemon über einen localhost-Port, und diese Daten werden in activity.sqlite auf diesem Computer gespeichert. Nichts wird zu NeuroSkill oder anderen hochgeladen.",
+  "onboarding.extensionsSkip":
+    "Alles optional. Du kannst diese später unter Einstellungen → Erweiterungen und Einstellungen → Terminal installieren, aktualisieren oder entfernen.",
+  "onboarding.extensions.vscodeTitle": "VS Code-basierter Editor",
+  "onboarding.extensions.vscodeDesc":
+    "Ergänzt Datei-Edit-Tracking, KI-Inline-Vorschläge und Integration in den Dev-Loop. Funktioniert mit VS Code, VSCodium, Cursor, Windsurf, Trae, Positron — installierte Forks werden automatisch erkannt.",
+  "onboarding.extensions.browserTitle": "Browser-Erweiterung",
+  "onboarding.extensions.browserDesc":
+    "Erfasst aktiven Tab, Verweildauer und Lesemuster aus deinem Browser. Sideload für Chrome, Firefox, Edge und Safari (Safari benötigt einen zusätzlichen Signatur-Schritt).",
+  "onboarding.extensions.terminalTitle": "Terminal- / Shell-Hooks",
+  "onboarding.extensions.terminalDesc":
+    "Fügt einen kleinen preexec/precmd-Hook in deine Shell ein, damit die App Befehlszeitpunkte mit dem Fokuszustand korrelieren kann. Wähle zsh, bash, fish oder PowerShell — fügt eine einzige source-Zeile in deine rc-Datei ein, jederzeit vollständig entfernbar.",
+
+  "onboarding.permissionsTitle": "Optionale Aktivitätsverfolgung",
+  "onboarding.permissionsBody":
+    '{app} kann aufzeichnen, woran du gearbeitet hast, um deine EEG-/Fokusdaten mit dem tatsächlichen Kontext zu korrelieren — "Ich habe beim Schreiben dieses PRs den Fokus verloren" statt nur "Ich habe um 15 Uhr den Fokus verloren". Standardmäßig deaktiviert und vollkommen optional.',
+  "onboarding.permissionsPrivacy":
+    "Alles bleibt auf diesem Computer. Aufgezeichnete Aktivität wird in eine lokale activity.sqlite-Datei geschrieben und niemals an einen Server gesendet — weder an NeuroSkill noch an irgendjemand sonst. Du kannst jede Option jederzeit ausschalten; die aufgezeichneten Daten bleiben auf der Festplatte, bis du sie löschst.",
+  "onboarding.permissionsSkip":
+    "Standardmäßig alles aus. Du kannst jede Option später unter Einstellungen → Aktivitätsverfolgung aktivieren.",
+  "onboarding.permissionsActiveWindowDesc":
+    "Erfasst die App im Vordergrund, den Fenstertitel, den aktiven Browser-Tab und den geöffneten Editor-Dateipfad. macOS fragt nach Bedienungshilfen-/Automatisierungszugriff für jeden Browser und Editor.",
+  "onboarding.permissionsInputDesc":
+    "Speichert nur die Zeitstempel von Tastatur-/Maus-Nutzung — niemals welche Tasten, niemals Positionen, niemals Inhalte. Keine Berechtigung nötig.",
+  "onboarding.permissionsFileDesc":
+    "Beobachtet Dokumente, Schreibtisch, Downloads und übliche Entwicklungsordner auf Erstellungs-/Änderungs-/Löschereignisse. Speichert nur Pfade und Zeitstempel — Dateiinhalte werden nie gelesen. macOS fragt eventuell nach Vollständigem Festplattenzugriff.",
+  "onboarding.permissionsScreenshotsDesc":
+    'Nimmt den Bildschirm in Intervallen auf, führt OCR auf Text aus und indexiert beides für visuelle Suche und „was war um 15 Uhr auf meinem Bildschirm"-Abfragen. macOS fragt nach Bildschirmaufnahme. Intervall, Qualität und OCR können in Einstellungen → Screenshots feinjustiert werden.',
+  "onboarding.permissionsLocationDesc":
+    "Erfasst den Gerätestandort zusammen mit Fokusblöcken (zuhause vs. Büro vs. Café), sodass Ortswechsel mit deinem Fokuszustand korreliert werden können. macOS fragt nach Ortungsdiensten. Lokal gespeichert; nie hochgeladen.",
+  "onboarding.permissionsCalendarDesc":
+    "Liest Kalenderereignis-Metadaten (Titel, Zeit, Dauer, Teilnehmerzahl), um Meeting-Dichte mit Konzentrationseinbrüchen zu korrelieren. macOS fragt beim ersten Zugriff nach Kalenderzugriff. Ereignisinhalte werden nie hochgeladen.",
+  "onboarding.permissionsClipboardDesc":
+    "Erfasst, wann sich die Zwischenablage ändert (welche App, Inhaltstyp, Größe). Der Inhalt wird niemals gelesen. Nur macOS; fragt nach Automatisierungszugriff.",
   "onboarding.downloadsComplete": "Alle Downloads abgeschlossen!",
   "onboarding.downloadsCompleteBody":
     "Die empfohlenen Modelle sind heruntergeladen und einsatzbereit. Um mehr Modelle herunterzuladen oder zu anderen zu wechseln, öffnen Sie",

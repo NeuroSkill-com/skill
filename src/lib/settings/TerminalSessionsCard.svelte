@@ -8,13 +8,13 @@
   the user actually opens a session.
 -->
 <script lang="ts">
+import { onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { CardContent } from "$lib/components/ui/card";
 import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
 import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
-import { CardContent } from "$lib/components/ui/card";
-import { Button } from "$lib/components/ui/button";
 import { Spinner } from "$lib/components/ui/spinner";
 import { daemonPost } from "$lib/daemon/http";
-import { onMount } from "svelte";
 
 interface SessionRow {
   id: string;
@@ -77,7 +77,6 @@ const filtered = $derived.by((): SessionRow[] => {
         return s.started_at >= weekStart;
       case "live":
         return s.ended_at == null;
-      case "all":
       default:
         return true;
     }
@@ -90,7 +89,7 @@ const dayBuckets = $derived.by((): { key: string; label: string; rows: SessionRo
   for (const s of filtered) {
     const key = ymd(s.started_at);
     if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(s);
+    map.get(key)?.push(s);
   }
   // sessions are returned newest-first by the API, so `entries()` keeps that.
   return Array.from(map.entries()).map(([key, rows]) => ({
@@ -127,15 +126,15 @@ async function loadSessions() {
     }>("/v1/brain/terminal-sessions", { limit: 50 });
     sessions = r.sessions ?? [];
     orphanCount = r.orphan_command_count ?? 0;
-  } catch (e: any) {
-    error = e?.message ?? "Failed to load sessions";
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to load sessions";
   }
   loading = false;
 }
 
 async function toggleSession(s: SessionRow) {
   const id = s.id;
-  if (expanded[id] && expanded[id]!.kind !== "loading") {
+  if (expanded[id] && expanded[id]?.kind !== "loading") {
     delete expanded[id];
     expanded = { ...expanded };
     return;
@@ -147,10 +146,10 @@ async function toggleSession(s: SessionRow) {
     // session-level stripped text (legacy backfill) if no commands are
     // attached or none have output rows.
     if (s.command_count > 0) {
-      const r = await daemonPost<{ commands: CommandRow[] }>(
-        "/v1/brain/terminal-session-output",
-        { sessionId: id, raw: false },
-      );
+      const r = await daemonPost<{ commands: CommandRow[] }>("/v1/brain/terminal-session-output", {
+        sessionId: id,
+        raw: false,
+      });
       const cmds = r.commands ?? [];
       if (cmds.length > 0) {
         expanded[id] = { kind: "commands", commands: cmds };
@@ -190,24 +189,26 @@ async function runSearch() {
   searching = true;
   try {
     if (searchMode === "keyword") {
-      const r = await daemonPost<{ command_ids: number[] }>(
-        "/v1/brain/terminal-search",
-        { query: searchQuery, limit: 20 },
-      );
+      const r = await daemonPost<{ command_ids: number[] }>("/v1/brain/terminal-search", {
+        query: searchQuery,
+        limit: 20,
+      });
       searchResults = await hydrateSearch(r.command_ids ?? []);
     } else {
-      const r = await daemonPost<{ command_ids: number[]; scores: number[] }>(
-        "/v1/brain/terminal-semantic-search",
-        { query: searchQuery, limit: 20 },
-      );
+      const r = await daemonPost<{ command_ids: number[]; scores: number[] }>("/v1/brain/terminal-semantic-search", {
+        query: searchQuery,
+        limit: 20,
+      });
       const ids = r.command_ids ?? [];
       const scores = r.scores ?? [];
       const hydrated = await hydrateSearch(ids);
-      hydrated.forEach((row, i) => (row.score = scores[i]));
+      hydrated.forEach((row, i) => {
+        row.score = scores[i];
+      });
       searchResults = hydrated;
     }
-  } catch (e: any) {
-    error = e?.message ?? "Search failed";
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Search failed";
     searchResults = [];
   }
   searching = false;
@@ -219,12 +220,14 @@ async function hydrateSearch(ids: number[]): Promise<{ id: number; text: string;
   const out: { id: number; text: string }[] = [];
   for (const id of ids) {
     try {
-      const r = await daemonPost<{ found: boolean; stripped_text: string }>(
-        "/v1/brain/terminal-output",
-        { commandId: id, raw: false },
-      );
+      const r = await daemonPost<{ found: boolean; stripped_text: string }>("/v1/brain/terminal-output", {
+        commandId: id,
+        raw: false,
+      });
       if (r.found) out.push({ id, text: r.stripped_text });
-    } catch { /* skip on error */ }
+    } catch {
+      /* skip on error */
+    }
   }
   return out;
 }
@@ -250,7 +253,7 @@ function fmtFocus(v: number | null): string {
 
 function snippet(text: string, max = 120): string {
   const t = text.replace(/\s+/g, " ").trim();
-  return t.length > max ? t.slice(0, max) + "…" : t;
+  return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
 /** Local-time YYYY-MM-DD key for grouping sessions into day buckets. */
@@ -307,6 +310,7 @@ function toggleDay(key: string) {
     <div class="flex flex-wrap items-center gap-2">
       <input
         type="text"
+        aria-label="Search command output"
         bind:value={searchQuery}
         onkeydown={(e) => { if (e.key === "Enter") runSearch(); }}
         placeholder="Search command output…"

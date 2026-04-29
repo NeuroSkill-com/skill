@@ -328,6 +328,12 @@ const ui: Record<string, string> = {
   "invite.linkHint": "Відкрийте це посилання на телефоні, якщо не вдається сканувати QR-код",
 
   "cmdK.sectionSettings": "Налаштування",
+
+  // ── Auto-synced from en/ (2026-04-28) ──
+  "updates.receivePrereleases": "Отримувати попередні версії",
+  "updates.receivePrereleasesDesc":
+    "Отримуйте реліз-кандидати раніше за стабільні версії. Ручні та фонові перевірки оновлень ураховують цей параметр одразу.",
+  "about.rcMarker": "(RC · {commit})",
 };
 
 export default ui;

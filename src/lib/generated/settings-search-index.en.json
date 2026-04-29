@@ -595,12 +595,6 @@
   },
   {
     "tab": "settings",
-    "key": "settings.activeWindowToggle",
-    "label": "Track Active Window",
-    "desc": "Record which app and window is in focus. Stored locally in activity.sqlite, never uploaded."
-  },
-  {
-    "tab": "settings",
     "key": "settings.apiToken",
     "label": "API Authentication",
     "desc": "When set, all HTTP and WebSocket API requests must include this token in the Authorization header. Leave empty to disable authentication."
@@ -613,9 +607,15 @@
   },
   {
     "tab": "settings",
+    "key": "settings.calendarToggle",
+    "label": "Track Calendar Events",
+    "desc": "Reads metadata of your upcoming and recent calendar events (title, time, duration, attendee count) so the app can correlate focus dips with meeting density. Why it's useful: shows whether back-to-back meetings are eroding your deep work blocks. Permission needed: macOS will show a Calendar Access prompt the first time it's queried. Privacy: events are read on-demand and used to render correlation views — only aggregate counts are persisted to activity.sqlite, and nothing is uploaded."
+  },
+  {
+    "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Track Clipboard Activity",
-    "desc": "Record clipboard changes (metadata only — content is never stored). Tracks which app copied, content type and size. macOS only."
+    "desc": "Records when the clipboard changes — which app copied, the content type, and its size. The clipboard contents themselves are never read or stored. Why it's useful: copy/paste bursts are a strong signal of context-switching, and pairing them with EEG can show when juggling sources is breaking your flow. Permission needed: macOS will ask for Automation access to read clipboard metadata. Privacy: only metadata is stored, locally in activity.sqlite, never uploaded. macOS only."
   },
   {
     "tab": "settings",
@@ -652,12 +652,6 @@
     "key": "settings.inferenceDevice",
     "label": "Inference Device",
     "desc": "Where AI inference runs. GPU is faster; CPU works on any machine and avoids VRAM pressure. Restart the LLM server after changing."
-  },
-  {
-    "tab": "settings",
-    "key": "settings.inputActivityToggle",
-    "label": "Track Keyboard & Mouse Activity",
-    "desc": "Record when keyboard and mouse are used, by second. No special OS permissions required. Stored locally in activity.sqlite."
   },
   {
     "tab": "settings",
@@ -742,6 +736,12 @@
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Configure an OpenBCI board to connect alongside or instead of another BCI device."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.reopenOnboarding",
+    "label": "Onboarding",
+    "desc": "Re-open the first-run setup wizard to revisit Bluetooth, calibration, model downloads, and the optional activity-tracking permissions step."
   },
   {
     "tab": "settings",
@@ -838,5 +838,11 @@
     "key": "updates.checkInterval",
     "label": "Check frequency",
     "desc": "How often the app automatically checks for updates in the background."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.receivePrereleases",
+    "label": "Receive pre-releases",
+    "desc": "Opt into release candidates ahead of stable releases. Both manual and background update checks honor this setting live."
   }
 ]

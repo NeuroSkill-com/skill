@@ -13,7 +13,6 @@ import { CardContent } from "$lib/components/ui/card";
 import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
 import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
 import { Spinner } from "$lib/components/ui/spinner";
-import TerminalSessionsCard from "$lib/settings/TerminalSessionsCard.svelte";
 import { daemonGet, daemonPost } from "$lib/daemon/http";
 import {
   type DailySummaryRow,
@@ -39,6 +38,7 @@ import {
   type WeeklyDigest,
 } from "$lib/daemon/settings";
 import { t } from "$lib/i18n/index.svelte";
+import TerminalSessionsCard from "$lib/settings/TerminalSessionsCard.svelte";
 import {
   getFatigue as brainFatigue,
   getFlow as brainFlow,
@@ -65,33 +65,145 @@ let staleFiles = $state<StaleFileRow[]>([]);
 let timeline = $state<{ kind: string; title: string; detail: string; ts: number; eeg_focus: number | null }[]>([]);
 
 // New: Terminal & conversation data from VS Code extension
-let terminalCommands = $state<{ command: string; category: string; exit_code: number | null; started_at: number; cwd: string; eeg_focus: number | null }[]>([]);
-let terminalImpact = $state<{ category: string; cmd_count: number; avg_focus_delta: number | null; pass_count: number; fail_count: number }[]>([]);
-let contextCost = $state<{ from_zone: string; to_zone: string; switches: number; avg_focus_at_switch: number | null }[]>([]);
-let devLoops = $state<{ loop_type: string; command: string; iterations: number; passes: number; fails: number; avg_cycle_secs: number; focus_trend: string }[]>([]);
+let terminalCommands = $state<
+  {
+    command: string;
+    category: string;
+    exit_code: number | null;
+    started_at: number;
+    cwd: string;
+    eeg_focus: number | null;
+  }[]
+>([]);
+let terminalImpact = $state<
+  { category: string; cmd_count: number; avg_focus_delta: number | null; pass_count: number; fail_count: number }[]
+>([]);
+let contextCost = $state<
+  { from_zone: string; to_zone: string; switches: number; avg_focus_at_switch: number | null }[]
+>([]);
+let devLoops = $state<
+  {
+    loop_type: string;
+    command: string;
+    iterations: number;
+    passes: number;
+    fails: number;
+    avg_cycle_secs: number;
+    focus_trend: string;
+  }[]
+>([]);
 let conversations = $state<{ app: string; role: string; text: string; at: number; eeg_focus: number | null }[]>([]);
-let aiUsage = $state<{ suggestions_shown: number; accepted: number; acceptance_rate: number; chat_sessions: number; by_source: { source: string; count: number }[] } | null>(null);
+let aiUsage = $state<{
+  suggestions_shown: number;
+  accepted: number;
+  acceptance_rate: number;
+  chat_sessions: number;
+  by_source: { source: string; count: number }[];
+} | null>(null);
+// biome-ignore lint/suspicious/noExplicitAny: insights is a dynamic shape from multiple analytics endpoints
 let insights = $state<any>(null);
 
 // Browser analytics
-let browserDistraction = $state<{ score: number; tab_switches_per_min: number; social_pct: number; productive_pct: number; idle_pct: number; suggestion: string } | null>(null);
-let browserContent = $state<{ content_type: string; events: number; avg_focus: number | null; total_secs: number }[]>([]);
+let browserDistraction = $state<{
+  score: number;
+  tab_switches_per_min: number;
+  social_pct: number;
+  productive_pct: number;
+  idle_pct: number;
+  suggestion: string;
+} | null>(null);
+let browserContent = $state<{ content_type: string; events: number; avg_focus: number | null; total_secs: number }[]>(
+  [],
+);
 let browserDomains = $state<[string, string, number][]>([]);
-let browserResearch = $state<{ total_searches: number; refinement_rate: number; revisit_count: number; avg_search_focus: number | null; stuck_indicator: boolean } | null>(null);
-let browserFocus = $state<{ domain: string; category: string; content_type: string; events: number; avg_focus: number | null; total_reading_secs: number; avg_scroll_depth: number | null; visits: number }[]>([]);
-let browserLearning = $state<{ domain: string; content_type: string; efficiency_score: number; avg_focus: number | null; pages: number; revisits: number; avg_reading_secs: number }[]>([]);
-let browserOptimalHours = $state<{ best_hours: number[]; worst_hours: number[]; by_hour: { hour: number; avg_focus: number; events: number }[] } | null>(null);
-let browserAiEff = $state<{ provider: string; interactions: number; avg_focus: number | null; avg_session_secs: number | null }[]>([]);
-let browserProcrast = $state<{ score: number; procrastinating: boolean; suggestion: string; idle_secs: number; revisit_loops: number } | null>(null);
-let browserDeepReading = $state<{ domain: string; title: string; reading_secs: number; scroll_depth: number | null; eeg_focus: number | null; at: number }[]>([]);
-let browserVideoRoi = $state<{ total_watched_secs: number; focused_watched_secs: number; focus_ratio: number; avg_focus: number | null } | null>(null);
-let browserEmailImpact = $state<{ email_sessions: number; avg_focus_during_email: number | null; avg_focus_outside_email: number | null; focus_delta: number | null } | null>(null);
+let browserResearch = $state<{
+  total_searches: number;
+  refinement_rate: number;
+  revisit_count: number;
+  avg_search_focus: number | null;
+  stuck_indicator: boolean;
+} | null>(null);
+let browserFocus = $state<
+  {
+    domain: string;
+    category: string;
+    content_type: string;
+    events: number;
+    avg_focus: number | null;
+    total_reading_secs: number;
+    avg_scroll_depth: number | null;
+    visits: number;
+  }[]
+>([]);
+let browserLearning = $state<
+  {
+    domain: string;
+    content_type: string;
+    efficiency_score: number;
+    avg_focus: number | null;
+    pages: number;
+    revisits: number;
+    avg_reading_secs: number;
+  }[]
+>([]);
+let browserOptimalHours = $state<{
+  best_hours: number[];
+  worst_hours: number[];
+  by_hour: { hour: number; avg_focus: number; events: number }[];
+} | null>(null);
+let browserAiEff = $state<
+  { provider: string; interactions: number; avg_focus: number | null; avg_session_secs: number | null }[]
+>([]);
+let browserProcrast = $state<{
+  score: number;
+  procrastinating: boolean;
+  suggestion: string;
+  idle_secs: number;
+  revisit_loops: number;
+} | null>(null);
+let browserDeepReading = $state<
+  {
+    domain: string;
+    title: string;
+    reading_secs: number;
+    scroll_depth: number | null;
+    eeg_focus: number | null;
+    at: number;
+  }[]
+>([]);
+let browserVideoRoi = $state<{
+  total_watched_secs: number;
+  focused_watched_secs: number;
+  focus_ratio: number;
+  avg_focus: number | null;
+} | null>(null);
+let browserEmailImpact = $state<{
+  email_sessions: number;
+  avg_focus_during_email: number | null;
+  avg_focus_outside_email: number | null;
+  focus_delta: number | null;
+} | null>(null);
 let browserTabLoad = $state<{ tab_count: number; avg_focus: number; samples: number }[]>([]);
-let browserWeekday = $state<{ weekday_avg_focus: number | null; weekend_avg_focus: number | null; delta: number | null } | null>(null);
+let browserWeekday = $state<{
+  weekday_avg_focus: number | null;
+  weekend_avg_focus: number | null;
+  delta: number | null;
+} | null>(null);
 let browserNightOwl = $state<{ hour: number; avg_focus: number; events: number }[]>([]);
-let browserCopyPaste = $state<{ copies: number; pastes: number; avg_paste_length: number | null; top_domains: [string, number][] } | null>(null);
-let browserPostMeeting = $state<{ meeting_title: string; platform: string; post_meeting_focus: number | null; distraction_events: number }[]>([]);
-let browserSwitchTax = $state<{ total_switches: number; avg_focus_at_switch: number | null; estimated_lost_minutes: number } | null>(null);
+let browserCopyPaste = $state<{
+  copies: number;
+  pastes: number;
+  avg_paste_length: number | null;
+  top_domains: [string, number][];
+} | null>(null);
+let browserPostMeeting = $state<
+  { meeting_title: string; platform: string; post_meeting_focus: number | null; distraction_events: number }[]
+>([]);
+let browserSwitchTax = $state<{
+  total_switches: number;
+  avg_focus_at_switch: number | null;
+  estimated_lost_minutes: number;
+} | null>(null);
 
 // Feedback system
 let feedbackSent = $state<Record<string, "yay" | "nay" | null>>({});
@@ -100,7 +212,9 @@ async function sendFeedback(insight: string, correct: boolean, score?: number, c
   feedbackSent[insight] = correct ? "yay" : "nay";
   try {
     await daemonPost("/v1/brain/feedback", { insight, correct, score, context });
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
 }
 
 // Fusion insights
@@ -147,9 +261,8 @@ async function loadWeeklyDigest() {
   try {
     const weekStart = todayStart - 7 * 86400;
     weeklyDigest = await getWeeklyDigest(weekStart);
-  } catch (e: any) {
-    weeklyError = e?.message ?? "Failed to load weekly report";
-    console.error("loadWeeklyDigest failed:", e);
+  } catch (e) {
+    weeklyError = e instanceof Error ? e.message : "Failed to load weekly report";
   }
   weeklyLoading = false;
 }
@@ -268,24 +381,42 @@ onMount(async () => {
     if (results[17].status === "fulfilled") aiUsage = results[17].value as typeof aiUsage;
     if (results[18].status === "fulfilled") insights = results[18].value;
     // Browser analytics (indices 19-23)
-    if (results[19]?.status === "fulfilled" && results[19].value) browserDistraction = results[19].value as typeof browserDistraction;
-    if (results[20]?.status === "fulfilled" && results[20].value) browserContent = (results[20].value as typeof browserContent) ?? [];
-    if (results[21]?.status === "fulfilled" && results[21].value) browserDomains = (results[21].value as typeof browserDomains) ?? [];
-    if (results[22]?.status === "fulfilled" && results[22].value) browserResearch = results[22].value as typeof browserResearch;
-    if (results[23]?.status === "fulfilled" && results[23].value) browserFocus = (results[23].value as typeof browserFocus) ?? [];
-    if (results[24]?.status === "fulfilled" && results[24].value) browserLearning = (results[24].value as typeof browserLearning) ?? [];
-    if (results[25]?.status === "fulfilled" && results[25].value) browserOptimalHours = results[25].value as typeof browserOptimalHours;
-    if (results[26]?.status === "fulfilled" && results[26].value) browserAiEff = (results[26].value as typeof browserAiEff) ?? [];
-    if (results[27]?.status === "fulfilled" && results[27].value) browserProcrast = results[27].value as typeof browserProcrast;
-    if (results[28]?.status === "fulfilled" && results[28].value) browserDeepReading = (results[28].value as typeof browserDeepReading) ?? [];
-    if (results[29]?.status === "fulfilled" && results[29].value) browserVideoRoi = results[29].value as typeof browserVideoRoi;
-    if (results[30]?.status === "fulfilled" && results[30].value) browserEmailImpact = results[30].value as typeof browserEmailImpact;
-    if (results[31]?.status === "fulfilled" && results[31].value) browserTabLoad = (results[31].value as typeof browserTabLoad) ?? [];
-    if (results[32]?.status === "fulfilled" && results[32].value) browserWeekday = results[32].value as typeof browserWeekday;
-    if (results[33]?.status === "fulfilled" && results[33].value) browserNightOwl = (results[33].value as typeof browserNightOwl) ?? [];
-    if (results[34]?.status === "fulfilled" && results[34].value) browserCopyPaste = results[34].value as typeof browserCopyPaste;
-    if (results[35]?.status === "fulfilled" && results[35].value) browserPostMeeting = (results[35].value as typeof browserPostMeeting) ?? [];
-    if (results[36]?.status === "fulfilled" && results[36].value) browserSwitchTax = results[36].value as typeof browserSwitchTax;
+    if (results[19]?.status === "fulfilled" && results[19].value)
+      browserDistraction = results[19].value as typeof browserDistraction;
+    if (results[20]?.status === "fulfilled" && results[20].value)
+      browserContent = (results[20].value as typeof browserContent) ?? [];
+    if (results[21]?.status === "fulfilled" && results[21].value)
+      browserDomains = (results[21].value as typeof browserDomains) ?? [];
+    if (results[22]?.status === "fulfilled" && results[22].value)
+      browserResearch = results[22].value as typeof browserResearch;
+    if (results[23]?.status === "fulfilled" && results[23].value)
+      browserFocus = (results[23].value as typeof browserFocus) ?? [];
+    if (results[24]?.status === "fulfilled" && results[24].value)
+      browserLearning = (results[24].value as typeof browserLearning) ?? [];
+    if (results[25]?.status === "fulfilled" && results[25].value)
+      browserOptimalHours = results[25].value as typeof browserOptimalHours;
+    if (results[26]?.status === "fulfilled" && results[26].value)
+      browserAiEff = (results[26].value as typeof browserAiEff) ?? [];
+    if (results[27]?.status === "fulfilled" && results[27].value)
+      browserProcrast = results[27].value as typeof browserProcrast;
+    if (results[28]?.status === "fulfilled" && results[28].value)
+      browserDeepReading = (results[28].value as typeof browserDeepReading) ?? [];
+    if (results[29]?.status === "fulfilled" && results[29].value)
+      browserVideoRoi = results[29].value as typeof browserVideoRoi;
+    if (results[30]?.status === "fulfilled" && results[30].value)
+      browserEmailImpact = results[30].value as typeof browserEmailImpact;
+    if (results[31]?.status === "fulfilled" && results[31].value)
+      browserTabLoad = (results[31].value as typeof browserTabLoad) ?? [];
+    if (results[32]?.status === "fulfilled" && results[32].value)
+      browserWeekday = results[32].value as typeof browserWeekday;
+    if (results[33]?.status === "fulfilled" && results[33].value)
+      browserNightOwl = (results[33].value as typeof browserNightOwl) ?? [];
+    if (results[34]?.status === "fulfilled" && results[34].value)
+      browserCopyPaste = results[34].value as typeof browserCopyPaste;
+    if (results[35]?.status === "fulfilled" && results[35].value)
+      browserPostMeeting = (results[35].value as typeof browserPostMeeting) ?? [];
+    if (results[36]?.status === "fulfilled" && results[36].value)
+      browserSwitchTax = results[36].value as typeof browserSwitchTax;
   } catch {}
   loading = false;
 });

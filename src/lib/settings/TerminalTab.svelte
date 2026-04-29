@@ -61,7 +61,14 @@ async function refresh() {
     const statuses: ShellStatus[] = [];
     for (const s of SHELLS) {
       try {
-        const status = await daemonPost<any>("/v1/activity/shell-hook-status", { shell: s.shell });
+        const status = await daemonPost<{
+          rc_file?: string;
+          hook_path?: string;
+          installed?: boolean;
+          hook_exists?: boolean;
+          rc_has_line?: boolean;
+          available?: boolean;
+        }>("/v1/activity/shell-hook-status", { shell: s.shell });
         statuses.push({
           shell: s.shell,
           label: s.label,
@@ -97,8 +104,8 @@ async function refresh() {
     } catch {
       recentCommands = [];
     }
-  } catch (e: any) {
-    error = e?.message ?? "Failed to load terminal status";
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to load terminal status";
   }
   loading = false;
 }
@@ -108,7 +115,15 @@ async function install(shell: string) {
   error = "";
   success = "";
   try {
-    const result = await daemonPost<any>("/v1/activity/install-shell-hook", { shell });
+    const result = await daemonPost<{
+      ok?: boolean;
+      error?: string;
+      instructions?: string;
+      already_installed?: boolean;
+      hook_refreshed?: boolean;
+      rc_file?: string;
+      hook_path?: string;
+    }>("/v1/activity/install-shell-hook", { shell });
     if (result?.ok) {
       if (result.instructions) {
         // PowerShell returns manual setup instructions instead of touching $PROFILE.
@@ -124,9 +139,8 @@ async function install(shell: string) {
     } else {
       error = result?.error ?? "Installation failed";
     }
-  } catch (e: any) {
-    error = e?.message ?? "Installation failed";
-    console.error("install hook failed:", e);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Installation failed";
   }
   installing = null;
 }
@@ -136,15 +150,15 @@ async function uninstall(shell: string) {
   error = "";
   success = "";
   try {
-    const result = await daemonPost<any>("/v1/activity/uninstall-shell-hook", { shell });
+    const result = await daemonPost<{ ok?: boolean; error?: string }>("/v1/activity/uninstall-shell-hook", { shell });
     if (result?.ok) {
       success = `${shell} hook removed. Open a new terminal to apply.`;
       await refresh();
     } else {
       error = result?.error ?? "Uninstall failed";
     }
-  } catch (e: any) {
-    error = e?.message ?? "Uninstall failed";
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Uninstall failed";
   }
   installing = null;
 }
@@ -155,9 +169,15 @@ function fmtTime(ts: number): string {
 
 function categoryColor(cat: string): string {
   const colors: Record<string, string> = {
-    build: "text-blue-400", test: "text-purple-400", run: "text-green-400",
-    git: "text-orange-400", docker: "text-cyan-400", deploy: "text-yellow-400",
-    install: "text-pink-400", navigate: "text-muted-foreground", debug: "text-red-400",
+    build: "text-blue-400",
+    test: "text-purple-400",
+    run: "text-green-400",
+    git: "text-orange-400",
+    docker: "text-cyan-400",
+    deploy: "text-yellow-400",
+    install: "text-pink-400",
+    navigate: "text-muted-foreground",
+    debug: "text-red-400",
   };
   return colors[cat] ?? "text-muted-foreground";
 }
