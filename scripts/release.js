@@ -77,6 +77,75 @@ function gitTracksRemote(b) {
   return captureOut(`git for-each-ref --format=%(upstream:short) refs/heads/${b}`).length > 0;
 }
 
+function gitTagExistsLocal(tag) {
+  return sh("git", ["rev-parse", "--verify", `refs/tags/${tag}`], { capture: true }).status === 0;
+}
+
+function gitTagExistsOnAnyRemote(tag) {
+  const remotes = captureOut("git remote")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const remote of remotes) {
+    const r = sh("git", ["ls-remote", "--tags", "--exit-code", remote, `refs/tags/${tag}`], { capture: true });
+    if (r.status === 0) return true;
+  }
+  return false;
+}
+
+function gitHeadPackageVersion() {
+  // Read package.json at HEAD to confirm the current commit is the bump for `currentVersion`.
+  const out = sh("git", ["show", "HEAD:package.json"], { capture: true });
+  if (out.status !== 0) return null;
+  try {
+    return JSON.parse(out.stdout).version || null;
+  } catch {
+    return null;
+  }
+}
+
+/// Self-heal a half-finished previous iteration: if `currentVersion`'s tag
+/// is missing locally or on the remote, push the branch (if needed) and
+/// create + push the tag before we try to bump. Without this, every aborted
+/// push (failed pre-push hook, killed CI, network blip) wedges the release
+/// branch until someone runs `npm run tag` by hand.
+function ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch }) {
+  if (!onReleaseBranch) return; // Cutting from main — there's no prior version on this branch to tag.
+
+  const tag = `v${currentVersion}`;
+  const haveLocal = gitTagExistsLocal(tag);
+  const haveRemote = haveLocal && gitTagExistsOnAnyRemote(tag);
+
+  if (haveLocal && haveRemote) return; // Nothing to recover.
+
+  // Sanity: HEAD's package.json must match `currentVersion`. If it doesn't,
+  // we're not on the bump commit and tagging here would produce a wrong tag.
+  const headVersion = gitHeadPackageVersion();
+  if (headVersion !== currentVersion) {
+    fail(
+      `Cannot self-heal: HEAD's package.json version (${headVersion ?? "unknown"}) doesn't match the ` +
+        `current version (${currentVersion}). Resolve manually: tag the right commit, push, then re-run.`,
+    );
+  }
+
+  log(`recovering: tag ${tag} is missing — completing the previous iteration first`);
+
+  // The remote-tag check requires HEAD's commit to be reachable on the remote,
+  // so the branch must be pushed before we push the tag.
+  if (!gitTracksRemote(branchName)) {
+    log(`git push -u origin ${branchName} (recovery)`);
+    sh("git", ["push", "-u", "origin", branchName], { check: true });
+  } else {
+    log("git push (recovery)");
+    sh("git", ["push"], { check: true });
+  }
+
+  log("npm run tag (recovery)");
+  sh("npm", ["run", "tag"], { check: true });
+
+  ok(`recovered: ${tag} tagged and pushed; resuming next-RC iteration`);
+}
+
 function ensureGhReady() {
   if (sh("gh", ["--version"], { capture: true }).status !== 0) {
     fail("`gh` (GitHub CLI) not installed. Install with `brew install gh` then `gh auth login`.");
@@ -210,7 +279,15 @@ async function main() {
     sh("git", ["checkout", "-b", branchName], { check: true });
   }
 
-  // ── 2. Run bump (mutates files, runs preflight, creates commit) ────────
+  // ── 2. Self-heal: tag any prior iteration that didn't get pushed ───────
+  // The previous run can die mid-flight (failed pre-push hook, killed CI,
+  // network blip) after the bump commit but before `npm run tag`. That
+  // leaves the release branch in a state where bump's preflight refuses to
+  // run because the current version isn't tagged. Detect + recover here so
+  // the user doesn't need to remember the manual `npm run tag` dance.
+  ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch });
+
+  // ── 3. Run bump (mutates files, runs preflight, creates commit) ────────
   const bumpArgs = ["run", "bump", "--", "--rc"];
   if (force) bumpArgs.push("--force");
   log(`npm ${bumpArgs.join(" ")}`);
