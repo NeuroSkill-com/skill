@@ -5402,3 +5402,10 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 ### Features
 
 - fix win/linux
+
+## [0.0.130-rc.3] — 2026-04-29
+
+### Features
+
+- fixed issues with the metrics, keychain access (3 -> 1 + on demand), windows CI
+- umap e2e
