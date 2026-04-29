@@ -129,6 +129,8 @@ export default defineConfig(({ mode }) => ({
       "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
       "src-tauri/target/**",
       "**/*.spec.ts",
+      "extensions/vscode/src/test/**",
+      "extensions/vscode/out/**",
     ],
   },
 
