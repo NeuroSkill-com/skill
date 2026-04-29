@@ -376,7 +376,6 @@ pub struct AppState {
     // ── Network / services ────────────────────────────────────────────────
     pub ws_host: String,
     pub ws_port: u16,
-    pub api_token: String,
     pub hf_endpoint: String,
     pub update_check_interval_secs: u64,
     /// Set by the frontend when an update has been downloaded and is ready
@@ -385,7 +384,6 @@ pub struct AppState {
 
     // ── Device configs ────────────────────────────────────────────────────
     pub openbci_config: crate::settings::OpenBciConfig,
-    pub device_api_config: crate::settings::DeviceApiConfig,
     pub scanner_config: crate::settings::ScannerConfig,
 
     /// Location services enabled by the user (default false).
@@ -497,7 +495,6 @@ impl Default for AppState {
             )),
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),
-            api_token: String::new(),
             hf_endpoint: skill_settings::default_hf_endpoint(),
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
@@ -506,7 +503,6 @@ impl Default for AppState {
             inference_device: skill_settings::default_inference_device(),
             llm_gpu_layers_saved: skill_settings::default_llm_gpu_layers_saved(),
             exg_inference_device: skill_settings::default_exg_inference_device(),
-            device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
             neutts_config: NeuttsConfig::default(),
             tts_preload: true,

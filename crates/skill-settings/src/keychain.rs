@@ -75,16 +75,108 @@ pub struct Secrets {
     pub neurosity_device_id: String,
 }
 
-/// Load all secrets from the system keychain.
+// ── Lazy per-secret accessors ─────────────────────────────────────────────────
+//
+// macOS prompts for keychain access whenever the calling binary's code
+// signature doesn't match the ACL on a stored item.  A fresh app build has
+// a fresh signature, so eagerly reading every secret at startup produces
+// one prompt per item per process, before the user has done anything.
+//
+// These accessors read individual entries on demand, so the prompt only
+// appears when the user initiates an action that actually needs the secret
+// (e.g. clicking "Connect Emotiv" or opening the device settings tab).
+//
+// Each accessor is a no-op in debug builds — see [`load_secrets`].
+
+pub fn get_api_token() -> String {
+    if cfg!(debug_assertions) {
+        return String::new();
+    }
+    get_secret(KEY_API_TOKEN)
+}
+
+pub fn set_api_token(value: &str) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    set_secret(KEY_API_TOKEN, value);
+}
+
+pub fn get_emotiv_credentials() -> (String, String) {
+    if cfg!(debug_assertions) {
+        return (String::new(), String::new());
+    }
+    (get_secret(KEY_EMOTIV_CLIENT_ID), get_secret(KEY_EMOTIV_CLIENT_SECRET))
+}
+
+pub fn get_idun_api_token() -> String {
+    if cfg!(debug_assertions) {
+        return String::new();
+    }
+    get_secret(KEY_IDUN_API_TOKEN)
+}
+
+pub fn get_oura_access_token() -> String {
+    if cfg!(debug_assertions) {
+        return String::new();
+    }
+    get_secret(KEY_OURA_ACCESS_TOKEN)
+}
+
+pub fn get_neurosity_credentials() -> (String, String, String) {
+    if cfg!(debug_assertions) {
+        return (String::new(), String::new(), String::new());
+    }
+    (
+        get_secret(KEY_NEUROSITY_EMAIL),
+        get_secret(KEY_NEUROSITY_PASSWORD),
+        get_secret(KEY_NEUROSITY_DEVICE_ID),
+    )
+}
+
+pub fn get_neurosity_device_id() -> String {
+    if cfg!(debug_assertions) {
+        return String::new();
+    }
+    get_secret(KEY_NEUROSITY_DEVICE_ID)
+}
+
+/// Write device-API secrets supplied in `secrets` to the keychain.
 ///
-/// In debug builds the keychain is **skipped** entirely to avoid macOS
-/// Keychain authorization dialogs on every `cargo run` / `tauri dev`
-/// (the dev binary has a different code signature each build, so macOS
-/// asks for permission every time).  Secrets fall back to the JSON
-/// settings file which still contains them in dev mode.
+/// Empty fields are **ignored** rather than treated as deletion: if the user
+/// denies a keychain prompt during the GET round-trip, the in-memory copy of
+/// untouched secrets will be empty, and we don't want to clobber valid stored
+/// values on the next save.  Use [`set_api_token`] (or extend with explicit
+/// delete helpers) when an empty value is genuinely meant to clear.
+///
+/// Used by the daemon's `set_device_api_config` route.
+pub fn save_device_api_secrets(secrets: &Secrets) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let pairs: &[(&str, &str)] = &[
+        (KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id),
+        (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
+        (KEY_IDUN_API_TOKEN, &secrets.idun_api_token),
+        (KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token),
+        (KEY_NEUROSITY_EMAIL, &secrets.neurosity_email),
+        (KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password),
+        (KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id),
+    ];
+    for &(key, value) in pairs {
+        if !value.is_empty() {
+            set_secret(key, value);
+        }
+    }
+}
+
+/// Load all secrets eagerly from the keychain.
+///
+/// Retained only for the legacy round-trip through [`save_secrets`] used by
+/// the Tauri shell's `save_settings_now`.  New code should use the per-secret
+/// accessors above so prompts only fire on user-initiated actions.
 pub fn load_secrets() -> Secrets {
     if cfg!(debug_assertions) {
-        eprintln!("[keychain] skipping keychain in debug build");
         return Secrets::default();
     }
     Secrets {
@@ -101,19 +193,32 @@ pub fn load_secrets() -> Secrets {
 
 /// Save all secrets to the system keychain.
 ///
+/// Empty values are **ignored** rather than treated as a deletion request.
+/// This avoids clobbering previously-stored secrets when the caller's
+/// in-memory copy was never populated (e.g. lazy-load callers that don't
+/// hydrate every field).  Use the dedicated `set_*` helpers above to
+/// explicitly delete a secret.
+///
 /// No-op in debug builds (see [`load_secrets`] for rationale).
 pub fn save_secrets(secrets: &Secrets) {
     if cfg!(debug_assertions) {
         return;
     }
-    set_secret(KEY_API_TOKEN, &secrets.api_token);
-    set_secret(KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id);
-    set_secret(KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret);
-    set_secret(KEY_IDUN_API_TOKEN, &secrets.idun_api_token);
-    set_secret(KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token);
-    set_secret(KEY_NEUROSITY_EMAIL, &secrets.neurosity_email);
-    set_secret(KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password);
-    set_secret(KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id);
+    let pairs: &[(&str, &str)] = &[
+        (KEY_API_TOKEN, &secrets.api_token),
+        (KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id),
+        (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
+        (KEY_IDUN_API_TOKEN, &secrets.idun_api_token),
+        (KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token),
+        (KEY_NEUROSITY_EMAIL, &secrets.neurosity_email),
+        (KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password),
+        (KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id),
+    ];
+    for &(key, value) in pairs {
+        if !value.is_empty() {
+            set_secret(key, value);
+        }
+    }
 }
 
 /// Migrate plaintext secrets from settings JSON into the keychain.
