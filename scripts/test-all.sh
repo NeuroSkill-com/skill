@@ -185,7 +185,7 @@ for suite in "${SUITES[@]}"; do
       ;;
     mlx-e2e)
       if [[ "$(uname -s)" == "Darwin" ]]; then
-        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 || { $STOP_ON_FAIL && break; }
+        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 --include-ignored || { $STOP_ON_FAIL && break; }
         run_suite "FFT MLX E2E" cargo test -p skill-eeg --features mlx -- fft_e2e --nocapture || { $STOP_ON_FAIL && break; }
       else
         skip_suite "MLX E2E" "requires macOS with Apple Silicon"
