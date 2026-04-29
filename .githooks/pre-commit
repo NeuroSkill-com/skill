@@ -30,8 +30,22 @@ fi
 # Run cargo fmt on staged Rust files
 if echo "$STAGED_FILES" | grep -q '\.rs$'; then
   echo "🦀 Running cargo fmt…"
-  cargo fmt
-  git add $( echo "$STAGED_FILES" | grep '\.rs$' )
+  # GUI git clients (editors, Tower, etc.) launch hooks in a non-interactive
+  # shell that doesn't source ~/.zshrc, so rustup's ~/.cargo/bin is missing
+  # from PATH. Source the env file rustup ships, or fall back to the default
+  # install path.
+  if [ -f "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+  elif [ -d "$HOME/.cargo/bin" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+  fi
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "⚠️  cargo not found on PATH; skipping cargo fmt." >&2
+    echo "   Install rustup (https://rustup.rs) or add ~/.cargo/bin to your shell's PATH." >&2
+  else
+    cargo fmt
+    git add $( echo "$STAGED_FILES" | grep '\.rs$' )
+  fi
 fi
 
 echo "✅ Pre-commit checks passed (basic validation only)."
