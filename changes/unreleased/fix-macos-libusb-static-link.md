@@ -1,3 +1,0 @@
-### Build
-
-- **macOS: link libusb statically into `skill-daemon`**: vendored libusb via `rusb`'s `vendored` feature in `crates/skill-devices`. The `antneuro` USB driver pulls in `rusb` → `libusb1-sys`, which by default uses `pkg-config` to find a system libusb-1.0.dylib. On the macOS-26 release runner that resolved to Homebrew's `/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib`, so end users without Homebrew hit a launch-time `dyld: Library not loaded` error. Cargo feature unification now flips `libusb1-sys/vendored`, which compiles libusb from source and links `libusb-vendored.a` into the binary — verified by 105 `_libusb_*` text symbols present in the release binary and zero libusb references in `otool -L`.
