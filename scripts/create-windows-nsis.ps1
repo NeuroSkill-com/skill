@@ -56,6 +56,21 @@ $Conf = Get-Content (Join-Path $TauriDir "tauri.conf.json") -Raw | ConvertFrom-J
 $ProductName = $Conf.productName
 $ProductDisplayName = if ($ProductName.EndsWith("™")) { $ProductName } else { "$ProductName™" }
 $Version = $Conf.version
+
+# NSIS's VIProductVersion requires strict 4-segment numeric format X.X.X.X
+# (Win32 VS_FIXEDFILEINFO). User-facing ProductVersion/FileVersion strings
+# accept any text, but VIProductVersion does not — it rejects "-rc.N" suffixes.
+# Map the SemVer string to a numeric 4-tuple:
+#   "0.0.130"        -> "0.0.130.0"
+#   "0.0.130-rc.2"   -> "0.0.130.2"   (use RC number as fourth segment)
+#   "0.0.130-beta.7" -> "0.0.130.7"
+if ($Version -match '^(\d+\.\d+\.\d+)(?:-[A-Za-z]+\.(\d+))?') {
+    $vibase  = $Matches[1]
+    $vibuild = if ($Matches[2]) { $Matches[2] } else { "0" }
+    $VIVersion = "$vibase.$vibuild"
+} else {
+    $VIVersion = "0.0.0.0"
+}
 $Identifier = $Conf.identifier
 $BinaryName = "skill.exe"
 $TargetReleaseDir = Join-Path $TauriDir "target/$Target/release"
@@ -531,7 +546,7 @@ $imageDirectives
 !insertmacro MUI_LANGUAGE "English"
 
 ; ── Version info ────────────────────────────────────────────────────────
-VIProductVersion "$Version.0"
+VIProductVersion "$VIVersion"
 VIAddVersionKey "ProductName" "$ProductDisplayName"
 VIAddVersionKey "ProductVersion" "$Version"
 VIAddVersionKey "FileVersion" "$Version"

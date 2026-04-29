@@ -19,8 +19,26 @@
 // works if no rebuild happens at promotion time.
 
 import { execSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { baseVersion, bumpVersion } from "./version-utils.mjs";
+
+// GitHub caps PR/issue bodies at 65_536 chars. Leave headroom for the
+// surrounding template; truncate the embedded notes if they exceed this.
+const NOTES_MAX_CHARS = 50_000;
+
+function readReleaseNotes(version) {
+  const path = `changes/releases/${version}.md`;
+  if (!existsSync(path)) return null;
+  let body = readFileSync(path, "utf8").trim();
+  // The file leads with `## [<version>] — <date>` which is redundant with the
+  // PR's surrounding heading; strip it so the embedded section starts at the
+  // first content heading (Features / Bugfixes / etc.).
+  body = body.replace(/^##\s+\[[^\]]+\][^\n]*\n+/, "");
+  if (body.length > NOTES_MAX_CHARS) {
+    body = `${body.slice(0, NOTES_MAX_CHARS)}\n\n_…notes truncated — see \`changes/releases/${version}.md\` for the full text._`;
+  }
+  return body;
+}
 
 // ── Shell + git helpers ─────────────────────────────────────────────────────
 
@@ -231,9 +249,11 @@ async function main() {
     prs = JSON.parse(prList.stdout || "[]");
   } catch {}
 
+  const notes = readReleaseNotes(newVersion);
+
   if (prs.length === 0) {
     log("gh pr create");
-    const body = [
+    const sections = [
       `## Release v${base}`,
       "",
       `Tracking release candidates for **v${base}**.`,
@@ -251,7 +271,11 @@ async function main() {
       `- ${tag}`,
       "",
       "_(more added as RCs are cut)_",
-    ].join("\n");
+    ];
+    if (notes) {
+      sections.push("", "---", "", `## What's in this release (\`${tag}\`)`, "", notes);
+    }
+    const body = sections.join("\n");
     sh(
       "gh",
       [
@@ -273,11 +297,15 @@ async function main() {
   } else {
     const pr = prs[0];
     log(`gh pr comment ${pr.number}`);
-    const body = [
+    const sections = [
       `🚀 New RC: \`${tag}\``,
       "",
       "CI is building. Once the workflow finishes, RC channel users will receive this build automatically on their next update check.",
-    ].join("\n");
+    ];
+    if (notes) {
+      sections.push("", "<details><summary>Release notes for this RC</summary>", "", notes, "", "</details>");
+    }
+    const body = sections.join("\n");
     sh("gh", ["pr", "comment", String(pr.number), "--body", body], { check: true });
   }
 
