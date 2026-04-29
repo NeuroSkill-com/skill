@@ -5396,3 +5396,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - **Update llama-cpp-4 to 0.2.50**: upstream llama.cpp fixes including `common_*` symbol renames.
 - **Update kittentts to 0.4.1**: TTS engine update.
 - **Add grayscale 0.0.1**: macOS grayscale display control for DND mode.
+
+## [0.0.130-rc.2] — 2026-04-29
+
+### Features
+
+- fix win/linux
