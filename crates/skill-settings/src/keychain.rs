@@ -10,10 +10,58 @@
 //! Secrets survive app re-installs and build updates because they live in
 //! the system credential store, not in the app data directory.
 
+#[cfg(not(debug_assertions))]
 use keyring::Entry;
 
 /// Service name used as the keychain namespace for all NeuroSkill secrets.
+#[cfg(not(debug_assertions))]
 const SERVICE: &str = "com.neuroskill.skill";
+
+// ── Debug-build in-memory store ──────────────────────────────────────────────
+//
+// Debug builds (`cargo run`, `tauri dev`, `cargo test`) deliberately avoid the
+// OS keychain — every rebuild produces a binary with a different code
+// signature, which on macOS triggers a fresh authorization prompt. The dev
+// loop becomes unbearable.
+//
+// Pre-this commit the workaround was to short-circuit getters to `""` and
+// setters to no-op, but that broke any code (including unit tests) that
+// expected `set` then `get` to roundtrip. We now keep a process-local
+// `Mutex<HashMap>` instead — no OS prompt, but values survive within the same
+// process so the route handlers behave like real keychain code.
+//
+// Release builds bypass this entirely and use `keyring::Entry`.
+
+#[cfg(debug_assertions)]
+mod dev_store {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    use std::sync::OnceLock;
+
+    static STORE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+    fn store() -> &'static Mutex<HashMap<String, String>> {
+        STORE.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    pub fn get(key: &str) -> String {
+        store()
+            .lock()
+            .ok()
+            .and_then(|g| g.get(key).cloned())
+            .unwrap_or_default()
+    }
+
+    pub fn set(key: &str, value: &str) {
+        if let Ok(mut g) = store().lock() {
+            if value.is_empty() {
+                g.remove(key);
+            } else {
+                g.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+}
 
 // ── Key names ─────────────────────────────────────────────────────────────────
 
@@ -27,7 +75,13 @@ const KEY_NEUROSITY_PASSWORD: &str = "neurosity_password";
 const KEY_NEUROSITY_DEVICE_ID: &str = "neurosity_device_id";
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
+//
+// In debug builds these route through `dev_store` (process-local, no OS
+// keychain access). In release they hit the real OS keychain. Per-secret
+// helpers above don't need their own `cfg!(debug_assertions)` checks — the
+// switch happens here so the callers behave identically in both modes.
 
+#[cfg(not(debug_assertions))]
 fn get_secret(key: &str) -> String {
     match Entry::new(SERVICE, key).and_then(|e| e.get_password()) {
         Ok(v) => v,
@@ -39,6 +93,12 @@ fn get_secret(key: &str) -> String {
     }
 }
 
+#[cfg(debug_assertions)]
+fn get_secret(key: &str) -> String {
+    dev_store::get(key)
+}
+
+#[cfg(not(debug_assertions))]
 fn set_secret(key: &str, value: &str) {
     let entry = match Entry::new(SERVICE, key) {
         Ok(e) => e,
@@ -53,11 +113,14 @@ fn set_secret(key: &str, value: &str) {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
             Err(e) => eprintln!("[keychain] failed to delete {key}: {e}"),
         }
-    } else {
-        if let Err(e) = entry.set_password(value) {
-            eprintln!("[keychain] failed to store {key}: {e}");
-        }
+    } else if let Err(e) = entry.set_password(value) {
+        eprintln!("[keychain] failed to store {key}: {e}");
     }
+}
+
+#[cfg(debug_assertions)]
+fn set_secret(key: &str, value: &str) {
+    dev_store::set(key, value);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -82,51 +145,34 @@ pub struct Secrets {
 // a fresh signature, so eagerly reading every secret at startup produces
 // one prompt per item per process, before the user has done anything.
 //
-// These accessors read individual entries on demand, so the prompt only
-// appears when the user initiates an action that actually needs the secret
-// (e.g. clicking "Connect Emotiv" or opening the device settings tab).
-//
-// Each accessor is a no-op in debug builds — see [`load_secrets`].
+// These accessors read individual entries on demand, so the OS keychain
+// prompt only appears when the user initiates an action that actually needs
+// the secret (e.g. clicking "Connect Emotiv" or opening the device settings
+// tab). In debug builds the low-level helpers route through `dev_store`
+// instead of the OS keychain, so dev/test workflows roundtrip values without
+// any auth dialogs.
 
 pub fn get_api_token() -> String {
-    if cfg!(debug_assertions) {
-        return String::new();
-    }
     get_secret(KEY_API_TOKEN)
 }
 
 pub fn set_api_token(value: &str) {
-    if cfg!(debug_assertions) {
-        return;
-    }
     set_secret(KEY_API_TOKEN, value);
 }
 
 pub fn get_emotiv_credentials() -> (String, String) {
-    if cfg!(debug_assertions) {
-        return (String::new(), String::new());
-    }
     (get_secret(KEY_EMOTIV_CLIENT_ID), get_secret(KEY_EMOTIV_CLIENT_SECRET))
 }
 
 pub fn get_idun_api_token() -> String {
-    if cfg!(debug_assertions) {
-        return String::new();
-    }
     get_secret(KEY_IDUN_API_TOKEN)
 }
 
 pub fn get_oura_access_token() -> String {
-    if cfg!(debug_assertions) {
-        return String::new();
-    }
     get_secret(KEY_OURA_ACCESS_TOKEN)
 }
 
 pub fn get_neurosity_credentials() -> (String, String, String) {
-    if cfg!(debug_assertions) {
-        return (String::new(), String::new(), String::new());
-    }
     (
         get_secret(KEY_NEUROSITY_EMAIL),
         get_secret(KEY_NEUROSITY_PASSWORD),
@@ -135,9 +181,6 @@ pub fn get_neurosity_credentials() -> (String, String, String) {
 }
 
 pub fn get_neurosity_device_id() -> String {
-    if cfg!(debug_assertions) {
-        return String::new();
-    }
     get_secret(KEY_NEUROSITY_DEVICE_ID)
 }
 
@@ -151,9 +194,6 @@ pub fn get_neurosity_device_id() -> String {
 ///
 /// Used by the daemon's `set_device_api_config` route.
 pub fn save_device_api_secrets(secrets: &Secrets) {
-    if cfg!(debug_assertions) {
-        return;
-    }
     let pairs: &[(&str, &str)] = &[
         (KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id),
         (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
@@ -176,9 +216,6 @@ pub fn save_device_api_secrets(secrets: &Secrets) {
 /// the Tauri shell's `save_settings_now`.  New code should use the per-secret
 /// accessors above so prompts only fire on user-initiated actions.
 pub fn load_secrets() -> Secrets {
-    if cfg!(debug_assertions) {
-        return Secrets::default();
-    }
     Secrets {
         api_token: get_secret(KEY_API_TOKEN),
         emotiv_client_id: get_secret(KEY_EMOTIV_CLIENT_ID),
@@ -199,11 +236,7 @@ pub fn load_secrets() -> Secrets {
 /// hydrate every field).  Use the dedicated `set_*` helpers above to
 /// explicitly delete a secret.
 ///
-/// No-op in debug builds (see [`load_secrets`] for rationale).
 pub fn save_secrets(secrets: &Secrets) {
-    if cfg!(debug_assertions) {
-        return;
-    }
     let pairs: &[(&str, &str)] = &[
         (KEY_API_TOKEN, &secrets.api_token),
         (KEY_EMOTIV_CLIENT_ID, &secrets.emotiv_client_id),
@@ -228,9 +261,6 @@ pub fn save_secrets(secrets: &Secrets) {
 /// into the keychain.  Returns `true` if any migration happened (caller
 /// should re-save settings to strip the plaintext values).
 pub fn migrate_plaintext_secrets(secrets: &Secrets) -> bool {
-    if cfg!(debug_assertions) {
-        return false;
-    }
     let mut migrated = false;
 
     let pairs: &[(&str, &str)] = &[

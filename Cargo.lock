@@ -7290,9 +7290,9 @@ dependencies = [
 
 [[package]]
 name = "llmfit-core"
-version = "0.9.16"
+version = "0.9.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5eb09b5be6bade227582226bd0d74069abd88460756af4e93a8dfe97c38d57c"
+checksum = "ab3d28d163be4423375ed1f7fb0bdc23e40fd1fe56e7a5beb025a9240bb6b978"
 dependencies = [
  "dirs",
  "http 1.4.0",
@@ -12130,7 +12130,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skill"
-version = "0.0.130-rc.2"
+version = "0.0.130-rc.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
