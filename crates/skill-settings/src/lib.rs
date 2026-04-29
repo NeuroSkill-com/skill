@@ -1313,20 +1313,16 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         }
     }
 
-    // ── Load secrets from keychain (release) or keep JSON values (debug) ──
-    if !cfg!(debug_assertions) {
-        let secrets = keychain::load_secrets();
-        s.api_token = secrets.api_token;
-        s.device_api.emotiv_client_id = secrets.emotiv_client_id;
-        s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
-        s.device_api.idun_api_token = secrets.idun_api_token;
-        s.device_api.oura_access_token = secrets.oura_access_token;
-        s.device_api.neurosity_email = secrets.neurosity_email;
-        s.device_api.neurosity_password = secrets.neurosity_password;
-        s.device_api.neurosity_device_id = secrets.neurosity_device_id;
-    }
-    // In debug mode, secrets stay as loaded from the JSON file — no keychain
-    // interaction, no macOS authorization prompts on every dev build.
+    // Secrets are deliberately **not** hydrated here.  Loading every secret at
+    // startup triggers one macOS keychain prompt per item per process whenever
+    // the binary's code signature changes (i.e. on every release upgrade), and
+    // `load_settings` is called by both the Tauri shell and the daemon during
+    // boot.  Callers that actually need a secret read it on demand from
+    // `keychain::get_*`, so a prompt only appears when the user initiates an
+    // action that requires that specific secret.
+    //
+    // In debug builds, secrets stay as loaded from the JSON file (the JSON
+    // round-trip is preserved by `skip_secret_in_release` returning false).
 
     s
 }

@@ -46,6 +46,24 @@ impl<'a> Default for WindowSpec<'a> {
     }
 }
 
+/// Clamp a requested logical inner size so it fits on the primary monitor.
+///
+/// Without this, windows configured larger than the user's screen (e.g. the
+/// 880-tall onboarding window on a 13" laptop) open partially off-screen with
+/// their footer controls unreachable.
+fn clamp_to_monitor(app: &AppHandle, requested: (f64, f64)) -> (f64, f64) {
+    // Reserve room for menubar/taskbar/dock so the title bar stays visible.
+    const CHROME_MARGIN: f64 = 80.0;
+    const FLOOR: f64 = 320.0;
+    let Ok(Some(monitor)) = app.primary_monitor() else {
+        return requested;
+    };
+    let scale = monitor.scale_factor();
+    let max_w = (monitor.size().width as f64 / scale - CHROME_MARGIN).max(FLOOR);
+    let max_h = (monitor.size().height as f64 / scale - CHROME_MARGIN).max(FLOOR);
+    (requested.0.min(max_w), requested.1.min(max_h))
+}
+
 /// Focus an existing window or create a new one from `spec`.
 ///
 /// Deduplicates the repeated "check-existing → unminimize/show/focus → or build new"
@@ -57,20 +75,23 @@ pub(crate) fn focus_or_create(app: &AppHandle, spec: WindowSpec) -> Result<(), S
         let _ = win.set_focus();
         return Ok(());
     }
+    let (inner_w, inner_h) = clamp_to_monitor(app, spec.inner_size);
     let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         spec.label,
         tauri::WebviewUrl::App(spec.route.into()),
     )
     .title(spec.title)
-    .inner_size(spec.inner_size.0, spec.inner_size.1)
+    .inner_size(inner_w, inner_h)
     .resizable(spec.resizable)
     .center()
     .decorations(false)
     .transparent(true);
 
     if let Some((w, h)) = spec.min_inner_size {
-        builder = builder.min_inner_size(w, h);
+        // Min must not exceed the (possibly clamped) inner size, or the
+        // builder will silently grow the window past the screen.
+        builder = builder.min_inner_size(w.min(inner_w), h.min(inner_h));
     }
     if spec.always_on_top {
         builder = builder.always_on_top(true);
@@ -102,21 +123,21 @@ pub(crate) fn focus_or_create_with_emit(
         let _ = win.emit(event, payload.to_string());
         return Ok(());
     }
-    // Fall through to normal builder
+    let (inner_w, inner_h) = clamp_to_monitor(app, spec.inner_size);
     let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         spec.label,
         tauri::WebviewUrl::App(spec.route.into()),
     )
     .title(spec.title)
-    .inner_size(spec.inner_size.0, spec.inner_size.1)
+    .inner_size(inner_w, inner_h)
     .resizable(spec.resizable)
     .center()
     .decorations(false)
     .transparent(true);
 
     if let Some((w, h)) = spec.min_inner_size {
-        builder = builder.min_inner_size(w, h);
+        builder = builder.min_inner_size(w.min(inner_w), h.min(inner_h));
     }
 
     builder

@@ -776,6 +776,10 @@ pub struct EpochMetrics {
 
 impl EpochMetrics {
     /// Derive metrics from a `BandSnapshot` by averaging across all channels.
+    ///
+    /// Engagement and relaxation delegate to `skill_devices::compute_engagement`
+    /// / `compute_relaxation` — the single source of truth shared with the live
+    /// `latest_bands` path. Storing here is fine; *computing* here is not.
     pub fn from_snapshot(snap: &BandSnapshot) -> Self {
         let n = snap.channels.len() as f32;
         if n < 1.0 {
@@ -788,8 +792,6 @@ impl EpochMetrics {
         let mut rb = 0.0f32;
         let mut rg = 0.0f32;
         let mut rhg = 0.0f32;
-        let mut sum_relax = 0.0f32;
-        let mut sum_engage = 0.0f32;
 
         for ch in &snap.channels {
             rd += ch.rel_delta;
@@ -798,17 +800,6 @@ impl EpochMetrics {
             rb += ch.rel_beta;
             rg += ch.rel_gamma;
             rhg += ch.rel_high_gamma;
-            let a = ch.rel_alpha;
-            let b = ch.rel_beta;
-            let t = ch.rel_theta;
-            let d1 = a + t;
-            let d2 = b + t;
-            if d2 > 1e-6 {
-                sum_relax += a / d2;
-            }
-            if d1 > 1e-6 {
-                sum_engage += b / d1;
-            }
         }
         rd /= n;
         rt /= n;
@@ -832,8 +823,8 @@ impl EpochMetrics {
             rel_beta: rb,
             rel_gamma: rg,
             rel_high_gamma: rhg,
-            relaxation: Self::sigmoid100(sum_relax / n, 2.5, 1.0),
-            engagement: Self::sigmoid100(sum_engage / n, 2.0, 0.8),
+            relaxation: skill_devices::compute_relaxation(snap) as f32,
+            engagement: skill_devices::compute_engagement(snap) as f32,
             faa,
             tar: snap.tar,
             bar: snap.bar,
@@ -1134,6 +1125,135 @@ mod tests {
         let back: EpochMetrics = serde_json::from_str(&json).unwrap();
         assert_eq!(back.mood, m.mood);
         assert_eq!(back.rel_delta, m.rel_delta);
+    }
+
+    /// Closes the single-source-of-truth loop: storage path
+    /// (`EpochMetrics::from_snapshot`) and live path
+    /// (`skill_devices::compute_engagement` / `compute_relaxation`) must
+    /// agree on the same `BandSnapshot`. Pre-refactor they diverged — this
+    /// test would have caught the stuck-engagement bug.
+    #[test]
+    fn epoch_metrics_match_canonical_compute() {
+        use skill_eeg::eeg_bands::{BandPowers, BandSnapshot};
+
+        let ch = BandPowers {
+            channel: "AF7".into(),
+            delta: 5.0,
+            theta: 3.0,
+            alpha: 4.0,
+            beta: 6.0,
+            gamma: 1.0,
+            high_gamma: 0.5,
+            rel_delta: 0.25,
+            rel_theta: 0.15,
+            rel_alpha: 0.20,
+            rel_beta: 0.30,
+            rel_gamma: 0.05,
+            rel_high_gamma: 0.05,
+            dominant: "beta".into(),
+            dominant_symbol: "β".into(),
+            dominant_color: "#22c55e".into(),
+        };
+        let mut snap = BandSnapshot {
+            timestamp: 0.0,
+            channels: vec![ch.clone(), ch.clone(), ch.clone(), ch],
+            faa: 0.0,
+            tar: 0.5,
+            bar: 0.4,
+            dtr: 1.2,
+            pse: 0.7,
+            apf: 10.0,
+            bps: -1.5,
+            snr: 12.0,
+            coherence: 0.5,
+            mu_suppression: 0.1,
+            mood: 60.0,
+            tbr: 0.8,
+            sef95: 22.0,
+            spectral_centroid: 15.0,
+            hjorth_activity: 0.1,
+            hjorth_mobility: 0.2,
+            hjorth_complexity: 0.3,
+            permutation_entropy: 0.6,
+            higuchi_fd: 1.5,
+            dfa_exponent: 0.7,
+            sample_entropy: 0.4,
+            pac_theta_gamma: 0.1,
+            laterality_index: 0.05,
+            headache_index: 10.0,
+            migraine_index: 5.0,
+            consciousness_lzc: 50.0,
+            consciousness_wakefulness: 70.0,
+            consciousness_integration: 60.0,
+            hr: None,
+            rmssd: None,
+            sdnn: None,
+            pnn50: None,
+            lf_hf_ratio: None,
+            respiratory_rate: None,
+            spo2_estimate: None,
+            perfusion_index: None,
+            stress_index: None,
+            blink_count: None,
+            blink_rate: None,
+            head_pitch: None,
+            head_roll: None,
+            stillness: None,
+            nod_count: None,
+            shake_count: None,
+            meditation: None,
+            cognitive_load: None,
+            drowsiness: None,
+            engagement: None,
+            relaxation: None,
+            focus: None,
+            temperature_raw: None,
+            gpu_overall: None,
+            gpu_render: None,
+            gpu_tiler: None,
+            rel_delta: 0.25,
+            rel_theta: 0.15,
+            rel_alpha: 0.20,
+            rel_beta: 0.30,
+            rel_gamma: 0.05,
+        };
+
+        let metrics = EpochMetrics::from_snapshot(&snap);
+        let canonical_e = skill_devices::compute_engagement(&snap) as f32;
+        let canonical_r = skill_devices::compute_relaxation(&snap) as f32;
+
+        assert!(
+            (metrics.engagement - canonical_e).abs() < 0.001,
+            "EpochMetrics.engagement={} diverges from canonical={canonical_e}",
+            metrics.engagement,
+        );
+        assert!(
+            (metrics.relaxation - canonical_r).abs() < 0.001,
+            "EpochMetrics.relaxation={} diverges from canonical={canonical_r}",
+            metrics.relaxation,
+        );
+
+        // And confirm enrich_band_snapshot puts the same value on the wire format.
+        skill_devices::enrich_band_snapshot(
+            &mut snap,
+            &skill_devices::SnapshotContext {
+                ppg: None,
+                artifacts: None,
+                head_pose: None,
+                temperature_raw: 0,
+                gpu: None,
+            },
+        );
+        let on_snapshot_e = snap.engagement.unwrap();
+        let on_snapshot_r = snap.relaxation.unwrap();
+        assert!(
+            (on_snapshot_e as f32 - canonical_e).abs() < 0.05,
+            "snapshot.engagement={on_snapshot_e} diverges from canonical={canonical_e}",
+        );
+        assert!(
+            (on_snapshot_r as f32 - canonical_r).abs() < 0.05,
+            "snapshot.relaxation={on_snapshot_r} diverges from canonical={canonical_r}",
+        );
     }
 
     // ── validate_safetensors ─────────────────────────────────────────────

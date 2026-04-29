@@ -289,6 +289,18 @@ pub struct BandSnapshot {
     /// Drowsiness score (0–100).  High TAR + alpha spindles.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drowsiness: Option<f64>,
+    /// Engagement score (0–100).  Per-channel β / (α + θ), per-channel `0.5`
+    /// fallback for low-signal channels, then sigmoid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engagement: Option<f64>,
+    /// Relaxation score (0–100).  Per-channel α / (β + θ), per-channel `0.5`
+    /// fallback for low-signal channels, then sigmoid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relaxation: Option<f64>,
+    /// Focus score (0–100).  Currently identical to `engagement`; kept as a
+    /// distinct field for UI semantics and future divergence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus: Option<f64>,
 
     // ── Device telemetry ─────────────────────────────────────────────────────
     /// Raw temperature ADC value from headset (Classic firmware only).
@@ -1001,6 +1013,9 @@ impl BandAnalyzer {
             meditation: None,
             cognitive_load: None,
             drowsiness: None,
+            engagement: None,
+            relaxation: None,
+            focus: None,
             temperature_raw: None,
             gpu_overall: None,
             gpu_render: None,
