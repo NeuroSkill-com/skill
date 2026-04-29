@@ -599,6 +599,7 @@ fn poll_active_window() -> Option<ActiveWindowInfo> {
             document_path: None,
             activated_at: unix_secs(),
             browser_title: None,
+            monitor_id: None,
         })
     }
 }

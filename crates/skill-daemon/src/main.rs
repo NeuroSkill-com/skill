@@ -21,7 +21,6 @@ pub(crate) mod session_runner;
 mod tty;
 #[cfg(unix)]
 mod tty_backfill;
-#[cfg(unix)]
 mod tty_embedder;
 #[cfg(unix)]
 mod tty_finalizer;
@@ -150,7 +149,6 @@ async fn daemon_main() -> anyhow::Result<()> {
     tty_finalizer::spawn(state.clone());
     // Fill in `terminal_outputs.embedding` for finalized rows. Runs every
     // 30 s, batches of 32, int8-quantised vectors.
-    #[cfg(unix)]
     tty_embedder::spawn(state.clone());
 
     // Auto-refresh installed shell hooks so upgrades propagate fixes (e.g. the
