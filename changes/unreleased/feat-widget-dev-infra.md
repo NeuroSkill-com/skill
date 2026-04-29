@@ -1,3 +1,0 @@
-### Features
-
-- **Widget development infrastructure**.

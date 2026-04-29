@@ -11,6 +11,9 @@ thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 iroh = "0.97"
+# Pin transitive pkcs8 to the rc that matches iroh's pre-release ed25519/ed25519-dalek;
+# pkcs8 0.11.0 stable made KeyMalformed a tuple variant and broke them.
+pkcs8 = "=0.11.0-rc.11"
 rand = "0.9"
 tokio = { version = "1", features = ["full"] }
 totp-rs = { version = "5.7", features = ["gen_secret", "otpauth", "qr"] }
