@@ -91,9 +91,12 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
     }
 
     // openpty() returns a master/slave pair. Caller owns both FDs.
+    // libc declares the winsize parameter as *const on Linux and *mut on macOS,
+    // so we always pass &mut and silence the Linux-only "unnecessary mut" lint.
     let mut master_fd: RawFd = -1;
     let mut slave_fd: RawFd = -1;
     let rc = unsafe {
+        #[allow(clippy::unnecessary_mut_passed)]
         libc::openpty(
             &mut master_fd,
             &mut slave_fd,

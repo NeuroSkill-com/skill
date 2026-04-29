@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../..");
 const _tauriI18n = resolve(repoRoot, "src/lib/i18n");
 const vscodeL10n = resolve(repoRoot, "extensions/vscode/l10n");
+
+// `extensions/vscode` is a git submodule. Skip the VS Code l10n suite when
+// not checked out (CI without `submodules: true`, fresh clones).
+const vscodeSubmoduleAvailable = existsSync(vscodeL10n);
 
 const TAURI_LANGS = ["en", "de", "es", "fr", "he", "ja", "ko", "uk", "zh"] as const;
 const VSCODE_BUNDLES = [
@@ -57,7 +61,7 @@ const TAURI_REQUIRED_KEYS = [
   "validation.eeg.enabled",
 ] as const;
 
-describe("VS Code extension — validation l10n bundles", () => {
+describe.skipIf(!vscodeSubmoduleAvailable)("VS Code extension — validation l10n bundles", () => {
   it("every bundle file exists", () => {
     const present = readdirSync(vscodeL10n);
     for (const f of VSCODE_BUNDLES) {

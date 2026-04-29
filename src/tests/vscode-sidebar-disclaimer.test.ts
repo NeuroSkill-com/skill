@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -8,7 +8,11 @@ const extRoot = resolve(__dirname, "../../extensions/vscode");
 
 const FDA_REQUIRED_TOKENS = ["FDA", "CE"] as const;
 
-describe("vscode extension — research-use disclaimer", () => {
+// `extensions/vscode` is a git submodule. Skip when not checked out
+// (CI without `submodules: true`, or fresh `git clone` without `--recursive`).
+const submoduleAvailable = existsSync(`${extRoot}/src/sidebar.ts`);
+
+describe.skipIf(!submoduleAvailable)("vscode extension — research-use disclaimer", () => {
   it("sidebar.ts defines _disclaimerFooter and calls it from every HTML producer", () => {
     const src = readFileSync(`${extRoot}/src/sidebar.ts`, "utf-8");
 

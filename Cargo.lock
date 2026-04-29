@@ -12380,6 +12380,7 @@ dependencies = [
  "anyhow",
  "arrow-array",
  "arrow-schema",
+ "chrono",
  "csv",
  "grayscale",
  "libc",

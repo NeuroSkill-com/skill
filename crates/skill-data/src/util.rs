@@ -65,15 +65,7 @@ pub fn init_wal_pragmas(conn: &rusqlite::Connection) {
 
 /// Return the local timezone's UTC offset in seconds (e.g. -28800 for UTC-8).
 pub fn local_tz_offset_secs() -> i32 {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as libc::time_t;
-    // SAFETY: zeroed libc::tm is a valid all-zeros struct (all integer fields).
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    // SAFETY: localtime_r is thread-safe and writes into the provided `tm`.
-    unsafe { libc::localtime_r(&now, &mut tm) };
-    tm.tm_gmtoff as i32
+    chrono::Local::now().offset().local_minus_utc()
 }
 
 // ── Blob ↔ f32 conversion ─────────────────────────────────────────────────────

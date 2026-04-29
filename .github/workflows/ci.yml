@@ -366,6 +366,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
+          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

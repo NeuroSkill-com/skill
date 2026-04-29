@@ -2482,10 +2482,8 @@ fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
         .output();
 
     if let Ok(output) = xclip {
-        if output.status.success() && !output.stdout.is_empty() {
-            if std::fs::write(&tmp_path, &output.stdout).is_ok() {
-                return Some(tmp_path);
-            }
+        if output.status.success() && !output.stdout.is_empty() && std::fs::write(&tmp_path, &output.stdout).is_ok() {
+            return Some(tmp_path);
         }
     }
 
@@ -2497,10 +2495,8 @@ fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
         .output();
 
     if let Ok(output) = wl {
-        if output.status.success() && !output.stdout.is_empty() {
-            if std::fs::write(&tmp_path, &output.stdout).is_ok() {
-                return Some(tmp_path);
-            }
+        if output.status.success() && !output.stdout.is_empty() && std::fs::write(&tmp_path, &output.stdout).is_ok() {
+            return Some(tmp_path);
         }
     }
 
