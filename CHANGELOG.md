@@ -5421,3 +5421,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 ### Features
 
 - fix vulkan cache on windows ci
+
+## [0.0.130-rc.6] — 2026-04-30
+
+### Features
+
+- Minor updates and improvements
