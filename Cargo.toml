@@ -13,7 +13,7 @@
 
 [workspace]
 resolver = "2"
-exclude = ["patches/muda-0.17.2"]
+exclude = []
 members = [
     "src-tauri",
     "crates/skill-autostart",
@@ -68,8 +68,6 @@ members = [
 [patch.crates-io]
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
-# Fix muda ZeroWidth panic in to_png() on macOS (upstream bug in 0.17.2)
-muda            = { path = "patches/muda-0.17.2" }
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
 glib            = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
@@ -78,8 +76,6 @@ gobject-sys     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 gio             = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 gio-sys         = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
-# Fix rand 0.7.3 vulnerability (GHSA-2qph-qpvm-2qf7) pulled in by selectors → phf_codegen → phf_generator
-phf_generator   = { path = "patches/phf_generator-0.8.0" }
 # burn-mlx on crates.io (0.1.2) targets burn 0.16; the git main branch supports
 # burn 0.20 which we use.  This patch also covers fast-umap's transitive dep.
 burn-mlx        = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20" }
