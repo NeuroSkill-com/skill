@@ -238,11 +238,14 @@ fn ax_poll_active_window() -> Option<ActiveWindowInfo> {
 
     // ── Step 2: window title + document path via AXUIElement ─────────────────
     // One "Accessibility" permission covers all apps — no per-app dialogs.
+    // SAFETY: All CF/AX objects are null-checked before use; owned refs are
+    // released via CFRelease before the block exits.
     let (window_title, document_path) = unsafe {
         /// Convert a non-null CFStringRef to a Rust `String`.
         ///
         /// SAFETY: `s` must be a valid, non-null CFStringRef.
         unsafe fn cfstr_to_string(s: CFStringRef, enc: u32) -> String {
+            // SAFETY: upheld by the caller (see fn-level doc).
             unsafe {
                 let len = CFStringGetLength(s);
                 let max = CFStringGetMaximumSizeForEncoding(len, enc) + 1;
@@ -255,21 +258,11 @@ fn ax_poll_active_window() -> Option<ActiveWindowInfo> {
             }
         }
 
-        let key_focused_win = CFStringCreateWithCString(
-            std::ptr::null(),
-            b"AXFocusedWindow\0".as_ptr() as *const c_char,
-            KCF_STRING_ENCODING_UTF8,
-        );
-        let key_title = CFStringCreateWithCString(
-            std::ptr::null(),
-            b"AXTitle\0".as_ptr() as *const c_char,
-            KCF_STRING_ENCODING_UTF8,
-        );
-        let key_document = CFStringCreateWithCString(
-            std::ptr::null(),
-            b"AXDocument\0".as_ptr() as *const c_char,
-            KCF_STRING_ENCODING_UTF8,
-        );
+        let key_focused_win =
+            CFStringCreateWithCString(std::ptr::null(), c"AXFocusedWindow".as_ptr(), KCF_STRING_ENCODING_UTF8);
+        let key_title = CFStringCreateWithCString(std::ptr::null(), c"AXTitle".as_ptr(), KCF_STRING_ENCODING_UTF8);
+        let key_document =
+            CFStringCreateWithCString(std::ptr::null(), c"AXDocument".as_ptr(), KCF_STRING_ENCODING_UTF8);
 
         let app_ax = AXUIElementCreateApplication(pid);
 
@@ -464,6 +457,7 @@ fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
         ///
         /// SAFETY: `s` must be a NUL-terminated byte slice. Caller must CFRelease.
         unsafe fn cfstr(s: &[u8]) -> CFStringRef {
+            // SAFETY: upheld by caller (NUL-terminated slice, result CFRelease'd).
             unsafe {
                 CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8)
             }
@@ -477,6 +471,7 @@ fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
                 return None;
             }
             let mut v: i64 = 0;
+            // SAFETY: `n` is non-null and a valid CFNumber; `v` is a local i64.
             unsafe {
                 if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) {
                     Some(v as i32)
@@ -494,6 +489,7 @@ fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
                 return None;
             }
             let mut v: i64 = 0;
+            // SAFETY: `n` is non-null and a valid CFNumber; reinterpret bits as f64.
             unsafe {
                 // CFNumberGetValue writes the numeric bits; reinterpret as f64.
                 if CFNumberGetValue(n, K_CF_NUMBER_FLOAT64_TYPE, &mut v) {
@@ -508,6 +504,7 @@ fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
         ///
         /// SAFETY: `s` must be a valid, non-null CFStringRef.
         unsafe fn cfstr_to_string(s: CFStringRef) -> String {
+            // SAFETY: upheld by the caller (see fn-level doc).
             unsafe {
                 let len = CFStringGetLength(s);
                 let max = CFStringGetMaximumSizeForEncoding(len, K_CF_STRING_ENCODING_UTF8) + 1;
