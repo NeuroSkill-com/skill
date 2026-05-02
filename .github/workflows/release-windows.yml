@@ -912,6 +912,7 @@ jobs:
       - name: Notify Discord of release
         if: always() && steps.version_meta.outputs.is_release == 'true'
         shell: bash
+        env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: >-
           node scripts/ci.mjs discord-notify
