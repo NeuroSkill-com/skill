@@ -391,11 +391,10 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.hooks = data.hooks;
         s.ws_host = data.ws_host.clone();
         s.ws_port = data.ws_port;
-        s.api_token = data.api_token.clone();
+        // Secrets stay in the keychain; Tauri no longer caches them in AppState.
         s.hf_endpoint = data.hf_endpoint.clone();
         s.update_check_interval_secs = data.update_check_interval_secs;
         s.openbci_config = data.openbci;
-        s.device_api_config = data.device_api;
         s.scanner_config = data.scanner;
         s.location_enabled = data.location_enabled;
         s.inference_device = data.inference_device.clone();

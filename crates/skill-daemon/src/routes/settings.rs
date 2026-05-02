@@ -1300,9 +1300,16 @@ fi
 # fresh PTY and proxies stdin/stdout while forwarding SIGWINCH correctly.
 # Log path is chosen internally (under ~/.skill/terminal-logs/) so it never
 # appears in argv or the terminal title. Set NEUROSKILL_RECORDING=1 to opt out.
+# We intentionally avoid `exec` here: if the shim exits with code 126 it
+# means startup failed (not a tty, can't open PTY, etc.) and we fall through
+# to a plain interactive shell. For any other exit code (normal user exit,
+# Ctrl-D, …) we forward it and close this shell too.
 if [[ -z "$NEUROSKILL_RECORDING" && -x "{daemon_path}" ]]; then
   export NEUROSKILL_RECORDING=1
-  exec "{daemon_path}" tty
+  "{daemon_path}" tty
+  _ns_rc=$?
+  unset NEUROSKILL_RECORDING
+  [[ $_ns_rc -ne 126 ]] && exit $_ns_rc
 fi
 "#
         ),
@@ -1356,9 +1363,13 @@ fi
 
 # Session recording via the daemon's `tty` PTY shim (forwards SIGWINCH).
 # Log path chosen internally — nothing leaks into argv or the tab title.
+# See zsh block above for the fallback-on-failure rationale.
 if [[ -z "$NEUROSKILL_RECORDING" && -x "{daemon_path}" ]]; then
   export NEUROSKILL_RECORDING=1
-  exec "{daemon_path}" tty
+  "{daemon_path}" tty
+  _ns_rc=$?
+  unset NEUROSKILL_RECORDING
+  [[ $_ns_rc -ne 126 ]] && exit $_ns_rc
 fi
 "#
         ),

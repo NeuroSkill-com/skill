@@ -154,11 +154,10 @@ for suite in "${SUITES[@]}"; do
       run_suite "Windows manifest" node scripts/check-windows-manifest.mjs || { $STOP_ON_FAIL && break; }
       ;;
     smoke)
-      if command -v tmux >/dev/null 2>&1 && [ -t 0 ]; then
-        run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
-      else
-        skip_suite "smoke test" "requires tmux + interactive terminal"
-      fi
+      # smoke-test.sh auto-selects headless mode when stdout isn't a TTY or
+      # CI=true, so it runs unattended in CI / piped shells. Interactive
+      # terminals get the tmux split-pane unless overridden by SMOKE_MODE.
+      run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
       ;;
     daemon)
       if ls src-tauri/target/*/release/bundle/dmg/*.dmg >/dev/null 2>&1 || \
@@ -185,7 +184,7 @@ for suite in "${SUITES[@]}"; do
       ;;
     mlx-e2e)
       if [[ "$(uname -s)" == "Darwin" ]]; then
-        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 || { $STOP_ON_FAIL && break; }
+        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 --include-ignored || { $STOP_ON_FAIL && break; }
         run_suite "FFT MLX E2E" cargo test -p skill-eeg --features mlx -- fft_e2e --nocapture || { $STOP_ON_FAIL && break; }
       else
         skip_suite "MLX E2E" "requires macOS with Apple Silicon"

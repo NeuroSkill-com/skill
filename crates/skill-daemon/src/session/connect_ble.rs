@@ -116,19 +116,13 @@ pub(super) async fn connect_hermes(paired_name: Option<String>) -> anyhow::Resul
 // ── IDUN Guardian (BLE) ──────────────────────────────────────────────────────
 
 pub(super) async fn connect_idun(
-    state: &AppState,
+    _state: &AppState,
     paired_name: Option<String>,
 ) -> anyhow::Result<Box<dyn DeviceAdapter>> {
     use skill_devices::idun::prelude::*;
     use skill_devices::session::idun::IdunAdapter;
 
-    let api_token = {
-        let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-        skill_settings::load_settings(&skill_dir)
-            .device_api
-            .idun_api_token
-            .clone()
-    };
+    let api_token = skill_settings::keychain::get_idun_api_token();
 
     info!("connecting to IDUN Guardian…");
     let config = GuardianClientConfig {

@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
-use crate::settings::{save_secrets_from_settings, settings_path};
+use crate::settings::settings_path;
 use crate::state::*;
 use crate::ws_server::WsBroadcaster;
 use crate::MutexExt;
@@ -269,13 +269,14 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     // Infrastructure / server config
     data.ws_host = s.ws_host.clone();
     data.ws_port = s.ws_port;
-    data.api_token = s.api_token.clone();
+    // Secrets (api_token, device_api credentials) are owned by the daemon's
+    // route handlers and stored exclusively in the system keychain — Tauri
+    // no longer round-trips them through AppState.  See keychain::get_*.
     data.hf_endpoint = s.hf_endpoint.clone();
     data.update_check_interval_secs = s.update_check_interval_secs;
 
     // Hardware / device config
     data.openbci = s.openbci_config.clone();
-    data.device_api = s.device_api_config.clone();
     data.neutts = s.neutts_config.clone();
     data.tts_preload = s.tts_preload;
     data.screenshot = s.screenshot_config.clone();
@@ -303,9 +304,6 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     }
 
     drop(s);
-
-    // Persist secrets to the system keychain (encrypted, survives updates).
-    save_secrets_from_settings(&data);
 
     if let Ok(json) = serde_json::to_string_pretty(&data) {
         if let Err(e) = std::fs::write(&path, &json) {

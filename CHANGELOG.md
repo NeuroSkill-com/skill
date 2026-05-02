@@ -4626,3 +4626,834 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 - Better updater configuration
 
 ---
+
+## [0.0.130-rc.1] — 2026-04-29
+
+### Features
+
+- **Human vs AI activity tracking**: every edit and commit is now classified as `source: "human"` or `source: "ai"` in real-time. `AIActivityTracker` watches VSCode commands (Copilot/Codeium completions, inline chat, AI-generated commit messages) to tag subsequent edits/commits, exposes `getAIRatioForFile()` (rolling 5-minute ratio) for CodeLens + sidebar, and forwards the `source` field to the daemon for `build_events` / `ai_events` storage.
+
+## How it works
+
+The `AIActivityTracker` monitors VSCode command execution to detect AI tool usage:
+
+- **Inline completions** (Copilot, Codeium) — edits within 5 seconds after an AI command are tagged `source: "ai"`
+- **Inline chat** (`inlineChat.start`, `copilot.interactiveEditor.*`) — subsequent edits in the same file are tagged AI
+- **Commit messages** — `github.copilot.git.generateCommitMessage` marks the next commit as AI-assisted
+- **Everything else** — classified as `source: "human"`
+
+## What's tracked
+
+| Signal | Classification |
+|--------|---------------|
+| Manual typing | `human` |
+| Copilot inline suggestion accepted | `ai` |
+| Copilot inline chat edits | `ai` |
+| Paste from external source | `human` |
+| AI-generated commit message | `ai` |
+| Manually typed commit message | `human` |
+
+## Per-file AI ratio
+
+`AIActivityTracker.getAIRatioForFile(path)` returns a rolling 5-minute ratio (0.0 = all human, 1.0 = all AI) used by:
+- CodeLens annotations (shows "AI-Assisted" vs focus score)
+- Sidebar (Human/AI percentage display)
+- Brain status command (Human/AI split)
+
+## Daemon integration
+
+The `source` field is sent on every `edit` and `git_commit` event to the daemon. The daemon stores:
+- AI commits as `"git commit (ai-assisted)"` in `build_events`
+- AI commits also as `ai_events` for analytics weighting
+- Completion acceptances as `ai_events` with type `"suggestion_accepted"`
+
+## Files
+
+- `src/ai-tracker.ts` — Core tracker (new)
+- `src/events.ts` — Wired to classify edits and commits
+- `crates/skill-daemon/src/routes/settings_hooks_activity.rs` — Daemon-side storage
+
+- **Focus-aware code review CodeLens**: annotations at the top of each file show the developer's focus level when the file was last edited (`⚠ Low Focus (42)`, `ℹ Focus: 65/100`, `🤖 AI-Assisted (85%)`, or none for high focus). `NeuroSkill: Show Files Needing Review` command lists low-focus human-authored files. Toggle via `neuroskill.focusCodeLens`.
+
+## What you see
+
+- `⚠ Low Focus (42) — Review Recommended` — File was edited during low focus. Click to see all files needing review.
+- `ℹ Focus: 65/100` — Moderate focus, informational only.
+- `🤖 AI-Assisted (85%)` — Most edits were AI-generated, focus score not applicable.
+- No annotation — High focus (>70) or no data yet.
+
+## Commands
+
+**NeuroSkill: Show Files Needing Review** (`Cmd+Shift+P`)
+- Shows a QuickPick list of files edited during low focus (<50) that were mostly human-authored
+- Sorted by focus score (lowest first)
+- Select a file to open it
+
+## How it works
+
+- `FocusCodeLensProvider` queries `/brain/cognitive-load` (grouped by file) every 30 seconds
+- Combines focus data with `AIActivityTracker.getAIRatioForFile()` to distinguish human vs AI code
+- Files with high AI ratio (>70%) show AI label instead of focus score — AI code doesn't reflect human cognitive state
+
+## Settings
+
+`neuroskill.focusCodeLens` (default: `true`) — Toggle CodeLens annotations on/off.
+
+## Files
+
+- `src/codelens-provider.ts` — CodeLens provider (new)
+
+- **Smart Interruption Shield**: when `/brain/flow-state` reports `in_flow: true`, VS Code's Do Not Disturb mode auto-enables and the status bar shows `$(shield) In Flow 12m`. `NeuroSkill: Toggle Flow Shield` cycles Auto / Forced-on / Forced-off. Toggle via `neuroskill.flowShield`.
+
+## How it works
+
+- When `/brain/flow-state` reports `in_flow: true`, the Flow Shield activates
+- Enables VSCode's Do Not Disturb mode (VSCode 1.90+)
+- Shows `$(shield) In Flow 12m` in the status bar with elapsed time
+- When flow state ends, DND is automatically disabled
+
+## Manual override
+
+**NeuroSkill: Toggle Flow Shield** (`Cmd+Shift+P`)
+
+Cycles through three modes:
+1. **Auto** (default) — activates/deactivates based on EEG flow detection
+2. **Forced on** — always active regardless of flow state
+3. **Forced off** — never active
+
+## Settings
+
+`neuroskill.flowShield` (default: `true`) — Enable/disable the flow shield feature.
+
+## Files
+
+- `src/flow-shield.ts` — Flow shield implementation (new)
+- `src/brain.ts` — Calls `flowShield.update()` every 30s
+
+- **Adaptive Break Coach**: personalized break timing based on the developer's actual EEG focus cycle (via `/brain/break-timing`), not generic Pomodoro. Status bar countdown `$(clock) Break in 8m`, max one notification per cycle, auto-resets when fatigue indicates idleness. `NeuroSkill: Take a Break` resets the timer manually. Toggle via `neuroskill.breakCoach`.
+
+## How it works
+
+- Queries `/brain/break-timing` to learn the developer's natural focus cycle length
+- Shows a countdown in the status bar: `$(clock) Break in 8m`
+- When the predicted focus drop is imminent (<5 min), the countdown turns visible
+- When the cycle ends, shows `$(clock) Break time` and optionally notifies
+
+## Notifications
+
+- Max one notification per focus cycle
+- Message: "You've been focused for 47m. Your natural cycle is 42m — take a break?"
+- Buttons: "Take Break" (resets timer) or "Dismiss"
+
+## Timer sync
+
+The break coach automatically syncs with the daemon's fatigue data. If `continuous_work_mins` drops below 5 (indicating the user was idle), the session timer resets — no false break suggestions after returning from lunch.
+
+## Commands
+
+**NeuroSkill: Take a Break** (`Cmd+Shift+P`) — Manually acknowledge a break and reset the timer.
+
+## Settings
+
+`neuroskill.breakCoach` (default: `true`) — Enable/disable break coaching.
+
+## Files
+
+- `src/break-coach.ts` — Break coach implementation (new)
+- `src/brain.ts` — Calls `breakCoach.refresh()` and `resetSessionIfIdle()` every 30s
+
+- **Struggle → AI assist bridge**: when `/brain/struggle-predict` flags a file (EEG focus + undo rate + velocity drop + time-on-file), shows an actionable notification with **Open Copilot Chat**, **Open Terminal**, and **Step Back** buttons. Debounced to one suggestion per file per 10 minutes. Toggle via `neuroskill.struggleBridge`.
+
+## How it works
+
+- Monitors `/brain/struggle-predict` (EEG focus + undo rate + velocity drop + time-on-file)
+- When `struggling: true`, shows an actionable notification:
+  > "Stuck on auth.ts? (score: 78) Consider breaking the problem into smaller pieces."
+
+## Action buttons
+
+| Button | Action |
+|--------|--------|
+| **Open Copilot Chat** | Opens GitHub Copilot interactive chat (or generic chat panel) |
+| **Open Terminal** | Toggles terminal for CLI debugging |
+| **Step Back** | Dismiss and take a mental break |
+
+## Debouncing
+
+- Max one suggestion per file per 10 minutes
+- Prevents notification fatigue while still catching genuine struggles
+
+## Settings
+
+`neuroskill.struggleBridge` (default: `true`) — Enable/disable struggle detection and AI suggestions.
+
+## Files
+
+- `src/struggle-bridge.ts` — Struggle bridge implementation (new)
+- `src/brain.ts` — Calls `struggleBridge.check()` every 30s (replaces the old generic struggle notification)
+
+- **Personal Flow Triggers dashboard**: collapsible "Your Flow Recipe" sidebar section mining 7-day EEG + activity history — best language (`/brain/code-eeg`), peak hours (`/brain/optimal-hours`), natural cycle length (`/brain/break-timing`), top flow killer (`/brain/context-cost`). Toggle via `neuroskill.flowTriggers`.
+
+## What you see
+
+In the NeuroSkill sidebar panel, a collapsible "Your Flow Recipe" section shows:
+
+- **Best language** — "Focus best on Rust (82)" — from `/brain/code-eeg`
+- **Peak hours** — "Peak hours: 9:00, 10:00, 14:00" — from `/brain/optimal-hours`
+- **Natural cycle** — "Natural cycle: 42m" — from `/brain/break-timing`
+- **Flow killer** — "Flow killer: Slack (focus 38 at switch)" — from `/brain/context-cost`
+
+## Data sources
+
+| Insight | API Endpoint | Time Range |
+|---------|-------------|------------|
+| Best languages | `/brain/code-eeg` | Last 7 days |
+| Peak hours | `/brain/optimal-hours` | Last 7 days |
+| Natural cycle | `/brain/break-timing` | Last 7 days |
+| Flow killers | `/brain/context-cost` | Last 7 days |
+
+## Settings
+
+`neuroskill.flowTriggers` (default: `true`) — Show/hide the flow triggers section in the sidebar.
+
+## Files
+
+- `src/sidebar.ts` — `_fetchFlowTriggers()` and `_renderFlowTriggers()` methods
+
+- **Focus-scored git commits in sidebar**: collapsible "Recent Commits" section shows the last 8 commits with author marker (👤 human / 🤖 AI) and a color-coded focus badge captured at commit time via `/brain/flow-state`. AI-assisted commits show "AI" instead of a focus score. Toggle via `neuroskill.focusCommits`.
+
+## What you see
+
+In the NeuroSkill sidebar, a collapsible "Recent Commits" section shows the last 8 commits:
+
+```
+👤 82  fix: resolve auth race condition
+👤 45  chore: update dependencies  
+🤖 AI  refactor: extract helper functions
+👤 71  feat: add user preferences
+```
+
+- **👤** = human-authored commit
+- **🤖** = AI-assisted commit (message generated by Copilot)
+- **Focus badge** = color-coded: green (>70), yellow (40-70), red (<40)
+- AI commits show "AI" instead of a focus score — AI output doesn't measure human cognition
+
+## How it works
+
+- When the extension detects a git commit (SCM input box clears), it:
+  1. Snapshots current EEG focus via `/brain/flow-state`
+  2. Checks `AIActivityTracker.isCommitAIAssisted()`
+  3. Records the commit with focus score + source label
+- Commits stored in-memory (last 15), refreshed on sidebar render
+- The daemon also stores commits with human/AI distinction in `build_events`
+
+## Settings
+
+`neuroskill.focusCommits` (default: `true`) — Show/hide the commits section in the sidebar.
+
+## Files
+
+- `src/sidebar.ts` — `recordCommit()`, `_renderCommits()`
+- `src/extension.ts` — Wires commit detection to sidebar recording
+- `src/events.ts` — `onCommit` callback with human/AI source
+
+- **Optimal Task Router**: monitors flow score every 30 s and, when it changes by >20 points, suggests an appropriate task type (refactoring/new features at high focus, code review at moderate, docs/routine at low). Debounced to one suggestion per 15 minutes. Toggle via `neuroskill.taskRouter`.
+
+## How it works
+
+- Monitors the flow state score every 30 seconds
+- When focus changes by >20 points from the last reading, suggests an appropriate task type:
+
+| Focus Level | Suggestion |
+|------------|------------|
+| >75 | "Focus is high (85) — great time for complex work like refactoring or new features." |
+| 45-75 | "Focus moderate (58) — good for code review, testing, or incremental tasks." |
+| <45 | "Focus low (32) — consider documentation, routine tasks, or a break." |
+
+## Debouncing
+
+- Maximum one suggestion every 15 minutes
+- No suggestion on the first reading (establishes baseline)
+- No suggestion if focus stays within 20 points of the last reading
+
+## Settings
+
+`neuroskill.taskRouter` (default: `true`) — Enable/disable task routing suggestions.
+
+## Files
+
+- `src/task-router.ts` — Task router implementation (new)
+- `src/brain.ts` — Calls `taskRouter.check()` every 30s
+
+- **Activity dashboard tab**: new Settings tab with daily summary, productivity score (0-100 composite), hourly heatmap, top files/projects, language breakdown, focus sessions, meetings, and stale file alerts.
+- **Focus session replay**: click any session to expand a detailed view with file timeline, edit counts, EEG focus overlay bar, and meeting interruptions.
+- **Weekly report with CSV export**: 7-day activity digest with daily breakdown chart and one-click CSV download.
+- **Productivity scoring**: composite score from edit velocity + deep work time + context stability + EEG focus.
+- **Stale file detection**: files edited but untouched for 7+ days.
+- **Code-Brain correlation**: focus ranked by language, project, and individual files — shows which code drains or energizes you.
+- **Activity timeline**: unified chronological feed of all events (files, builds, meetings, AI, clipboard) with EEG focus indicators.
+
+- **Brain awareness API**: 14 endpoints under `/v1/brain/*` — flow state, cognitive load, meeting recovery, optimal hours, fatigue check, undo struggle, daily brain report, break timing, deep work streak, task type detection, struggle prediction, interruption recovery, code-EEG correlation, and unified timeline.
+- **Flow state detector**: real-time check if user is in deep focus (high focus + low switches + sustained editing).
+- **Task type detection**: auto-classify coding/debugging/reviewing/refactoring/testing from activity patterns.
+- **Struggle prediction**: fuse undo rate + velocity drop + focus decline to predict when user is stuck. Includes actionable suggestion.
+- **Interruption recovery measurement**: measure actual focus recovery time per interruption source (Slack avg 12min, Zoom avg 23min, etc.).
+- **Fatigue monitor**: 15-minute background check broadcasts `fatigue-alert` and sends OS notification when focus declines.
+- **Daily brain report**: 6pm OS notification with morning/afternoon/evening brain summary.
+- **Weekly digest notification**: Monday 9am OS notification with weekly summary. ISO week dedup prevents re-fire on daemon restart.
+- **Break timing optimizer**: detect natural focus cycle length from 5-minute EEG buckets.
+- **Deep work streak**: gamified consecutive days with 60+ minutes of deep work.
+
+- **Developer insights endpoint**: `POST /v1/brain/developer-insights` returns 7 actionable EEG-fused insights in one call.
+- **Test failure by focus level**: correlates build/test exit codes with EEG focus (high/mid/low) — shows how focus level predicts test outcomes.
+- **Hourly productivity**: churn volume + undo rate + avg EEG focus by hour of day — identifies peak and trough hours.
+- **Context switch recovery**: EEG focus level at each editor/terminal/panel transition — measures the cognitive cost of switching.
+- **AI tool impact on focus**: per-app (Claude, Pi) focus delta vs baseline — quantifies whether AI tools help or hurt flow state.
+- **Focus by language**: avg EEG focus + undo rate per programming language — identifies which languages are cognitively easiest/hardest.
+- **Dev loop efficiency by hour**: build/test cycle time + pass rate by time of day — shows when edit-test loops are fastest.
+- **Tool focus impact**: avg EEG focus per command category (docker, git, deploy, etc.) — reveals which tools correlate with lowest focus.
+- **EEG timeseries table**: periodic JSON snapshots of all brain metrics (every 5s during recording). Extensible — new metrics without schema changes. Any event correlatable by timestamp join.
+- **EEG timeseries worker**: background thread writes full band powers to `eeg_timeseries` every 5s when an EEG session is active.
+- **`POST /v1/brain/eeg-at`**: get EEG metrics at a specific timestamp (nearest sample).
+- **`POST /v1/brain/eeg-range`**: get EEG time-series in a range for charts and correlation analysis.
+- **Window focus tracking**: `window_focus` events sent when VS Code gains/loses focus. EEG not attributed to coding when VS Code is in background.
+- **Live EEG attachment**: `latest_bands` focus/mood injected at event storage time for terminal commands, zone switches, and conversations.
+
+- **`mlx-e2e` test suite**: new suite in `scripts/test-all.sh` running UMAP and FFT e2e tests with MLX features. Auto-skips on non-macOS. Available via `npm run test:mlx-e2e`.
+
+- **Conversations table**: stores all AI coding assistant messages (Claude, Pi) with app, role (user/assistant/tool), text, cwd, timestamp, session ID, EEG focus/mood.
+- **FTS5 full-text search**: SQLite virtual table for instant keyword search across all conversation text. `POST /v1/brain/search-conversations {"query":"JWT","mode":"fts"}`.
+- **Fuzzy search**: LIKE-based substring matching for partial queries. `{"query":"rate limit","mode":"fuzzy"}`.
+- **Structured search**: filter by app, role, time range. `{"mode":"structured","app":"claude","role":"user","since":...}`.
+- **Semantic search**: user prompts embedded via fastembed (nomic-embed-text-v1.5, local, no API credits) and stored in HNSW label index. Searchable by meaning, not just keywords.
+- **Generic embedding store**: `embeddings` table decoupled from specific data tables. Multi-model support — can re-embed with different models, store multiple vectors per item. Source tracking (source_type, source_id).
+- **Code context HNSW index**: separate `code_context_index.hnsw` file for code-specific semantic search, keeping EEG label searches uncontaminated.
+- **Conversation events**: VS Code extension sends `conversation_message` events to daemon for each Claude/Pi message. User prompts get embedded; assistant responses and tool calls get FTS-indexed only (saves compute).
+- **Session tracking**: messages grouped by JSONL filename (session ID). Timestamps from app's own data (ISO 8601 UTC), not extension read time.
+- **Embedding settings**: `neuroskill.embedding.maxInputLength` (default 1000 chars) and `neuroskill.embedding.enableConversations` (default true) in VS Code settings.
+
+- **Meeting detection**: automatically detect Zoom, Teams, Slack, Google Meet, FaceTime, Discord, and Webex meetings from window titles. Track start/end times in `meeting_events` table.
+- **Browser tab extraction**: extract page titles from Chrome, Safari, Firefox, Edge, Brave, Arc, Opera, Vivaldi, Chromium. Stored in `browser_title` column on `active_windows`.
+- **Clipboard monitoring**: opt-in macOS clipboard change tracking (metadata only — content never stored). Records source app, content type, and size. Includes Automation permission check and settings UI.
+- **Multi-monitor awareness**: track windows on secondary monitors across macOS (AppleScript), Linux (wmctrl), Windows (EnumWindows). Dynamic primary screen resolution detection.
+- **Undo frequency tracking**: detect undo/redo from file edit diffs via reversal heuristic. `undo_estimate` per 5-second chunk, `undo_count` per file interaction.
+
+- **Design tokens** (`webview-ui/src/lib/tokens.css`): 30+ CSS custom properties organized into core palette (5 colors), surfaces (4 levels), backgrounds (14 translucent tints), borders (3 colors), semantic aliases (7), and typography (3). Zero inline `rgba()` in App.svelte.
+- **Reusable Svelte components** (`webview-ui/src/lib/`):
+  - `Card` — wrapper with title, info button, info panel, header-right slot, variant borders (warn/danger/info)
+  - `MetricRow` — label + value pair with variant colors (warn/accent/dim/good/bad)
+  - `Chevron` — collapsible section with chevron toggle, count badge, slot content
+  - `ProgressBar` — horizontal bar with value/max, 5 color variants, optional label
+  - `Gauge` — circular SVG ring with animated fill, value, label
+  - `Badge` — text badge with 7 variants (default/good/warn/bad/blue/live/score-circle/si)
+  - `Callout` — alert box with 3 variants (warn/danger/info)
+- **Component index** (`webview-ui/src/lib/index.ts`): barrel export for all components.
+- **Timestamp compliance**: 25 automated tests (`src/test-timestamps.ts`) verifying:
+  - No `toLocaleTimeString`/`toLocaleDateString` in data layer (activity-tracker, events, brain, config, vt-parser)
+  - `toLocaleTimeString` used in UI layer (App.svelte) for display
+  - `Date.now()` returns UTC milliseconds
+  - ISO 8601 strings parsed to UTC millis
+  - No hardcoded timezone offsets in data layer
+  - All stored timestamps are UTC; local conversion only at UI boundary
+
+- **Dev loop detection**: identifies edit-build-test cycles from terminal command history. Groups consecutive runs of the same build/test command into loops.
+- **`dev_loops` table**: loop type, command, iteration count, pass/fail counts, avg cycle time, fastest/slowest cycle, EEG focus start/end, focus trend (rising/falling/stable).
+- **`POST /v1/brain/dev-loops`**: returns detected loops for a time window with all metrics.
+- **Enhanced `predict_struggle()`**: terminal failures (+8/fail, max +40) and re-running same failing command 3+ times (+15/rerun, max +30) boost struggle score. New suggestions: "You're re-running the same failing command", "Multiple failures — read the error messages."
+- **Enhanced `detect_task_type()`**: terminal command categories override heuristics with higher confidence — docker/kubectl → infrastructure (0.8), deploy → deploying (0.85), git dominating → git_management (0.7), test → testing (0.85), debug → debugging (0.9).
+- **Dev loops in sidebar**: command, iteration count, pass rate, avg cycle time, focus trend arrow. Failing loops get red left border.
+- **Dev loops in Tauri Activity tab**: expanded view with pass rate percentage, cycle time, focus trend.
+- **Loop efficiency by hour**: insight showing build/test cycle time + pass rate by time of day.
+
+- **Inference backend selector**: `exg_inference_device` setting expanded from `gpu | cpu` to `auto | mlx | gpu | cpu`. Default changed from `gpu` to `auto` (picks MLX on macOS, GPU elsewhere).
+- **Four-button selector in EXG Settings**: Auto, MLX, GPU, CPU — each with localized label and description. Reconnect headset hint shown after change.
+- **`embed-exg-mlx` feature**: new daemon Cargo feature that enables `skill-router/mlx`, `skill-eeg/mlx`, and `embed-zuna-mlx` together.
+
+- **fast-umap 1.6.0**: updated from 1.5.1 with MLX, PCA, and nearest-neighbor descent support.
+- **MLX UMAP backend**: Apple Silicon native UMAP projection via `burn-mlx`. Runtime dispatch between MLX and GPU (wgpu) based on user preference. Auto defaults to MLX on macOS, GPU elsewhere.
+- **Precision selector**: F32 / F16 precision for the GPU (wgpu) backend. MLX is F32-only (fast-umap trait constraint). Exposed in UMAP settings as chip group.
+- **Backend & precision UI**: new "Compute Backend" section in UMAP settings with Auto / MLX / GPU chips and F32 / F16 precision chips. Pipeline summary badge shows active backend and precision.
+
+- **UMAP e2e benchmarks**: `umap_e2e_small` (200 pts), `umap_e2e_medium` (1K pts), `umap_e2e_large` (5K pts) with synthetic 32-dim EEG embeddings. Reports backend, timing, throughput (pts/sec), and separation score.
+
+- **gpu-fft 1.2.0**: updated from 1.1.1 with MLX FFT backend. EEG signal filtering (overlap-save convolution) uses MLX when `skill-eeg/mlx` is enabled. ~3.7x faster than wgpu at N=65536.
+- **`skill-eeg/mlx` feature**: new feature gate that enables `gpu-fft/mlx` alongside `gpu-fft/wgpu`. Wired into `embed-exg-mlx` daemon feature.
+
+- **FFT MLX e2e**: `fft_e2e_roundtrip_256`, `fft_e2e_batch_4ch`, `fft_e2e_psd_peak_detection`, `fft_e2e_large_batch` (32 channels x 1024 samples). Validates round-trip accuracy, PSD peak detection, and batch throughput.
+
+- **Grayscale display mode**: optional system-wide grayscale that activates/deactivates in sync with Do Not Disturb. Reduces visual distraction during deep work. macOS only, default off.
+
+- **File activity in history sessions**: expanded EEG sessions show files worked on during the session with focus indicators, edit counts (+/-), language, and meeting interruption badges.
+- **File activity in interactive search**: `file_activity` nodes in the 3D search graph linked to EEG epochs and text labels, showing which files were being edited during matching brain states.
+- **Meeting nodes in search graph**: detected meetings appear alongside EEG results in the interactive search as amber nodes with temporal proximity edges.
+
+- **Git context card**: current branch (monospace), dirty/staged file count, ahead/behind indicators. Uses VS Code git extension API.
+- **Session timeline card**: horizontal bar chart showing activity events by hour of day. Color-coded by volume.
+- **Workspace activity card**: per-file edits, lines added/removed, focus time. Grouped by workspace folder (project), sorted by activity. Active file indicator (blue dot). Top 10 files per project.
+- **Environment card**: editor/terminal/panel time split (colored stacked bar), tab count, editor groups, terminal count. Per-terminal cards with shell type, CWD, PID, shell integration status.
+- **Terminal I/O sections**: collapsible with chevrons, minimized by default. Input shows timestamped commands with CWD. Output shows VT-parsed session content.
+- **Terminal input card**: keystroke intensity per program (keys/min), duration, collapsible behind chevron.
+- **Terminal impact card**: EEG focus delta by command category with pass rate percentage.
+- **Context switch cost card**: focus level at each zone transition type with switch count.
+- **Dev loops card**: edit-build-test cycles with iteration count, pass/fail rate, cycle time, focus trend (rising/falling/stable arrow).
+- **Today's report card**: productivity score, morning/afternoon/evening period breakdown with focus bars and churn.
+- **Energy card**: fatigue bar (inverse of focus decline), continuous work time, streak badge.
+- **Struggle card**: EEG-only (hidden without recording), score 0-100, contributing factors.
+- **Optimal hours card**: peak/avoid hours grid.
+- **AI usage card**: acceptance rate bar, suggestion count, source breakdown.
+- **Today vs yesterday card**: files and churn comparison with directional arrows.
+- **Code review detection**: auto-detected when file switches > 5 and edit velocity < 1 line/min.
+- **Process monitor card**: running dev servers (vite, next, webpack, cargo, node, python, docker, postgres) with ports and PIDs.
+- **Info toggles**: every card has a `?` button explaining how metrics are calculated.
+- **Dual-speed updates**: local data every 5s (visible), brain data every 30s. Pauses when sidebar hidden.
+
+- **OS-wide shell hooks**: preexec/precmd hooks for zsh, bash, fish, PowerShell. Background curl sends every command to daemon — zero delay to prompt. Self-contained scripts generated by daemon, stored in `~/.skill/shell-hooks/`.
+- **Shell hook management**: `GET /v1/activity/shell-hook?shell=zsh` returns hook script, `POST /v1/activity/install-shell-hook` writes to rc file, `POST /v1/activity/uninstall-shell-hook` removes cleanly, `POST /v1/activity/shell-hook-status` health check per shell.
+- **Terminal command table**: `terminal_commands` with command text, binary name, args, cwd, exit code, duration, auto-categorized (284 CLI tools across 18 categories), EEG focus at start + end for delta calculation.
+- **Binary extraction**: raw binary name stored separately from args. Lazy categorization — `POST /v1/brain/recategorize-commands` reruns rules on all historical data. `POST /v1/brain/binary-stats` discovers uncategorized tools by frequency.
+- **284 CLI tools recognized**: git, gh, glab, hf, docker, kubectl, helm, aws, gcloud, az, brew, pip, cargo, npm, psql, redis-cli, ollama, claude, pi, vim, tmux, htop, terraform, and 260+ more across 18 categories (build, test, run, git, docker, deploy, install, navigate, debug, network, database, ai, editor, multiplexer, monitor, env, system, other).
+- **Script session recording**: `script` PTY proxy wraps shell sessions, captures all terminal I/O (including input inside interactive programs). Logs stored in `~/.skill/terminal-logs/` with auto-rotation.
+- **VT100 terminal emulator**: `vt-parser.ts` replays script recordings through a virtual terminal with scrollback capture. Handles cursor movement, screen clears, alternate screen buffer. Separates input from output via prompt pattern detection.
+- **App-specific JSONL parsing**: reads Claude Code (`~/.claude/projects/`) and Pi agent (`~/.pi/agent/sessions/`) conversation files directly. Extracts user prompts with real timestamps, assistant responses, and tool calls. Supports multiple parallel sessions.
+- **Readline history polling**: monitors `~/.python_history`, `~/.node_repl_history`, `~/.irb_history`, `~/.psql_history` for REPL input.
+- **`neuroskill terminal` CLI**: `status` (hook health per shell), `install [shell]`, `uninstall [shell]`, `commands` (recent tracked), `impact` (focus delta by category), `loops` (dev loop detection).
+- **Tauri Terminal settings tab**: per-shell install/uninstall/repair buttons with health indicators (green/yellow/red dot), recent commands preview, "How it works" documentation.
+
+- **Validation / fatigue-research daemon backend**: foundations for calibrating the Break Coach and Focus Score against four external instruments — KSS (Karolinska Sleepiness Scale), NASA-TLX (workload), PVT (Psychomotor Vigilance Task), and an EEG-derived fatigue index per Jap et al. 2009.
+- **`skill-data::validation_store`** — new SQLite store at `~/.skill/validation.sqlite` with five tables (`config`, `kss_responses`, `tlx_responses`, `pvt_runs`, `prompt_log`). Persistent config is a single-row JSON blob with serde defaults so adding a new channel later is a non-migration. New constant `VALIDATION_FILE` in `skill-constants`.
+- **EEG fatigue index**: pure function `eeg_fatigue_index(bands) → Option<f64>` computing `(α + θ) / β` over the existing band-power snapshot. Guards against missing bands and zero-β. Passive; ships **on** because it costs nothing when no headset is attached.
+- **Pure scheduler `decide_prompt(ctx, ...) → PromptDecision`**: respects the `respect_flow` master gate, configurable quiet hours, per-channel daily caps, runtime snoozes, and rate limits. Channel ordering: KSS first (lightest), TLX after a long task unit, PVT on a weekly cadence. Live `read_in_flow` and `read_break_coach_active` open the activity store read-only and ask `flow_state_now(300).in_flow` and `fatigue_check().fatigued` so the gates actually mean something.
+- **Sane defaults — opt-in everywhere**: KSS, TLX, PVT all ship `enabled = false`. Only the passive EEG fatigue index ships on. The `respect_flow` master gate ships on.
+
+- **Validation & Research settings tab** (`src/lib/settings/ValidationTab.svelte`): new top-level settings tab gathering five `SettingsCard` blocks — global gates (`respect_flow`, quiet hours), KSS, NASA-TLX, PVT, and EEG fatigue index — plus a Calibration Week button and a recent-results card.
+  - Every toggle / numeric input PATCHes one nested field via `daemonPatch("/v1/validation/config", …)`; the daemon's recursive JSON merge keeps the rest of the config untouched.
+  - EEG fatigue card shows the live `(α + θ) / β` value polled every 5 s from `/v1/validation/fatigue-index`.
+  - Calibration Week: single button that batch-updates all four channels to higher-frequency presets (KSS 8/day, TLX after every flow block ≥ 20 min, PVT mid-week) in one PATCH.
+- **PVT panel** (`src/lib/settings/PvtPanel.svelte`): full 3-minute Psychomotor Vigilance Task. Random ITIs (2–10 s), green-dot stimulus, `performance.now()` for sub-millisecond RT measurement, tracks responses + false starts. On finish computes mean RT, median RT, slowest-10% mean RT (anticipation-resistant), and lapse count (RT > 500 ms per Dinges & Powell 1985), POSTs to `/v1/validation/pvt`. State machine: intro → running → done.
+- **NASA-TLX form** (`src/lib/settings/TlxForm.svelte`): six-slider modal for the raw (un-weighted) NASA-TLX. Performance scale uses inverted endpoints ("Failure" → "Perfect") per Hart 2006. POSTs to `/v1/validation/tlx` with `task_kind`, `task_duration_secs`, optional `prompt_id` echo-back.
+- **Pure stats helper** (`src/lib/settings/pvt-stats.ts`): extracted `mean`, `median`, `slowest10Mean`, `lapseCount`, `computeStats` from the PVT panel so the math is unit-testable without a Svelte renderer.
+- **`daemonPatch<T>(path, body)`** in `src/lib/daemon/http.ts` — needed for the validation config endpoint.
+
+- **Test coverage for the validation feature across all three layers** — 72 tests total, all passing.
+  - **Rust unit tests** (`crates/skill-data/src/validation_store.rs`): 19 tests covering config persistence, store round-trips, the `(α + θ) / β` fatigue index (Jap et al. 2009) including zero-β and missing-band edge cases, every scheduler branch (flow respect, quiet hours, snooze blocking, KSS rate limit, TLX trigger after long task, TLX skip on short task, PVT weekly cadence, PVT silence after recent run, quiet-window-equals-end semantics), and prompt-log queries.
+  - **Rust HTTP integration tests** (`crates/skill-daemon/src/routes/validation.rs`): 10 tests using `tower::ServiceExt::oneshot()` against a tempdir-backed `AppState` — `GET /config` defaults, `PATCH /config` partial-update + round-trip, `POST /kss` happy path, KSS score-out-of-range → 400, TLX subscale-out-of-range → 400, `GET /should-prompt` returns `{kind: "none"}` with default config, `POST /snooze` envelope, plus three `merge_json` tests covering deep nesting.
+  - **Vitest — PVT statistics** (`src/tests/pvt-stats.test.ts`, 12 tests): edge cases for `mean`, `median`, `slowest10Mean` (including the n<10 fallback), `lapseCount` with the 500 ms Dinges & Powell threshold and explicit-threshold override, plus a known-fixture `computeStats` round-trip.
+  - **Vitest — i18n coverage** (`src/tests/validation-i18n.test.ts`, 23 tests): every VS Code l10n bundle exists and contains every user-facing key (KSS prompt + scores 1/5/9, TLX/PVT prompts, all four escape-hatch labels); every Tauri language `validation.ts` imports cleanly; English Tauri bundle covers every required key; every non-English Tauri bundle has at least the tab name and disclaimer translated.
+
+- **VS Code extension joins the validation prompt loop**: new `ValidationManager` (`extensions/vscode/src/validation.ts`) polls `/v1/validation/should-prompt` every 90 s and renders whichever channel the daemon decides to fire.
+  - **KSS** (1–9 sleepiness) — full QuickPick with Karolinska wording, plus Snooze 30m / Don't ask today / Stop these prompts escape hatches in-line. POSTs the answer to `/v1/validation/kss` echoing the daemon's `prompt_id` so the prompt log can mark it answered.
+  - **NASA-TLX** — fallback path: shows an information message offering to open the form in the Tauri app (deep link `neuroskill://validation/tlx`) plus the same escape hatches.
+  - **PVT** — weekly nudge: offers to deep-link into the Tauri PVT panel (`neuroskill://validation/pvt`) or skip a week (snoozes for 6 days so the next reminder fires on cadence).
+- **Two new commands**: `NeuroSkill: Open Validation Settings…` (deep links into the Tauri preferences pane) and `NeuroSkill: Check for Validation Prompt Now` (forces a single scheduler poll — useful for opt-in onboarding).
+- **`DaemonClient.patch()`**: extension's daemon client gained a PATCH method so the "Stop these prompts" escape hatch can flip `enabled = false` on the persistent config.
+
+- **VS Code extension**: separate repo (`NeuroSkill-com/vscode-neuroskill`) as git submodule at `extensions/vscode/`. 50+ tracked event types across editing, navigation, debugging, git, AI, terminal, clipboard, and more.
+- **Sidebar webview (Svelte 5)**: full brain dashboard in the VS Code activity bar with circular flow gauge, metrics strip, daily report, energy, struggle, optimal hours, workspace activity, environment, terminal impact, context cost, and dev loops.
+- **Activity bar icon**: neural network SVG icon in the VS Code sidebar; NeuroSkill logo (PNG) in the webview header.
+- **Brain status bar in VS Code**: polls daemon every 30s showing flow state, fatigue, streak, task type, and struggle score. Shows "offline" when daemon unreachable. Notifications for fatigue and struggle.
+- **Dual-speed sidebar updates**: local data (files, terminals, layout) refreshes every 5s when sidebar is visible; brain endpoints every 30s. Pauses when hidden.
+- **Event caching**: offline-resilient `pendingEvents` array (10K cap) persisted to disk via `globalStorageUri`. Auto-flushes on reconnect. Survives VS Code restarts. Cache count shown in status bar tooltip.
+- **Workspace activity tracking**: per-file edits, lines added/removed, focus time, active file indicator. Grouped by workspace folder (project), sorted by activity. Top 10 files per project.
+- **Terminal command tracking**: full command text, exit code, cwd, output streaming (via `execution.read()`), shell type detection (zsh/bash/fish/powershell/cmd/node/python), focus time per terminal, PID. Expandable command output in sidebar.
+- **Terminal shell integration**: captures commands via `onDidStartTerminalShellExecution` / `onDidEndTerminalShellExecution` (VS Code 1.93+). CWD tracked via `onDidChangeTerminalShellIntegration`.
+- **Zone tracking**: editor/terminal/panel time split with stacked color bar (blue/green/yellow). Layout chips showing tab count, editor groups, terminal count.
+- **Auto EEG labeling**: every significant VS Code event auto-inserts a searchable label into EEG recordings with smart categorization (editing, debugging, git commits, AI assistance, meetings, errors, navigation, terminal commands, zone switches).
+- **Inline label embedding**: auto-labels embedded immediately via fastembed for instant searchability (no idle reembed wait).
+- **Command execution tracking**: 40+ VS Code commands tracked (go-to-definition, rename, find, format, fold, git, AI, debug, layout) with semantic categorization.
+- **IntelliSense acceptance detection**: multi-char single-line insertions heuristically identified as autocomplete acceptances.
+- **Clipboard tracking**: clipboard content changes polled every 5s with debounce.
+- **Layout snapshots**: periodic (60s) capture of editor groups, visible editors, open tabs, terminal count sent to daemon.
+- **Zone switch events**: editor/terminal/panel transitions sent to daemon with EEG focus snapshot.
+- **File system watcher**: selective watching of package.json, Cargo.toml, go.mod, .git/HEAD for external change detection.
+- **Environment context**: one-time capture of appHost, remoteName, shell, uiKind, language.
+- **Info toggles**: every sidebar card has a `?` button explaining how metrics are calculated (flow score formula, struggle signals, energy bar, optimal hours, dev loops, terminal impact, context cost).
+- **Open NeuroSkill button**: launches native app from sidebar (cross-platform: `open -a` macOS, `start` Windows, `xdg-open` Linux). Also in command palette.
+- **Command palette → sidebar**: `Show Brain Status`, `Today's Report`, `Am I Stuck?`, `Best Time to Code` now open sidebar and scroll to relevant section instead of showing toast notifications.
+
+- **Developer insights endpoint**: `POST /v1/brain/developer-insights` returns 7 actionable insights in one call.
+- **Test failure by focus level**: correlates build/test exit codes with EEG focus (high/mid/low) — "your tests fail 45% more when focus is low."
+- **Hourly productivity**: churn + undo rate + avg focus by hour of day — "you write 3x more bugs after 2pm."
+- **Context switch recovery**: focus level at editor/terminal/panel transitions — "switching to terminal costs 4 focus points."
+- **AI tool impact**: Claude/Pi focus delta vs baseline — "Claude conversations drop focus by 8 points."
+- **Focus by language**: avg EEG focus + undo rate per programming language — "best focus in Rust, worst in CSS."
+- **Dev loop efficiency by hour**: build/test cycle time + pass rate by time of day.
+- **Tool focus impact**: avg focus when using each command category (docker, git, deploy, etc.).
+
+- **Widget accessibility and localization**.
+
+- **Analysis widgets (Optimal Hours, Daily Report, Weekly Trend)**.
+
+- **Biometric widgets (Heart Rate, Cognitive Load, EEG Band Power, Sleep)**.
+
+- **Brain Dashboard widget (medium)**.
+
+- **Calendar Mind State widget (large)**.
+
+- **Widget deep links (neuroskill:// URL scheme)**.
+
+- **Widget development infrastructure**.
+
+- **Core desktop widgets (Focus, Streak, Session, Break Timer)**.
+
+- **Interactive widget buttons (macOS 14+)**.
+
+- **Widget offline data caching**.
+
+- **Widget timeline reload on state changes**.
+
+- **zuna-rs 0.1.4**: updated from 0.1.3 with native MLX backend for EEG embedding inference.
+- **`embed-zuna-mlx` feature**: new `ZunaMlxState` struct with `ZunaEncoder<burn_mlx::Mlx>`. Adds `load_zuna_mlx()` and `encode_zuna_mlx()` functions matching the existing GPU/CPU variants.
+- **Load priority**: when user selects Auto or MLX, encoder loading tries MLX first, then GPU f16, then GPU f32, then CPU.
+
+### Performance
+
+- **MLX vs GPU benchmarks** (Mac mini, Apple Silicon):
+
+| Dataset | Points | GPU (wgpu) | MLX | Speedup |
+|---|---|---|---|---|
+| Small | 200 | 120.9 s | 2.3 s | **51x** |
+| Medium | 1,000 | 136.6 s | 7.1 s | **19x** |
+| Large | 5,000 | 152.8 s | 23.8 s | **6.4x** |
+
+- **`open_readonly` for read-only handlers**: added `ActivityStore::open_readonly()` that skips 15+ ALTER TABLE migrations and opens in read-only mode. Switched 38+ HTTP handlers and 3 background tasks from `open` to `open_readonly`.
+- **`PRAGMA busy_timeout=5000`**: added to `init_wal_pragmas` and `util::open_readonly` so all database connections (activity, labels, screenshots, EEG embeddings) wait up to 5 s on lock contention instead of failing immediately with SQLITE_BUSY.
+- **Composite indexes**: added `(seen_at, file_path)` and `(seen_at, project)` indexes on `file_interactions` for queries that filter by time range and group by path or project.
+- **Lock consolidation**: `productivity_score` reduced from 3 separate mutex acquisitions to 1 via internal `_q` query helpers. `weekly_digest` reduced from 12 to 4 locks. Introduced `daily_summary_q`, `context_switch_rate_q`, `get_focus_sessions_in_range_q` static methods that take `&Connection` directly.
+- **`PRAGMA optimize` after pruning**: runs after hourly retention pruning to keep query planner statistics fresh.
+- **Batch label lookup in interactive search**: replaced 15 per-epoch `get_labels_near` calls (each opening a new DB connection) with a single `get_labels_near_batch` call per text label, then in-memory filtering. Reduces search DB round-trips from ~28 to ~16.
+
+### Bugfixes
+
+- **Daemon-side event storage**: `git_commit`/`push`/`pull`/`checkout`/`stage`/`unstage`/`stash` events were received but never written to `build_events` (used only for EEG labels). Now persisted, with AI-assisted commits also recorded as `ai_events` (type `"ai_commit"`) and labelled `"git commit (AI)"`.
+- **Completion-accepted events were dropped**: previously ignored by the daemon. Now stored as `ai_events` (type `"suggestion_accepted"`) and as edit chunks so they show up in code metrics and AI usage analytics.
+
+## Impact on analysis
+
+Brain analysis endpoints can now:
+- Count human vs AI commits (`/brain/developer-insights`)
+- Track AI suggestion acceptance rates (`/brain/ai-usage`)
+- Include git activity in the activity timeline
+- Weight human-authored code differently from AI output in focus/productivity scores
+
+## Files
+
+- `crates/skill-daemon/src/routes/settings_hooks_activity.rs` — Event handler updates
+
+- **Schema migration**: ALTER TABLE for existing databases missing columns added across releases. Runs before DDL to handle all legacy schemas.
+- **Retention pruning**: meetings, clipboard, and secondary_windows pruned alongside file interactions during hourly maintenance.
+
+- **Dismiss stale Dependabot alerts**: crossbeam-deque, crossbeam-utils, crossbeam-queue, memoffset, and glib alerts dismissed (already at patched versions or fixed in fork).
+
+- **CORS allow-methods now includes `PATCH`**: `crates/skill-daemon/src/main.rs` was advertising only `GET, POST, PUT, DELETE, OPTIONS`, so the browser preflight blocked `PATCH /v1/validation/config` from the Tauri webview. Added `Method::PATCH` to the list.
+
+- **Equal padding on screenshot edges**: viewport width was 360px while the body was 320px wide, leaving an asymmetric 40px right gutter. Matched viewport to body width so left and right gutters are now identical.
+
+- **Deadlock in daily-report endpoint**: `daily_brain_report` held the database mutex while calling `productivity_score`, which re-acquires the same mutex. Scoped the lock to drop before the nested call.
+- **Deadlock in struggle-predict endpoint**: same pattern in `predict_struggle` — held mutex while calling `get_recent_files`.
+- **`overall_focus` returned `-0.0`**: always wrapped in `Some` even with no EEG data. Now returns `null` when no focus samples exist.
+- **`best_period` arbitrary without EEG**: picked the first SQL result when all `avg_focus` were `None`. Now returns empty string when no EEG data to compare.
+- **`weekly_avg_deep_mins` returned `-0.0`**: divided by hardcoded 7 regardless of actual days. Now divides by actual day count, returns `0.0` when empty.
+- **Notification text ugly without EEG**: daily report notification showed "Best: . Score: 25. Focus: 0." — now conditionally includes only available fields.
+- **Brain endpoints return HTTP 200 on errors**: all 18 brain handlers silently returned `null` with 200 OK when the activity store was offline or a query failed. Refactored to use `run_query` helper that returns 503 (db_unavailable) or 500 (task_error) with structured `ApiError` JSON.
+
+- **Worker thread panic recovery with auto-restart**: all 4 activity worker threads (poller, input monitor, file watcher, clipboard monitor) now wrapped in `catch_unwind` via `spawn_resilient`. On panic, the worker logs the error and restarts after 5 s with freshly cloned `AppState` and `Arc<ActivityStore>`.
+- **osascript timeout**: all `osascript` calls (active window poll, secondary windows, clipboard monitor) now use a 3-second timeout via `run_osascript` helper. Previously, a hung app could block the poller thread indefinitely, silently killing all activity tracking.
+- **Daily report catch-up on late startup**: if the daemon starts after 18:00 local, the daily brain report fires on the first tick instead of waiting up to 1 hour for the hourly check.
+- **WAL checkpoint on shutdown**: daemon now runs `PRAGMA optimize` on the activity database during graceful shutdown, ensuring the WAL is checkpointed and the database is clean for next start.
+- **Missing WAL pragmas on EEG embedding store**: `day_store.rs` opened connections without `init_wal_pragmas`, missing both WAL mode and `busy_timeout`.
+- **Retention pruning for new tables**: added `prune_terminal_commands`, `prune_ai_events`, `prune_zone_switches`, `prune_layout_snapshots` — wired into the hourly maintenance cycle so these tables don't grow unbounded.
+- **TOCTOU race in calibration settings**: concurrent profile CRUD could lose writes. Added `modify_settings_blocking()` helper that runs under a global mutex on tokio's blocking thread pool — serializes read-modify-write without blocking the async runtime.
+
+- **Duration-averaged EEG**: `FileSnapshot` now samples EEG focus/mood every 5 s (at each edit-chunk tick) and writes the average to `file_interactions` at finalize, replacing the single snapshot captured at file-switch time. Falls back to the initial snapshot if no samples were collected (`COALESCE`).
+- **EEG mood/focus sample count mismatch**: both `FileSnapshot` and `build_focus_sessions` used a single counter for focus and mood samples, inflating mood averages when they arrived independently. Split into separate `focus_count` and `mood_count`.
+- **EEG ghost data after disconnect**: `latest_bands` was not cleared when an EEG device disconnected, causing stale focus/mood values to persist in reports and the activity pipeline. Now cleared on all 3 disconnect paths (idle timeout, stream end, explicit disconnect).
+
+- **InteractiveGraph3D event listener leaks**: `pointerdown` and `dblclick` listeners on the WebGL canvas were never removed in `onDestroy`. Extracted into named refs with cleanup.
+- **UmapViewer3D event listener leaks**: 4 canvas event listeners (pointermove, pointerleave, pointerdown, pointerup) added as anonymous functions were never removed on unmount. Extracted into named module-level refs with removal in `onDestroy`.
+- **ActivityTab brain polling leak**: `startBrainPolling()` was called on mount but `stopBrainPolling()` was never called on destroy, leaving a 30-second interval running after leaving the tab.
+- **Brain polling stopped by peer component**: `stopBrainPolling()` unconditionally killed the interval even when other components still needed it. Added reference counting so polling only stops when the last consumer unmounts.
+- **Memory leak in terminal_command_end labeling**: `Box::leak` was used to format non-zero exit codes in EEG auto-labeling, permanently leaking memory for every failed command. Replaced with owned `String`.
+- **Screenshot encode failures untracked**: `encode_webp` failures (disk full, I/O error) silently continued without incrementing the `capture_errors` counter. Now counted so metrics reflect actual failures.
+- **401 auto-retry**: daemon HTTP client now retries once with a fresh token on 401 (stale token after daemon restart) instead of failing immediately.
+
+- **Path traversal in `delete_session`**: `csv_path` parameter was passed unsanitized to `fs::remove_file`. Now validates the path is within `skill_dir` via canonicalize + starts_with.
+- **Timing-vulnerable token comparison**: default bearer token checks in auth middleware used `==` (variable-time). Switched to `constant_time_eq` for both in-memory and on-disk token paths.
+- **Unbounded CSV memory in EXG loader**: loading a CSV with millions of rows would allocate unlimited RAM. Added a 4M row cap (~4.3 hours at 256 Hz).
+
+- **Timezone-wrong period classification**: `daily_brain_report`, `hourly_edit_heatmap`, and `optimal_hours` used `seen_at % 86400` (UTC hour) instead of local hour. Daily report now uses `seen_at - day_start`; heatmap and optimal-hours accept a timezone offset computed server-side.
+- **UTC midnight in all clients**: search page, CLI (`cmdActivity`, `cmdBrain`), VS Code extension, and Swift widget all computed `day_start` as UTC midnight instead of local midnight. Fixed to use `Date.setHours(0,0,0,0)` (JS/TS) and `Calendar.startOfDay` (Swift).
+- **Widget empty daily-report body**: `DaemonClient.fetchDailyReport()` sent an empty POST body; the endpoint requires `dayStart`. Now sends local midnight.
+- **Widget UTC sleep/calendar endpoints**: `fetchSleep()` and `fetchCalendarEvents()` used `% 86400` UTC approximations. Now use `Calendar.current` for correct local time boundaries.
+
+### Refactor
+
+- **Shared `DaemonClient` for VS Code extension**: extracted the repeated `fetch` + auth-token + port-discovery + 3 s timeout pattern into one class. All features now use `client.post<T>(path, body)`. Returns `null` on failure (never throws), with `setToken()` for refresh on reconnect.
+
+## Before
+
+Every component (brain.ts, sidebar.ts, extension.ts) independently constructed fetch calls:
+```typescript
+const port = await discoverDaemonPort(config);
+const base = `http://${config.daemonHost}:${port}/v1`;
+const headers = { "Content-Type": "application/json" };
+if (token) headers["Authorization"] = `Bearer ${token}`;
+const resp = await fetch(`${base}${path}`, { method: "POST", headers, body, signal: AbortSignal.timeout(3000) });
+```
+
+## After
+
+```typescript
+const client = new DaemonClient(config, token);
+const result = await client.post<FlowState>("/brain/flow-state", { windowSecs: 300 });
+```
+
+## Benefits
+
+- Single place to update auth, timeout, port discovery
+- All 8 new features use the shared client
+- `setToken()` method for token refresh on reconnect
+- Returns `null` on any failure (never throws) — all features handle gracefully
+
+## Files
+
+- `src/daemon-client.ts` — DaemonClient class (new)
+
+- **Sidebar disclaimer test now accepts either localiser**: existing `vscode-sidebar-disclaimer.test.ts` updated so the `vscode.l10n.t("sidebar.disclaimer")` ↔ `tr("sidebar.disclaimer")` migration doesn't break the assertion. Both look up the same key.
+
+- **Conversations table + FTS5**: full-text search on all AI conversation messages (user/assistant/tool). Three search modes: FTS, fuzzy, structured.
+- **EEG timeseries table**: periodic JSON snapshots of all brain metrics. Extensible — new metrics without schema changes. Join-at-query-time correlation with any event.
+- **Embeddings store**: generic, multi-model. User prompts embedded via fastembed (local, no API credits). Can re-embed with different models.
+- **Code context HNSW index**: separate from label index for code-specific semantic search.
+- **Binary extraction**: terminal commands store raw binary name + args separately. Lazy categorization — 284 CLI tools recognized, rerun anytime.
+- **EEG attachment**: live focus/mood from `latest_bands` injected at event storage time.
+- **EEG timeseries worker**: writes full band powers to `eeg_timeseries` every 5s during recording.
+
+### Build
+
+- **CI for the VS Code extension** (`extensions/vscode/.github/workflows/`): two workflows live in the submodule repo (`vscode-neuroskill`).
+  - **`ci.yml`** — runs on every PR and `main` push. `npm ci` → `tsc` build → `vsce package` → uploads the `.vsix` as a 14-day artifact. No secrets, no publish.
+  - **`release.yml`** — fires two ways. *Tag push* (`git push --tags` after `npm version patch`) verifies the tag matches `package.json` and publishes. *Manual dispatch* with a `patch | minor | major | x.y.z` input bumps `package.json`, commits, tags, pushes, then publishes. Both paths run `npx @vscode/vsce publish` (uses `VSCE_PAT`) and `npx ovsx publish` (uses `OVSX_PAT`), then create a GitHub release with the `.vsix` attached and the latest `## ` block from `CHANGELOG.md` as release notes.
+- **Skip-on-missing-secret**: if either `VSCE_PAT` or `OVSX_PAT` is unset, the corresponding publish step emits a `::warning::` and is skipped — letting you wire up Open VSX later without breaking the workflow.
+- **Releasing section in the extension README**: documents the secret setup (Azure DevOps PAT, Open VSX token), the two release flows, and the one-time namespace claims (Marketplace publisher registration + `ovsx create-namespace`).
+
+- **macOS: link libusb statically into `skill-daemon`**: vendored libusb via `rusb`'s `vendored` feature in `crates/skill-devices`. The `antneuro` USB driver pulls in `rusb` → `libusb1-sys`, which by default uses `pkg-config` to find a system libusb-1.0.dylib. On the macOS-26 release runner that resolved to Homebrew's `/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib`, so end users without Homebrew hit a launch-time `dyld: Library not loaded` error. Cargo feature unification now flips `libusb1-sys/vendored`, which compiles libusb from source and links `libusb-vendored.a` into the binary — verified by 105 `_libusb_*` text symbols present in the release binary and zero libusb references in `otool -L`.
+
+### CLI
+
+- **`neuroskill activity` expanded**: 19 subcommands — bands, window, input, windows, files, top-files, top-projects, languages, sessions, meetings, clipboard, builds, heatmap, switches, summary, score, digest, stale, timeline.
+- **`neuroskill brain` added**: 14 subcommands — flow, load, load-files, recovery, optimal, fatigue, struggle, report, breaks, streak, task, stuck, interruptions, correlation.
+- **`neuroskill vscode` added**: auto-build and install VS Code/VSCodium/Cursor extension from source on macOS, Linux, and Windows.
+
+### UI
+
+- **EEG focus timeline heatmap**: collapsible "Focus Timeline" sidebar section renders a ~280×36 px SVG sparkline of today's EEG focus (`/brain/eeg-range`, max 120 points), color-graded green/yellow/red, with hour labels and file-name annotations at peaks/valleys (merged from `/activity/timeline`). Toggle via `neuroskill.eegHeatmap`.
+
+## What you see
+
+In the NeuroSkill sidebar, a collapsible "Focus Timeline" section shows:
+
+- A ~280px wide, ~36px tall SVG sparkline
+- Color gradient: green (>70 focus), yellow (40-70), red (<40)
+- Hour labels along the bottom (0:00, 3:00, 6:00, ...)
+- File names annotated at focus peaks and valleys
+
+## Data sources
+
+| Data | API Endpoint |
+|------|-------------|
+| EEG time-series | `/brain/eeg-range` (today, max 120 points) |
+| File context | `/activity/timeline` (today, last 200 events) |
+
+The heatmap merges EEG data points with the closest timeline events to show which files correspond to focus peaks and dips.
+
+## Settings
+
+`neuroskill.eegHeatmap` (default: `true`) — Show/hide the heatmap in the sidebar.
+
+## Files
+
+- `src/sidebar.ts` — `_fetchHeatmap()` and `_renderHeatmap()` methods
+
+- **Brain status bar**: persistent bottom bar in Tauri app showing flow state, fatigue, streak, edit velocity, and focus score.
+- **Brain dashboard card**: flow/fatigue/streak + focus progress bar on the EEG dashboard alongside existing BrainStateScores.
+- **Brain indicators in ActivityTab**: flow state card (green), fatigue alert card (amber), and streak card (violet) at top.
+
+- **Tauri Brain Insights section** in Activity tab: test failure rates by focus level, focus by language bars, AI impact delta, tool focus grid, hourly productivity chart.
+- **Tauri EEG focus inline**: terminal commands and conversation messages show EEG focus score (green/yellow/red) at the moment they occurred.
+- **VS Code Brain Insights card**: test failure by focus chips, focus by language bars, tool impact chips. Only shown when EEG data is available.
+- **VS Code Struggle card**: hidden when no EEG recording (focus is EEG-only, not activity-based).
+- **VS Code Flow gauge label**: shows "focus" with EEG, "activity" without — no false claim of brain measurement.
+
+- **Tauri AI Conversations section** in Activity tab: timestamped message thread with role icons (user/assistant/tool), app name, EEG focus score, scrollable.
+- **VS Code Conversations card**: timestamped messages with role icons, app badge, collapsible.
+- **VS Code AI Usage card**: Copilot/Codeium acceptance rate bar, suggestion count, source breakdown chips.
+
+- **Search mode dropdown**: replaced 4-tab bar with a styled dropdown supporting 7 search modes — Interactive, EEG, Text, Images, Code, Meetings, Brain.
+- **Diamond EEG nodes**: EEG epochs rendered as faceted octahedrons (diamonds) in the 3D search graph. Meeting nodes rendered as tetrahedrons (pyramids). Visual distinction by data type.
+- **New search modes**: Code (file activity + brain state), Meetings (meeting events + recovery), Brain (flow/fatigue/struggle insights).
+- **Terminal commands in Cmd-K**: added 4 terminal commands to the command palette — Recent Terminal Commands, Terminal Focus Impact, Context Switch Cost, Dev Loops. Translated labels in all 9 locales.
+
+- **Configurable alerts**: `neuroskill.alerts.focusLow` (warn when EEG focus drops below threshold), `neuroskill.alerts.continuousWorkMins` (warn after N minutes continuous work).
+- **Daily digest notification**: at configurable time (default 17:30), shows productivity score + stats. "Full Report" button opens detail panel.
+- **Full report panel**: `Cmd+Shift+R` opens full-width webview with same data as sidebar.
+- **Keyboard shortcuts**: `Cmd+Shift+N` (toggle sidebar), `Cmd+Shift+R` (full report), `Cmd+Shift+Alt+N` (reconnect).
+- **Open NeuroSkill button**: launches native app (cross-platform).
+- **Event caching**: offline-resilient `pendingEvents` array (10K cap) persisted to disk. Auto-flushes on reconnect.
+
+- **Spacing pass on the validation tab and modals**: every card uses `flex flex-col gap-5 p-6` instead of the old `space-y-4` (which provided no padding override). Conditional sub-settings under a channel toggle are now indented under a left border (`ml-1 border-l-2 border-border pl-5`) so the parent/child relationship reads visually. Modals padded to `p-8` with `gap-3` button rows. TLX sliders gained `mt-1` lift off the description and `uppercase tracking-wide` low/high legend labels.
+
+- **Design tokens** (`tokens.css`): 30+ CSS custom properties — palette, surfaces, backgrounds, borders, semantic, typography. Zero inline rgba() in sidebar.
+- **7 reusable Svelte components**: Card, MetricRow, Chevron, ProgressBar, Gauge, Badge, Callout.
+- **Timestamp compliance**: 25 tests verifying UTC in data layer, local conversion only in UI.
+
+- **Theme-aware sidebar screenshots in the README**: every screenshot now ships in two variants (`*-dark.png`, `*-light.png`) and is embedded via a `<picture>` element with `prefers-color-scheme` sources. GitHub serves the variant matching the reader's OS theme; the marketplace gets the dark fallback. Six states captured: in-flow, stuck, fatigued, low-focus / off-peak, daemon-disconnected, status-bar strip.
+- **Sidebar mock library + Playwright generator**: HTML stubs in `extensions/vscode/media/preview/` render the sidebar webview offline (no daemon required). A shared `_styles.css` drives both themes via a `:root.light` override; `npm run screenshots` (Playwright) toggles `<html class="light">` between captures and writes 12 PNGs to `media/screenshots/`.
+- **Marketplace README pipeline**: `scripts/build-marketplace-readme.mjs` rewrites every relative `media/...` path (including `<source srcset>`, which `vsce` doesn't touch) to absolute GitHub raw URLs at package time. The source `README.md` keeps relative paths for GitHub + offline viewing; the generated `.marketplace.readme.md` is what `vsce package --readme-path` ships.
+
+- **Sidebar webview now renders correctly in light themes** (`extensions/vscode/src/sidebar.ts`). Three theme-fragile spots fixed:
+  - `.metric-card` background switched from `--vscode-sideBar-background` (which is the same colour as the surrounding sidebar — cards collapsed into a faint border in light mode) to `--vscode-editorWidget-background`, with `--vscode-input-background` and a translucent grey as cascading fallbacks.
+  - `.ai-bar` track switched from `--vscode-panel-border` to `--vscode-progressBar-background` so the empty bar is visible against a white background.
+  - Row-divider opacity bumped from 0.08 to 0.18; added `:last-child { border-bottom: none }` on commit and AI-metric rows so the last row doesn't double up against the disclaimer footer.
+- **State colours stay hard-coded** — red ring for stuck, green for flow, amber for warning. They're semantic, not chrome, and they read fine on both themes.
+
+### Server
+
+- **`POST /v1/activity/shell-command`**: receives commands from shell hooks with command text, cwd, shell type, exit code.
+- **`POST /v1/brain/terminal-commands`**: query recent commands with exit codes, durations, categories, EEG correlation.
+- **`POST /v1/brain/terminal-impact`**: avg EEG focus delta by command category.
+- **`POST /v1/brain/binary-stats`**: usage frequency per binary for discovering uncategorized tools.
+- **`POST /v1/brain/recategorize-commands`**: rerun categorization rules on all historical commands.
+- **Terminal EEG auto-labels**: `"running: cargo test"` on start, `"cargo test passed"` / `"cargo test failed (exit 1)"` on end.
+- **Zone switch events**: editor/terminal/panel transitions stored with EEG focus snapshot. `POST /v1/brain/context-cost` returns focus at each transition type.
+- **Layout snapshots**: periodic (60s) tab/group/terminal counts from VS Code.
+
+- **`/v1/validation/*` HTTP endpoints** (axum): `GET /config`, `PATCH /config` (recursive JSON merge for partial updates), `POST /snooze`, `POST /disable-today`, `GET /should-prompt` (returns the daemon's prompt decision; logs the fire so the rate-limiter sees it), `POST /kss`, `POST /tlx`, `POST /pvt`, `POST /close-prompt`, `GET /results`, `GET /fatigue-index` (live `(α+θ)/β` from the latest band snapshot).
+- **`AppState.validation_runtime`** (`crates/skill-daemon-state/src/state.rs`): new `Arc<Mutex<ValidationRuntime>>` field holding ephemeral snooze/disable-today state. Resets on daemon restart by design — a crash loop shouldn't keep prompts suppressed forever.
+
+- **`terminal_commands` table**: shell command text, cwd, exit code, duration, auto-categorized (50+ patterns: build/test/run/git/docker/deploy/install/navigate/debug/network/other), EEG focus at start and end for delta calculation.
+- **`dev_loops` table**: edit→build/test cycle tracking with iteration count, pass/fail rate, avg cycle time, focus trend (rising/falling/stable).
+- **`zone_switches` table**: editor/terminal/panel transitions with EEG focus snapshot at moment of switch.
+- **`layout_snapshots` table**: periodic tab/group/terminal counts from VS Code.
+- **Event handler**: new match arms for `terminal_command_start`, `terminal_command_end`, `zone_switch`, `layout_snapshot` in `activity_vscode_events_impl()`.
+- **Command categorizer**: `categorize_command()` with 50+ patterns across build, test, run, git, docker, deploy, install, navigate, debug, network.
+- **`POST /v1/brain/terminal-impact`**: avg EEG focus delta by command category — shows how builds, tests, git, docker affect brain state.
+- **`POST /v1/brain/context-cost`**: focus level at each zone transition type with switch counts.
+- **`POST /v1/brain/dev-loops`**: edit-build-test cycle detection with iterations, pass rate, cycle time, focus trend.
+- **`POST /v1/brain/terminal-commands`**: recent commands with exit codes, durations, categories, EEG correlation.
+- **Enhanced `predict_struggle()`**: terminal failures (+8/fail, max +40) and re-running same failing command 3+ times (+15/rerun, max +30) boost struggle score. New suggestions: "You're re-running the same failing command", "Multiple failures — read the error messages".
+- **Enhanced `detect_task_type()`**: terminal command categories override heuristics with higher confidence — docker/kubectl→infrastructure (0.8), deploy→deploying (0.85), git dominating→git_management (0.7), test→testing (0.85), debug→debugging (0.9).
+- **Terminal EEG auto-labels**: `"running: cargo test"` on start, `"cargo test passed"` / `"cargo test failed (exit 1)"` on end, `"switched to terminal"` on zone changes.
+- **AI events table**: `ai_events` SQLite table tracking suggestion shown/accepted/rejected and chat sessions with source attribution.
+- **OS-wide shell hooks**: `scripts/shell-hooks/` with preexec/precmd hooks for zsh, bash, fish, PowerShell. Sends every command to daemon via background curl. No delay to prompt.
+- **Shell hook daemon endpoints**: `GET /v1/activity/shell-hook?shell=zsh` returns hook script, `POST /v1/activity/install-shell-hook` writes to `~/.skill/shell-hooks/` and appends to rc file, `POST /v1/activity/uninstall-shell-hook` removes cleanly, `POST /v1/activity/shell-hook-status` health check.
+- **`neuroskill terminal` CLI**: `status` (hook health per shell), `install [shell]`, `uninstall [shell]`, `commands` (recent tracked), `impact` (focus delta by category), `loops` (dev loop detection).
+- **`neuroskill brain` new subactions**: `terminal-impact`, `context-cost`, `dev-loops`.
+- **`neuroskill activity` new subaction**: `terminal-commands`.
+- **Tauri Terminal settings tab**: per-shell install/uninstall/repair buttons, health indicators (green/yellow/red), recent commands preview, "How it works" documentation.
+- **`neuroskill vscode` CLI**: auto-install extension to VS Code, VSCodium, or Cursor on macOS, Linux, and Windows.
+- **Meeting nodes in search graph**: meetings appear as amber nodes in the interactive 3D search graph linked by `meeting_prox` edges.
+
+### i18n
+
+- Activity dashboard, clipboard, file history, session replay, weekly report, brain status, timeline, and code-brain correlation translations for all 9 locales.
+
+- Added `settings.inferenceDeviceAuto`, `settings.inferenceDeviceAutoDesc`, `settings.inferenceDeviceMlx`, `settings.inferenceDeviceMlxDesc` to all 9 locales (en, de, es, fr, he, ja, ko, uk, zh).
+
+- Added `umapSettings.backend`, `umapSettings.backendDesc`, `umapSettings.precision`, `umapSettings.precisionDesc` to all 9 locales (en, de, es, fr, he, ja, ko, uk, zh).
+
+- Added `dnd.grayscale` and `dnd.grayscaleDesc` translations to all 9 locales.
+
+- Search mode labels (Code, Meetings, Brain) translated in all 9 locales.
+- Terminal command palette entries translated in all 9 locales.
+
+- **New `validation` namespace** in all 9 languages (`src/lib/i18n/{de,en,es,fr,he,ja,ko,uk,zh}/validation.ts`): ~95 keys in English (full coverage), ~55 in each other language for the user-visible strings (long-tail descriptions fall back via the runtime `t()` chain). `index.ts` barrel exports updated for every language.
+
+- **22 new `validation.*` keys per bundle** in all 9 languages (`bundle.l10n.{de,en,es,fr,he,ja,ko,uk,zh-cn}.json`): KSS prompt + 9 score labels with translated Karolinska wording, TLX/PVT prompts, all four escape-hatch labels, the disabled-permanently acknowledgement.
+- **Two new `cmd.*` keys** for the validation commands in `package.nls.json`.
+
+- Added `settings.inferenceDeviceAuto`, `settings.inferenceDeviceAutoDesc`, `settings.inferenceDeviceMlx`, `settings.inferenceDeviceMlxDesc` to all 9 locales (en, de, es, fr, he, ja, ko, uk, zh).
+
+### Docs
+
+- VS Code extension design plan at `docs/vscode-extension.md`.
+- `neuroskill-activity` skill documentation with 18 activity + 24 brain subcommands, terminal integration, shell hook reference, command categorization table.
+- Updated `neuroskill-dnd` skill with grayscale mode.
+- Updated `neuroskill/README.md` with terminal, brain awareness, and VS Code extension features.
+- Updated `skills/SKILL.md` index with terminal tracking skill reference.
+
+- **VS Code extension README rewritten for skeptical developers**: scientific framing throughout — every derived metric (focus score, flow detector, deep-work minute, struggle predictor, optimal hours, fatigue) now ships with its formula, hyperparameters, and a "what can go wrong" line. Added an explicit *What this is, and isn't* section, a *Validation status* table tracking each metric's evidence level (production / pilot / heuristic / descriptive-only), and a *Validation roadmap* describing the planned KSS / NASA-TLX / PVT / EEG-fatigue calibration channels. Replaced the marketing pain-points table with a per-API signal taxonomy and an architecture paragraph.
+- **References section with verified citations**: nine entries with DOIs cross-checked via CrossRef and `doi.org` redirects — Csikszentmihalyi 1990 (flow), Klimesch 1999 (α/θ oscillations), Lubar 1991 (θ/β attention ratio), Barry et al. 2005 (caffeine confound), Newport 2016 (deep work), Roenneberg et al. 2003 (chronotypes), Hart & Staveland 1988 + Hart 2006 (NASA-TLX), Jap et al. 2009 (EEG fatigue index). Each reference linked back to the metric it grounds.
+- **Repository metadata pointed at the right repo**: discovered `extensions/vscode/` is a git submodule of `vscode-neuroskill`, not a subdirectory of the monorepo. Reverted `repository.url`, `bugs.url`, `homepage`, `qna` to the submodule's actual repo so the marketplace links resolve.
+
+### Dependencies
+
+- **burn-mlx**: added `burn-mlx` from git (`eidola-ai/burn-mlx`, branch `burn-0-20`) as optional dependency in `skill-router` and `skill-daemon`. Workspace `[patch.crates-io]` redirects all `burn-mlx` references to the git version (crates.io 0.1.2 targets burn 0.16; project uses burn 0.20).
+- **macOS deployment target**: bumped from 10.15 to 14.0 in `.cargo/config.toml` for Metal 3.0 `simdgroup_matrix` intrinsics required by MLX. Still satisfies llama.cpp's `std::filesystem` (available since 10.15).
+- **half 2.4**: added to `skill-router` for GPU f16 precision backend type (`CubeBackend<WgpuRuntime, half::f16, ...>`).
+
+- **Fix rand 0.7.3 vulnerability**: vendored `phf_generator 0.8.0` with rand bumped from 0.7 to 0.8, eliminating the vulnerable transitive dependency.
+- **Remove atty**: migrated `iroh_test_client` from `structopt` (clap v2) to `clap v4` derive, dropping the unmaintained `atty` crate.
+- **Update llama-cpp-4 to 0.2.50**: upstream llama.cpp fixes including `common_*` symbol renames.
+- **Update kittentts to 0.4.1**: TTS engine update.
+- **Add grayscale 0.0.1**: macOS grayscale display control for DND mode.
+
+## [0.0.130-rc.10] — 2026-05-02
+
+### Features
+
+- fix windows ci
+
+## [0.0.130-rc.11] — 2026-05-02
+
+### Features
+
+- 1. GPU f16 SHADER_F16 panic → `catch_unwind` in worker.rs
+
+## [0.0.130-rc.2] — 2026-04-29
+
+### Features
+
+- fix win/linux
+
+## [0.0.130-rc.3] — 2026-04-29
+
+### Features
+
+- fixed issues with the metrics, keychain access (3 -> 1 + on demand), windows CI
+- umap e2e
+
+## [0.0.130-rc.4] — 2026-04-29
+
+### Features
+
+- Minor updates and improvements
+
+## [0.0.130-rc.5] — 2026-04-30
+
+### Features
+
+- fix vulkan cache on windows ci
+
+## [0.0.130-rc.6] — 2026-04-30
+
+### Features
+
+- Minor updates and improvements
+
+## [0.0.130-rc.7] — 2026-05-02
+
+### Features
+
+- Replace per-app AppleScript window tracking (which triggered a macOS TCC Automation dialog for every new foreground app) with native Accessibility API (AXUIElement) + CoreGraphics calls that require only a single one-time "Accessibility" permission for NeuroSkill.
+
+## [0.0.130-rc.8] — 2026-05-02
+
+### Features
+
+- Minor updates and improvements
+
+## [0.0.130-rc.9] — 2026-05-02
+
+### Features
+
+- Minor updates and improvements

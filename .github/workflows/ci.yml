@@ -610,6 +610,10 @@ jobs:
       # only happens once per change to the install script.  On cache hit the
       # install script detects the SDK via filesystem and skips the download.
       - name: Cache Vulkan SDK
+        # Don't fail the job on transient cache-service errors (actions/cache@v5
+        # occasionally returns "failure" instead of "miss"). The install script
+        # below handles a missing SDK by downloading it on the spot.
+        continue-on-error: true
         uses: actions/cache@v5
         with:
           path: C:\VulkanSDK

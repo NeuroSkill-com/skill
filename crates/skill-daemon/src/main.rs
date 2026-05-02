@@ -21,7 +21,6 @@ pub(crate) mod session_runner;
 mod tty;
 #[cfg(unix)]
 mod tty_backfill;
-#[cfg(unix)]
 mod tty_embedder;
 #[cfg(unix)]
 mod tty_finalizer;
@@ -53,7 +52,16 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     #[cfg(unix)]
     if args.get(1).map(String::as_str) == Some("tty") {
-        return tty::run(&args[2..]);
+        // Exit 126 signals the shell hook that the PTY shim failed to start
+        // (not a tty, openpty failed, etc.) so the hook can fall through to a
+        // plain shell instead of closing the terminal. Any other exit code is
+        // the inner shell's own exit code and is forwarded as-is (tty::run
+        // calls std::process::exit internally on success).
+        if let Err(e) = tty::run(&args[2..]) {
+            eprintln!("skill-daemon tty: {e:#}");
+            std::process::exit(126);
+        }
+        return Ok(());
     }
     daemon_main()
 }
@@ -150,7 +158,6 @@ async fn daemon_main() -> anyhow::Result<()> {
     tty_finalizer::spawn(state.clone());
     // Fill in `terminal_outputs.embedding` for finalized rows. Runs every
     // 30 s, batches of 32, int8-quantised vectors.
-    #[cfg(unix)]
     tty_embedder::spawn(state.clone());
 
     // Auto-refresh installed shell hooks so upgrades propagate fixes (e.g. the

@@ -312,13 +312,24 @@ function fmt(v: unknown): string {
 async function discover(): Promise<number> {
   if (PORT) return PORT;
 
-  // Retry discovery indefinitely until Ctrl-C.
-  // Each attempt tries mDNS (5s timeout) then lsof fallback.
+  // Bounded discovery for CI/headless callers. Set SKILL_DISCOVER_TIMEOUT_SECS
+  // to cap total wall time spent retrying mDNS + lsof. Unset = retry forever
+  // (the historical interactive behaviour — Ctrl-C to abort).
+  const timeoutEnv = process.env.SKILL_DISCOVER_TIMEOUT_SECS;
+  const deadlineMs = timeoutEnv ? Date.now() + Number(timeoutEnv) * 1000 : Number.POSITIVE_INFINITY;
+
   let attempt = 0;
   while (true) {
+    if (Date.now() > deadlineMs) {
+      throw new Error(
+        `discovery timed out after ${timeoutEnv}s — app did not register on mDNS or open a listening port`,
+      );
+    }
     attempt++;
     if (attempt === 1) {
-      info("discovering Skill port (retries until Ctrl-C)…");
+      info(timeoutEnv
+        ? `discovering Skill port (timeout ${timeoutEnv}s)…`
+        : "discovering Skill port (retries until Ctrl-C)…");
     } else {
       info(`discovery attempt #${attempt} — retrying in 3s…`);
       await new Promise(r => setTimeout(r, 3000));
