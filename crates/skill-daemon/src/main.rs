@@ -52,7 +52,16 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     #[cfg(unix)]
     if args.get(1).map(String::as_str) == Some("tty") {
-        return tty::run(&args[2..]);
+        // Exit 126 signals the shell hook that the PTY shim failed to start
+        // (not a tty, openpty failed, etc.) so the hook can fall through to a
+        // plain shell instead of closing the terminal. Any other exit code is
+        // the inner shell's own exit code and is forwarded as-is (tty::run
+        // calls std::process::exit internally on success).
+        if let Err(e) = tty::run(&args[2..]) {
+            eprintln!("skill-daemon tty: {e:#}");
+            std::process::exit(126);
+        }
+        return Ok(());
     }
     daemon_main()
 }
