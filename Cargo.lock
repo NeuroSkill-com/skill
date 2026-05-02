@@ -17349,11 +17349,3 @@ dependencies = [
  "syn 2.0.117",
  "winnow 1.0.2",
 ]
-
-[[patch.unused]]
-name = "muda"
-version = "0.17.2"
-
-[[patch.unused]]
-name = "phf_generator"
-version = "0.8.0"
