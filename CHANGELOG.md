@@ -5397,6 +5397,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - **Update kittentts to 0.4.1**: TTS engine update.
 - **Add grayscale 0.0.1**: macOS grayscale display control for DND mode.
 
+## [0.0.130-rc.10] — 2026-05-02
+
+### Features
+
+- fix windows ci
+
 ## [0.0.130-rc.2] — 2026-04-29
 
 ### Features
