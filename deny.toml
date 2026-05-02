@@ -25,6 +25,11 @@ ignore = [
     { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
     # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
     # Pulled transitively; not directly used by workspace code paths that call IterMut.
+
+    # hickory-proto 0.25.2 — pulled transitively via iroh → hickory-resolver.
+    # Cannot upgrade until iroh ships a version that depends on hickory-proto >=0.25.3.
+    { id = "RUSTSEC-2026-0118", reason = "transitive via iroh/hickory-resolver, not directly upgradeable" },
+    { id = "RUSTSEC-2026-0119", reason = "transitive via iroh/hickory-resolver, not directly upgradeable" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
