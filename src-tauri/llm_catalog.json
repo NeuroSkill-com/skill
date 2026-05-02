@@ -445,6 +445,33 @@
       "is_mmproj": false,
       "params_b": 4.0,
       "max_context_length": 131072
+    },
+    "mistral-medium-3.5-128b": {
+      "name": "Mistral Medium 3.5 128B",
+      "description": "Mistral AI's 128B parameter medium-class model with strong reasoning and chat quality. Requires 64 GB+ unified memory or VRAM for Q4 quants.",
+      "repo": "bartowski/mistralai_Mistral-Medium-3.5-128B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large"
+      ],
+      "is_mmproj": false,
+      "params_b": 128.0,
+      "max_context_length": 131072
+    },
+    "nemotron-3-nano-omni-30b": {
+      "name": "NVIDIA Nemotron-3 Nano Omni 30B",
+      "description": "NVIDIA's multimodal MoE model (30B, 3B active) with video, audio, image, and text understanding. Supports reasoning, tool calling, OCR, and GUI automation.",
+      "repo": "unsloth/NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "multimodal",
+        "moe"
+      ],
+      "is_mmproj": true,
+      "params_b": 30.0,
+      "max_context_length": 131072
     }
   },
   "models": [
@@ -4073,6 +4100,250 @@
       "size_gb": 35.81,
       "description": "8-bit with important layers at higher precision",
       "advanced": true
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q2_K.gguf",
+      "quant": "Q2_K",
+      "size_gb": 49.86,
+      "description": "Very low quality; smallest single-file download",
+      "advanced": true
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 48.61,
+      "description": "Low quality imatrix; surprisingly usable",
+      "advanced": true
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q2_K_L/mistralai_Mistral-Medium-3.5-128B-Q2_K_L-00001-of-00002.gguf",
+      "quant": "Q2_K_L",
+      "size_gb": 51.43,
+      "description": "Q8_0 embed/output weights; very low quality",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q2_K_L/mistralai_Mistral-Medium-3.5-128B-Q2_K_L-00001-of-00002.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q2_K_L/mistralai_Mistral-Medium-3.5-128B-Q2_K_L-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ3_M/mistralai_Mistral-Medium-3.5-128B-IQ3_M-00001-of-00002.gguf",
+      "quant": "IQ3_M",
+      "size_gb": 59.53,
+      "description": "Medium-low quality imatrix; decent performance",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-IQ3_M/mistralai_Mistral-Medium-3.5-128B-IQ3_M-00001-of-00002.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-IQ3_M/mistralai_Mistral-Medium-3.5-128B-IQ3_M-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q3_K_M/mistralai_Mistral-Medium-3.5-128B-Q3_K_M-00001-of-00002.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 63.28,
+      "description": "Low quality; good for limited RAM/VRAM",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q3_K_M/mistralai_Mistral-Medium-3.5-128B-Q3_K_M-00001-of-00002.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q3_K_M/mistralai_Mistral-Medium-3.5-128B-Q3_K_M-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ4_XS/mistralai_Mistral-Medium-3.5-128B-IQ4_XS-00001-of-00002.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 69.14,
+      "description": "Decent quality imatrix; smaller than Q4_K_S",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-IQ4_XS/mistralai_Mistral-Medium-3.5-128B-IQ4_XS-00001-of-00002.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-IQ4_XS/mistralai_Mistral-Medium-3.5-128B-IQ4_XS-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q4_K_S/mistralai_Mistral-Medium-3.5-128B-Q4_K_S-00001-of-00002.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 73.02,
+      "description": "Good quality with space savings",
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q4_K_S/mistralai_Mistral-Medium-3.5-128B-Q4_K_S-00001-of-00002.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q4_K_S/mistralai_Mistral-Medium-3.5-128B-Q4_K_S-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q4_K_M/mistralai_Mistral-Medium-3.5-128B-Q4_K_M-00001-of-00002.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 78.41,
+      "description": "Recommended -- best quality/size tradeoff",
+      "recommended": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q4_K_M/mistralai_Mistral-Medium-3.5-128B-Q4_K_M-00001-of-00002.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q4_K_M/mistralai_Mistral-Medium-3.5-128B-Q4_K_M-00002-of-00002.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q5_K_M/mistralai_Mistral-Medium-3.5-128B-Q5_K_M-00001-of-00003.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 91.11,
+      "description": "High quality; >= 96 GB unified memory",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q5_K_M/mistralai_Mistral-Medium-3.5-128B-Q5_K_M-00001-of-00003.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q5_K_M/mistralai_Mistral-Medium-3.5-128B-Q5_K_M-00002-of-00003.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q5_K_M/mistralai_Mistral-Medium-3.5-128B-Q5_K_M-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q6_K/mistralai_Mistral-Medium-3.5-128B-Q6_K-00001-of-00003.gguf",
+      "quant": "Q6_K",
+      "size_gb": 107.8,
+      "description": "Very high quality, near perfect; >= 112 GB unified memory",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q6_K/mistralai_Mistral-Medium-3.5-128B-Q6_K-00001-of-00003.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q6_K/mistralai_Mistral-Medium-3.5-128B-Q6_K-00002-of-00003.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q6_K/mistralai_Mistral-Medium-3.5-128B-Q6_K-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-Q8_0/mistralai_Mistral-Medium-3.5-128B-Q8_0-00001-of-00004.gguf",
+      "quant": "Q8_0",
+      "size_gb": 132.85,
+      "description": "Effectively lossless; very large",
+      "advanced": true,
+      "shard_files": [
+        "mistralai_Mistral-Medium-3.5-128B-Q8_0/mistralai_Mistral-Medium-3.5-128B-Q8_0-00001-of-00004.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q8_0/mistralai_Mistral-Medium-3.5-128B-Q8_0-00002-of-00004.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q8_0/mistralai_Mistral-Medium-3.5-128B-Q8_0-00003-of-00004.gguf",
+        "mistralai_Mistral-Medium-3.5-128B-Q8_0/mistralai_Mistral-Medium-3.5-128B-Q8_0-00004-of-00004.gguf"
+      ]
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 18.5,
+      "description": "Ultra-low quality imatrix; smallest useful option",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 18.5,
+      "description": "Ultra-low quality; Q8_0 embed/output weights",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ3_S.gguf",
+      "quant": "IQ3_S",
+      "size_gb": 18.82,
+      "description": "Low quality imatrix",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 19.46,
+      "description": "Low quality imatrix",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 19.54,
+      "description": "Decent quality; smaller than Q4_K_S",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 19.54,
+      "description": "Decent quality; good for ARM CPU inference",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-MXFP4_MOE.gguf",
+      "quant": "MXFP4_MOE",
+      "size_gb": 21.73,
+      "description": "MX FP4 MoE quant -- fast on supported hardware"
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 23.05,
+      "description": "Good quality with space savings"
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 23.89,
+      "description": "Recommended -- best quality/size tradeoff",
+      "recommended": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 24.8,
+      "description": "High quality",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 29.0,
+      "description": "High quality; >= 32 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 33.59,
+      "description": "Very high quality, near perfect",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 33.59,
+      "description": "Effectively lossless; very large",
+      "advanced": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 1.59,
+      "description": "Nemotron-3 Nano Omni vision/audio projector -- BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "nemotron-3-nano-omni-30b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 1.59,
+      "description": "Nemotron-3 Nano Omni vision/audio projector -- FP16"
     }
   ]
 }
