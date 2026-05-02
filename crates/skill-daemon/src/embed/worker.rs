@@ -628,11 +628,24 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
             }
             #[cfg(feature = "embed-zuna-gpu-f16")]
             if try_gpu {
-                if let Some(s) = load_zuna_gpu_f16(config) {
-                    info!("ZUNA GPU f16 encoder loaded");
-                    return Some(Encoder::ZunaGpuF16(Box::new(s)));
+                // Wrap in catch_unwind: on adapters where wgpu does not expose
+                // SHADER_F16 (e.g. Vulkan/DX12 without storageInputOutput16),
+                // burn's naga validation panics with "Using f16 values requires
+                // the naga::valid::Capabilities::FLOAT16 flag".  Without this
+                // guard the entire embed worker thread would die and epochs
+                // would be silently dropped for the rest of the session.
+                let f16_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load_zuna_gpu_f16(config)));
+                match f16_result {
+                    Ok(Some(s)) => {
+                        info!("ZUNA GPU f16 encoder loaded");
+                        return Some(Encoder::ZunaGpuF16(Box::new(s)));
+                    }
+                    Ok(None) => warn!("GPU f16 unavailable, trying GPU f32"),
+                    Err(_) => warn!(
+                        "ZUNA GPU f16 panicked — adapter likely lacks SHADER_F16 \
+                         (naga FLOAT16 capability); falling back to GPU f32"
+                    ),
                 }
-                warn!("GPU f16 unavailable, trying GPU f32");
             }
             #[cfg(feature = "embed-zuna-gpu")]
             if try_gpu {

@@ -109,9 +109,13 @@ pub struct RoundedScores {
 // ── Embedding / label loaders ─────────────────────────────────────────────────
 
 /// Load all embedding vectors from daily SQLite DBs in [start, end] UTC range.
+///
+/// Uses [`skill_data::util::DualTimestampRange`] to match all three timestamp
+/// formats that may be stored in the `embeddings` table (Unix ms, 14-digit
+/// `YYYYMMDDHHmmss`, or 17-digit `YYYYMMDDHHmmss × 1000`).
 pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, Vec<f32>)> {
-    let ts_start = (start_utc as i64) * 1000;
-    let ts_end = (end_utc as i64) * 1000;
+    let r = skill_data::util::DualTimestampRange::from_unix_secs(start_utc, end_utc);
+    let ts_where = skill_data::util::DualTimestampRange::WHERE_CLAUSE;
 
     let mut out: Vec<(u64, Vec<f32>)> = Vec::new();
     let Ok(entries) = std::fs::read_dir(skill_dir) else {
@@ -130,19 +134,29 @@ pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> 
             continue;
         };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let Ok(mut stmt) = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(&format!(
             "SELECT timestamp, eeg_embedding FROM embeddings
-             WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY timestamp",
-        ) else {
+             WHERE ({ts_where}) ORDER BY timestamp"
+        )) else {
             continue;
         };
 
-        let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
-            let ts: i64 = row.get(0)?;
-            let blob: Vec<u8> = row.get(1)?;
-            let emb: Vec<f32> = skill_data::util::blob_to_f32(&blob);
-            Ok(((ts / 1000) as u64, emb))
-        });
+        let rows = stmt.query_map(
+            rusqlite::params![
+                r.unix_ms_start,
+                r.unix_ms_end,
+                r.dt14_start,
+                r.dt14_end,
+                r.dt17_start,
+                r.dt17_end
+            ],
+            |row| {
+                let ts: i64 = row.get(0)?;
+                let blob: Vec<u8> = row.get(1)?;
+                let emb: Vec<f32> = skill_data::util::blob_to_f32(&blob);
+                Ok((skill_data::util::epoch_ts_to_unix(ts), emb))
+            },
+        );
         if let Ok(rows) = rows {
             for r in rows.flatten() {
                 out.push(r);
