@@ -5403,6 +5403,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - fix windows ci
 
+## [0.0.130-rc.11] — 2026-05-02
+
+### Features
+
+- 1. GPU f16 SHADER_F16 panic → `catch_unwind` in worker.rs
+
 ## [0.0.130-rc.2] — 2026-04-29
 
 ### Features
