@@ -12271,6 +12271,8 @@ dependencies = [
  "neurosky",
  "notify",
  "notify-rust",
+ "objc2 0.6.4",
+ "objc2-app-kit",
  "osf-rs",
  "rand 0.10.1",
  "regex",

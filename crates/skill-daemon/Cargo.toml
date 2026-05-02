@@ -133,6 +133,8 @@ tokio-tungstenite    = "0.28"
 # macOS: use Apple Accelerate for BLAS (AMX coprocessor on M-series)
 [target.'cfg(target_os = "macos")'.dependencies]
 burn-ndarray        = { version = "0.20.1", default-features = false, features = ["blas-accelerate"], optional = true }
+objc2               = "0.6"
+objc2-app-kit       = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 
 # Linux: use system OpenBLAS when available
 [target.'cfg(target_os = "linux")'.dependencies]

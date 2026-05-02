@@ -118,8 +118,229 @@ fn run_osascript(script: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
+/// macOS: try the native Accessibility-API path first; fall back to
+/// AppleScript only when Accessibility permission has not been granted yet.
+///
+/// The native path (`ax_poll_active_window`) requires ONE one-time
+/// "Accessibility" permission for NeuroSkill that covers every application
+/// forever — no per-app Automation dialogs appear.  The AppleScript fallback
+/// (`applescript_poll_active_window`) may trigger macOS TCC dialogs for each
+/// new app that comes to the foreground.
 #[cfg(target_os = "macos")]
 fn poll_active_window() -> Option<ActiveWindowInfo> {
+    ax_poll_active_window().or_else(applescript_poll_active_window)
+}
+
+/// Native macOS window polling via NSWorkspace + Accessibility API.
+///
+/// * App name / path — obtained from `NSWorkspace.frontmostApplication`
+///   (no permissions required at all).
+/// * Window title    — obtained via `AXFocusedWindow` + `AXTitle`
+///   (single one-time "Accessibility" permission for NeuroSkill).
+/// * Document path   — obtained via `AXDocument` on the focused window
+///   (same Accessibility permission; replaces the per-app AppleScript lookup).
+///
+/// Returns `None` (causing a fall-through to AppleScript) if Accessibility
+/// permission is not yet granted.
+#[cfg(target_os = "macos")]
+fn ax_poll_active_window() -> Option<ActiveWindowInfo> {
+    use std::ffi::{c_void, CStr};
+    use std::os::raw::c_char;
+
+    type CFTypeRef = *const c_void;
+    type CFStringRef = *const c_void;
+    type CFAllocatorRef = *const c_void;
+    type AXUIElementRef = *const c_void;
+    type AXError = i32;
+
+    const AX_SUCCESS: AXError = 0;
+    const KCF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+        fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
+        fn AXUIElementCopyAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: *mut CFTypeRef,
+        ) -> AXError;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithCString(alloc: CFAllocatorRef, c_str: *const c_char, encoding: u32) -> CFStringRef;
+        fn CFStringGetLength(s: CFStringRef) -> isize;
+        fn CFStringGetMaximumSizeForEncoding(len: isize, encoding: u32) -> isize;
+        fn CFStringGetCString(s: CFStringRef, buf: *mut c_char, size: isize, encoding: u32) -> bool;
+        fn CFRelease(cf: CFTypeRef);
+    }
+
+    // SAFETY: AXIsProcessTrusted is thread-safe and returns immediately.
+    if !unsafe { AXIsProcessTrusted() } {
+        // Accessibility not yet granted — fall through to AppleScript path.
+        return None;
+    }
+
+    // ── Step 1: frontmost app info from NSWorkspace (zero permissions) ────────
+    let (pid, app_name, app_path) = {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+        use objc2_app_kit::NSWorkspace;
+
+        // SAFETY: NSWorkspace and NSRunningApplication are stable AppKit APIs.
+        // Returned Objective-C objects have autorelease lifetime tied to the
+        // current thread's autorelease pool which Tauri/the OS maintains.
+        unsafe {
+            let workspace = NSWorkspace::sharedWorkspace();
+            let front_app: Option<&AnyObject> = msg_send![&workspace, frontmostApplication];
+            let front_app = front_app?;
+
+            let pid: i32 = msg_send![front_app, processIdentifier];
+            if pid <= 0 {
+                return None;
+            }
+
+            let name_obj: Option<&AnyObject> = msg_send![front_app, localizedName];
+            let app_name = name_obj
+                .map(|n| {
+                    let bytes: *const c_char = msg_send![n, UTF8String];
+                    if bytes.is_null() {
+                        String::new()
+                    } else {
+                        CStr::from_ptr(bytes).to_string_lossy().into_owned()
+                    }
+                })
+                .unwrap_or_default();
+
+            let url_obj: Option<&AnyObject> = msg_send![front_app, executableURL];
+            let app_path = url_obj
+                .and_then(|u| {
+                    let path_obj: Option<&AnyObject> = msg_send![u, path];
+                    path_obj.map(|p| {
+                        let bytes: *const c_char = msg_send![p, UTF8String];
+                        if bytes.is_null() {
+                            String::new()
+                        } else {
+                            CStr::from_ptr(bytes).to_string_lossy().into_owned()
+                        }
+                    })
+                })
+                .unwrap_or_default();
+
+            (pid, app_name, app_path)
+        }
+    };
+
+    if app_name.is_empty() {
+        return None;
+    }
+
+    // ── Step 2: window title + document path via AXUIElement ─────────────────
+    // One "Accessibility" permission covers all apps — no per-app dialogs.
+    let (window_title, document_path) = unsafe {
+        /// Convert a non-null CFStringRef to a Rust `String`.
+        ///
+        /// SAFETY: `s` must be a valid, non-null CFStringRef.
+        unsafe fn cfstr_to_string(s: CFStringRef, enc: u32) -> String {
+            unsafe {
+                let len = CFStringGetLength(s);
+                let max = CFStringGetMaximumSizeForEncoding(len, enc) + 1;
+                let mut buf: Vec<c_char> = vec![0; max as usize];
+                if CFStringGetCString(s, buf.as_mut_ptr(), max, enc) {
+                    CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
+                } else {
+                    String::new()
+                }
+            }
+        }
+
+        let key_focused_win = CFStringCreateWithCString(
+            std::ptr::null(),
+            b"AXFocusedWindow\0".as_ptr() as *const c_char,
+            KCF_STRING_ENCODING_UTF8,
+        );
+        let key_title = CFStringCreateWithCString(
+            std::ptr::null(),
+            b"AXTitle\0".as_ptr() as *const c_char,
+            KCF_STRING_ENCODING_UTF8,
+        );
+        let key_document = CFStringCreateWithCString(
+            std::ptr::null(),
+            b"AXDocument\0".as_ptr() as *const c_char,
+            KCF_STRING_ENCODING_UTF8,
+        );
+
+        let app_ax = AXUIElementCreateApplication(pid);
+
+        let mut win_ref: CFTypeRef = std::ptr::null();
+        let err = AXUIElementCopyAttributeValue(app_ax, key_focused_win, &mut win_ref);
+
+        let (title, doc_path) = if err == AX_SUCCESS && !win_ref.is_null() {
+            let mut title_ref: CFTypeRef = std::ptr::null();
+            let title = if AXUIElementCopyAttributeValue(win_ref, key_title, &mut title_ref) == AX_SUCCESS
+                && !title_ref.is_null()
+            {
+                let t = cfstr_to_string(title_ref, KCF_STRING_ENCODING_UTF8);
+                CFRelease(title_ref);
+                t
+            } else {
+                String::new()
+            };
+
+            let mut doc_ref: CFTypeRef = std::ptr::null();
+            let doc_path = if AXUIElementCopyAttributeValue(win_ref, key_document, &mut doc_ref) == AX_SUCCESS
+                && !doc_ref.is_null()
+            {
+                // AXDocument returns a URL string: "file:///path/to/doc.txt"
+                let raw = cfstr_to_string(doc_ref, KCF_STRING_ENCODING_UTF8);
+                CFRelease(doc_ref);
+                let path = raw.strip_prefix("file://").unwrap_or(&raw);
+                let decoded = urlencoding::decode(path)
+                    .map(|s| s.into_owned())
+                    .unwrap_or_else(|_| path.to_string());
+                if decoded.is_empty() {
+                    None
+                } else {
+                    Some(decoded)
+                }
+            } else {
+                None
+            };
+
+            CFRelease(win_ref);
+            (title, doc_path)
+        } else {
+            (String::new(), None)
+        };
+
+        // SAFETY: app_ax is a retained AXUIElementRef (CFType); must be released.
+        CFRelease(app_ax as CFTypeRef);
+        CFRelease(key_focused_win);
+        CFRelease(key_title);
+        CFRelease(key_document);
+
+        (title, doc_path)
+    };
+
+    Some(ActiveWindowInfo {
+        app_name,
+        app_path,
+        window_title,
+        document_path,
+        activated_at: unix_secs(),
+        browser_title: None, // Enriched later in run_poller.
+        monitor_id: None,    // Enriched later if multi-monitor detection succeeds.
+    })
+}
+
+/// AppleScript fallback for active-window polling (macOS).
+///
+/// Used only when Accessibility permission has not been granted yet.
+/// May trigger macOS TCC Automation permission dialogs for each new
+/// foreground application.
+#[cfg(target_os = "macos")]
+fn applescript_poll_active_window() -> Option<ActiveWindowInfo> {
     let script = r#"
 tell application "System Events"
     set frontApp to first application process whose frontmost is true
@@ -189,70 +410,221 @@ return appName & "|||" & appPath & "|||" & winTitle & "|||" & docPath"#;
 }
 
 /// Poll all visible windows on non-primary monitors (macOS only).
-/// Returns a list of windows that are on secondary screens.
+///
+/// Uses `CGWindowListCopyWindowInfo` (CoreGraphics) and `CGMainDisplayID` /
+/// `CGDisplayPixelsWide` to detect secondary-monitor windows without any
+/// AppleScript or TCC permission prompts.
+///
+/// Window titles (`kCGWindowName`) may be empty without Screen Recording
+/// permission; owner names (`kCGWindowOwnerName`) are always available.
 #[cfg(target_os = "macos")]
 fn poll_secondary_windows() -> Vec<SecondaryWindowInfo> {
-    // Use AppleScript to get all visible windows with their positions,
-    // then compare against screen bounds to determine which monitor.
-    let script = r#"
-set result to ""
-tell application "System Events"
-    set frontName to name of first application process whose frontmost is true
-    repeat with proc in (application processes whose visible is true)
-        set procName to name of proc
-        if procName is not frontName then
-            try
-                repeat with w in windows of proc
-                    try
-                        set winTitle to name of w
-                        set winPos to position of w
-                        set xPos to item 1 of winPos
-                        -- Use x position to infer monitor (primary is typically x >= 0 and < primary width)
-                        set result to result & procName & "|||" & winTitle & "|||" & xPos & linefeed
-                    end try
-                end repeat
-            end try
-        end if
-    end repeat
-end tell
-return result"#;
+    use std::ffi::{c_void, CStr};
+    use std::os::raw::c_char;
 
-    let out = match run_osascript(script) {
-        Some(s) => s,
-        None => return vec![],
-    };
+    type CFTypeRef = *const c_void;
+    type CFDictionaryRef = *const c_void;
+    type CFStringRef = *const c_void;
+    type CFAllocatorRef = *const c_void;
+    type CFArrayRef = *const c_void;
+    type CFIndex = isize;
+    type CFNumberType = i32;
+    type CGWindowID = u32;
 
-    // Parse: each line is "appName|||windowTitle|||xPosition"
-    // Query actual primary screen width to avoid hardcoded values.
-    let primary_width: i64 = run_osascript("tell application \"Finder\" to get bounds of window of desktop")
-        .and_then(|s| s.split(',').nth(2)?.trim().parse::<i64>().ok())
-        .unwrap_or(2000);
+    const ON_SCREEN_ONLY: u32 = 1 << 0;
+    const EXCLUDE_DESKTOP: u32 = 1 << 4;
+    const K_CG_NULL_WINDOW_ID: CGWindowID = 0;
+    const K_CF_NUMBER_SINT32_TYPE: CFNumberType = 3;
+    const K_CF_NUMBER_FLOAT64_TYPE: CFNumberType = 13;
+    const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
-    out.lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGWindowListCopyWindowInfo(option: u32, relativeToWindow: CGWindowID) -> CFArrayRef;
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayPixelsWide(display: u32) -> usize;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFArrayGetCount(theArray: CFArrayRef) -> CFIndex;
+        fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: CFIndex) -> CFTypeRef;
+        fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFStringRef) -> CFTypeRef;
+        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64) -> bool;
+        fn CFRelease(cf: CFTypeRef);
+        fn CFStringCreateWithCString(alloc: CFAllocatorRef, c_str: *const c_char, encoding: u32) -> CFStringRef;
+        fn CFStringGetLength(s: CFStringRef) -> isize;
+        fn CFStringGetMaximumSizeForEncoding(len: isize, encoding: u32) -> isize;
+        fn CFStringGetCString(s: CFStringRef, buf: *mut c_char, size: isize, encoding: u32) -> bool;
+    }
+
+    // SAFETY: CoreGraphics C APIs — all pointers are valid and non-null-checked.
+    unsafe {
+        /// Create a UTF-8 CFString from a NUL-terminated byte literal.
+        ///
+        /// SAFETY: `s` must be a NUL-terminated byte slice. Caller must CFRelease.
+        unsafe fn cfstr(s: &[u8]) -> CFStringRef {
+            unsafe {
+                CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8)
+            }
+        }
+
+        /// Read a CFNumber as i32.
+        ///
+        /// SAFETY: `n` must be a valid CFNumber (or null).
+        unsafe fn cfnum_i32(n: CFTypeRef) -> Option<i32> {
+            if n.is_null() {
                 return None;
             }
-            let mut parts = line.splitn(3, "|||");
-            let app_name = parts.next()?.trim().to_string();
-            let window_title = parts.next()?.trim().to_string();
-            let x_pos: i64 = parts.next()?.trim().parse().ok()?;
-            if app_name.is_empty() || window_title.is_empty() {
+            let mut v: i64 = 0;
+            unsafe {
+                if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) {
+                    Some(v as i32)
+                } else {
+                    None
+                }
+            }
+        }
+
+        /// Read a CFNumber as f64.
+        ///
+        /// SAFETY: `n` must be a valid CFNumber (or null).
+        unsafe fn cfnum_f64(n: CFTypeRef) -> Option<f64> {
+            if n.is_null() {
                 return None;
             }
-            // If window is outside primary monitor bounds, it's on a secondary monitor.
-            if x_pos < 0 || x_pos >= primary_width {
-                Some(SecondaryWindowInfo {
-                    app_name,
-                    window_title,
-                    monitor_id: if x_pos < 0 { 2 } else { 1 },
-                })
+            let mut v: i64 = 0;
+            unsafe {
+                // CFNumberGetValue writes the numeric bits; reinterpret as f64.
+                if CFNumberGetValue(n, K_CF_NUMBER_FLOAT64_TYPE, &mut v) {
+                    Some(f64::from_bits(v as u64))
+                } else {
+                    None
+                }
+            }
+        }
+
+        /// Convert a non-null CFStringRef to a Rust String.
+        ///
+        /// SAFETY: `s` must be a valid, non-null CFStringRef.
+        unsafe fn cfstr_to_string(s: CFStringRef) -> String {
+            unsafe {
+                let len = CFStringGetLength(s);
+                let max = CFStringGetMaximumSizeForEncoding(len, K_CF_STRING_ENCODING_UTF8) + 1;
+                let mut buf: Vec<c_char> = vec![0; max as usize];
+                if CFStringGetCString(s, buf.as_mut_ptr(), max, K_CF_STRING_ENCODING_UTF8) {
+                    CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
+                } else {
+                    String::new()
+                }
+            }
+        }
+
+        // Primary display width — used to determine which monitor a window is on.
+        let primary_width = CGDisplayPixelsWide(CGMainDisplayID()) as i64;
+
+        let key_pid = cfstr(b"kCGWindowOwnerPID\0");
+        let key_layer = cfstr(b"kCGWindowLayer\0");
+        let key_owner_name = cfstr(b"kCGWindowOwnerName\0");
+        let key_name = cfstr(b"kCGWindowName\0");
+        let key_bounds = cfstr(b"kCGWindowBounds\0");
+        let key_x = cfstr(b"X\0");
+
+        let list = CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, K_CG_NULL_WINDOW_ID);
+        if list.is_null() {
+            CFRelease(key_pid);
+            CFRelease(key_layer);
+            CFRelease(key_owner_name);
+            CFRelease(key_name);
+            CFRelease(key_bounds);
+            CFRelease(key_x);
+            return vec![];
+        }
+
+        // Identify the frontmost app's PID so we can skip its windows.
+        let frontmost_pid: i32 = {
+            use objc2::msg_send;
+            use objc2::runtime::AnyObject;
+            use objc2_app_kit::NSWorkspace;
+            let workspace = NSWorkspace::sharedWorkspace();
+            let front_app: Option<&AnyObject> = msg_send![&workspace, frontmostApplication];
+            front_app.map(|a| msg_send![a, processIdentifier]).unwrap_or(-1)
+        };
+
+        let count = CFArrayGetCount(list);
+        let mut results: Vec<SecondaryWindowInfo> = Vec::new();
+
+        for i in 0..count {
+            let dict = CFArrayGetValueAtIndex(list, i);
+            if dict.is_null() {
+                continue;
+            }
+
+            // Layer 0 = normal windows only.
+            let layer = cfnum_i32(CFDictionaryGetValue(dict, key_layer)).unwrap_or(-1);
+            if layer != 0 {
+                continue;
+            }
+
+            // Skip the frontmost app's windows (those belong to primary tracking).
+            let pid = cfnum_i32(CFDictionaryGetValue(dict, key_pid)).unwrap_or(-1);
+            if pid == frontmost_pid {
+                continue;
+            }
+
+            // Window x-position from bounds dictionary.
+            let bounds_dict = CFDictionaryGetValue(dict, key_bounds);
+            if bounds_dict.is_null() {
+                continue;
+            }
+            let x_val = CFDictionaryGetValue(bounds_dict, key_x);
+            let x_pos = cfnum_f64(x_val).unwrap_or(0.0) as i64;
+
+            // Only include windows that are outside the primary monitor.
+            if x_pos >= 0 && x_pos < primary_width {
+                continue;
+            }
+
+            let owner_name_ref = CFDictionaryGetValue(dict, key_owner_name);
+            if owner_name_ref.is_null() {
+                continue;
+            }
+            let app_name = cfstr_to_string(owner_name_ref);
+            if app_name.is_empty() {
+                continue;
+            }
+
+            // kCGWindowName may be null without Screen Recording permission;
+            // fall back to the app name to keep the record useful.
+            let win_name_ref = CFDictionaryGetValue(dict, key_name);
+            let window_title = if win_name_ref.is_null() {
+                app_name.clone()
             } else {
-                None
-            }
-        })
-        .collect()
+                let t = cfstr_to_string(win_name_ref);
+                if t.is_empty() {
+                    app_name.clone()
+                } else {
+                    t
+                }
+            };
+
+            results.push(SecondaryWindowInfo {
+                app_name,
+                window_title,
+                monitor_id: if x_pos < 0 { 2 } else { 1 },
+            });
+        }
+
+        CFRelease(list);
+        CFRelease(key_pid);
+        CFRelease(key_layer);
+        CFRelease(key_owner_name);
+        CFRelease(key_name);
+        CFRelease(key_bounds);
+        CFRelease(key_x);
+
+        results
+    }
 }
 
 /// Poll visible windows on non-primary monitors (Linux).
