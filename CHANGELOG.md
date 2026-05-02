@@ -5427,3 +5427,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 ### Features
 
 - Minor updates and improvements
+
+## [0.0.130-rc.7] — 2026-05-02
+
+### Features
+
+- Replace per-app AppleScript window tracking (which triggered a macOS TCC Automation dialog for every new foreground app) with native Accessibility API (AXUIElement) + CoreGraphics calls that require only a single one-time "Accessibility" permission for NeuroSkill.
