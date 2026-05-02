@@ -323,7 +323,7 @@ function ensureRcLatestRelease() {
   ], { check: true });
 }
 
-function cmdDiscordNotify(args) {
+async function cmdDiscordNotify(args) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) {
     console.log("⚠ DISCORD_WEBHOOK_URL not set, skipping.");
@@ -359,8 +359,13 @@ function cmdDiscordNotify(args) {
   });
 
   try {
-    const r = spawnSync("curl", ["-sf", "-X", "POST", webhook, "-H", "Content-Type: application/json", "-d", payload], { stdio: "pipe", encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`curl exited ${r.status}`);
+    // Use built-in fetch (Node 18+) to avoid platform-specific curl quoting issues.
+    const r = await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
   } catch {
     console.log("⚠ Discord notification failed (non-fatal).");
   }
