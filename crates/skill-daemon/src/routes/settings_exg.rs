@@ -305,7 +305,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
             let _ = conn.execute_batch("BEGIN");
 
             for (row_id, ts_ms) in chunk {
-                let ts_secs = (*ts_ms as f64) / 1000.0;
+                let ts_secs = skill_data::util::epoch_ts_to_unix(*ts_ms) as f64;
 
                 let (samples, seg_ch_names) = extract_epoch_samples(&raw_data, ts_secs, epoch_samples);
                 if samples.is_empty() {

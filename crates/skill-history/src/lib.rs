@@ -911,7 +911,7 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
         day_names.push(day_name);
         if let Ok(rows) = rows {
             for row in rows.filter_map(std::result::Result::ok) {
-                all_ts.push(((row / 1000) as u64, day_idx));
+                all_ts.push((skill_data::util::epoch_ts_to_unix(row), day_idx));
             }
         }
     }
