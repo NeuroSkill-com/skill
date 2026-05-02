@@ -38,7 +38,7 @@ pub mod graph;
 pub use graph::{dot_edge_label, dot_esc, dot_node_label, generate_dot, generate_svg, generate_svg_3d, SvgLabels};
 
 // Re-export shared utilities so downstream crates keep compiling.
-pub use skill_data::util::{fmt_unix_utc, ts_to_unix, unix_to_ts, MutexExt};
+pub use skill_data::util::{fmt_unix_utc, ts_to_unix, unix_to_ts, DualTimestampRange, MutexExt};
 
 /// Shared, optionally-ready global HNSW index.
 ///
@@ -244,15 +244,21 @@ struct RawEmb {
     embedding: Vec<f32>,
 }
 
-/// Read every embedding in [start_ts, end_ts] from a single day's SQLite.
-fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<RawEmb> {
-    read_embeddings_in_range_filtered(db_path, start_ts, end_ts, None)
+/// Read every embedding in [start_utc, end_utc] from a single day's SQLite.
+///
+/// Uses [`DualTimestampRange`] so it matches all three timestamp formats that
+/// may appear in the `embeddings` table:
+/// - Unix milliseconds (13 digits)
+/// - `YYYYMMDDHHmmss` (14 digits, pre-Apr 2026)
+/// - `YYYYMMDDHHmmss × 1000` (17 digits, Apr 2026+)
+fn read_embeddings_in_range(db_path: &Path, start_utc: u64, end_utc: u64) -> Vec<RawEmb> {
+    read_embeddings_in_range_filtered(db_path, start_utc, end_utc, None)
 }
 
 fn read_embeddings_in_range_filtered(
     db_path: &Path,
-    start_ts: i64,
-    end_ts: i64,
+    start_utc: u64,
+    end_utc: u64,
     device_filter: Option<&str>,
 ) -> Vec<RawEmb> {
     let conn = match skill_data::util::open_readonly(db_path) {
@@ -263,30 +269,46 @@ fn read_embeddings_in_range_filtered(
         }
     };
 
+    let r = skill_data::util::DualTimestampRange::from_unix_secs(start_utc, end_utc);
+    let ts_where = skill_data::util::DualTimestampRange::WHERE_CLAUSE;
+
     let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(dev) = device_filter {
         (
-            "SELECT hnsw_id, timestamp, eeg_embedding \
-             FROM embeddings \
-             WHERE timestamp BETWEEN ?1 AND ?2 \
-               AND length(eeg_embedding) >= 4 \
-               AND device_name = ?3 \
-             ORDER BY timestamp"
-                .into(),
+            format!(
+                "SELECT hnsw_id, timestamp, eeg_embedding \
+                 FROM embeddings \
+                 WHERE ({ts_where}) \
+                   AND length(eeg_embedding) >= 4 \
+                   AND device_name = ?7 \
+                 ORDER BY timestamp"
+            ),
             vec![
-                Box::new(start_ts) as Box<dyn rusqlite::types::ToSql>,
-                Box::new(end_ts),
+                Box::new(r.unix_ms_start) as Box<dyn rusqlite::types::ToSql>,
+                Box::new(r.unix_ms_end),
+                Box::new(r.dt14_start),
+                Box::new(r.dt14_end),
+                Box::new(r.dt17_start),
+                Box::new(r.dt17_end),
                 Box::new(dev.to_string()),
             ],
         )
     } else {
         (
-            "SELECT hnsw_id, timestamp, eeg_embedding \
-             FROM embeddings \
-             WHERE timestamp BETWEEN ?1 AND ?2 \
-               AND length(eeg_embedding) >= 4 \
-             ORDER BY timestamp"
-                .into(),
-            vec![Box::new(start_ts) as Box<dyn rusqlite::types::ToSql>, Box::new(end_ts)],
+            format!(
+                "SELECT hnsw_id, timestamp, eeg_embedding \
+                 FROM embeddings \
+                 WHERE ({ts_where}) \
+                   AND length(eeg_embedding) >= 4 \
+                 ORDER BY timestamp"
+            ),
+            vec![
+                Box::new(r.unix_ms_start) as Box<dyn rusqlite::types::ToSql>,
+                Box::new(r.unix_ms_end),
+                Box::new(r.dt14_start),
+                Box::new(r.dt14_end),
+                Box::new(r.dt17_start),
+                Box::new(r.dt17_end),
+            ],
         )
     };
 
@@ -315,8 +337,24 @@ fn read_embeddings_in_range_filtered(
 }
 
 /// Derive the `YYYYMMDD` date string from a `YYYYMMDDHHmmss` timestamp integer.
+/// Extract a `YYYYMMDD` directory name from any embeddings-table timestamp.
+///
+/// Handles all three historical formats:
+/// - 17-digit `YYYYMMDDHHmmss × 1000` (e.g. `20260427034308000`) → divide by 10^9
+/// - 14-digit `YYYYMMDDHHmmss`        (e.g. `20260427034308`)    → divide by 10^6
+/// - 13-digit Unix milliseconds        (e.g. `1777362376000`)     → convert via calendar
 fn date_from_ts(ts: i64) -> String {
-    format!("{}", ts / 1_000_000)
+    let digits = if ts > 0 { (ts as f64).log10() as u32 + 1 } else { 0 };
+    match digits {
+        17 => format!("{}", ts / 1_000_000_000), // YYYYMMDDHHmmss×1000 → YYYYMMDD
+        14 => format!("{}", ts / 1_000_000),     // YYYYMMDDHHmmss → YYYYMMDD
+        _ => {
+            // Unix milliseconds: convert to Unix secs, then to YYYYMMDDHHmmss, take date part.
+            let secs = (ts.max(0) / 1000) as u64;
+            let dt14 = skill_data::util::unix_to_ts(secs);
+            format!("{}", dt14 / 1_000_000)
+        }
+    }
 }
 
 /// Convert a database timestamp (ms) to Unix seconds.
@@ -464,12 +502,10 @@ pub fn search_embeddings_in_range_for(
     global_index: GlobalIndexHandle,
     model_backend: &str,
 ) -> SearchResult {
-    let start_ts = (start_utc as i64) * 1000;
-    let end_ts = (end_utc as i64) * 1000;
     let labels_db = skill_dir.join(LABELS_FILE);
     let date_dirs = list_date_dirs(skill_dir);
 
-    // ── Collect query embeddings from days that overlap [start_ts, end_ts] ────
+    // ── Collect query embeddings from days that overlap [start_utc, end_utc] ────
     // Store index into `date_dirs` to avoid cloning String/PathBuf per embedding.
     let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
     for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
@@ -477,7 +513,7 @@ pub fn search_embeddings_in_range_for(
         if !db_path.exists() {
             continue;
         }
-        let embs = read_embeddings_in_range(&db_path, start_ts, end_ts);
+        let embs = read_embeddings_in_range(&db_path, start_utc, end_utc);
         if !embs.is_empty() {
             eprintln!("[search] {} query embs from {}", embs.len(), date);
         }
@@ -648,8 +684,6 @@ pub fn stream_search_inner_for(
     emit: &dyn Fn(SearchProgress),
     model_backend: &str,
 ) {
-    let start_ts = (start_utc as i64) * 1000;
-    let end_ts = (end_utc as i64) * 1000;
     let labels_db = skill_dir.join(LABELS_FILE);
     let date_dirs = list_date_dirs(skill_dir);
 
@@ -681,7 +715,7 @@ pub fn stream_search_inner_for(
         if !db_path.exists() {
             continue;
         }
-        let embs = read_embeddings_in_range_filtered(&db_path, start_ts, end_ts, device_filter);
+        let embs = read_embeddings_in_range_filtered(&db_path, start_utc, end_utc, device_filter);
         let _ = date; // used only for db_path
         for emb in embs {
             query_embs.push((dd_idx, emb));
@@ -1460,13 +1494,28 @@ mod tests {
 
     #[test]
     fn date_from_ts_extracts_date_prefix() {
-        // ts format is YYYYMMDDHHmmss — dividing by 1_000_000 gives YYYYMMDD
+        // 14-digit YYYYMMDDHHmmss → divide by 10^6
         assert_eq!(date_from_ts(20260414143000), "20260414");
     }
 
     #[test]
     fn date_from_ts_epoch() {
         assert_eq!(date_from_ts(19700101000000), "19700101");
+    }
+
+    #[test]
+    fn date_from_ts_17digit() {
+        // 17-digit YYYYMMDDHHmmss×1000 (current stored format) → divide by 10^9
+        assert_eq!(date_from_ts(20260427034308000), "20260427");
+    }
+
+    #[test]
+    fn date_from_ts_unix_ms() {
+        // Unix milliseconds (13 digits) → calendar conversion
+        // 1777362376000 ms = 2026-04-26 ... UTC
+        let result = date_from_ts(1777362376000);
+        assert!(result.starts_with("2026"), "expected 2026 date, got {result}");
+        assert_eq!(result.len(), 8, "YYYYMMDD must be 8 chars, got {result}");
     }
 
     // ── ts_ms_to_unix ────────────────────────────────────────────────────
