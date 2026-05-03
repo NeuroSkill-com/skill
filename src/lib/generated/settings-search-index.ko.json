@@ -835,6 +835,12 @@
   },
   {
     "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "업데이트 자동 설치",
+    "desc": "백그라운드에서 새 버전을 다운로드하고 다음 재시작 시 설치합니다. 설치 시점을 직접 선택하려면 끄세요."
+  },
+  {
+    "tab": "updates",
     "key": "updates.checkInterval",
     "label": "확인 빈도",
     "desc": "앱이 백그라운드에서 자동으로 업데이트를 확인하는 빈도."
