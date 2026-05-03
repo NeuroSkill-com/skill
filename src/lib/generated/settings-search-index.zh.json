@@ -835,6 +835,12 @@
   },
   {
     "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "自动安装更新",
+    "desc": "在后台下载新版本，并在下次重启时安装。关闭后可自行选择安装时机。"
+  },
+  {
+    "tab": "updates",
     "key": "updates.checkInterval",
     "label": "检查频率",
     "desc": "应用在后台自动检查更新的频率。"

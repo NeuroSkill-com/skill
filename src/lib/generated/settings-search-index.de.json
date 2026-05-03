@@ -835,6 +835,12 @@
   },
   {
     "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "Updates automatisch installieren",
+    "desc": "Neue Versionen im Hintergrund herunterladen und beim nächsten Neustart installieren. Deaktivieren, um den Zeitpunkt selbst zu wählen."
+  },
+  {
+    "tab": "updates",
     "key": "updates.checkInterval",
     "label": "Prüfintervall",
     "desc": "Wie oft die App im Hintergrund automatisch auf Updates prüft."

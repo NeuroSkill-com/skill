@@ -5409,6 +5409,16 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - 1. GPU f16 SHADER_F16 panic → `catch_unwind` in worker.rs
 
+## [0.0.130-rc.12] — 2026-05-03
+
+### Features
+
+- translations
+- 1. Settings tab font-size lint rule (scripts/check-settings-font-sizes.js)
+- The baseline doubles as a punch list — top offenders are ActivityTab (95), ValidationTab (36), and TerminalSessionsCard (27).
+- 2. Tray hint when auto-update is OFF and an update is detected
+- auto-update + update RC settings
+
 ## [0.0.130-rc.2] — 2026-04-29
 
 ### Features

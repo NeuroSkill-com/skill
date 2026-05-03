@@ -835,6 +835,12 @@
   },
   {
     "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "Install updates automatically",
+    "desc": "Download new versions in the background and install them on the next restart. Turn off to choose when to install."
+  },
+  {
+    "tab": "updates",
     "key": "updates.checkInterval",
     "label": "Check frequency",
     "desc": "How often the app automatically checks for updates in the background."
