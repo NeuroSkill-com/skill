@@ -215,6 +215,12 @@ const ui: Record<string, string> = {
     "Automatische Updateprüfung ist deaktiviert. Nutze den Button oben zur manuellen Prüfung.",
   "updates.autostart": "Bei Anmeldung starten",
   "updates.autostartDesc": "Startet automatisch, wenn du dich an deinem Computer anmeldest.",
+  "updates.autoUpdate": "Updates automatisch installieren",
+  "updates.autoUpdateDesc":
+    "Neue Versionen im Hintergrund herunterladen und beim nächsten Neustart installieren. Deaktivieren, um den Zeitpunkt selbst zu wählen.",
+  "updates.autoUpdateOffNotice":
+    "Automatische Installation ist aus — auf „Installieren“ klicken, um herunterzuladen und zu aktualisieren.",
+  "updates.installNow": "Installieren",
   "updates.autoCheckDesc": "Nach Updates prüfen, sobald die App startet, einmal pro Tag.",
   "updates.footer": "Updates werden automatisch heruntergeladen. Starten Sie neu, wenn Sie bereit sind.",
 
