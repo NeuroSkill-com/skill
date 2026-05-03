@@ -135,6 +135,12 @@ const ui: Record<string, string> = {
     "Las comprobaciones de actualizaciones automáticas están deshabilitadas. Utilice el botón de arriba para comprobarlo manualmente.",
   "updates.autostart": "Iniciar sesión",
   "updates.autostartDesc": "Se inicia automáticamente cuando inicia sesión en su computadora.",
+  "updates.autoUpdate": "Instalar actualizaciones automáticamente",
+  "updates.autoUpdateDesc":
+    "Descarga las nuevas versiones en segundo plano e instálalas al reiniciar. Desactiva esta opción para elegir cuándo instalar.",
+  "updates.autoUpdateOffNotice":
+    "La instalación automática está desactivada — haz clic en Instalar para descargar y actualizar.",
+  "updates.installNow": "Instalar",
   "updates.footer":
     "Las actualizaciones se descargan automáticamente. Reinicie cuando esté listo para presentar la solicitud.",
 

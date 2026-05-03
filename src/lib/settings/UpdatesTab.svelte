@@ -53,6 +53,13 @@ let updateChannelRc = $state(false);
 let channelSaving = $state(false);
 let channelError = $state("");
 
+// Auto-update (backend-persisted; default true). When false, the
+// `update-available` event surfaces a notice + manual Install button
+// instead of immediately downloading and installing.
+let autoUpdateEnabled = $state(true);
+let autoUpdateSaving = $state(false);
+let autoUpdateError = $state("");
+
 // ── Interval options ──────────────────────────────────────────────────────
 const INTERVAL_OPTIONS: [number, string][] = [
   [900, "updates.interval15m"],
@@ -261,6 +268,21 @@ async function toggleChannel() {
   }
 }
 
+// ── Auto-update opt-out ───────────────────────────────────────────────────
+async function toggleAutoUpdate() {
+  autoUpdateError = "";
+  autoUpdateSaving = true;
+  const next = !autoUpdateEnabled;
+  try {
+    await invoke("set_auto_update_enabled", { enabled: next });
+    autoUpdateEnabled = next;
+  } catch (e) {
+    autoUpdateError = String(e);
+  } finally {
+    autoUpdateSaving = false;
+  }
+}
+
 // ── Update-check interval ─────────────────────────────────────────────────
 async function setCheckInterval(secs: number) {
   intervalSaving = true;
@@ -279,20 +301,28 @@ onMount(async () => {
   loadLastChecked();
   appVersion = await invoke<string>("get_app_version");
 
-  const [autoEnabled, intervalSecs, savedChannel] = await Promise.all([
+  const [autoEnabled, intervalSecs, savedChannel, autoUpdate] = await Promise.all([
     invoke<boolean>("get_autostart_enabled").catch(() => false),
     invoke<number>("get_update_check_interval").catch(() => 3600),
     invoke<string>("get_update_channel").catch(() => "stable"),
+    invoke<boolean>("get_auto_update_enabled").catch(() => true),
   ]);
   autostartEnabled = autoEnabled;
   checkIntervalSecs = intervalSecs;
   updateChannelRc = savedChannel === "rc";
+  autoUpdateEnabled = autoUpdate;
 
   unlisteners.push(
     // Background Rust task found an update — kick off download automatically.
     await listen<{ version: string; date?: string; body?: string }>("update-available", (ev) => {
       if (phase === "checking" || phase === "downloading" || phase === "ready") return;
       saveLastChecked();
+      if (!autoUpdateEnabled) {
+        // Surface the notice; user installs manually via the button.
+        available = ev.payload;
+        phase = "idle";
+        return;
+      }
       // Pass the event payload as a hint so checkAndDownload() keeps the
       // version visible in the UI while it fetches a fresh Update object,
       // and surfaces an error if check() returns null (CDN race) instead
@@ -423,6 +453,23 @@ onDestroy(() => {
                   {t("updates.downloadFailed")}
                 </span>
               </div>
+            {:else if phase === "idle" && available && !autoUpdateEnabled}
+              <!-- Auto-update is off: announce + offer manual install. -->
+              <div class="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-xl shrink-0">
+                ⬆
+              </div>
+              <div class="flex flex-col gap-0.5 flex-1">
+                <span class="text-ui-lg font-semibold text-foreground">
+                  v{available.version} {t("updates.available")}
+                </span>
+                <span class="text-ui-sm text-muted-foreground/70">
+                  {t("updates.autoUpdateOffNotice")}
+                </span>
+              </div>
+              <Button size="sm" class="text-ui-md h-8 px-4 shrink-0"
+                      onclick={() => available && doInstall(available)}>
+                {t("updates.installNow")}
+              </Button>
             {:else}
               <div class="flex flex-col gap-0.5 flex-1">
                 <span class="text-ui-lg font-semibold text-foreground">
@@ -435,6 +482,7 @@ onDestroy(() => {
             {/if}
 
             <!-- Check / Retry button -->
+            {#if !(phase === "idle" && available && !autoUpdateEnabled)}
             <Button size="sm" variant="outline"
                     class="text-ui-md h-8 px-4 gap-1.5 shrink-0"
                     disabled={phase === "checking"}
@@ -459,6 +507,7 @@ onDestroy(() => {
                 {t("updates.checkNow")}
               {/if}
             </Button>
+            {/if}
           </div>
 
           <!-- Error detail — always visible when phase === "error" -->
@@ -516,6 +565,52 @@ onDestroy(() => {
           </p>
         {/if}
       </div>
+    </CardContent>
+  </SettingsCard>
+
+  <!-- ── Automatically download & install (opt-out) ────────────────────────── -->
+  <SettingsCard>
+    <CardContent class="py-0 px-0">
+      <button
+        role="switch" aria-checked={autoUpdateEnabled}
+        aria-label="Toggle automatic updates"
+        onclick={toggleAutoUpdate}
+        disabled={autoUpdateSaving}
+        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
+               hover:bg-accent/50 dark:hover:bg-white/[0.02] disabled:opacity-50">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {autoUpdateEnabled ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
+          {#if autoUpdateSaving}
+            <div class="absolute inset-0 flex items-center justify-center">
+              <svg class="w-2.5 h-2.5 text-white/80 animate-spin" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+              </svg>
+            </div>
+          {:else}
+            <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                        {autoUpdateEnabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+          {/if}
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-ui-md font-semibold text-foreground leading-tight">
+            {t("updates.autoUpdate")}
+          </span>
+          <span class="text-ui-sm text-muted-foreground leading-tight">
+            {t("updates.autoUpdateDesc")}
+          </span>
+        </div>
+        <span class="ml-auto text-ui-xs font-bold tracking-widest uppercase shrink-0
+                     {autoUpdateEnabled ? 'text-emerald-500' : 'text-muted-foreground/40'}">
+          {autoUpdateEnabled ? t("common.on") : t("common.off")}
+        </span>
+      </button>
+
+      {#if autoUpdateError}
+        <div class="border-t border-border dark:border-white/[0.06] px-4 py-2">
+          <span class="text-ui-sm text-red-600 dark:text-red-400 break-all">{autoUpdateError}</span>
+        </div>
+      {/if}
     </CardContent>
   </SettingsCard>
 

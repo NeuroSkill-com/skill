@@ -79,6 +79,7 @@ mod tray;
 
 mod about;
 mod active_window;
+mod auto_update;
 mod shortcut_cmds;
 mod update_channel;
 
@@ -108,6 +109,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 use about::{get_about_info, open_about_window};
+use auto_update::{get_auto_update_enabled, set_auto_update_enabled};
 use daemon_cmds::{
     cancel_session, cancel_weights_download, daemon_install_service, daemon_uninstall_service,
     estimate_reembed, force_restart_daemon, get_daemon_bootstrap, get_daemon_service_status,
@@ -311,6 +313,8 @@ pub fn run() {
             set_update_channel,
             channel_check_for_update,
             channel_download_and_install,
+            get_auto_update_enabled,
+            set_auto_update_enabled,
             pick_ref_wav_file,
             get_recent_active_windows,
             get_recent_input_activity,

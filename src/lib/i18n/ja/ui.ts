@@ -116,6 +116,12 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "自動アップデート確認が無効です。上のボタンを使用して手動で確認してください。",
   "updates.autostart": "ログイン時に起動",
   "updates.autostartDesc": "コンピューターにログインしたときに自動的に起動します。",
+  "updates.autoUpdate": "アップデートを自動的にインストール",
+  "updates.autoUpdateDesc":
+    "新しいバージョンをバックグラウンドでダウンロードし、次回の再起動時にインストールします。タイミングを自分で選ぶには無効にしてください。",
+  "updates.autoUpdateOffNotice":
+    "自動インストールはオフです — 「インストール」をクリックしてダウンロードと更新を行ってください。",
+  "updates.installNow": "インストール",
   "updates.footer": "アップデートは自動的にダウンロードされます。準備ができたら再起動して適用してください。",
 
   "whatsNew.title": "新着情報",

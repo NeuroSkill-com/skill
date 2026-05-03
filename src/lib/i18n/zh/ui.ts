@@ -114,6 +114,11 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "已禁用自动更新检查。请使用上方按钮手动检查。",
   "updates.autostart": "登录时启动",
   "updates.autostartDesc": "登录计算机时自动启动。",
+  "updates.autoUpdate": "自动安装更新",
+  "updates.autoUpdateDesc":
+    "在后台下载新版本，并在下次重启时安装。关闭后可自行选择安装时机。",
+  "updates.autoUpdateOffNotice": "自动安装已关闭 — 点击“安装”以下载并更新。",
+  "updates.installNow": "安装",
   "updates.footer": "更新会自动下载。准备好后重启即可应用。",
 
   "whatsNew.title": "新功能",
