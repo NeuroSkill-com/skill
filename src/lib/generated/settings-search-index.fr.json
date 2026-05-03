@@ -835,6 +835,12 @@
   },
   {
     "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "Installer les mises à jour automatiquement",
+    "desc": "Télécharger les nouvelles versions en arrière-plan et les installer au prochain redémarrage. Désactivez pour choisir quand installer."
+  },
+  {
+    "tab": "updates",
     "key": "updates.checkInterval",
     "label": "Fréquence de vérification",
     "desc": "À quelle fréquence l'application vérifie automatiquement les mises à jour en arrière-plan."
