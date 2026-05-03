@@ -835,6 +835,12 @@
   },
   {
     "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "Instalar actualizaciones automáticamente",
+    "desc": "Descarga las nuevas versiones en segundo plano e instálalas al reiniciar. Desactiva esta opción para elegir cuándo instalar."
+  },
+  {
+    "tab": "updates",
     "key": "updates.checkInterval",
     "label": "Verificar frecuencia",
     "desc": "Con qué frecuencia la aplicación busca actualizaciones automáticamente en segundo plano."
