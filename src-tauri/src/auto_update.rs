@@ -14,7 +14,11 @@
 //! today's behavior.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
+
+use crate::state::AppState;
+use crate::MutexExt;
 
 const PREF_FILE: &str = "auto-update.txt";
 
@@ -51,5 +55,15 @@ pub fn set_auto_update_enabled(app: AppHandle, enabled: bool) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, if enabled { "true" } else { "false" }).map_err(|e| e.to_string())?;
+    if enabled {
+        // Auto-update is back on — drop any "⬆ Update available" tray hint;
+        // the next background poll will trigger the usual auto-download.
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut g = r.lock_or_recover();
+        if g.update_available_pending.take().is_some() {
+            drop(g);
+            crate::tray::refresh_tray(&app);
+        }
+    }
     Ok(())
 }

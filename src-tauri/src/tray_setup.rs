@@ -122,7 +122,7 @@ pub(crate) fn build_tray(
                 });
             } else if id == "show_logs" {
                 crate::window_cmds::open_latest_log();
-            } else if id == "check_update" {
+            } else if id == "check_update" || id == "update_available" {
                 let a = app.clone();
                 tauri::async_runtime::spawn(async move {
                     let _ = crate::window_cmds::open_updates_window(a).await;
