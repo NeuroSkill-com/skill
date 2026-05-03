@@ -381,6 +381,12 @@ pub struct AppState {
     /// Set by the frontend when an update has been downloaded and is ready
     /// to install on next restart / relaunch.
     pub update_ready_to_install: bool,
+    /// Version string of an update detected by the background poller while
+    /// the auto-update toggle is OFF — surfaces in the tray menu so the
+    /// user notices a pending update without opening Settings. Cleared
+    /// when the user installs (`set_update_ready(true)`) or re-enables
+    /// auto-update.
+    pub update_available_pending: Option<String>,
 
     // ── Device configs ────────────────────────────────────────────────────
     pub openbci_config: crate::settings::OpenBciConfig,
@@ -498,6 +504,7 @@ impl Default for AppState {
             hf_endpoint: skill_settings::default_hf_endpoint(),
             update_check_interval_secs: default_update_check_interval(),
             update_ready_to_install: false,
+            update_available_pending: None,
             openbci_config: crate::settings::OpenBciConfig::default(),
             location_enabled: false,
             inference_device: skill_settings::default_inference_device(),

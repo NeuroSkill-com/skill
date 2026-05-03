@@ -226,6 +226,17 @@ fn spawn_updater_poll(handle: &AppHandle) {
                         Err(_) => eprintln!("[updater] check timed out after 30 s"),
                         Ok(Ok(Some(update))) => {
                             eprintln!("[updater] update available: {}", update.version);
+                            // When auto-update is off, mirror the version into AppState so
+                            // the tray menu can surface "⬆ Update available …". The
+                            // frontend gets the same event either way and decides whether
+                            // to auto-download.
+                            if !crate::auto_update::read_auto_update_enabled(&app) {
+                                let r = app.state::<Mutex<Box<AppState>>>();
+                                let mut g = r.lock_or_recover();
+                                g.update_available_pending = Some(update.version.clone());
+                                drop(g);
+                                crate::tray::refresh_tray(&app);
+                            }
                             let payload = serde_json::json!({
                                 "version": update.version,
                                 "date":    update.date,
