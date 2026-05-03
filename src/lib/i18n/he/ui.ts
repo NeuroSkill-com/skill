@@ -221,10 +221,8 @@ const ui: Record<string, string> = {
   "updates.autostart": "הפעלה בכניסה למערכת",
   "updates.autostartDesc": "מתחיל אוטומטית כשנכנסים למחשב.",
   "updates.autoUpdate": "התקן עדכונים אוטומטית",
-  "updates.autoUpdateDesc":
-    "הורד גרסאות חדשות ברקע והתקן בהפעלה הבאה. כבה כדי לבחור מתי להתקין.",
-  "updates.autoUpdateOffNotice":
-    "התקנה אוטומטית כבויה — לחץ על התקן כדי להוריד ולעדכן.",
+  "updates.autoUpdateDesc": "הורד גרסאות חדשות ברקע והתקן בהפעלה הבאה. כבה כדי לבחור מתי להתקין.",
+  "updates.autoUpdateOffNotice": "התקנה אוטומטית כבויה — לחץ על התקן כדי להוריד ולעדכן.",
   "updates.installNow": "התקן",
   "updates.autoCheckDesc": "בדוק עדכונים פעם ביום כאשר האפליקציה מתחילה.",
   "updates.footer": "עדכונים מורדים אוטומטית. הפעל מחדש כשנוח לך.",
