@@ -115,8 +115,7 @@ const ui: Record<string, string> = {
   "updates.autoUpdate": "업데이트 자동 설치",
   "updates.autoUpdateDesc":
     "백그라운드에서 새 버전을 다운로드하고 다음 재시작 시 설치합니다. 설치 시점을 직접 선택하려면 끄세요.",
-  "updates.autoUpdateOffNotice":
-    "자동 설치가 꺼져 있습니다 — 다운로드 및 업데이트하려면 설치를 클릭하세요.",
+  "updates.autoUpdateOffNotice": "자동 설치가 꺼져 있습니다 — 다운로드 및 업데이트하려면 설치를 클릭하세요.",
   "updates.installNow": "설치",
   "updates.footer": "업데이트는 자동으로 다운로드됩니다. 적용 준비가 되면 재시작하세요.",
 
