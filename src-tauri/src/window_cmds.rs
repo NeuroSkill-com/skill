@@ -1255,6 +1255,12 @@ pub fn set_update_ready(app: AppHandle, ready: bool) {
     let r = app.state::<Mutex<Box<AppState>>>();
     let mut g = r.lock_or_recover();
     g.update_ready_to_install = ready;
+    if ready {
+        // Once staged, the "⬆ Update available" tray hint is redundant.
+        g.update_available_pending = None;
+        drop(g);
+        crate::tray::refresh_tray(&app);
+    }
 }
 
 #[tauri::command]
