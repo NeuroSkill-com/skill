@@ -216,6 +216,12 @@ const ui: Record<string, string> = {
     "Les vérifications automatiques sont désactivées. Utilisez le bouton ci-dessus pour vérifier manuellement.",
   "updates.autostart": "Lancer à la connexion",
   "updates.autostartDesc": "Démarre automatiquement quand vous ouvrez une session.",
+  "updates.autoUpdate": "Installer les mises à jour automatiquement",
+  "updates.autoUpdateDesc":
+    "Télécharger les nouvelles versions en arrière-plan et les installer au prochain redémarrage. Désactivez pour choisir quand installer.",
+  "updates.autoUpdateOffNotice":
+    "L'installation automatique est désactivée — cliquez sur Installer pour télécharger et mettre à jour.",
+  "updates.installNow": "Installer",
   "updates.autoCheckDesc": "Vérifier les mises à jour une fois par jour au démarrage de l'application.",
   "updates.footer": "Les mises à jour sont téléchargées automatiquement. Redémarrez quand vous êtes prêt.",
 

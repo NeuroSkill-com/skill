@@ -112,6 +112,12 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "자동 업데이트 확인이 비활성화되었습니다. 위의 버튼으로 수동 확인하세요.",
   "updates.autostart": "로그인 시 시작",
   "updates.autostartDesc": "컴퓨터에 로그인할 때 자동으로 시작합니다.",
+  "updates.autoUpdate": "업데이트 자동 설치",
+  "updates.autoUpdateDesc":
+    "백그라운드에서 새 버전을 다운로드하고 다음 재시작 시 설치합니다. 설치 시점을 직접 선택하려면 끄세요.",
+  "updates.autoUpdateOffNotice":
+    "자동 설치가 꺼져 있습니다 — 다운로드 및 업데이트하려면 설치를 클릭하세요.",
+  "updates.installNow": "설치",
   "updates.footer": "업데이트는 자동으로 다운로드됩니다. 적용 준비가 되면 재시작하세요.",
 
   "whatsNew.title": "새로운 기능",

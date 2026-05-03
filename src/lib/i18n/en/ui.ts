@@ -119,6 +119,11 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "Automatic update checks are disabled. Use the button above to check manually.",
   "updates.autostart": "Launch at Login",
   "updates.autostartDesc": "Start automatically when you log in to your computer.",
+  "updates.autoUpdate": "Install updates automatically",
+  "updates.autoUpdateDesc":
+    "Download new versions in the background and install them on the next restart. Turn off to choose when to install.",
+  "updates.autoUpdateOffNotice": "Automatic install is off — click Install to download and update.",
+  "updates.installNow": "Install",
   "updates.receivePrereleases": "Receive pre-releases",
   "updates.receivePrereleasesDesc":
     "Opt into release candidates ahead of stable releases. Both manual and background update checks honor this setting live.",
