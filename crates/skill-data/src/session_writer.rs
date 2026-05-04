@@ -124,6 +124,19 @@ impl SessionWriter {
     pub fn flush(&mut self) {
         dispatch!(self, flush());
     }
+
+    /// Finalise underlying writers (writes Parquet footer; no-op for CSV).
+    /// Idempotent. Drop also calls this for crash safety, but calling it
+    /// explicitly gives deterministic ordering and surfaces errors via logs.
+    pub fn close(&mut self) {
+        match self {
+            Self::Csv(_) => {}
+            #[cfg(feature = "parquet")]
+            Self::Parquet(p) => p.close(),
+            #[cfg(feature = "parquet")]
+            Self::Both(_, p) => p.close(),
+        }
+    }
 }
 
 #[cfg(test)]

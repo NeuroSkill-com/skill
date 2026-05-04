@@ -37,6 +37,25 @@ pub(crate) async fn run_adapter_session(
     let idle_sleep = tokio::time::sleep(IDLE_TIMEOUT);
     tokio::pin!(idle_sleep);
 
+    // Session rollover: bound the blast radius of a daemon crash to ≤ N
+    // minutes of data, and keep individual files small enough for readers.
+    // Configurable via `session_rollover_minutes` (0 = disabled).
+    let rollover_secs: u64 = {
+        let settings = skill_settings::load_settings(&skill_dir);
+        u64::from(settings.session_rollover_minutes).saturating_mul(60)
+    };
+    // When disabled, use a finite-but-effectively-infinite duration. The
+    // select arm gates on `rollover_secs > 0` so the sleep is never read,
+    // but the Sleep future still exists and its deadline must not overflow
+    // tokio's internal Instant arithmetic — so cap at ~10 years.
+    let rollover_duration = if rollover_secs == 0 {
+        std::time::Duration::from_secs(60 * 60 * 24 * 365 * 10)
+    } else {
+        std::time::Duration::from_secs(rollover_secs)
+    };
+    let rollover_sleep = tokio::time::sleep(rollover_duration);
+    tokio::pin!(rollover_sleep);
+
     loop {
         tokio::select! {
             biased;
@@ -54,6 +73,16 @@ pub(crate) async fn run_adapter_session(
                 if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                 broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({"reason": "idle_timeout"}));
                 break;
+            }
+            () = &mut rollover_sleep, if rollover_secs > 0 && pipeline.is_some() => {
+                if let Some(ref mut pipe) = pipeline {
+                    if let Err(e) = pipe.roll(&skill_dir) {
+                        error!(%e, "session rollover failed; continuing on existing writer");
+                    } else if let Ok(mut s) = state.status.lock() {
+                        s.csv_path = Some(pipe.csv_path.display().to_string());
+                    }
+                }
+                rollover_sleep.as_mut().reset(tokio::time::Instant::now() + rollover_duration);
             }
             ev = adapter.next_event() => {
                 // Reset idle timer on every event.
@@ -127,6 +156,7 @@ pub(crate) async fn run_adapter_session(
                                     s.csv_path = Some(p.csv_path.display().to_string());
                                 }
                                 pipeline = Some(p);
+                                rollover_sleep.as_mut().reset(tokio::time::Instant::now() + rollover_duration);
                             }
                             Err(e) => error!(%e, "pipeline open failed"),
                         }
@@ -1899,5 +1929,120 @@ mod tests {
             .count()
             .saturating_sub(1); // minus header
         assert_eq!(csv_rows, expected_imu_frames as usize, "IMU CSV row count mismatch");
+    }
+
+    // ── Rollover: long-running session produces multiple chunk files ──────────
+
+    fn write_settings_with_rollover(skill_dir: &std::path::Path, minutes: u32) {
+        let mut s = skill_settings::UserSettings::default();
+        s.session_rollover_minutes = minutes;
+        let p = skill_settings::settings_path(skill_dir);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+    }
+
+    /// With `session_rollover_minutes = 1`, a session that runs ≥ 60 fake-time
+    /// seconds should produce at least two raw EEG CSV chunks. `start_paused`
+    /// makes tokio auto-advance virtual time across `tokio::time::sleep` calls
+    /// so the test runs in real-milliseconds.
+    #[tokio::test(start_paused = true)]
+    async fn session_rolls_over_after_configured_interval() {
+        let dir = TempDir::new().unwrap();
+        write_settings_with_rollover(dir.path(), 1);
+        let state = test_state(dir.path());
+
+        // Each adapter event carries a 2 s fake-time delay → 40 events ≈ 80 s,
+        // well past the 60 s rollover threshold.
+        let mut adapter = MockAdapter::new(eeg_desc("muse", 4, 256.0)).with_delay(Duration::from_secs(2));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-Roll".to_string(),
+            id: "mock:roll".to_string(),
+            firmware_version: Some("1.0.0".to_string()),
+            ..Default::default()
+        }));
+        for i in 0..40 {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        run(state, adapter).await;
+
+        // Count raw EEG chunk CSVs (excluding suffixed companions).
+        let chunks: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_")
+                    && s.ends_with(".csv")
+                    && !s.contains("_imu")
+                    && !s.contains("_ppg")
+                    && !s.contains("_metrics")
+                    && !s.contains("_fnirs")
+            })
+            .collect();
+
+        assert!(
+            chunks.len() >= 2,
+            "expected ≥2 EEG chunk CSVs after rollover, got {}: {:?}",
+            chunks.len(),
+            chunks
+        );
+
+        // Each chunk has its own sidecar JSON, both readable and well-formed.
+        for chunk in &chunks {
+            let sidecar = chunk.with_extension("json");
+            assert!(sidecar.exists(), "missing sidecar for {chunk:?}");
+            let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&sidecar).unwrap()).unwrap();
+            assert_eq!(v["device_name"], "Muse-Roll");
+        }
+    }
+
+    /// With `session_rollover_minutes = 0`, rollover is disabled — even a
+    /// long-running session must produce exactly one chunk.
+    #[tokio::test(start_paused = true)]
+    async fn rollover_disabled_keeps_single_chunk() {
+        let dir = TempDir::new().unwrap();
+        write_settings_with_rollover(dir.path(), 0);
+        let state = test_state(dir.path());
+
+        let mut adapter = MockAdapter::new(eeg_desc("muse", 4, 256.0)).with_delay(Duration::from_secs(2));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-NoRoll".to_string(),
+            id: "mock:noroll".to_string(),
+            ..Default::default()
+        }));
+        for i in 0..40 {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        run(state, adapter).await;
+
+        let chunks: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_")
+                    && s.ends_with(".csv")
+                    && !s.contains("_imu")
+                    && !s.contains("_ppg")
+                    && !s.contains("_metrics")
+                    && !s.contains("_fnirs")
+            })
+            .collect();
+
+        assert_eq!(
+            chunks.len(),
+            1,
+            "expected exactly 1 chunk with rollover disabled, got {chunks:?}"
+        );
     }
 }
