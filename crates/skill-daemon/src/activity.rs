@@ -1494,6 +1494,16 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
                 if deleted > 0 {
                     tracing::info!("[activity] pruned {deleted} file_interactions older than {retention_days}d");
                 }
+
+                // Session day directories (EEG/PPG/IMU/fNIRS recordings,
+                // sidecars, metrics caches, per-day SQLite + HNSW).
+                let (dirs_removed, dir_errors) =
+                    crate::session::retention::prune_session_dirs(&skill_dir, retention_days, now);
+                if dirs_removed > 0 || dir_errors > 0 {
+                    tracing::info!(
+                        "[activity] pruned {dirs_removed} session day dirs older than {retention_days}d ({dir_errors} errors)"
+                    );
+                }
             }
             // Build focus sessions from recent interactions.
             build_focus_sessions(&store, now.saturating_sub(7200));

@@ -272,6 +272,7 @@ impl Pipeline {
 
     pub(crate) fn finalize(&mut self) {
         self.writer.flush();
+        self.writer.close();
         write_session_meta(
             &self.csv_path,
             &self.device_name,
@@ -290,6 +291,45 @@ impl Pipeline {
             samples = self.total_samples,
             "session finalized"
         );
+    }
+
+    /// Roll the session writer to a new file. Finalises the current chunk
+    /// (writes sidecar JSON, closes Parquet footer) and opens a fresh
+    /// `exg_<ts>.csv|parquet`. Keeps DSP, embedding, and PPG/artifact state
+    /// warm — only the writer is swapped.
+    ///
+    /// To downstream readers each chunk looks identical to a normal short
+    /// session — same naming, same sidecar shape — so no readers need to
+    /// know about rollover.
+    pub(crate) fn roll(&mut self, skill_dir: &Path) -> anyhow::Result<()> {
+        // 1. Finalise the current chunk (writer flush+close, sidecar JSON).
+        self.finalize();
+
+        // 2. Compute a new csv_path. unix_secs() granularity is 1s; if a
+        //    rollover lands inside the same second as the previous start,
+        //    bump by 1 to keep filenames unique.
+        let day_dir = utc_date_dir(skill_dir);
+        let now = unix_secs();
+        let new_start = if now > self.start_utc { now } else { self.start_utc + 1 };
+        let new_path = day_dir.join(format!("exg_{new_start}.csv"));
+
+        // 3. Open a fresh writer with the same labels and current settings.
+        let storage_format = {
+            let settings = skill_settings::load_settings(skill_dir);
+            StorageFormat::parse(&settings.storage_format)
+        };
+        let labels: Vec<&str> = self.channel_names.iter().map(String::as_str).collect();
+        let new_writer = SessionWriter::open(&new_path, &labels, storage_format).context("rollover writer open")?;
+
+        // 4. Swap.
+        self.writer = new_writer;
+        self.csv_path = new_path;
+        self.start_utc = new_start;
+        self.total_samples = 0;
+        self.flush_counter = 0;
+
+        info!(path = %self.csv_path.display(), "session rolled");
+        Ok(())
     }
 }
 
@@ -459,5 +499,104 @@ mod tests {
 
         let q = pipe.channel_quality();
         assert_eq!(q.len(), 4);
+    }
+
+    /// Rollover finalises the current chunk and opens a fresh one with a
+    /// distinct path, while preserving DSP/embed state. Both chunks must be
+    /// readable independently.
+    #[test]
+    fn pipeline_roll_finalizes_and_opens_new_chunk() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = skill_settings::UserSettings::default();
+        let settings_path = skill_settings::settings_path(dir.path());
+        if let Some(parent) = settings_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let _ = std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap());
+
+        let (tx, _rx) = broadcast::channel(16);
+        let mut pipe = Pipeline::open(
+            dir.path(),
+            2,
+            128.0,
+            vec!["Ch1".into(), "Ch2".into()],
+            "RollDevice".into(),
+            tx,
+            Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new(),
+        )
+        .unwrap();
+
+        // Write some samples to chunk 1.
+        for i in 0..30 {
+            pipe.push_eeg(&[1.0, 2.0], i as f64 / 128.0);
+        }
+        let chunk1_path = pipe.csv_path.clone();
+        let chunk1_start = pipe.start_utc;
+
+        // Roll.
+        pipe.roll(dir.path()).unwrap();
+
+        // After roll: counters reset, path differs, start_utc strictly greater.
+        assert_eq!(pipe.total_samples, 0);
+        assert_ne!(pipe.csv_path, chunk1_path);
+        assert!(pipe.start_utc > chunk1_start, "new start_utc must advance");
+
+        // Write samples to chunk 2.
+        for i in 0..20 {
+            pipe.push_eeg(&[3.0, 4.0], i as f64 / 128.0);
+        }
+        assert_eq!(pipe.total_samples, 20);
+        let chunk2_path = pipe.csv_path.clone();
+
+        pipe.finalize();
+
+        // Both CSVs and both sidecars exist.
+        assert!(chunk1_path.exists(), "chunk1 csv");
+        assert!(chunk2_path.exists(), "chunk2 csv");
+        let m1: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(chunk1_path.with_extension("json")).unwrap()).unwrap();
+        let m2: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(chunk2_path.with_extension("json")).unwrap()).unwrap();
+        assert_eq!(m1["total_samples"], 30);
+        assert_eq!(m2["total_samples"], 20);
+        assert_eq!(m1["device_name"], "RollDevice");
+        assert_eq!(m2["device_name"], "RollDevice");
+    }
+
+    /// Same-second rollover must still produce a unique filename.
+    #[test]
+    fn pipeline_roll_handles_subsecond_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = skill_settings::UserSettings::default();
+        let settings_path = skill_settings::settings_path(dir.path());
+        if let Some(parent) = settings_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let _ = std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap());
+
+        let (tx, _rx) = broadcast::channel(16);
+        let mut pipe = Pipeline::open(
+            dir.path(),
+            2,
+            128.0,
+            vec!["Ch1".into(), "Ch2".into()],
+            "Sub".into(),
+            tx,
+            Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new(),
+        )
+        .unwrap();
+
+        let p0 = pipe.csv_path.clone();
+        pipe.roll(dir.path()).unwrap();
+        let p1 = pipe.csv_path.clone();
+        pipe.roll(dir.path()).unwrap();
+        let p2 = pipe.csv_path.clone();
+
+        assert_ne!(p0, p1);
+        assert_ne!(p1, p2);
+        assert_ne!(p0, p2);
+        assert!(p0.exists() && p1.exists() && p2.exists());
     }
 }
