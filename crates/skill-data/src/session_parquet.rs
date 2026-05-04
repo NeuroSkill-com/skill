@@ -52,7 +52,7 @@ fn writer_props() -> WriterProperties {
 /// and `flush` in the same way.
 pub struct ParquetState {
     // ── EEG ──────────────────────────────────────────────────────────────────
-    eeg_wtr: ArrowWriter<std::fs::File>,
+    eeg_wtr: Option<ArrowWriter<std::fs::File>>,
     eeg_schema: Arc<Schema>,
     n_eeg: usize,
     eeg_ts: Vec<VecDeque<f64>>,
@@ -151,7 +151,7 @@ impl ParquetState {
         let imu_schema = Arc::new(Schema::new(imu_fields));
 
         Ok(Self {
-            eeg_wtr,
+            eeg_wtr: Some(eeg_wtr),
             eeg_schema,
             n_eeg: n,
             eeg_ts: (0..n).map(|_| VecDeque::new()).collect(),
@@ -226,12 +226,16 @@ impl ParquetState {
         }
 
         if let Ok(batch) = RecordBatch::try_new(self.eeg_schema.clone(), columns) {
-            let _ = self.eeg_wtr.write(&batch);
+            if let Some(ref mut w) = self.eeg_wtr {
+                let _ = w.write(&batch);
+            }
             self.eeg_rows += ready;
         }
 
         if self.eeg_rows >= EEG_FLUSH_ROWS {
-            let _ = self.eeg_wtr.flush();
+            if let Some(ref mut w) = self.eeg_wtr {
+                let _ = w.flush();
+            }
             self.eeg_rows = 0;
         }
     }
@@ -609,7 +613,9 @@ impl ParquetState {
     }
 
     pub fn flush(&mut self) {
-        let _ = self.eeg_wtr.flush();
+        if let Some(ref mut w) = self.eeg_wtr {
+            let _ = w.flush();
+        }
         if let Some(ref mut w) = self.ppg_wtr {
             let _ = w.flush();
         }
@@ -618,24 +624,36 @@ impl ParquetState {
         self.flush_fnirs();
     }
 
-    /// Close all writers, finalising the Parquet files.
-    pub fn close(mut self) {
+    /// Close all writers, finalising the Parquet files. Idempotent.
+    ///
+    /// A Parquet file is invalid until its footer is written by `close()`.
+    /// This is also called from `Drop`, so a daemon panic or unexpected
+    /// shutdown won't leave a footerless file.
+    pub fn close(&mut self) {
         self.flush_metrics();
         self.flush_imu();
         self.flush_fnirs();
-        let _ = self.eeg_wtr.close();
-        if let Some(w) = self.ppg_wtr {
+        if let Some(w) = self.eeg_wtr.take() {
             let _ = w.close();
         }
-        if let Some(w) = self.metrics_wtr {
+        if let Some(w) = self.ppg_wtr.take() {
             let _ = w.close();
         }
-        if let Some(w) = self.imu_wtr {
+        if let Some(w) = self.metrics_wtr.take() {
             let _ = w.close();
         }
-        if let Some(w) = self.fnirs_wtr {
+        if let Some(w) = self.imu_wtr.take() {
             let _ = w.close();
         }
+        if let Some(w) = self.fnirs_wtr.take() {
+            let _ = w.close();
+        }
+    }
+}
+
+impl Drop for ParquetState {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 
@@ -710,6 +728,63 @@ mod tests {
 
         let ppg_path = ppg_parquet_path(&csv_path);
         assert!(ppg_path.exists(), "Parquet PPG file should exist");
+    }
+
+    #[test]
+    fn parquet_readable_after_drop_without_explicit_close() {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_drop.csv");
+        let labels = ["TP9", "AF7", "AF8", "TP10"];
+
+        let pq_path = eeg_parquet_path(&csv_path);
+        let ppg_path = ppg_parquet_path(&csv_path);
+
+        {
+            let mut pq = ParquetState::open_with_labels(&csv_path, &labels).unwrap();
+            for i in 0..10 {
+                let s = [i as f64; 4];
+                pq.push_eeg(0, &s, 1000.0 + i as f64, 256.0);
+                pq.push_eeg(1, &s, 1000.0 + i as f64, 256.0);
+                pq.push_eeg(2, &s, 1000.0 + i as f64, 256.0);
+                pq.push_eeg(3, &s, 1000.0 + i as f64, 256.0);
+            }
+            // Force PPG writer creation so Drop must close it too.
+            let ppg = [500.0, 501.0];
+            pq.push_ppg(&csv_path, 0, &ppg, 1000.0, None);
+            pq.push_ppg(&csv_path, 1, &ppg, 1000.0, None);
+            pq.push_ppg(&csv_path, 2, &ppg, 1000.0, None);
+            // Intentionally drop without calling close() — Drop must finalise.
+        }
+
+        let f = std::fs::File::open(&pq_path).expect("parquet exists");
+        let builder = ParquetRecordBatchReaderBuilder::try_new(f).expect("eeg footer readable");
+        let reader = builder.build().unwrap();
+        let total_rows: usize = reader.flatten().map(|b| b.num_rows()).sum();
+        assert!(total_rows > 0, "should have read EEG rows back");
+
+        let f = std::fs::File::open(&ppg_path).expect("ppg parquet exists");
+        let builder = ParquetRecordBatchReaderBuilder::try_new(f).expect("ppg footer readable");
+        let _ = builder.build().unwrap();
+    }
+
+    #[test]
+    fn parquet_close_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_close.csv");
+        let labels = ["TP9", "AF7", "AF8", "TP10"];
+
+        let mut pq = ParquetState::open_with_labels(&csv_path, &labels).unwrap();
+        let s = [1.0; 4];
+        pq.push_eeg(0, &s, 1000.0, 256.0);
+        pq.push_eeg(1, &s, 1000.0, 256.0);
+        pq.push_eeg(2, &s, 1000.0, 256.0);
+        pq.push_eeg(3, &s, 1000.0, 256.0);
+
+        pq.close();
+        pq.close();
+        // Drop runs another close — must not panic.
     }
 
     #[test]

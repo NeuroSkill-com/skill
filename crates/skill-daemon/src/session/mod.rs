@@ -10,6 +10,7 @@ mod connect;
 mod connect_ble;
 mod connect_wired;
 pub(crate) mod pipeline;
+pub(crate) mod retention;
 mod runner;
 pub(crate) mod shared;
 
