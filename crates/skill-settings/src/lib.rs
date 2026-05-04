@@ -948,6 +948,11 @@ pub struct UserSettings {
     /// Recording storage format: `"csv"` (default), `"parquet"`, or `"both"`.
     #[serde(default = "default_storage_format")]
     pub storage_format: String,
+    /// Roll the session writer to a new file every N minutes. Bounds the
+    /// blast radius of a daemon crash to ≤ N minutes of data and keeps any
+    /// single file small enough for readers to load. `0` disables rollover.
+    #[serde(default = "default_session_rollover_minutes")]
+    pub session_rollover_minutes: u32,
     /// Background scanner backend toggles.
     #[serde(default)]
     pub scanner: ScannerConfig,
@@ -1095,6 +1100,10 @@ fn skip_secret_in_release(_value: &str) -> bool {
 
 pub fn default_storage_format() -> String {
     "csv".into()
+}
+
+pub fn default_session_rollover_minutes() -> u32 {
+    60
 }
 
 pub fn default_tts_preload() -> bool {
@@ -1257,6 +1266,7 @@ impl Default for UserSettings {
             llm: LlmConfig::default(),
             accent_color: default_accent_color(),
             storage_format: default_storage_format(),
+            session_rollover_minutes: default_session_rollover_minutes(),
             screenshot: ScreenshotConfig::default(),
             sleep: SleepConfig::default(),
             scanner: ScannerConfig::default(),
