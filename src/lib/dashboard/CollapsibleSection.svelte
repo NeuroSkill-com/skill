@@ -47,7 +47,7 @@ let {
     </svg>
     <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground
                  group-hover:text-foreground transition-colors">{title}</span>
-    <span class="text-[0.45rem] {dotColor} live-blink shrink-0" aria-hidden="true">●</span>
+    <span class="text-ui-2xs {dotColor} live-blink shrink-0" aria-hidden="true">●</span>
   </button>
 
   {#if expanded}

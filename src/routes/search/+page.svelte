@@ -1645,25 +1645,25 @@ useWindowTitle("window.title.search");
                         border-t border-border dark:border-white/[0.06]
                         hover:bg-muted/10 transition-colors">
               <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
-                           text-[0.42rem] font-bold text-white shrink-0 select-none"
+                           text-ui-2xs font-bold text-white shrink-0 select-none"
                     style="background:{step.color}">{step.n}</span>
               <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{step.title}</span>
               <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{step.hint}</span>
               <div class="flex items-center gap-0.5 shrink-0">
                 <button onclick={() => step.set(Math.max(step.min, step.val - 1))}
                         aria-label="Decrease {step.title}"
-                        class="w-5 h-5 rounded flex items-center justify-center text-ui-md font-bold
+                        class="w-6 h-6 rounded flex items-center justify-center text-ui-md font-bold
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">−</button>
                 <input type="number" min={step.min} max={step.max} value={step.val}
                        aria-label="{step.title} value"
                        oninput={(e) => step.set(Number((e.target as HTMLInputElement).value))}
-                       class="w-9 rounded border border-border dark:border-white/[0.1]
+                       class="w-11 rounded border border-border dark:border-white/[0.1]
                               bg-background px-0.5 py-0.5 text-ui-base text-center font-mono
                               focus:outline-none focus:ring-1 focus:ring-ring" />
                 <button onclick={() => step.set(Math.min(step.max, step.val + 1))}
                         aria-label="Increase {step.title}"
-                        class="w-5 h-5 rounded flex items-center justify-center text-ui-md font-bold
+                        class="w-6 h-6 rounded flex items-center justify-center text-ui-md font-bold
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">+</button>
               </div>
@@ -1689,7 +1689,7 @@ useWindowTitle("window.title.search");
                       border-t border-border dark:border-white/[0.06]
                       hover:bg-muted/10 transition-colors">
             <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
-                         text-[0.42rem] font-bold text-white shrink-0 select-none"
+                         text-ui-2xs font-bold text-white shrink-0 select-none"
                   style="background:#ef4444">6</span>
             <label for="snr-toggle" class="text-ui-sm font-medium text-foreground/70 shrink-0 cursor-pointer">{t("search.snrFilterLabel")}</label>
             <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.snrFilterHint")}</span>
@@ -1703,7 +1703,7 @@ useWindowTitle("window.title.search");
                         border-t border-border dark:border-white/[0.06]
                         hover:bg-muted/10 transition-colors">
               <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
-                           text-[0.42rem] font-bold text-white shrink-0 select-none"
+                           text-ui-2xs font-bold text-white shrink-0 select-none"
                     style="background:#8b5cf6">7</span>
               <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{t("search.deviceFilterLabel")}</span>
               <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.deviceFilterHint")}</span>
@@ -1725,7 +1725,7 @@ useWindowTitle("window.title.search");
                       border-t border-border dark:border-white/[0.06]
                       hover:bg-muted/10 transition-colors">
             <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
-                         text-[0.42rem] font-bold text-white shrink-0 select-none"
+                         text-ui-2xs font-bold text-white shrink-0 select-none"
                   style="background:#f97316">8</span>
             <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{t("search.dateRangeLabel")}</span>
             <div class="flex items-center gap-1 flex-1 min-w-0">
@@ -1768,7 +1768,7 @@ useWindowTitle("window.title.search");
                       border-t border-border dark:border-white/[0.06]
                       hover:bg-muted/10 transition-colors">
             <span class="w-3.5 h-3.5 rounded-full flex items-center justify-center
-                         text-[0.42rem] font-bold text-white shrink-0 select-none"
+                         text-ui-2xs font-bold text-white shrink-0 select-none"
                   style="background:#ec4899">9</span>
             <span class="text-ui-sm font-medium text-foreground/70 shrink-0">{t("search.rankByLabel")}</span>
             <span class="text-ui-xs text-muted-foreground/40 flex-1 min-w-0 truncate">{t("search.rankByHint")}</span>
@@ -2205,7 +2205,7 @@ useWindowTitle("window.title.search");
 
                     <!-- Hour histogram -->
                     <div class="px-3.5 py-2.5">
-                      <span class="text-[0.45rem] font-semibold text-muted-foreground/55 uppercase tracking-wider">
+                      <span class="text-ui-2xs font-semibold text-muted-foreground/55 uppercase tracking-wider">
                         {t("search.analysisHourOfDay")}
                       </span>
                       <div class="flex items-end gap-[2px] h-[36px] mt-1.5">
@@ -2220,7 +2220,7 @@ useWindowTitle("window.title.search");
                       <!-- Hour labels (every 6h) -->
                       <div class="flex justify-between mt-0.5">
                         {#each [0,6,12,18] as h}
-                          <span class="text-[0.35rem] text-muted-foreground/35 tabular-nums">{String(h).padStart(2,'0')}h</span>
+                          <span class="text-ui-2xs text-muted-foreground/35 tabular-nums">{String(h).padStart(2,'0')}h</span>
                         {/each}
                       </div>
                     </div>
@@ -2228,13 +2228,13 @@ useWindowTitle("window.title.search");
                     <!-- Day × hour heatmap -->
                     {#if temporalHeatmap}
                       <div class="px-3.5 py-2.5 border-t border-border/40 dark:border-white/[0.04]">
-                        <span class="text-[0.45rem] font-semibold text-muted-foreground/55 uppercase tracking-wider">
+                        <span class="text-ui-2xs font-semibold text-muted-foreground/55 uppercase tracking-wider">
                           {t("search.analysisHourByDay")}
                         </span>
                         <div class="mt-1.5 flex flex-col gap-[2px]">
                           {#each temporalHeatmap as row, di}
                             <div class="flex items-center gap-[2px]">
-                              <span class="text-[0.34rem] text-muted-foreground/35 w-[18px] shrink-0 text-right pr-0.5 select-none">
+                              <span class="text-ui-2xs text-muted-foreground/35 w-[18px] shrink-0 text-right pr-0.5 select-none">
                                 {DAY_NAMES[di]}
                               </span>
                               {#each row as count, h}
@@ -2252,7 +2252,7 @@ useWindowTitle("window.title.search");
                     <!-- Top days -->
                     {#if sa.topDays.length > 0}
                       <div class="flex items-center gap-2 px-3.5 pb-2.5 flex-wrap border-t border-border/40 dark:border-white/[0.04] pt-2">
-                        <span class="text-[0.42rem] text-muted-foreground/45 uppercase tracking-wider shrink-0">
+                        <span class="text-ui-2xs text-muted-foreground/45 uppercase tracking-wider shrink-0">
                           {t("search.analysisTopDays")}
                         </span>
                         {#each sa.topDays as td}
@@ -2291,16 +2291,16 @@ useWindowTitle("window.title.search");
                     <line x1="18" y1="17" x2="14" y2="13"/>
                   </svg>
                   <span class="text-ui-sm font-semibold select-none">Brain Nebula™</span>
-                  <span class="text-[0.45rem] text-muted-foreground/40 font-normal select-none">{t("search.umap")}</span>
+                  <span class="text-ui-2xs text-muted-foreground/40 font-normal select-none">{t("search.umap")}</span>
 
                   <!-- Status / point count -->
                   {#if umapLoading}
                     <Spinner size="w-3 h-3" class="text-muted-foreground/40" />
-                    <span class="text-[0.45rem] text-muted-foreground italic">
+                    <span class="text-ui-2xs text-muted-foreground italic">
                       {umapEta || t("search.computing3d")}{#if umapElapsed > 0} · {fmtSecs(umapElapsed)}{/if}
                     </span>
                   {:else if umapResult}
-                    <span class="text-[0.45rem] text-muted-foreground/55 tabular-nums">
+                    <span class="text-ui-2xs text-muted-foreground/55 tabular-nums">
                       {umapResult.n_a} + {umapResult.n_b} pts · dim={umapResult.dim}
                     </span>
                   {/if}
@@ -2333,7 +2333,7 @@ useWindowTitle("window.title.search");
                   </div>
 
                   <!-- Legend bar -->
-                  <div class="flex items-center gap-4 text-[0.42rem] text-muted-foreground/55
+                  <div class="flex items-center gap-4 text-ui-2xs text-muted-foreground/55
                               px-4 py-2 border-t border-border dark:border-white/[0.06] flex-wrap">
                     {#if !umapColorByDate}
                       <div class="flex items-center gap-1">
@@ -2513,7 +2513,7 @@ useWindowTitle("window.title.search");
               { n: 5, col: "#10b981", label: "Discover nearby label context" },
             ] as step}
               <div class="flex items-center gap-2">
-                <span class="w-4 h-4 rounded-full flex items-center justify-center text-[0.45rem]
+                <span class="w-4 h-4 rounded-full flex items-center justify-center text-ui-2xs
                              font-bold text-white shrink-0"
                       style="background:{step.col}">
                   {step.n}
@@ -2597,7 +2597,7 @@ useWindowTitle("window.title.search");
               { n: 4, label: "Temporal labels", col: "#10b981" },
             ] as step}
               <div class="flex items-center gap-2.5">
-                <span class="w-4 h-4 rounded-full flex items-center justify-center text-[0.45rem]
+                <span class="w-4 h-4 rounded-full flex items-center justify-center text-ui-2xs
                              font-bold text-white shrink-0 animate-pulse"
                       style="background:{step.col}">
                   {step.n}
@@ -2632,24 +2632,24 @@ useWindowTitle("window.title.search");
         <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border dark:border-white/[0.06] shrink-0">
           <!-- Coloured node-kind dots + counts + labels -->
           <span class="flex items-center gap-0.5 text-ui-xs text-violet-600/80 dark:text-violet-400/80 tabular-nums shrink-0" title={t("search.nodeQueryTip")}>
-            <span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span>1 <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeQuery")}</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span>1 <span class="text-ui-2xs text-muted-foreground/40 font-normal">{t("search.nodeQuery")}</span>
           </span>
           <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
           <span class="flex items-center gap-0.5 text-ui-xs text-blue-500/80 tabular-nums shrink-0" title={t("search.nodeTextTip")}>
-            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>{tlCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeText")}</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>{tlCount} <span class="text-ui-2xs text-muted-foreground/40 font-normal">{t("search.nodeText")}</span>
           </span>
           <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
           <span class="flex items-center gap-0.5 text-ui-xs text-amber-500/80 tabular-nums shrink-0" title={t("search.nodeEegTip")}>
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>{epCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeEeg")}</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>{epCount} <span class="text-ui-2xs text-muted-foreground/40 font-normal">{t("search.nodeEeg")}</span>
           </span>
           <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
           <span class="flex items-center gap-0.5 text-ui-xs text-emerald-500/80 tabular-nums shrink-0" title={t("search.nodeFoundTip")}>
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>{flDisp}{#if ixDedupeLabels && flRaw > flDisp}<span class="opacity-40">/{flRaw}</span>{/if} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeFound")}</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>{flDisp}{#if ixDedupeLabels && flRaw > flDisp}<span class="opacity-40">/{flRaw}</span>{/if} <span class="text-ui-2xs text-muted-foreground/40 font-normal">{t("search.nodeFound")}</span>
           </span>
           {#if ssCount > 0}
             <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
             <span class="flex items-center gap-0.5 text-ui-xs text-cyan-500/80 tabular-nums shrink-0" title={t("search.nodeScreenshotsTip")}>
-              <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>{ssCount} <span class="text-[0.42rem] text-muted-foreground/40 font-normal">{t("search.nodeScreenshots")}</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>{ssCount} <span class="text-ui-2xs text-muted-foreground/40 font-normal">{t("search.nodeScreenshots")}</span>
             </span>
           {/if}
           <span class="text-muted-foreground/20 select-none text-ui-2xs">·</span>
@@ -2726,7 +2726,7 @@ useWindowTitle("window.title.search");
 
             <!-- Inline error hint (truncated, full text on hover via button title) -->
             {#if svgError}
-              <span class="text-[0.44rem] text-red-500/70 truncate max-w-[140px]"
+              <span class="text-ui-2xs text-red-500/70 truncate max-w-[140px]"
                     title={svgError}>{svgError}</span>
             {/if}
           {/if}
@@ -2754,7 +2754,7 @@ useWindowTitle("window.title.search");
                      checked={!ixHiddenKinds.includes(f.kind)}
                      onchange={() => { ixHiddenKinds = ixHiddenKinds.includes(f.kind) ? ixHiddenKinds.filter(k => k !== f.kind) : [...ixHiddenKinds, f.kind]; }}
                      class="rounded border-border h-2.5 w-2.5 accent-{f.color}-500" />
-              <span class="text-[0.44rem] text-muted-foreground/45">{f.label}</span>
+              <span class="text-ui-2xs text-muted-foreground/45">{f.label}</span>
             </label>
           {/each}
 
@@ -3114,7 +3114,7 @@ useWindowTitle("window.title.search");
             <div class="mx-4 mb-3 rounded-xl border border-border bg-card overflow-hidden shrink-0">
               <div class="flex items-center gap-2 px-4 py-2 border-b border-border dark:border-white/[0.06]">
                 <span class="text-ui-sm font-semibold select-none">{t("search.timelineScrubber")}</span>
-                <span class="text-[0.45rem] text-muted-foreground/45 font-mono">
+                <span class="text-ui-2xs text-muted-foreground/45 font-mono">
                   {new Date(tMin * 1000).toLocaleDateString()} → {new Date(tMax * 1000).toLocaleDateString()}
                 </span>
               </div>
@@ -3206,7 +3206,7 @@ useWindowTitle("window.title.search");
                       {/each}
                     </svg>
                     {/each}
-                    <div class="flex justify-between text-[0.45rem] text-muted-foreground/30 font-mono mt-0.5">
+                    <div class="flex justify-between text-ui-2xs text-muted-foreground/30 font-mono mt-0.5">
                       <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span>
                     </div>
                   </div>
@@ -3782,17 +3782,17 @@ Reference specific metrics and timestamps.`;
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
               <span class="text-ui-sm font-semibold select-none">EEG Time Distribution</span>
-              <span class="text-[0.45rem] text-muted-foreground/45 tabular-nums">
+              <span class="text-ui-2xs text-muted-foreground/45 tabular-nums">
                 {hm.days.length} day{hm.days.length !== 1 ? "s" : ""} ·
                 hours 0–23
               </span>
               <!-- Turbo gradient pill -->
               <div class="ml-auto flex items-center gap-1.5">
-                <span class="text-[0.4rem] text-muted-foreground/40 select-none">early</span>
+                <span class="text-ui-2xs text-muted-foreground/40 select-none">early</span>
                 <div class="w-14 h-1.5 rounded-full"
                      style="background:linear-gradient(to right,{turboColor(0)},{turboColor(0.25)},{turboColor(0.5)},{turboColor(0.75)},{turboColor(1)})">
                 </div>
-                <span class="text-[0.4rem] text-muted-foreground/40 select-none">late</span>
+                <span class="text-ui-2xs text-muted-foreground/40 select-none">late</span>
               </div>
             </div>
 
@@ -3890,7 +3890,7 @@ Reference specific metrics and timestamps.`;
               {#if flHasPca}
                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded
                              bg-emerald-500/8 border border-emerald-500/20
-                             text-emerald-600 dark:text-emerald-400 text-[0.46rem] select-none">
+                             text-emerald-600 dark:text-emerald-400 text-ui-2xs select-none">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                        class="w-2 h-2 shrink-0">
                     <circle cx="12" cy="12" r="2"/><circle cx="5" cy="6" r="2"/>
@@ -3940,7 +3940,7 @@ Reference specific metrics and timestamps.`;
                       {/if}
                       {#if projX !== undefined && projY !== undefined}
                         <!-- Tiny PCA coordinate badge — helps user cross-reference with 3D graph -->
-                        <span class="text-[0.44rem] font-mono text-emerald-500/40 select-none"
+                        <span class="text-ui-2xs font-mono text-emerald-500/40 select-none"
                               title="PCA embedding coordinates (x={projX.toFixed(2)}, y={projY.toFixed(2)})">
                           pca ({projX.toFixed(2)}, {projY.toFixed(2)})
                         </span>
@@ -4050,7 +4050,7 @@ Reference specific metrics and timestamps.`;
                   <line x1="18" y1="17" x2="14" y2="13"/>
                 </svg>
                 <span class="text-ui-sm font-semibold select-none">{t("search.textKnnGraph")}</span>
-                <span class="text-[0.45rem] text-muted-foreground/45 tabular-nums">
+                <span class="text-ui-2xs text-muted-foreground/45 tabular-nums">
                   1 + {textGraphData.n_b} pts
                 </span>
                 <!-- Toggle visibility -->
@@ -4070,7 +4070,7 @@ Reference specific metrics and timestamps.`;
                 </div>
 
                 <!-- Legend bar -->
-                <div class="flex items-center gap-4 text-[0.42rem] text-muted-foreground/55
+                <div class="flex items-center gap-4 text-ui-2xs text-muted-foreground/55
                             px-4 py-2 border-t border-border dark:border-white/[0.06] flex-wrap">
                   <!-- Query legend dot -->
                   <div class="flex items-center gap-1">
@@ -4087,13 +4087,13 @@ Reference specific metrics and timestamps.`;
                   <!-- Distance gradient hint -->
                   <div class="flex items-center gap-1 ml-2">
                     <span class="text-muted-foreground/30">←</span>
-                    <span class="text-[0.4rem] text-muted-foreground/35 select-none">{t("search.textKnnGraphNear")}</span>
+                    <span class="text-ui-2xs text-muted-foreground/35 select-none">{t("search.textKnnGraphNear")}</span>
                     <div class="w-14 h-1 rounded-full mx-0.5"
                          style="background: linear-gradient(to right,
                            #{UMAP_COLOR_A.toString(16).padStart(6,'0')}80,
                            #{UMAP_COLOR_B.toString(16).padStart(6,'0')}80)">
                     </div>
-                    <span class="text-[0.4rem] text-muted-foreground/35 select-none">{t("search.textKnnGraphFar")}</span>
+                    <span class="text-ui-2xs text-muted-foreground/35 select-none">{t("search.textKnnGraphFar")}</span>
                     <span class="text-muted-foreground/30">→</span>
                   </div>
                   <span class="ml-auto italic opacity-60">{t("search.textKnnGraphDesc")}</span>

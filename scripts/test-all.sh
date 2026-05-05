@@ -48,8 +48,8 @@ for arg in "$@"; do
       echo "  hooks     pre-commit + pre-push"
       exit 0
       ;;
-    fast)  SUITES+=(fmt lint clippy vitest rust ci types) ;;
-    all)   SUITES+=(fmt lint clippy deny vitest rust:all ci types widgets a11y i18n changelog smoke daemon e2e mlx-e2e) ;;
+    fast)  SUITES+=(fmt lint tiny-text clippy vitest rust ci types) ;;
+    all)   SUITES+=(fmt lint tiny-text clippy deny vitest rust:all ci types widgets a11y i18n changelog smoke daemon e2e mlx-e2e) ;;
     hooks) SUITES+=(pre-commit pre-push) ;;
     *)     SUITES+=("$arg") ;;
   esac
@@ -122,6 +122,12 @@ for suite in "${SUITES[@]}"; do
       ;;
     lint)
       run_suite "biome check" npx biome check src/ scripts/ || { $STOP_ON_FAIL && break; }
+      ;;
+    tiny-text)
+      # Bans arbitrary `text-[<11px]` classes that bypass the design
+      # system. See scripts/lint-tiny-text.mjs for the rule rationale
+      # and src/tests/visual-layout.spec.ts for the audit it derives from.
+      run_suite "tiny-text lint" node scripts/lint-tiny-text.mjs || { $STOP_ON_FAIL && break; }
       ;;
     clippy)
       run_suite "rust version check" node scripts/check-rust-version.mjs --verbose || { $STOP_ON_FAIL && break; }

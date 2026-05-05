@@ -100,14 +100,14 @@ let {
       </div>
 
       <!-- Month labels along the top -->
-      <div class="flex mt-1.5 text-[0.4rem] text-muted-foreground/40 select-none">
+      <div class="flex mt-1.5 text-ui-2xs text-muted-foreground/40 select-none">
         {#each ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as month, i}
           <span class="flex-1 text-center">{month}</span>
         {/each}
       </div>
 
       <!-- Legend -->
-      <div class="flex items-center gap-1 mt-2 text-[0.42rem] text-muted-foreground/50">
+      <div class="flex items-center gap-1 mt-2 text-ui-2xs text-muted-foreground/50">
         <span>{t("history.heatmap.less")}</span>
         {#each [0,1,2,3,4] as level}
           <div class="w-[10px] h-[10px] rounded-[2px]
@@ -129,7 +129,7 @@ let {
       <!-- Weekday headers -->
       <div class="grid grid-cols-7 gap-1 mb-1">
         {#each ["S","M","T","W","T","F","S"] as wd}
-          <div class="text-[0.42rem] text-center text-muted-foreground/50 font-medium uppercase">{wd}</div>
+          <div class="text-ui-2xs text-center text-muted-foreground/50 font-medium uppercase">{wd}</div>
         {/each}
       </div>
 
@@ -171,7 +171,7 @@ let {
       <div class="grid gap-px mb-1" style="grid-template-columns: 72px repeat(48, minmax(0,1fr))">
         <div></div>
         {#each [0,3,6,9,12,15,18,21] as hr}
-          <div class="text-[0.38rem] text-muted-foreground/40 text-center" style="grid-column: span 6">
+          <div class="text-ui-2xs text-muted-foreground/40 text-center" style="grid-column: span 6">
             {hr.toString().padStart(2,"0")}:00
           </div>
         {/each}

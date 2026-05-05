@@ -51,7 +51,7 @@ const items = $derived([
             <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground truncate">
               {t(`dashboard.${m.key}`)}
             </span>
-            <span class="text-[0.45rem] {m.blink} live-blink shrink-0" aria-hidden="true">●</span>
+            <span class="text-ui-2xs {m.blink} live-blink shrink-0" aria-hidden="true">●</span>
           </div>
           <div class="flex items-end gap-1">
             <span class="text-[1.2rem] font-bold tabular-nums leading-none"

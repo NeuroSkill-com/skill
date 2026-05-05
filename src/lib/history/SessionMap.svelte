@@ -296,7 +296,7 @@ $effect(() => {
     aria-label="Session location map"
   ></div>
   {#if usingIpFallback}
-    <p class="text-[0.46rem] text-muted-foreground/40 text-right px-0.5">
+    <p class="text-ui-2xs text-muted-foreground/40 text-right px-0.5">
       📍 Approximate location{ipCity ? ` · ${ipCity}` : ""} · no GPS recorded for this session
     </p>
   {/if}

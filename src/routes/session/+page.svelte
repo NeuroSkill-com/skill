@@ -113,13 +113,13 @@ useWindowTitle("window.title.session");
           <div class="flex flex-wrap gap-x-6 gap-y-1.5">
             {#if sessionMeta.device_name}
               <div class="flex flex-col gap-0.5">
-                <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.device")}</span>
+                <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.device")}</span>
                 <span class="text-ui-base font-medium">{sessionMeta.device_name}</span>
               </div>
             {/if}
             {#if sessionMeta.session_start_utc}
               <div class="flex flex-col gap-0.5">
-                <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.startTime")}</span>
+                <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.startTime")}</span>
                 <span class="text-ui-base font-medium tabular-nums">
                   {fmtDate(sessionMeta.session_start_utc)} {fmtTime(sessionMeta.session_start_utc)}
                 </span>
@@ -127,19 +127,19 @@ useWindowTitle("window.title.session");
             {/if}
             {#if sessionMeta.session_duration_s}
               <div class="flex flex-col gap-0.5">
-                <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.duration")}</span>
+                <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.duration")}</span>
                 <span class="text-ui-base font-medium">{fmtDuration(sessionMeta.session_duration_s)}</span>
               </div>
             {/if}
             {#if sessionMeta.firmware_version}
               <div class="flex flex-col gap-0.5">
-                <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">Firmware</span>
+                <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">Firmware</span>
                 <span class="text-ui-base font-medium">{sessionMeta.firmware_version}</span>
               </div>
             {/if}
             {#if sessionMeta.total_samples}
               <div class="flex flex-col gap-0.5">
-                <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.samples")}</span>
+                <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.samples")}</span>
                 <span class="text-ui-base font-medium tabular-nums">{sessionMeta.total_samples.toLocaleString()}</span>
               </div>
             {/if}
@@ -165,27 +165,27 @@ useWindowTitle("window.title.session");
                       bg-surface-1 px-3.5 py-3">
             <div class="flex items-center gap-4 flex-wrap">
               <div class="flex flex-col">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Efficiency</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Efficiency</span>
                 <span class="text-ui-lg font-bold tabular-nums {sa.efficiency >= 85 ? 'text-emerald-500' : sa.efficiency >= 70 ? 'text-yellow-500' : 'text-red-400'}">
                   {sa.efficiency.toFixed(0)}%
                 </span>
               </div>
               <div class="flex flex-col">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Onset</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Onset</span>
                 <span class="text-ui-lg font-bold tabular-nums">{sa.onsetLatencyMin.toFixed(0)}m</span>
               </div>
               {#if sa.remLatencyMin >= 0}
                 <div class="flex flex-col">
-                  <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">→ REM</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">→ REM</span>
                   <span class="text-ui-lg font-bold tabular-nums">{sa.remLatencyMin.toFixed(0)}m</span>
                 </div>
               {/if}
               <div class="flex flex-col">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Duration</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Duration</span>
                 <span class="text-ui-lg font-bold tabular-nums">{sa.totalMin.toFixed(0)}m</span>
               </div>
               <div class="flex flex-col">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Awakenings</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Awakenings</span>
                 <span class="text-ui-lg font-bold tabular-nums">{sa.awakenings}</span>
               </div>
             </div>

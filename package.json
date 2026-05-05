@@ -17,6 +17,7 @@
     "test:all": "bash scripts/test-all.sh all",
     "test:fmt": "bash scripts/test-all.sh fmt",
     "test:lint": "bash scripts/test-all.sh lint",
+    "test:tiny-text": "bash scripts/test-all.sh tiny-text",
     "test:clippy": "bash scripts/test-all.sh clippy",
     "test:deny": "bash scripts/test-all.sh deny",
     "test:vitest": "bash scripts/test-all.sh vitest",

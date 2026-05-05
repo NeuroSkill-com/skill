@@ -153,7 +153,7 @@ async function submit() {
             oninput={(e) => scale.set(Number((e.target as HTMLInputElement).value))}
             class="mt-1 w-full"
           />
-          <div class="flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+          <div class="flex justify-between text-ui-2xs uppercase tracking-wide text-muted-foreground">
             <span>
               {scale.inverted ? t("validation.tlx.failure") : t("validation.tlx.low")}
             </span>

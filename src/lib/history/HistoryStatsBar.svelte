@@ -43,16 +43,16 @@ let { daysCount, totalHours, recordingStreak, historyStats, weekTrend }: Props =
     <div class="flex items-center gap-5">
       <div class="flex flex-col items-center">
         <span class="text-ui-lg font-bold tabular-nums">{daysCount}</span>
-        <span class="text-[0.45rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.days")}</span>
+        <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.days")}</span>
       </div>
       {#if historyStats}
         <div class="flex flex-col items-center">
           <span class="text-ui-lg font-bold tabular-nums">{totalHours.toFixed(1)}</span>
-          <span class="text-[0.45rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.hours")}</span>
+          <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.hours")}</span>
         </div>
         <div class="flex flex-col items-center">
           <span class="text-ui-lg font-bold tabular-nums">{historyStats.total_sessions}</span>
-          <span class="text-[0.45rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.sessions")}</span>
+          <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.sessions")}</span>
         </div>
         {#if weekTrend && (weekTrend.thisWeek > 0 || weekTrend.lastWeek > 0)}
           <div class="flex flex-col items-center">
@@ -65,7 +65,7 @@ let { daysCount, totalHours, recordingStreak, historyStats, weekTrend }: Props =
                 </span>
               {/if}
             </div>
-            <span class="text-[0.45rem] text-muted-foreground/60 uppercase tracking-wider">{t("history.thisWeek")}</span>
+            <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{t("history.thisWeek")}</span>
           </div>
         {/if}
       {/if}
