@@ -198,6 +198,8 @@ const history: Record<string, string> = {
   "history.samples": "Зразки",
   "history.device": "Пристрій",
   "history.battery": "Батарея",
+  "history.chunkCount": "{n} фрагментів",
+  "history.chunkCountTooltip": "Довгий запис розділено на {n} файлів для безпеки; тривалість {duration}",
   "history.snr": "Якість сигналу",
   "history.label": "мітка",
   "history.labels": "мітки",

@@ -96,6 +96,8 @@ const history: Record<string, string> = {
   "history.samples": "Samples",
   "history.device": "Device",
   "history.battery": "Battery",
+  "history.chunkCount": "{n} chunks",
+  "history.chunkCountTooltip": "Long recording split into {n} files for crash safety; spans {duration}",
   "history.snr": "Signal Quality",
   "history.label": "label",
   "history.labels": "labels",

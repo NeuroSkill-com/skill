@@ -198,6 +198,8 @@ const history: Record<string, string> = {
   "history.samples": "Échantillons",
   "history.device": "Appareil",
   "history.battery": "Batterie",
+  "history.chunkCount": "{n} segments",
+  "history.chunkCountTooltip": "Enregistrement long divisé en {n} fichiers par sécurité ; durée {duration}",
   "history.snr": "Qualité du signal",
   "history.label": "étiquette",
   "history.labels": "étiquettes",

@@ -227,6 +227,8 @@ const history: Record<string, string> = {
   "history.samples": "דגימות",
   "history.device": "מכשיר",
   "history.battery": "סוללה",
+  "history.chunkCount": "{n} מקטעים",
+  "history.chunkCountTooltip": "הקלטה ארוכה פוצלה ל-{n} קבצים להגנה מקריסה; משך {duration}",
   "history.snr": "איכות אות",
   "history.label": "תווית",
   "history.labels": "תוויות",
