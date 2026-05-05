@@ -40,7 +40,8 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "Sample Entropy — irregularity of the signal. Higher = less predictable.",
   "tip.pacThetaGamma": "Phase-Amplitude Coupling between theta phase and gamma amplitude. Linked to memory encoding.",
   "tip.lateralityIndex": "Left–right power asymmetry across all bands. Positive = right-dominant.",
-  "tip.echt": "Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1). High = strong, phase-stable alpha oscillation. [Schreglmann 2021]",
+  "tip.echt":
+    "Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1). High = strong, phase-stable alpha oscillation. [Schreglmann 2021]",
   "tip.hr": "Heart rate derived from PPG inter-beat intervals.",
   "tip.rmssd": "Root Mean Square of Successive Differences between heartbeats. Key parasympathetic HRV metric.",
   "tip.sdnn": "Standard deviation of beat-to-beat intervals. Reflects overall HRV.",

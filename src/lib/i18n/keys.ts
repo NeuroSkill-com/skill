@@ -1163,6 +1163,8 @@ export type TranslationKey =
   | "history.addLabel"
   | "history.battery"
   | "history.charts"
+  | "history.chunkCount"
+  | "history.chunkCountTooltip"
   | "history.clearSelection"
   | "history.compare"
   | "history.compareSelected"
