@@ -200,6 +200,7 @@ const SYNTH_BANDS: Record<string, unknown> = {
   sample_entropy: 1.4,
   pac_theta_gamma: 0.08,
   laterality_index: 0.03,
+  echt: 0.5,
   hr: 68,
   rmssd: 42,
   sdnn: 55,

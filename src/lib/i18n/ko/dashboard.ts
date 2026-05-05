@@ -57,6 +57,7 @@ const dashboard: Record<string, string> = {
   "dashboard.sampleEntropy": "표본 엔트로피",
   "dashboard.pacThetaGamma": "PAC (θ–γ)",
   "dashboard.lateralityIndex": "편측성",
+  "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "PPG 지표",
   "dashboard.hr": "심박수",
   "dashboard.rmssd": "RMSSD",

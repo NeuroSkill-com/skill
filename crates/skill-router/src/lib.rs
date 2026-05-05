@@ -80,6 +80,7 @@ pub struct RoundedScores {
     pub sample_entropy: f32,
     pub pac_theta_gamma: f32,
     pub laterality_index: f32,
+    pub echt: f32,
     pub hr: f64,
     pub rmssd: f64,
     pub sdnn: f64,

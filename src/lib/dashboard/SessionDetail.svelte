@@ -48,6 +48,7 @@ export interface SessionMetrics {
   sample_entropy: number;
   pac_theta_gamma: number;
   laterality_index: number;
+  echt: number;
   hr: number;
   rmssd: number;
   sdnn: number;
@@ -102,6 +103,7 @@ export interface EpochRow {
   se: number;
   pac: number;
   lat: number;
+  echt: number;
   hr: number;
   rmssd: number;
   sdnn: number;
@@ -285,6 +287,7 @@ export interface CsvMetricsResult {
             { l: t("sd.muSupp"),    v: m.mu_suppression.toFixed(3), tip: t("tip.muSuppression") },
             { l: t("sd.laterality"),v: m.laterality_index.toFixed(3), tip: t("tip.lateralityIndex") },
             { l: t("sd.pac"),       v: m.pac_theta_gamma.toFixed(3), tip: t("tip.pacThetaGamma") },
+            { l: t("sd.echt"),      v: m.echt.toFixed(3), tip: t("tip.echt") },
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
@@ -452,6 +455,7 @@ export interface CsvMetricsResult {
             { key: "mood", label: "Mood", color: C_MOOD, data: ts.map(r => r.mood) },
             { key: "lat", label: "Laterality", color: C_DELTA, data: ts.map(r => r.lat) },
             { key: "pac", label: "PAC θ-γ", color: C_BLINK, data: ts.map(r => r.pac) },
+            { key: "echt", label: "ECHT", color: C_ALPHA, data: ts.map(r => r.echt) },
           ]} /></div>
         {/if}
 

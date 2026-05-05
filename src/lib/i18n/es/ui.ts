@@ -50,6 +50,7 @@ const ui: Record<string, string> = {
   "tip.pacThetaGamma":
     "Acoplamiento fase-amplitud entre fase theta y amplitud gamma. Vinculado a la codificación de la memoria.",
   "tip.lateralityIndex": "Asimetría de poder izquierda-derecha en todas las bandas. Positivo = derecha dominante.",
+  "tip.echt": "Transformada de Hilbert con corrección de extremos — ritmicidad de banda alfa (0–1). Alto = oscilación alfa intensa y estable en fase. [Schreglmann 2021]",
   "tip.hr": "Frecuencia cardíaca derivada de los intervalos entre latidos PPG.",
   "tip.rmssd":
     "Media cuadrática de diferencias sucesivas entre latidos del corazón. Métrica clave de VFC parasimpática.",
