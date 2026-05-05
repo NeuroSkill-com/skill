@@ -40,7 +40,7 @@ let { hr, rmssd, sdnn, pnn50, lfHf, respRate, spo2, perfIdx, stressIdx }: Props 
       <MetricTooltip text={t(`tip.${item.k}`)}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t(`dashboard.${item.k}`)}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t(`dashboard.${item.k}`)}</span>
             <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
           </div>
           <MetricBar value={item.bar} bg={item.bg ?? ''} gradient={item.grad ?? ''} />

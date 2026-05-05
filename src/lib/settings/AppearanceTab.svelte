@@ -174,7 +174,7 @@ const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
                 <div class="flex flex-col items-center gap-0.5">
                   <div class="w-5 h-5 rounded-full border border-black/10 dark:border-white/10"
                        style="background-color: {color}"></div>
-                  <span class="text-[0.42rem] text-muted-foreground/60 font-mono leading-none">{EEG_CH[i]}</span>
+                  <span class="text-ui-2xs text-muted-foreground/60 font-mono leading-none">{EEG_CH[i]}</span>
                 </div>
               {/each}
 
@@ -184,7 +184,7 @@ const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
                   <div class="flex flex-col items-center gap-0.5">
                     <div class="w-3 h-3 rounded-full border border-black/10 dark:border-white/10"
                          style="background-color: {color}"></div>
-                    <span class="text-[0.38rem] text-muted-foreground/50 font-mono leading-none">
+                    <span class="text-ui-2xs text-muted-foreground/50 font-mono leading-none">
                       {["δ","θ","α","β","γ"][i]}
                     </span>
                   </div>

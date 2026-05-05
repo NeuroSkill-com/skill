@@ -1496,7 +1496,7 @@ onDestroy(() => {
         <div class="relative w-full h-3">
           {#each traceTimeTicks as tick, i}
             {@const align = i === 0 ? 'left-0' : i === traceTimeTicks.length - 1 ? 'right-0' : '-translate-x-1/2'}
-            <span class="absolute text-[0.38rem] tabular-nums text-slate-500 dark:text-white/50 top-0 whitespace-nowrap {align}"
+            <span class="absolute text-ui-2xs tabular-nums text-slate-500 dark:text-white/50 top-0 whitespace-nowrap {align}"
                   style={i > 0 && i < traceTimeTicks.length - 1 ? `left:${tick.pct}%` : ''}>
               {tick.label}
             </span>
@@ -1535,11 +1535,11 @@ onDestroy(() => {
       <div class="flex items-center gap-3 px-3 py-1.5 shrink-0
                   border-b border-black/6 dark:border-white/[0.06]
                   bg-black/[0.02] dark:bg-white/[0.02]">
-        <span class="flex items-center gap-1 text-[0.44rem] text-slate-400 dark:text-white/30">
+        <span class="flex items-center gap-1 text-ui-2xs text-slate-400 dark:text-white/30">
           <span class="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-white/40 shrink-0"></span>
           {t("umap.sessionA")}
         </span>
-        <span class="flex items-center gap-1 text-[0.44rem] text-slate-400 dark:text-white/30">
+        <span class="flex items-center gap-1 text-ui-2xs text-slate-400 dark:text-white/30">
           <span class="w-1.5 h-1.5 rotate-45 bg-slate-400 dark:bg-white/40 shrink-0"></span>
           {t("umap.sessionB")}
         </span>
@@ -1550,7 +1550,7 @@ onDestroy(() => {
         {#each groups as group}
           <!-- Group header -->
           <div class="flex items-center gap-1.5 px-3 pt-2 pb-0.5">
-            <span class="text-[0.44rem] font-semibold tracking-widest uppercase
+            <span class="text-ui-2xs font-semibold tracking-widest uppercase
                          text-slate-400 dark:text-white/25 shrink-0">{group.label}</span>
             <div class="flex-1 h-px bg-black/6 dark:bg-white/[0.04]"></div>
           </div>
@@ -1584,11 +1584,11 @@ onDestroy(() => {
                              text-slate-700 dark:text-white/75">{entry.label}</span>
                 <div class="flex gap-0.5 shrink-0">
                   {#if entry.inA}
-                    <span class="text-[0.42rem] px-0.5 py-px rounded
+                    <span class="text-ui-2xs px-0.5 py-px rounded
                                  bg-blue-500/12 text-blue-600 dark:text-blue-400 font-semibold">A</span>
                   {/if}
                   {#if entry.inB}
-                    <span class="text-[0.42rem] px-0.5 py-px rounded
+                    <span class="text-ui-2xs px-0.5 py-px rounded
                                  bg-amber-500/12 text-amber-600 dark:text-amber-400 font-semibold">B</span>
                   {/if}
                 </div>
@@ -1596,7 +1596,7 @@ onDestroy(() => {
               <!-- Timestamps -->
               <div class="flex flex-wrap gap-0.5 pl-3">
                 {#each entry.timestamps.slice(0, 6) as ts}
-                  <span class="text-[0.4rem] tabular-nums px-0.5 rounded
+                  <span class="text-ui-2xs tabular-nums px-0.5 rounded
                                {ts.session === 0
                                  ? 'bg-violet-500/10 text-violet-600/80 dark:text-violet-400/80'
                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400/80'}">
@@ -1604,7 +1604,7 @@ onDestroy(() => {
                   </span>
                 {/each}
                 {#if entry.timestamps.length > 6}
-                  <span class="text-[0.4rem] text-slate-400 dark:text-white/25">
+                  <span class="text-ui-2xs text-slate-400 dark:text-white/25">
                     +{entry.timestamps.length - 6}
                   </span>
                 {/if}
@@ -1628,7 +1628,7 @@ onDestroy(() => {
         <input type="range" min="0.5" max="10" step="0.1"
                bind:value={proximityDist}
            class="w-full h-1 accent-violet-500 dark:accent-violet-400 cursor-pointer" />
-        <div class="text-[0.44rem] leading-snug min-h-[1.6em]">
+        <div class="text-ui-2xs leading-snug min-h-[1.6em]">
           {#if selectedLabel && !animating}
             {#if proximateLabels.length > 0}
               <span class="text-sky-600 dark:text-sky-400">
@@ -1753,17 +1753,17 @@ onDestroy(() => {
     {#if timeGradient && gradientRange}
       {@const span = gradientRange.maxUtc - gradientRange.minUtc}
       <div class="flex flex-col gap-1">
-        <span class="text-[0.45rem] font-medium text-slate-600 dark:text-white/60">
+        <span class="text-ui-2xs font-medium text-slate-600 dark:text-white/60">
           Session {timeGradient} · time →
         </span>
         <div class="flex items-center gap-1.5">
-          <span class="text-[0.42rem] text-slate-500 dark:text-white/40 tabular-nums whitespace-nowrap">
+          <span class="text-ui-2xs text-slate-500 dark:text-white/40 tabular-nums whitespace-nowrap">
             {fmtGradientTs(gradientRange.minUtc, span)}
           </span>
           <div class="w-32 h-2.5 rounded-full overflow-hidden border border-black/10 dark:border-white/10 shadow-sm"
                style="background:{jetGradientCSS}">
           </div>
-          <span class="text-[0.42rem] text-slate-500 dark:text-white/40 tabular-nums whitespace-nowrap">
+          <span class="text-ui-2xs text-slate-500 dark:text-white/40 tabular-nums whitespace-nowrap">
             {fmtGradientTs(gradientRange.maxUtc, span)}
           </span>
         </div>
@@ -1872,7 +1872,7 @@ onDestroy(() => {
           {traceActive ? t("umap.traceStop") : t("umap.trace")}
         </span>
         {#if traceActive && traceTotal > 0}
-          <span class="text-[0.45rem] tabular-nums text-slate-400 dark:text-white/40">{traceProgress}/{traceTotal}</span>
+          <span class="text-ui-2xs tabular-nums text-slate-400 dark:text-white/40">{traceProgress}/{traceTotal}</span>
         {/if}
       </div>
 

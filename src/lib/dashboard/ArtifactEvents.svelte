@@ -22,7 +22,7 @@ let { blinkCount, blinkRate }: Props = $props();
     <MetricTooltip text={t("tip.blinks")}>
       <div class="flex flex-col gap-0.5">
         <div class="flex items-center justify-between">
-          <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.blinks")}</span>
+          <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.blinks")}</span>
           <span class="text-ui-sm font-bold tabular-nums">{blinkCount}</span>
         </div>
       </div>
@@ -30,7 +30,7 @@ let { blinkCount, blinkRate }: Props = $props();
     <MetricTooltip text={t("tip.blinkRate")}>
       <div class="flex flex-col gap-0.5">
         <div class="flex items-center justify-between">
-          <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.blinkRate")}</span>
+          <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.blinkRate")}</span>
           <span class="text-ui-sm font-bold tabular-nums" style="color:{blinkRate > 25 ? '#f59e0b' : '#6b7280'}">{blinkRate.toFixed(1)}/min</span>
         </div>
         <MetricBar value={Math.min(100, blinkRate / 30 * 100)} bg="bg-pink-400" />

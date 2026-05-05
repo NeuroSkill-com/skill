@@ -24,7 +24,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
       <MetricTooltip text={t("tip.pitch")}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.pitch")}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.pitch")}</span>
             <span class="text-ui-sm font-bold tabular-nums">{pitch >= 0 ? "+" : ""}{pitch.toFixed(1)}°</span>
           </div>
           <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden relative">
@@ -36,7 +36,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
       <MetricTooltip text={t("tip.roll")}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.roll")}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.roll")}</span>
             <span class="text-ui-sm font-bold tabular-nums">{roll >= 0 ? "+" : ""}{roll.toFixed(1)}°</span>
           </div>
           <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden relative">
@@ -48,7 +48,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
       <MetricTooltip text={t("tip.stillness")}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.stillness")}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.stillness")}</span>
             <span class="text-ui-sm font-bold tabular-nums" style="color:{stillness > 80 ? '#22c55e' : stillness > 40 ? '#f59e0b' : '#ef4444'}">{stillness.toFixed(0)}</span>
           </div>
           <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
@@ -59,7 +59,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
       <MetricTooltip text={t("tip.nods")}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.nods")}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.nods")}</span>
             <span class="text-ui-sm font-bold tabular-nums">{nodCount}</span>
           </div>
         </div>
@@ -67,7 +67,7 @@ let { pitch, roll, stillness, nodCount, shakeCount }: Props = $props();
       <MetricTooltip text={t("tip.shakes")}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.shakes")}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashboard.shakes")}</span>
             <span class="text-ui-sm font-bold tabular-nums">{shakeCount}</span>
           </div>
         </div>

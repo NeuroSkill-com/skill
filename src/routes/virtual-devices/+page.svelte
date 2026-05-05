@@ -530,7 +530,7 @@ onDestroy(() => {
           <span class="text-ui-xs text-muted-foreground leading-relaxed line-clamp-2">{preset.desc}</span>
           <div class="flex flex-wrap gap-1 mt-auto pt-1">
             {#each preset.tags as tag}
-              <span class="inline-block rounded-full px-1.5 py-0.5 text-[0.44rem] font-semibold tracking-wide
+              <span class="inline-block rounded-full px-1.5 py-0.5 text-ui-2xs font-semibold tracking-wide
                            {isSelected ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400' : 'bg-muted text-muted-foreground'}">
                 {tag}
               </span>
@@ -554,7 +554,7 @@ onDestroy(() => {
         <span class="text-ui-base font-semibold text-foreground leading-tight">{t("vdev.presetCustom")}</span>
         <span class="text-ui-xs text-muted-foreground leading-relaxed">{t("vdev.presetCustomDesc")}</span>
         <div class="flex flex-wrap gap-1 mt-auto pt-1">
-          <span class="inline-block rounded-full px-1.5 py-0.5 text-[0.44rem] font-semibold tracking-wide
+          <span class="inline-block rounded-full px-1.5 py-0.5 text-ui-2xs font-semibold tracking-wide
                        {isCustomSelected ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400' : 'bg-muted text-muted-foreground'}">
             {t("vdev.configure")}
           </span>
@@ -764,7 +764,7 @@ onDestroy(() => {
   <section class="flex flex-col gap-2 shrink-0">
     <div class="flex items-center gap-2 px-0.5">
       <SectionHeader>{t("vdev.previewOffline")}</SectionHeader>
-      <span class="text-[0.46rem] text-muted-foreground/35 ml-auto font-mono">
+      <span class="text-ui-2xs text-muted-foreground/35 ml-auto font-mono">
         {config.channels}ch · {config.sampleRate} Hz
       </span>
     </div>
@@ -776,7 +776,7 @@ onDestroy(() => {
           height="140"
           class="w-full h-[140px] rounded-md bg-[#0c0c14]"
         ></canvas>
-        <p class="text-[0.46rem] text-muted-foreground/35 mt-1.5 leading-relaxed">
+        <p class="text-ui-2xs text-muted-foreground/35 mt-1.5 leading-relaxed">
           {t("vdev.previewOfflineDesc")}
         </p>
       </CardContent>

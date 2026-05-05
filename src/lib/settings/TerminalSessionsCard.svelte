@@ -424,11 +424,11 @@ function toggleDay(key: string) {
                 class="flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/30"
                 onclick={() => toggleDay(bucket.key)}
               >
-                <span class="text-[10px] font-mono text-muted-foreground/70">{collapsed ? "▸" : "▾"}</span>
+                <span class="text-ui-2xs font-mono text-muted-foreground/70">{collapsed ? "▸" : "▾"}</span>
                 <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {bucket.label}
                 </span>
-                <span class="text-[10px] text-muted-foreground/70">
+                <span class="text-ui-2xs text-muted-foreground/70">
                   {bucket.rows.length} session{bucket.rows.length === 1 ? "" : "s"}
                 </span>
               </button>
@@ -479,11 +479,11 @@ function toggleDay(key: string) {
                                 {/if}
                               </span>
                               {#if isLive}
-                                <span class="rounded-full bg-green-500/20 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
+                                <span class="rounded-full bg-green-500/20 px-1.5 py-0.5 text-ui-2xs font-medium text-green-400">
                                   live
                                 </span>
                               {:else if isLegacy}
-                                <span class="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400/80" title="Imported from a pre-redesign .log.zst — no per-command timing.">
+                                <span class="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-400/80" title="Imported from a pre-redesign .log.zst — no per-command timing.">
                                   legacy
                                 </span>
                               {/if}

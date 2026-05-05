@@ -159,8 +159,8 @@ onMount(refresh);
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <span class="text-ui-sm font-semibold text-foreground">{t("tokens.defaultToken")}</span>
-          <span class="text-[0.46rem] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">admin</span>
-          <span class="text-[0.46rem] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">{t("tokens.expiryNever")}</span>
+          <span class="text-ui-2xs font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">admin</span>
+          <span class="text-ui-2xs font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">{t("tokens.expiryNever")}</span>
         </div>
         <Button variant="outline" size="sm" class="h-6 text-ui-xs px-2" disabled={refreshing}
           onclick={refreshDefaultToken}>
@@ -267,10 +267,10 @@ onMount(refresh);
             <div class="flex flex-col gap-1 flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <span class="text-ui-base font-semibold text-foreground truncate">{tok.name}</span>
-                <span class="text-[0.46rem] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded {badge.color}">
+                <span class="text-ui-2xs font-bold tracking-wider uppercase px-1.5 py-0.5 rounded {badge.color}">
                   {badge.label}
                 </span>
-                <span class="text-[0.46rem] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <span class="text-ui-2xs font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
                   {tok.acl}
                 </span>
               </div>
