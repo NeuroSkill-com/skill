@@ -5461,6 +5461,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - Minor updates and improvements
 
+## [0.0.130-rc.17] — 2026-05-05
+
+### Features
+
+- address ZUNA GPU f16 fallback failure and embedding search timestamp mismatch
+
 ## [0.0.130-rc.2] — 2026-04-29
 
 ### Features
