@@ -774,8 +774,10 @@ mod round_trip_tests {
     fn build_metrics_header_has_correct_length() {
         let channels = ["TP9", "AF7", "AF8", "TP10"];
         let header = build_metrics_header(&channels);
-        // 1 timestamp + 4 channels × 12 bands + 46 cross-channel
-        assert_eq!(header.len(), 1 + 4 * 12 + 46);
+        // 1 timestamp + 4 channels × 12 bands + cross-channel indices.
+        // Track METRICS_CROSS_CHANNEL_HEADER's length so this test doesn't
+        // need updating each time a new cross-channel metric is added.
+        assert_eq!(header.len(), 1 + 4 * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
     }
 
     #[test]
@@ -795,7 +797,7 @@ mod round_trip_tests {
     #[test]
     fn build_metrics_header_empty_channels() {
         let header = build_metrics_header(&[]);
-        assert_eq!(header.len(), 1 + 46); // just timestamp + cross-channel
+        assert_eq!(header.len(), 1 + METRICS_CROSS_CHANNEL_HEADER.len()); // just timestamp + cross-channel
         assert_eq!(header[0], "timestamp_s");
     }
 

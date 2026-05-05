@@ -2,17 +2,19 @@
 //! Tests for CsvState: write EEG/PPG/metrics and verify the output.
 #![allow(clippy::unwrap_used)]
 
-use skill_data::session_csv::{build_metrics_header, CsvState};
+use skill_data::session_csv::{build_metrics_header, CsvState, METRICS_CROSS_CHANNEL_HEADER};
 use std::path::Path;
 use tempfile::tempdir;
 
 // ── build_metrics_header ─────────────────────────────────────────────────────
+//
+// Tests track METRICS_CROSS_CHANNEL_HEADER's length so they don't need
+// updating each time a new cross-channel metric is added to the constant.
 
 #[test]
 fn build_metrics_header_4ch() {
     let h = build_metrics_header(&["TP9", "AF7", "AF8", "TP10"]);
-    // timestamp + 4 channels × 12 bands + 46 cross-channel = 95
-    assert_eq!(h.len(), 95);
+    assert_eq!(h.len(), 1 + 4 * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
     assert_eq!(h[0], "timestamp_s");
     assert_eq!(h[1], "TP9_delta");
     assert_eq!(h[12], "TP9_rel_high_gamma"); // last of first channel
@@ -27,17 +29,17 @@ fn build_metrics_header_8ch() {
         .map(|i| ["Fp1", "Fp2", "F3", "F4", "C3", "C4", "O1", "O2"][i])
         .collect();
     let h = build_metrics_header(&labels);
-    // timestamp + 8 × 12 + 46 = 143
-    assert_eq!(h.len(), 143);
+    assert_eq!(h.len(), 1 + 8 * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
     assert_eq!(h[0], "timestamp_s");
-    assert!(h.last().unwrap() == "gpu_tiler_pct");
+    // Last header column = last cross-channel metric. Compare via the
+    // constant so appending new metrics doesn't require a test update.
+    assert_eq!(h.last().unwrap(), METRICS_CROSS_CHANNEL_HEADER.last().unwrap());
 }
 
 #[test]
 fn build_metrics_header_1ch() {
     let h = build_metrics_header(&["Cz"]);
-    // timestamp + 1 × 12 + 46 = 59
-    assert_eq!(h.len(), 59);
+    assert_eq!(h.len(), 1 + 1 * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
 }
 
 // ── CsvState: EEG write ──────────────────────────────────────────────────────
