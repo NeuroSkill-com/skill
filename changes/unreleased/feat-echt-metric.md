@@ -1,0 +1,7 @@
+### Features
+
+- **ECHT (Endpoint-Corrected Hilbert Transform)**: new EEG metric measuring alpha-band rhythmicity (0–1) via a causal complex-Morlet kernel. Phase estimates remain valid at the buffer edge, where FFT-based Hilbert breaks down. Surfaced in the live dashboard, session detail view, comparison view, recordings (CSV/Parquet), and history aggregates. Reference: Schreglmann et al., *Nat. Commun.* 12:363 (2021), [doi:10.1038/s41467-020-20581-7](https://doi.org/10.1038/s41467-020-20581-7).
+
+### i18n
+
+- **ECHT translations**: added `sd.echt`, `compare.echt`, `dashboard.echt`, and `tip.echt` for all 9 supported locales (en, de, es, fr, he, ja, ko, uk, zh).
