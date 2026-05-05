@@ -1949,10 +1949,20 @@ useWindowTitle("window.title.history");
 
                   {#if (session.chunk_count ?? 1) > 1}
                     <span
-                      class="text-ui-2xs px-1.5 py-0.5 rounded-sm bg-muted/30 text-muted-foreground/60 tabular-nums shrink-0"
-                      title="Recorded as {session.chunk_count} rollover chunks"
+                      class="inline-flex items-center gap-1 text-ui-2xs px-1.5 py-0.5 rounded-sm
+                             bg-muted/30 text-muted-foreground/60 tabular-nums shrink-0"
+                      title={t("history.chunkCountTooltip", { n: session.chunk_count!, duration: dur })}
+                      aria-label={t("history.chunkCountTooltip", { n: session.chunk_count!, duration: dur })}
                     >
-                      {session.chunk_count} chunks
+                      <!-- Stack icon: visually distinguishes the badge from labels and from the device name -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                           class="w-3 h-3 opacity-70" aria-hidden="true">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <path d="M3.27 6.96 12 12.01l8.73-5.05"/>
+                        <path d="M12 22.08V12"/>
+                      </svg>
+                      {t("history.chunkCount", { n: session.chunk_count! })}
                     </span>
                   {/if}
 
