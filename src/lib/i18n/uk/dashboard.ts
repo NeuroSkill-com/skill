@@ -54,6 +54,7 @@ const dashboard: Record<string, string> = {
   "dashboard.sampleEntropy": "Вибірк. ентропія",
   "dashboard.pacThetaGamma": "ФАЗ (θ–γ)",
   "dashboard.lateralityIndex": "Латеральність",
+  "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "PPG метрики",
   "dashboard.hr": "Пульс",
   "dashboard.rmssd": "RMSSD",

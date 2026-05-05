@@ -329,6 +329,7 @@ let dfaScore = $state(0); // DFA Exponent
 let seScore = $state(0); // Sample Entropy
 let pacScore = $state(0); // PAC (θ–γ)
 let latScore = $state(0); // Laterality Index
+let echtScore = $state(0); // ECHT alpha rhythmicity
 let hrScore = $state(0); // Heart Rate (bpm)
 let rmssdScore = $state(0); // RMSSD (ms)
 let sdnnScore = $state(0); // SDNN (ms)
@@ -427,6 +428,7 @@ function updateScores(snap: BandSnapshot) {
   if (snap.sample_entropy !== undefined) seScore = seScore + SCORE_TAU * (snap.sample_entropy - seScore);
   if (snap.pac_theta_gamma !== undefined) pacScore = pacScore + SCORE_TAU * (snap.pac_theta_gamma - pacScore);
   if (snap.laterality_index !== undefined) latScore = latScore + SCORE_TAU * (snap.laterality_index - latScore);
+  if (snap.echt !== undefined) echtScore = echtScore + SCORE_TAU * (snap.echt - echtScore);
   // PPG-derived
   if (snap.hr !== undefined && snap.hr > 0) hrScore = hrScore + SCORE_TAU * (snap.hr - hrScore);
   if (snap.rmssd !== undefined && snap.rmssd > 0) rmssdScore = rmssdScore + SCORE_TAU * (snap.rmssd - rmssdScore);
@@ -2292,6 +2294,7 @@ useWindowTitle("window.title.main");
               mood={moodScore} bps={bpsScore} snr={snrScore} coherence={coherenceScore} mu={muScore}
               tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
               pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
+              echt={echtScore}
               headache={headacheScore} migraine={migraineScore}
               showMu={status.has_central_electrodes} />
           </div>

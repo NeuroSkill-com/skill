@@ -410,6 +410,70 @@ pub(crate) fn laterality_index_fn(ch: &[BandPowers]) -> f32 {
     }
 }
 
+/// Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1).
+///
+/// Estimates instantaneous phase of the alpha band (≈10 Hz) via a **causal**
+/// complex-Morlet kernel: only past samples contribute to each estimate, so the
+/// phase at the most recent sample is not corrupted by missing future samples
+/// (the failure mode of FFT-based Hilbert at the buffer edge).
+///
+/// Returns the resultant length of the detrended phase sequence — i.e. how
+/// concentrated the inter-sample phase is around the expected advance
+/// `2π·f0/sr`.  1.0 = perfectly rhythmic alpha; 0.0 = phase-random.
+///
+/// Reference: Schreglmann et al., *Nat. Commun.* 12:363 (2021),
+/// doi:10.1038/s41467-020-20581-7.
+pub(crate) fn echt_fn(x: &[f32], sr: f32) -> f32 {
+    if sr <= 0.0 || x.len() < 64 {
+        return 0.0;
+    }
+    let f0: f32 = 10.0; // alpha center
+    let cycles: f32 = 5.0; // ≈ 2 Hz bandwidth
+    let kernel_len = (((cycles / f0) * sr).round() as usize).clamp(8, x.len() / 2);
+    let omega = 2.0 * std::f32::consts::PI * f0 / sr;
+    let sigma = kernel_len as f32 / 6.0;
+    let mid = kernel_len as f32 / 2.0;
+    let two_sig2 = 2.0 * sigma * sigma;
+
+    // Precompute the causal complex-Morlet kernel.
+    let mut k_re = vec![0.0f32; kernel_len];
+    let mut k_im = vec![0.0f32; kernel_len];
+    for j in 0..kernel_len {
+        let t = j as f32;
+        let env = (-((t - mid).powi(2)) / two_sig2).exp();
+        let arg = omega * t;
+        // Demodulator kernel exp(-iωt): negate imaginary part to shift the
+        // positive-frequency component down to baseband.
+        k_re[j] = env * arg.cos();
+        k_im[j] = -env * arg.sin();
+    }
+
+    let mut cs_acc = 0.0f32;
+    let mut sn_acc = 0.0f32;
+    let mut count: u32 = 0;
+    for k in (kernel_len - 1)..x.len() {
+        let mut re = 0.0f32;
+        let mut im = 0.0f32;
+        let base = k + 1 - kernel_len;
+        for j in 0..kernel_len {
+            let xv = x[base + j];
+            re += xv * k_re[j];
+            im += xv * k_im[j];
+        }
+        // Detrend by subtracting the expected phase advance ω·k so that a
+        // perfectly rhythmic oscillation maps to a constant residual phase.
+        let phase = im.atan2(re) - omega * k as f32;
+        cs_acc += phase.cos();
+        sn_acc += phase.sin();
+        count += 1;
+    }
+    if count == 0 {
+        return 0.0;
+    }
+    let n = count as f32;
+    ((cs_acc / n).powi(2) + (sn_acc / n).powi(2)).sqrt().clamp(0.0, 1.0)
+}
+
 /// Simple linear regression slope.
 fn lin_reg_slope(x: &[f64], y: &[f64]) -> f64 {
     let n = x.len() as f64;
@@ -505,5 +569,37 @@ mod tests {
         let signal: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin()).collect();
         let hfd = higuchi_fd(&signal);
         assert!(hfd > 0.0 && hfd < 3.0, "HFD={hfd} should be between 0 and 3");
+    }
+
+    #[test]
+    fn echt_pure_alpha_is_rhythmic() {
+        // 10 Hz sinusoid sampled at 256 Hz → ECHT should be close to 1.
+        let sr = 256.0_f32;
+        let signal: Vec<f32> = (0..512)
+            .map(|i| (2.0 * std::f32::consts::PI * 10.0 * i as f32 / sr).sin())
+            .collect();
+        let r = echt_fn(&signal, sr);
+        assert!(r > 0.9, "pure 10 Hz sine should give R>0.9, got {r}");
+    }
+
+    #[test]
+    fn echt_white_noise_is_low() {
+        // Deterministic pseudo-random sequence (LCG) → low rhythmicity.
+        let mut s: u32 = 1;
+        let signal: Vec<f32> = (0..512)
+            .map(|_| {
+                s = s.wrapping_mul(1664525).wrapping_add(1013904223);
+                (s as f32 / u32::MAX as f32) - 0.5
+            })
+            .collect();
+        let r = echt_fn(&signal, 256.0);
+        assert!(r < 0.5, "white-noise ECHT should be low, got {r}");
+    }
+
+    #[test]
+    fn echt_short_or_invalid_input() {
+        assert_eq!(echt_fn(&[], 256.0), 0.0);
+        assert_eq!(echt_fn(&[0.0; 32], 256.0), 0.0);
+        assert_eq!(echt_fn(&[0.0; 256], 0.0), 0.0);
     }
 }
