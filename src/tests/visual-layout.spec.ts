@@ -307,7 +307,7 @@ async function detectIssues(page: Page): Promise<LayoutIssue[]> {
         if (issues.length >= MAX_ISSUES) break;
         const cs = getComputedStyle(el);
         if (cs.display === "none" || cs.visibility === "hidden") continue;
-        let r = el.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
         // ── False-positive filters specific to this codebase ──
         // Window-control buttons in the Tauri titlebar (close/min/max)
