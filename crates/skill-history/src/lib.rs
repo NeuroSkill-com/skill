@@ -732,10 +732,14 @@ fn collapse_adjacent_chunks(sorted_desc: Vec<SessionEntry>) -> Vec<SessionEntry>
         head.mac_address = head.mac_address.clone().or(s.mac_address);
         head.hardware_version = head.hardware_version.clone().or(s.hardware_version);
         head.sample_rate_hz = head.sample_rate_hz.or(s.sample_rate_hz);
-        // Keep all chunk paths; the canonical csv_path stays as head's.
+        // Keep all chunk paths in oldest → newest order. We walk
+        // newest → older (input sorted DESC), so prepend each absorbed
+        // chunk to the front. This stays correct under repeated calls
+        // (e.g. the second collapse in `list_sessions_for_local_day`)
+        // — no post-pass reverse, which would flip an already-correct
+        // list.
         let chunks = head.chunks.get_or_insert_with(|| vec![head.csv_path.clone()]);
-        chunks.push(s.csv_path);
-        // Concatenate labels (oldest first → newest last after the rev).
+        chunks.insert(0, s.csv_path);
         head.labels.extend(s.labels);
         // avg_snr_db: take the simple average of available values for now
         // (a sample-weighted average would require keeping per-chunk
@@ -745,13 +749,6 @@ fn collapse_adjacent_chunks(sorted_desc: Vec<SessionEntry>) -> Vec<SessionEntry>
             (Some(a), None) | (None, Some(a)) => Some(a),
             (None, None) => None,
         };
-    }
-    // Each merged entry's `chunks` was built head-then-older; reverse so
-    // it reads oldest → newest, matching frontend expectations.
-    for entry in &mut out {
-        if let Some(c) = entry.chunks.as_mut() {
-            c.reverse();
-        }
     }
     out
 }
@@ -1674,5 +1671,31 @@ mod session_listing_tests {
     fn collapse_empty_input() {
         let merged = super::collapse_adjacent_chunks(vec![]);
         assert!(merged.is_empty());
+    }
+
+    /// Calling collapse twice must not flip the `chunks` ordering.
+    /// Important because `list_sessions_for_local_day` re-collapses the
+    /// merged result of `list_sessions_for_day` to handle UTC-midnight
+    /// crossings.
+    #[test]
+    fn collapse_is_idempotent_for_chunks_order() {
+        let mut entries: Vec<super::SessionEntry> = (0..10)
+            .map(|i| {
+                let start = 1_700_000_000 + i as u64 * 60;
+                mk(start, start + 60, 1000, "Muse", &format!("p{i}"))
+            })
+            .collect();
+        entries.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
+
+        let pass1 = super::collapse_adjacent_chunks(entries);
+        let pass1_chunks = pass1[0].chunks.clone().unwrap();
+
+        let pass2 = super::collapse_adjacent_chunks(pass1);
+        let pass2_chunks = pass2[0].chunks.clone().unwrap();
+
+        assert_eq!(pass1_chunks, pass2_chunks, "second collapse must not reorder");
+        assert_eq!(pass1_chunks.first().unwrap(), "p0", "oldest first");
+        assert_eq!(pass1_chunks.last().unwrap(), "p9", "newest last");
+        assert_eq!(pass2[0].chunk_count, 10, "chunk_count preserved through re-collapse");
     }
 }
