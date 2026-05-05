@@ -403,7 +403,7 @@ const streak = $derived.by(() => {
                    bg-clip-text text-transparent">
         {dailyGoalMin}m
       </span>
-      <span class="text-[0.45rem] text-muted-foreground/50">
+      <span class="text-ui-2xs text-muted-foreground/50">
         {goalHours >= 1 ? `${goalHours.toFixed(1)} hours` : `${dailyGoalMin} minutes`} / day
       </span>
       {#if streak > 0}
@@ -427,7 +427,7 @@ const streak = $derived.by(() => {
                bind:value={dailyGoalMin}
                oninput={save}
            class="w-full accent-violet-500 h-2" />
-        <div class="flex justify-between text-[0.42rem] text-muted-foreground/40 tabular-nums px-0.5">
+        <div class="flex justify-between text-ui-2xs text-muted-foreground/40 tabular-nums px-0.5">
           <span>5m</span>
           <span>1h</span>
           <span>2h</span>
@@ -469,7 +469,7 @@ const streak = $derived.by(() => {
           <!-- Goal line -->
           <div class="absolute inset-x-0 border-t border-dashed border-emerald-500/50 z-10 pointer-events-none"
                style="top:{goalY}%">
-            <span class="absolute right-0 -top-3.5 text-[0.42rem] text-emerald-500/70 font-medium pr-0.5">
+            <span class="absolute right-0 -top-3.5 text-ui-2xs text-emerald-500/70 font-medium pr-0.5">
               {fmtMins(dailyGoalMin)}
             </span>
           </div>
@@ -509,7 +509,7 @@ const streak = $derived.by(() => {
         </div>
 
         <!-- X-axis labels: only show first, middle, last -->
-        <div class="flex justify-between text-[0.42rem] text-muted-foreground/40 tabular-nums px-0.5 -mt-1">
+        <div class="flex justify-between text-ui-2xs text-muted-foreground/40 tabular-nums px-0.5 -mt-1">
           <span>{chartDays[0]?.label ?? ""}</span>
           <span>{chartDays[Math.floor(chartDays.length / 2)]?.label ?? ""}</span>
           <span class="text-foreground/60 font-medium">{t("goals.today")}</span>
@@ -636,7 +636,7 @@ const streak = $derived.by(() => {
                    value={dndConfig.focus_threshold}
                    oninput={(e) => setDndThreshold(Number((e.currentTarget as HTMLInputElement).value))}
                    class="w-full accent-violet-500 h-2" />
-            <div class="flex justify-between text-[0.42rem] text-muted-foreground/40 tabular-nums px-0.5">
+            <div class="flex justify-between text-ui-2xs text-muted-foreground/40 tabular-nums px-0.5">
               <span>10</span>
               <span>40</span>
               <span>60</span>
@@ -854,7 +854,7 @@ const streak = $derived.by(() => {
               </div>
 
               <!-- Axis labels -->
-              <div class="flex justify-between text-[0.42rem] text-muted-foreground/35
+              <div class="flex justify-between text-ui-2xs text-muted-foreground/35
                           tabular-nums select-none -mt-0.5">
                 {#if scoreAbove}
                   <span>0s</span>
@@ -918,7 +918,7 @@ const streak = $derived.by(() => {
               </div>
 
               <!-- Axis labels -->
-              <div class="flex justify-between text-[0.42rem] text-muted-foreground/35
+              <div class="flex justify-between text-ui-2xs text-muted-foreground/35
                           tabular-nums select-none -mt-0.5">
                 {#if isCounting}
                   <span>0s</span>

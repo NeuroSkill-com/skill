@@ -470,7 +470,7 @@ onDestroy(() => stopPolling());
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-medium">{g.label}</span>
-                        <Badge variant="destructive" class="text-[0.45rem] px-1 py-0">dangerous</Badge>
+                        <Badge variant="destructive" class="text-ui-2xs px-1 py-0">dangerous</Badge>
                       </div>
                       <div class="text-ui-xs text-muted-foreground leading-relaxed">{g.description}</div>
                     </div>

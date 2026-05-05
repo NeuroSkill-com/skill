@@ -105,7 +105,7 @@ let {
         <MetricTooltip text={t(`tip.${item.k}`)}>
           <div class="flex flex-col gap-0.5 min-w-0">
             <div class="flex items-center justify-between gap-1 min-w-0">
-              <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider truncate min-w-0">{t(`dashboard.${item.k}`)}</span>
+              <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider truncate min-w-0">{t(`dashboard.${item.k}`)}</span>
               <span class="text-ui-sm font-bold tabular-nums shrink-0" style="color:{item.c}">{item.v}</span>
             </div>
             {#if item.bar !== undefined}

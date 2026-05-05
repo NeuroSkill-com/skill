@@ -219,10 +219,10 @@ export interface CsvMetricsResult {
       ] as item}
         <MetricTooltip text={item.tip}>
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{item.l}</span>
+            <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{item.l}</span>
             <div class="flex items-end gap-0.5">
               <span class="text-ui-md font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
-              <span class="text-[0.42rem] text-muted-foreground/30 pb-0.5">{t("sd.outOf100")}</span>
+              <span class="text-ui-2xs text-muted-foreground/30 pb-0.5">{t("sd.outOf100")}</span>
             </div>
           </div>
         </MetricTooltip>
@@ -241,7 +241,7 @@ export interface CsvMetricsResult {
                       {isOpen(id) ? 'rotate-90' : ''}">
             <path d="M9 18l6-6-6-6"/>
           </svg>
-          <span class="text-[0.44rem] text-muted-foreground/40 group-hover:text-muted-foreground/60
+          <span class="text-ui-2xs text-muted-foreground/40 group-hover:text-muted-foreground/60
                        uppercase tracking-wider font-semibold transition-colors">{label}</span>
         </button>
       {/snippet}
@@ -259,7 +259,7 @@ export interface CsvMetricsResult {
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex flex-col items-center gap-0">
-                <span class="text-[0.42rem] text-muted-foreground/50">{item.l}</span>
+                <span class="text-ui-2xs text-muted-foreground/50">{item.l}</span>
                 <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
               </div>
             </MetricTooltip>
@@ -291,7 +291,7 @@ export interface CsvMetricsResult {
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                 <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
               </div>
             </MetricTooltip>
@@ -314,7 +314,7 @@ export interface CsvMetricsResult {
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                 <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
               </div>
             </MetricTooltip>
@@ -340,7 +340,7 @@ export interface CsvMetricsResult {
             ] as item}
               <MetricTooltip text={item.tip}>
                 <div class="flex items-center justify-between">
-                  <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                   <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
                 </div>
               </MetricTooltip>
@@ -365,7 +365,7 @@ export interface CsvMetricsResult {
             ] as item}
               <MetricTooltip text={item.tip}>
                 <div class="flex items-center justify-between">
-                  <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                   <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
                 </div>
               </MetricTooltip>

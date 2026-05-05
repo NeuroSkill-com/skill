@@ -28,7 +28,7 @@ let { meditation, cognitiveLoad, drowsiness }: Props = $props();
       <MetricTooltip text={t(`tip.${item.k}`)}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider">{t(`dashboard.${item.k}`)}</span>
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{t(`dashboard.${item.k}`)}</span>
             <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v.toFixed(0)}</span>
           </div>
           <MetricBar value={item.v} gradient={item.grad} height="h-1.5" />

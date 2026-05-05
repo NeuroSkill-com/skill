@@ -45,7 +45,7 @@ const items = $derived([
       <MetricTooltip text={t(`tip.consciousness.${item.k}`)}>
         <div class="flex flex-col gap-0.5">
           <div class="flex items-center justify-between">
-            <span class="text-[0.42rem] font-medium text-muted-foreground uppercase tracking-wider truncate">
+            <span class="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider truncate">
               {t(`dashboard.consciousness.${item.k}`)}
             </span>
             <span class="text-ui-sm font-bold tabular-nums ml-1 shrink-0"
@@ -54,7 +54,7 @@ const items = $derived([
             </span>
           </div>
           <MetricBar value={Math.min(100, Math.max(0, item.v))} gradient={item.grad} height="h-1.5" />
-          <span class="text-[0.40rem] text-muted-foreground/30">/100</span>
+          <span class="text-ui-2xs text-muted-foreground/30">/100</span>
         </div>
       </MetricTooltip>
     {/each}
