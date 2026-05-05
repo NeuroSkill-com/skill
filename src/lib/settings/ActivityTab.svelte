@@ -504,9 +504,9 @@ let heatmapMax = $state(1);
                 <div class="grid grid-cols-3 gap-2 text-xs">
                   {#each tfb as row}
                     <div class="rounded-md bg-muted/30 px-3 py-2 text-center">
-                      <div class="text-[10px] text-muted-foreground capitalize">{row.focus_level} focus</div>
+                      <div class="text-ui-2xs text-muted-foreground capitalize">{row.focus_level} focus</div>
                       <div class="text-lg font-bold tabular-nums {row.fail_rate > 0.3 ? 'text-red-400' : row.fail_rate > 0.1 ? 'text-yellow-400' : 'text-green-400'}">{Math.round(row.fail_rate * 100)}%</div>
-                      <div class="text-[10px] text-muted-foreground">fail rate ({row.passes + row.fails} runs)</div>
+                      <div class="text-ui-2xs text-muted-foreground">fail rate ({row.passes + row.fails} runs)</div>
                     </div>
                   {/each}
                 </div>
@@ -526,7 +526,7 @@ let heatmapMax = $state(1);
                         <div class="h-full rounded-full {row.avg_focus >= 70 ? 'bg-green-400' : row.avg_focus >= 40 ? 'bg-yellow-400' : 'bg-red-400'}" style="width: {row.avg_focus}%"></div>
                       </div>
                       <span class="tabular-nums font-bold w-8 text-right">{Math.round(row.avg_focus)}</span>
-                      <span class="text-muted-foreground text-[10px] w-12">undo {row.undo_rate.toFixed(1)}</span>
+                      <span class="text-muted-foreground text-ui-2xs w-12">undo {row.undo_rate.toFixed(1)}</span>
                     </div>
                   {/each}
                 </div>
@@ -542,7 +542,7 @@ let heatmapMax = $state(1);
                   <div class="flex items-center gap-2 text-xs rounded-md bg-muted/30 px-3 py-2">
                     <span class="font-medium capitalize">{row.app}</span>
                     <span class="ml-auto tabular-nums font-bold {row.delta > 0 ? 'text-green-400' : row.delta < -5 ? 'text-red-400' : 'text-yellow-400'}">{row.delta > 0 ? '+' : ''}{row.delta.toFixed(1)}</span>
-                    <span class="text-muted-foreground text-[10px]">vs {Math.round(ai.baseline_focus)} baseline ({row.message_count} msgs)</span>
+                    <span class="text-muted-foreground text-ui-2xs">vs {Math.round(ai.baseline_focus)} baseline ({row.message_count} msgs)</span>
                   </div>
                 {/each}
               </div>
@@ -574,7 +574,7 @@ let heatmapMax = $state(1);
                     {@const maxChurn = Math.max(1, ...hp.map((r: any) => r.churn))}
                     <div class="flex-1 flex flex-col items-center" title="{row.hour}:00 — focus: {Math.round(row.avg_focus)}, churn: {row.churn}, undo rate: {(row.undo_rate * 100).toFixed(0)}%">
                       <div class="w-full rounded-t {row.avg_focus >= 70 ? 'bg-green-400/60' : row.avg_focus >= 40 ? 'bg-yellow-400/60' : 'bg-red-400/60'}" style="height: {Math.max(2, (row.churn / maxChurn) * 40)}px"></div>
-                      <span class="text-[7px] text-muted-foreground mt-0.5">{row.hour}</span>
+                      <span class="text-ui-2xs text-muted-foreground mt-0.5">{row.hour}</span>
                     </div>
                   {/each}
                 </div>
@@ -624,7 +624,7 @@ let heatmapMax = $state(1);
 
   <!-- ───────────────────────── Today ───────────────────────── -->
   <div class="mt-3 border-t border-border/40 pt-3">
-    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+    <h2 class="text-ui-2xs font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
       Today
     </h2>
   </div>
@@ -711,7 +711,7 @@ let heatmapMax = $state(1);
               </div>
             {/each}
           </div>
-          <div class="flex justify-between text-[0.4rem] text-muted-foreground/30 mt-1 px-0.5">
+          <div class="flex justify-between text-ui-2xs text-muted-foreground/30 mt-1 px-0.5">
             <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
           </div>
         </CardContent>
@@ -721,7 +721,7 @@ let heatmapMax = $state(1);
 
   <!-- ───────────────────────── Code ───────────────────────── -->
   <div class="mt-3 border-t border-border/40 pt-3">
-    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+    <h2 class="text-ui-2xs font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
       Code
     </h2>
   </div>
@@ -1006,7 +1006,7 @@ let heatmapMax = $state(1);
 
   <!-- ───────────────────────── Terminal ───────────────────────── -->
   <div class="mt-3 border-t border-border/40 pt-3">
-    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+    <h2 class="text-ui-2xs font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
       Terminal
     </h2>
   </div>
@@ -1031,12 +1031,12 @@ let heatmapMax = $state(1);
                   {:else if cmd.exit_code === 0}<span class="text-green-400">ok</span>
                   {:else}<span class="text-red-400">!</span>{/if}
                 </span>
-                <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{cmd.category}</span>
+                <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">{cmd.category}</span>
                 <span class="truncate" title={cmd.command}>{cmd.command}</span>
                 {#if cmd.eeg_focus != null}
-                  <span class="text-[10px] tabular-nums {cmd.eeg_focus >= 70 ? 'text-emerald-400' : cmd.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus">{Math.round(cmd.eeg_focus)}</span>
+                  <span class="text-ui-2xs tabular-nums {cmd.eeg_focus >= 70 ? 'text-emerald-400' : cmd.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus">{Math.round(cmd.eeg_focus)}</span>
                 {/if}
-                <span class="ml-auto text-[10px] text-muted-foreground truncate max-w-24" title={cmd.cwd}>{cmd.cwd?.split("/").pop()}</span>
+                <span class="ml-auto text-ui-2xs text-muted-foreground truncate max-w-24" title={cmd.cwd}>{cmd.cwd?.split("/").pop()}</span>
               </div>
             {/each}
           </div>
@@ -1062,7 +1062,7 @@ let heatmapMax = $state(1);
                   <span class="font-bold tabular-nums {delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : ''}">{delta > 0 ? "+" : ""}{delta.toFixed(1)}</span>
                   <span class="text-muted-foreground">{row.cmd_count}x</span>
                   {#if total > 0}
-                    <span class="text-green-400 text-[10px]">{Math.round((row.pass_count / total) * 100)}%</span>
+                    <span class="text-green-400 text-ui-2xs">{Math.round((row.pass_count / total) * 100)}%</span>
                   {/if}
                 </div>
               </div>
@@ -1131,7 +1131,7 @@ let heatmapMax = $state(1);
 
   <!-- ───────────────────────── AI &amp; Web ───────────────────────── -->
   <div class="mt-3 border-t border-border/40 pt-3">
-    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+    <h2 class="text-ui-2xs font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
       AI &amp; Web
     </h2>
   </div>
@@ -1182,10 +1182,10 @@ let heatmapMax = $state(1);
               <div class="flex items-start gap-2 px-4 py-1.5 text-xs {msg.role === 'user' ? 'bg-blue-500/[0.03]' : ''}">
                 <span class="w-12 shrink-0 text-muted-foreground tabular-nums mt-0.5">{new Date(msg.at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
                 <span class="w-4 shrink-0 text-center mt-0.5 {msg.role === 'user' ? 'text-blue-400' : msg.role === 'tool' ? 'text-muted-foreground' : ''}">{msg.role === "user" ? "\u276F" : msg.role === "tool" ? "\u2699" : "\u2190"}</span>
-                <span class="shrink-0 text-[10px] text-muted-foreground mt-0.5">{msg.app}</span>
+                <span class="shrink-0 text-ui-2xs text-muted-foreground mt-0.5">{msg.app}</span>
                 <span class="flex-1 text-xs leading-relaxed {msg.role === 'user' ? 'font-medium' : 'text-muted-foreground'}" title={msg.text}>{msg.text?.slice(0, 120) ?? ""}</span>
                 {#if msg.eeg_focus != null}
-                  <span class="shrink-0 text-[10px] tabular-nums mt-0.5 {msg.eeg_focus >= 70 ? 'text-emerald-400' : msg.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus at this moment">{Math.round(msg.eeg_focus)}</span>
+                  <span class="shrink-0 text-ui-2xs tabular-nums mt-0.5 {msg.eeg_focus >= 70 ? 'text-emerald-400' : msg.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus at this moment">{Math.round(msg.eeg_focus)}</span>
                 {/if}
               </div>
             {/each}
@@ -1220,11 +1220,11 @@ let heatmapMax = $state(1);
               <p class="text-xs text-muted-foreground">{browserDistraction.suggestion}</p>
               {#if !feedbackSent["distraction"]}
                 <div class="flex gap-1 shrink-0 ml-2">
-                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("distraction", true, browserDistraction?.score)} title="Accurate">&#x1F44D;</button>
-                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-red-500/20 transition-colors" onclick={() => sendFeedback("distraction", false, browserDistraction?.score)} title="Inaccurate">&#x1F44E;</button>
+                  <button class="px-1.5 py-0.5 text-ui-2xs rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("distraction", true, browserDistraction?.score)} title="Accurate">&#x1F44D;</button>
+                  <button class="px-1.5 py-0.5 text-ui-2xs rounded bg-muted hover:bg-red-500/20 transition-colors" onclick={() => sendFeedback("distraction", false, browserDistraction?.score)} title="Inaccurate">&#x1F44E;</button>
                 </div>
               {:else}
-                <span class="text-[10px] text-muted-foreground ml-2">{feedbackSent["distraction"] === "yay" ? "&#x2713;" : "&#x2717;"} noted</span>
+                <span class="text-ui-2xs text-muted-foreground ml-2">{feedbackSent["distraction"] === "yay" ? "&#x2713;" : "&#x2717;"} noted</span>
               {/if}
             </div>
           </CardContent>
@@ -1298,10 +1298,10 @@ let heatmapMax = $state(1);
                   <Badge variant="default">{t("activity.notStuck")}</Badge>
                 {/if}
                 {#if !feedbackSent["research_stuck"]}
-                  <button class="px-1 py-0.5 text-[10px] rounded bg-muted hover:bg-green-500/20" onclick={() => sendFeedback("research_stuck", true)} title="Accurate">&#x1F44D;</button>
-                  <button class="px-1 py-0.5 text-[10px] rounded bg-muted hover:bg-red-500/20" onclick={() => sendFeedback("research_stuck", false)} title="Inaccurate">&#x1F44E;</button>
+                  <button class="px-1 py-0.5 text-ui-2xs rounded bg-muted hover:bg-green-500/20" onclick={() => sendFeedback("research_stuck", true)} title="Accurate">&#x1F44D;</button>
+                  <button class="px-1 py-0.5 text-ui-2xs rounded bg-muted hover:bg-red-500/20" onclick={() => sendFeedback("research_stuck", false)} title="Inaccurate">&#x1F44E;</button>
                 {:else}
-                  <span class="text-[10px] text-muted-foreground">{feedbackSent["research_stuck"] === "yay" ? "&#x2713;" : "&#x2717;"}</span>
+                  <span class="text-ui-2xs text-muted-foreground">{feedbackSent["research_stuck"] === "yay" ? "&#x2713;" : "&#x2717;"}</span>
                 {/if}
               </div>
             </div>
@@ -1323,11 +1323,11 @@ let heatmapMax = $state(1);
               <p class="text-xs text-muted-foreground">{browserProcrast.suggestion}</p>
               {#if !feedbackSent["procrastination"]}
                 <div class="flex gap-1 shrink-0 ml-2">
-                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("procrastination", true, browserProcrast?.score)} title="Accurate">&#x1F44D;</button>
-                  <button class="px-1.5 py-0.5 text-[10px] rounded bg-muted hover:bg-red-500/20 transition-colors" onclick={() => sendFeedback("procrastination", false, browserProcrast?.score)} title="Inaccurate">&#x1F44E;</button>
+                  <button class="px-1.5 py-0.5 text-ui-2xs rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("procrastination", true, browserProcrast?.score)} title="Accurate">&#x1F44D;</button>
+                  <button class="px-1.5 py-0.5 text-ui-2xs rounded bg-muted hover:bg-red-500/20 transition-colors" onclick={() => sendFeedback("procrastination", false, browserProcrast?.score)} title="Inaccurate">&#x1F44E;</button>
                 </div>
               {:else}
-                <span class="text-[10px] text-muted-foreground ml-2">{feedbackSent["procrastination"] === "yay" ? "&#x2713;" : "&#x2717;"} noted</span>
+                <span class="text-ui-2xs text-muted-foreground ml-2">{feedbackSent["procrastination"] === "yay" ? "&#x2713;" : "&#x2717;"} noted</span>
               {/if}
             </div>
           </CardContent>
@@ -1487,11 +1487,11 @@ let heatmapMax = $state(1);
                 <div class="flex-1 flex flex-col items-center gap-0.5">
                   <div class="w-full rounded-t-sm {tl.avg_focus > 60 ? 'bg-green-500/60' : tl.avg_focus > 40 ? 'bg-yellow-500/60' : 'bg-red-500/60'}"
                        style="height: {Math.round((tl.avg_focus / maxFocus) * 48)}px"></div>
-                  <span class="text-[9px] text-muted-foreground">{tl.tab_count}</span>
+                  <span class="text-ui-2xs text-muted-foreground">{tl.tab_count}</span>
                 </div>
               {/each}
             </div>
-            <div class="flex justify-between text-[9px] text-muted-foreground mt-1">
+            <div class="flex justify-between text-ui-2xs text-muted-foreground mt-1">
               <span>fewer tabs</span><span>more tabs</span>
             </div>
           </CardContent>
@@ -1511,7 +1511,7 @@ let heatmapMax = $state(1);
                      title="{hn.hour}:00 — focus {hn.avg_focus.toFixed(0)}, {hn.events} events"></div>
               {/each}
             </div>
-            <div class="flex justify-between text-[9px] text-muted-foreground mt-1">
+            <div class="flex justify-between text-ui-2xs text-muted-foreground mt-1">
               <span>0:00</span><span>12:00</span><span>23:00</span>
             </div>
           </CardContent>
@@ -1589,7 +1589,7 @@ let heatmapMax = $state(1);
 
   <!-- ───────────────────────── Trends ───────────────────────── -->
   <div class="mt-3 border-t border-border/40 pt-3">
-    <h2 class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
+    <h2 class="text-ui-2xs font-semibold uppercase tracking-[0.15em] text-muted-foreground/80">
       Trends
     </h2>
   </div>

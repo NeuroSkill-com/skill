@@ -309,7 +309,9 @@ useWindowTitle("window.title.label");
       {text.length}/{MAX_CHARS}
     </span>
 
-    <span class="text-ui-sm text-muted-foreground/35 select-none">
+    <!-- Keyboard-shortcut hint hidden on narrow mobile viewports
+         (no keyboard) so the toolbar fits at 375px. -->
+    <span class="hidden sm:inline text-ui-sm text-muted-foreground/35 select-none">
       {t("label.saveHint", { key: isMac ? "⌘" : "Ctrl" })}
     </span>
 

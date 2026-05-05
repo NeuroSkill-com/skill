@@ -163,7 +163,7 @@ function arcPath(startAngle: number, endAngle: number, r: number): string {
                    bg-clip-text text-transparent">
         {durationLabel(duration.total)}
       </span>
-      <span class="text-[0.45rem] text-muted-foreground/50">
+      <span class="text-ui-2xs text-muted-foreground/50">
         {config.bedtime} — {config.wake_time}
       </span>
     </div>

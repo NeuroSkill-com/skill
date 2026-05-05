@@ -1060,15 +1060,21 @@ useWindowTitle("window.title.onboarding");
   <div class="px-4 pb-2 shrink-0">
     <Progress value={((stepIdx) / (STEPS.length - 1)) * 100} class="h-1"
               aria-label="Setup progress" />
+    <!-- On narrow viewports the step labels don't fit; show numbers
+         only and surface the active step's label below. -->
     <div class="flex justify-between mt-1">
       {#each STEPS as s, i}
         <button
           onclick={() => { if (i <= stepIdx && !calRunning) step = s; }}
+          aria-label={t(`onboarding.step.${s}`)}
           class="relative text-ui-2xs font-medium transition-colors
+                 min-w-6 min-h-6 px-2 inline-flex items-center justify-center
                  {i <= stepIdx ? 'text-foreground cursor-pointer' : 'text-muted-foreground/40 cursor-default'}">
-          {t(`onboarding.step.${s}`)}
+          <!-- Mobile: numeric pip with hit area; ≥ sm: full label -->
+          <span class="sm:hidden tabular-nums">{i + 1}</span>
+          <span class="hidden sm:inline">{t(`onboarding.step.${s}`)}</span>
           {#if isNewStep(s)}
-            <span class="absolute -top-1.5 -right-1.5 text-[0.55rem] font-bold tracking-widest
+            <span class="absolute -top-1.5 -right-1.5 text-ui-2xs font-bold tracking-widest
                          px-1 py-px rounded-sm bg-violet-500 text-white shadow-sm uppercase
                          leading-none"
                   aria-label={t("onboarding.newBadge")}>
@@ -1078,6 +1084,10 @@ useWindowTitle("window.title.onboarding");
         </button>
       {/each}
     </div>
+    <!-- Active step name shown beneath the progress bar on mobile. -->
+    <p class="sm:hidden mt-1 text-ui-xs text-muted-foreground text-center truncate">
+      {t(`onboarding.step.${step}`)}
+    </p>
   </div>
 
   <!-- ── Step content ──────────────────────────────────────────────────────── -->
@@ -1133,7 +1143,7 @@ useWindowTitle("window.title.onboarding");
                 <span class="text-ui-xs text-muted-foreground">{t(`onboarding.${s.id}Hint`)}</span>
               </div>
               {#if isNewStep(s.id as Step)}
-                <span class="text-[0.55rem] font-bold tracking-widest px-1 py-px rounded-sm
+                <span class="text-ui-2xs font-bold tracking-widest px-1 py-px rounded-sm
                              bg-violet-500 text-white shadow-sm uppercase leading-none shrink-0">
                   {t("onboarding.newBadge")}
                 </span>

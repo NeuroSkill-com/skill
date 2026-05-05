@@ -38,7 +38,7 @@ let { faa }: Props = $props();
                         background: linear-gradient(270deg, var(--color-violet-400), var(--color-violet-500))"></div>
           {/if}
         </div>
-        <div class="flex justify-between text-[0.42rem] text-muted-foreground/30">
+        <div class="flex justify-between text-ui-2xs text-muted-foreground/30">
           <span>{t("dashboard.faaWithdrawal")}</span>
           <span>{t("dashboard.faaFormula")}</span>
           <span>{t("dashboard.faaApproach")}</span>

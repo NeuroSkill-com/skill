@@ -1067,17 +1067,17 @@ useWindowTitle("window.title.compare");
               <!-- Embedding status badge -->
               {#if emb}
                 {#if pct >= 90}
-                  <span class="inline-flex items-center gap-0.5 text-[0.45rem] text-emerald-500/70" title={t("compare.embeddingsReady")}>
+                  <span class="inline-flex items-center gap-0.5 text-ui-2xs text-emerald-500/70" title={t("compare.embeddingsReady")}>
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/60"></span>
                   </span>
                 {:else if pct > 0}
-                  <span class="inline-flex items-center gap-0.5 text-[0.45rem] text-amber-500/70"
+                  <span class="inline-flex items-center gap-0.5 text-ui-2xs text-amber-500/70"
                         title="{emb.embedded}/{emb.count} {t('compare.embeddingsReady')}">
                     <span class="w-1.5 h-1.5 rounded-full bg-amber-500/60"></span>
                     <span class="tabular-nums">{pct}%</span>
                   </span>
                 {:else}
-                  <span class="inline-flex items-center gap-0.5 text-[0.45rem] text-red-400/70"
+                  <span class="inline-flex items-center gap-0.5 text-ui-2xs text-red-400/70"
                         title={t("compare.embeddingsNone")}>
                     <span class="w-1.5 h-1.5 rounded-full bg-red-400/50"></span>
                   </span>
@@ -1150,14 +1150,14 @@ useWindowTitle("window.title.compare");
             <div class="relative h-5 bg-muted/30 dark:bg-white/[0.02] select-none">
               <!-- Day 1 label at far left -->
               {#if dayStr}
-                <span class="absolute top-0.5 left-1 text-[5.5px] font-semibold text-muted-foreground/50
+                <span class="absolute top-0.5 left-1 text-ui-2xs font-semibold text-muted-foreground/50
                              pointer-events-none uppercase tracking-wide">
                   {fromUnix(anchor + 43200).toLocaleDateString("default",{weekday:"short",month:"short",day:"numeric"})}
                 </span>
               {/if}
               <!-- Day 2 label at 50% -->
               {#if day2Str}
-                <span class="absolute top-0.5 text-[5.5px] font-semibold text-muted-foreground/50
+                <span class="absolute top-0.5 text-ui-2xs font-semibold text-muted-foreground/50
                              pointer-events-none uppercase tracking-wide"
                       style="left:50%; transform:translateX(2px)">
                   {fromUnix(day2Utc + 43200).toLocaleDateString("default",{weekday:"short",month:"short",day:"numeric"})}
@@ -1174,7 +1174,7 @@ useWindowTitle("window.title.compare");
                              background:{isMidnight?'rgba(148,163,184,0.5)':'rgba(148,163,184,0.2)'}">
                 </span>
                 {#if hOff % 6 === 0}
-                  <span class="absolute bottom-0.5 text-[5px] tabular-nums pointer-events-none
+                  <span class="absolute bottom-0.5 text-ui-2xs tabular-nums pointer-events-none
                                {isMidnight ? 'text-muted-foreground/55 font-semibold' : 'text-muted-foreground/35'}"
                         style="left:{pct}%; transform:translateX(-50%)">
                     {String(localH).padStart(2,"0")}
@@ -1211,7 +1211,7 @@ useWindowTitle("window.title.compare");
                            ring-0 hover:ring-2 hover:ring-white/60 hover:ring-offset-0"
                     style="left:{lp}%; width:{wp}%; background:{clr}; opacity:0.72; z-index:2">
                     {#if wp > 5}
-                      <span class="text-[6px] font-semibold text-white drop-shadow-sm pointer-events-none truncate px-0.5">{dur}</span>
+                      <span class="text-ui-2xs font-semibold text-white drop-shadow-sm pointer-events-none truncate px-0.5">{dur}</span>
                     {/if}
                   </button>
                 {/each}
@@ -1225,9 +1225,9 @@ useWindowTitle("window.title.compare");
                 <div class="absolute inset-y-0 pointer-events-none z-10 rounded-sm border-2"
                      style="left:{rl}%; width:{rw}%; background:{accentBg}; border-color:{accent}">
                   {#if rw > 8}
-                    <span class="absolute left-0.5 bottom-0.5 text-[5px] font-bold pointer-events-none leading-none"
+                    <span class="absolute left-0.5 bottom-0.5 text-ui-2xs font-bold pointer-events-none leading-none"
                           style="color:{accent}">{utcToTimeStr(rangeStart)}</span>
-                    <span class="absolute right-0.5 bottom-0.5 text-[5px] font-bold pointer-events-none leading-none"
+                    <span class="absolute right-0.5 bottom-0.5 text-ui-2xs font-bold pointer-events-none leading-none"
                           style="color:{accent}">{utcToTimeStr(rangeEnd)}</span>
                   {/if}
                 </div>
@@ -1510,7 +1510,7 @@ useWindowTitle("window.title.compare");
                                  bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
                                  text-ui-xs font-medium">
                       {d.label}
-                      <span class="text-[0.45rem] opacity-70">
+                      <span class="text-ui-2xs opacity-70">
                         {d.pctChange > 0 ? "+" : ""}{d.pctChange.toFixed(0)}%
                       </span>
                     </span>
@@ -1525,14 +1525,14 @@ useWindowTitle("window.title.compare");
                                  bg-red-500/10 text-red-500 dark:text-red-400
                                  text-ui-xs font-medium">
                       {d.label}
-                      <span class="text-[0.45rem] opacity-70">
+                      <span class="text-ui-2xs opacity-70">
                         {d.pctChange > 0 ? "+" : ""}{d.pctChange.toFixed(0)}%
                       </span>
                     </span>
                   {/each}
                 </div>
               {/if}
-              <p class="text-[0.42rem] text-muted-foreground/40 italic">
+              <p class="text-ui-2xs text-muted-foreground/40 italic">
                 Comparing session B vs A. Changes &gt;3% shown.
               </p>
             </div>
@@ -1575,7 +1575,7 @@ useWindowTitle("window.title.compare");
             {/each}
             <!-- Diff -->
             <div class="flex items-center justify-between pt-1 border-t border-border/50 dark:border-white/[0.04]">
-              <div class="flex justify-between text-[0.42rem] text-muted-foreground/30 flex-1">
+              <div class="flex justify-between text-ui-2xs text-muted-foreground/30 flex-1">
                 <span>{t("dashboard.faaWithdrawal")}</span>
                 <span>{t("dashboard.faaFormula")}</span>
                 <span>{t("dashboard.faaApproach")}</span>
@@ -1662,7 +1662,7 @@ useWindowTitle("window.title.compare");
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
                   </div>
-                  <span class="text-[0.42rem] text-muted-foreground/30 pl-1 italic">
+                  <span class="text-ui-2xs text-muted-foreground/30 pl-1 italic">
                     {t("compare.heatmapRowNorm")} · {tsA.length} epochs
                   </span>
                 </div>
@@ -1681,7 +1681,7 @@ useWindowTitle("window.title.compare");
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
                   </div>
-                  <span class="text-[0.42rem] text-muted-foreground/30 pl-1 italic">
+                  <span class="text-ui-2xs text-muted-foreground/30 pl-1 italic">
                     {t("compare.heatmapRowNorm")} · {tsB.length} epochs
                   </span>
                 </div>
@@ -1697,7 +1697,7 @@ useWindowTitle("window.title.compare");
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5 + 12}px; display:block"></canvas>
                   </div>
-                  <span class="text-[0.42rem] text-muted-foreground/30 pl-1 italic">
+                  <span class="text-ui-2xs text-muted-foreground/30 pl-1 italic">
                     {t("compare.heatmapDiffLegend")} · time-proportionally aligned
                   </span>
                 </div>
@@ -1732,7 +1732,7 @@ useWindowTitle("window.title.compare");
                             class="w-full block"
                             style="height:{HEATMAP_ROW_H * 5}px; display:block"></canvas>
                   </div>
-                  <span class="text-[0.42rem] text-muted-foreground/30 pl-1 italic">
+                  <span class="text-ui-2xs text-muted-foreground/30 pl-1 italic">
                     {t("compare.heatmapRowNorm")}
                   </span>
                 </div>
@@ -1917,7 +1917,7 @@ useWindowTitle("window.title.compare");
           <div class="flex flex-col gap-2">
             <span class="flex items-baseline gap-1.5 text-ui-sm font-semibold tracking-widest uppercase text-muted-foreground">
               Brain Nebula™
-              <span class="text-[0.45rem] font-normal normal-case tracking-normal text-muted-foreground/40">{t("compare.umap")}</span>
+              <span class="text-ui-2xs font-normal normal-case tracking-normal text-muted-foreground/40">{t("compare.umap")}</span>
             </span>
             <div class="rounded-xl border border-border dark:border-white/[0.06]
                         bg-surface-1 px-4 py-5 flex flex-col items-center gap-3">
@@ -1973,7 +1973,7 @@ useWindowTitle("window.title.compare");
                            style="width:{reembedPct}%"></div>
                     </div>
                     {#if eta}
-                      <span class="text-[0.45rem] text-blue-400/60 tabular-nums">
+                      <span class="text-ui-2xs text-blue-400/60 tabular-nums">
                         {eta.rate}/sec · ~{fmtDuration(eta.etaSecs)} left
                       </span>
                     {/if}
@@ -1988,7 +1988,7 @@ useWindowTitle("window.title.compare");
             <!-- Header -->
             <div class="flex items-center gap-2 px-4 py-3 shrink-0 flex-wrap">
               <span class="text-ui-md font-semibold">Brain Nebula™</span>
-              <span class="text-[0.45rem] text-muted-foreground/40 font-normal">{t("compare.umap")}</span>
+              <span class="text-ui-2xs text-muted-foreground/40 font-normal">{t("compare.umap")}</span>
               {#if umapLoading}
                 <!-- ── Queued: waiting for other tasks to finish ── -->
                 {#if umapQueuePosition !== null && umapQueuePosition > 0}
@@ -2024,7 +2024,7 @@ useWindowTitle("window.title.compare");
                       </span>
                     </div>
                     <!-- Live elapsed badge -->
-                    <span class="ml-1 text-[0.46rem] text-amber-500/60 tabular-nums shrink-0">
+                    <span class="ml-1 text-ui-2xs text-amber-500/60 tabular-nums shrink-0">
                       {fmtSecs(umapElapsed)} elapsed
                     </span>
                   </div>
@@ -2032,7 +2032,7 @@ useWindowTitle("window.title.compare");
                 <!-- ── Computing: job is running now ── -->
                 {:else}
                   <Spinner size="w-3 h-3" class="text-blue-400 shrink-0" />
-                  <span class="text-[0.45rem] text-muted-foreground italic tabular-nums">
+                  <span class="text-ui-2xs text-muted-foreground italic tabular-nums">
                     computing 3D projection · {fmtSecs(umapElapsed)} elapsed
                   </span>
                   {#if umapProgress && umapProgress.total_epochs > 0}
@@ -2047,12 +2047,12 @@ useWindowTitle("window.title.compare");
                           <div class="h-full rounded-full bg-blue-500 dark:bg-blue-400 transition-all duration-300"
                                style="width:{pct}%"></div>
                         </div>
-                        <span class="text-[0.42rem] text-muted-foreground tabular-nums shrink-0 w-6 text-right">
+                        <span class="text-ui-2xs text-muted-foreground tabular-nums shrink-0 w-6 text-right">
                           {pct}%
                         </span>
                       </div>
                       {#if remSecs !== null}
-                        <span class="text-[0.4rem] text-muted-foreground/50 tabular-nums">
+                        <span class="text-ui-2xs text-muted-foreground/50 tabular-nums">
                           epoch {umapProgress.epoch}/{umapProgress.total_epochs}
                           · {umapProgress.epoch_ms.toFixed(0)}ms/ep
                           · ~{fmtSecs(remSecs)} left
@@ -2069,7 +2069,7 @@ useWindowTitle("window.title.compare");
                           <div class="h-full rounded-full bg-blue-500/70 dark:bg-blue-400/70 transition-all duration-1000 ease-linear"
                                style="width:{estPct}%"></div>
                         </div>
-                        <span class="text-[0.42rem] text-muted-foreground/60 tabular-nums shrink-0">
+                        <span class="text-ui-2xs text-muted-foreground/60 tabular-nums shrink-0">
                           ~{fmtSecs(Math.max(0, estSecs - umapElapsed))}
                         </span>
                       </div>
@@ -2078,14 +2078,14 @@ useWindowTitle("window.title.compare");
                 {/if}
 
               {:else if umapResult}
-                <span class="text-[0.45rem] text-muted-foreground tabular-nums">
+                <span class="text-ui-2xs text-muted-foreground tabular-nums">
                   {umapResult.n_a} + {umapResult.n_b} {t("compare.umapPoints")} · dim={umapResult.dim} · 3D
                   {#if umapComputeMs != null}
                     · {umapComputeMs < 1000 ? `${umapComputeMs}ms` : `${(umapComputeMs / 1000).toFixed(1)}s`} compute
                   {/if}
                 </span>
                 {#if umapAnalysis}
-                  <span class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[0.45rem] font-semibold tabular-nums
+                  <span class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-ui-2xs font-semibold tabular-nums
                                {umapAnalysis.separationScore >= 2 ? 'bg-emerald-500/10 text-emerald-500' :
                                 umapAnalysis.separationScore >= 1 ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' :
                                 'bg-red-500/10 text-red-400'}">
@@ -2132,7 +2132,7 @@ useWindowTitle("window.title.compare");
             {/if}
 
             <!-- Footer legend -->
-            <div class="flex items-center gap-4 text-[0.42rem] text-muted-foreground/60 px-4 py-3 shrink-0">
+            <div class="flex items-center gap-4 text-ui-2xs text-muted-foreground/60 px-4 py-3 shrink-0">
               <div class="flex items-center gap-1">
                 <span class="inline-block w-2 h-2 rounded-full" style="background:#3b82f6"></span>
                 <span>A ({(umapResult ?? umapPlaceholder)?.n_a ?? 0})</span>
@@ -2183,23 +2183,23 @@ useWindowTitle("window.title.compare");
                       <span class="text-ui-2xs font-bold text-muted-foreground/60">{item.label}</span>
                       <div class="flex items-center gap-3 flex-wrap">
                         <div class="flex flex-col">
-                          <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Efficiency</span>
+                          <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Efficiency</span>
                           <span class="text-ui-md font-bold tabular-nums {item.sa.efficiency >= 85 ? 'text-emerald-500' : item.sa.efficiency >= 70 ? 'text-yellow-500' : 'text-red-400'}">
                             {item.sa.efficiency.toFixed(0)}%
                           </span>
                         </div>
                         <div class="flex flex-col">
-                          <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Onset</span>
+                          <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Onset</span>
                           <span class="text-ui-md font-bold tabular-nums">{item.sa.onsetLatencyMin.toFixed(0)}m</span>
                         </div>
                         {#if item.sa.remLatencyMin >= 0}
                           <div class="flex flex-col">
-                            <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">→ REM</span>
+                            <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">→ REM</span>
                             <span class="text-ui-md font-bold tabular-nums">{item.sa.remLatencyMin.toFixed(0)}m</span>
                           </div>
                         {/if}
                         <div class="flex flex-col">
-                          <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">Awakenings</span>
+                          <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">Awakenings</span>
                           <span class="text-ui-md font-bold tabular-nums">{item.sa.awakenings}</span>
                         </div>
                       </div>

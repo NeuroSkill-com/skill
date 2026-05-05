@@ -779,7 +779,7 @@ onDestroy(() => {
                    bg-clip-text text-transparent">
         {pairedDevices.length}
       </span>
-      <span class="text-[0.45rem] text-muted-foreground/50">
+      <span class="text-ui-2xs text-muted-foreground/50">
         {t("devices.pairedCount", { n: String(pairedDevices.length) })}
       </span>
     </div>
@@ -804,7 +804,7 @@ onDestroy(() => {
             <!-- Divider between real hardware and virtual devices -->
             <div class="flex items-center gap-2 px-4 py-1.5 bg-muted/30 dark:bg-white/[0.02]
                         border-y border-border dark:border-white/[0.06]">
-              <span class="text-[0.46rem] font-bold tracking-widest uppercase
+              <span class="text-ui-2xs font-bold tracking-widest uppercase
                            text-muted-foreground/50">🔬 {t("devices.virtualDevices")}</span>
             </div>
           {:else if i > 0}
@@ -860,10 +860,10 @@ onDestroy(() => {
           <!-- Subsection header -->
           <div class="flex items-center gap-2 px-4 py-2 bg-muted/30 dark:bg-white/[0.02]
                       {discoveredReal.length > 0 ? 'border-t border-border dark:border-white/[0.06]' : ''}">
-            <span class="text-[0.46rem] font-bold tracking-widest uppercase text-muted-foreground/50">
+            <span class="text-ui-2xs font-bold tracking-widest uppercase text-muted-foreground/50">
               🔬 {t("devices.virtualDevices")}
             </span>
-            <span class="text-[0.46rem] text-muted-foreground/35 leading-relaxed">— {t("devices.virtualDevicesHint")}</span>
+            <span class="text-ui-2xs text-muted-foreground/35 leading-relaxed">— {t("devices.virtualDevicesHint")}</span>
           </div>
           {#each discoveredVirtual as dev, i (dev.id)}
             {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
@@ -880,10 +880,10 @@ onDestroy(() => {
                       {(discoveredReal.length > 0 || discoveredVirtual.length > 0)
                         ? 'border-t border-border dark:border-white/[0.06]'
                         : ''}">
-            <span class="text-[0.46rem] font-bold tracking-widest uppercase text-muted-foreground/50">
+            <span class="text-ui-2xs font-bold tracking-widest uppercase text-muted-foreground/50">
               🧭 {t("devices.manualHints")}
             </span>
-            <span class="text-[0.46rem] text-muted-foreground/35 leading-relaxed">— {t("devices.manualHintsHint")}</span>
+            <span class="text-ui-2xs text-muted-foreground/35 leading-relaxed">— {t("devices.manualHintsHint")}</span>
           </div>
           {#each manualHintDevices as dev, i (dev.id)}
             {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
@@ -947,7 +947,7 @@ onDestroy(() => {
                       </div>
                       <span class="text-ui-xs text-center leading-snug text-foreground/75 line-clamp-2">{t(item.name_key)}</span>
                       {#if item.ios_only}
-                        <span class="text-[0.42rem] text-center leading-tight text-blue-500 dark:text-blue-400 font-semibold">📱 {t("devices.iosOnly")}</span>
+                        <span class="text-ui-2xs text-center leading-tight text-blue-500 dark:text-blue-400 font-semibold">📱 {t("devices.iosOnly")}</span>
                       {/if}
                     </div>
                   {/each}
@@ -1766,13 +1766,13 @@ onDestroy(() => {
         {/if}
         {#if isVirtualDevice(dev)}
           <Badge variant="outline"
-            class="text-[0.46rem] tracking-wide uppercase py-0 px-1 shrink-0
+            class="text-ui-2xs tracking-wide uppercase py-0 px-1 shrink-0
                    bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20">
             🔬 {t("devices.virtualBadge")}
           </Badge>
         {:else if dev.transport && dev.transport !== "ble"}
           <Badge variant="outline"
-            class="text-[0.46rem] tracking-wide uppercase py-0 px-1 shrink-0
+            class="text-ui-2xs tracking-wide uppercase py-0 px-1 shrink-0
                    {dev.transport === 'usb_serial' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
                     dev.transport === 'cortex'     ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20' :
                     dev.transport === 'wifi'        ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20' :

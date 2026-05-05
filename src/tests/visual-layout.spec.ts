@@ -40,12 +40,18 @@ const ROUTES = [
   "/whats-new",
 ];
 
+// This is a Tauri desktop app — primary targets are macOS/Windows/Linux
+// at ≥ 1024px. We include 375px (iPhone SE 2nd gen) as the lower bound
+// because the Tauri window can be resized that small on a desktop, but
+// we don't test 320px — supporting iPhone-SE-1st-gen width would mean
+// per-page redesigns that aren't justified for a desktop-first app.
 const VIEWPORTS = [
   { name: "mobile", width: 375, height: 667 },
   { name: "tablet", width: 768, height: 1024 },
   { name: "laptop", width: 1280, height: 800 },
   { name: "desktop", width: 1440, height: 900 },
   { name: "wide", width: 1920, height: 1080 },
+  { name: "ultra", width: 2560, height: 1440 }, // 27" 1440p — common on dev workstations
 ];
 
 // Font scales applied as html { font-size: <px> } — propagates through
@@ -63,7 +69,14 @@ const OUT_DIR = path.join(process.cwd(), "test-results", "visual-layout");
 // ── DOM-side checks (run inside the page) ────────────────────────────────────
 
 interface LayoutIssue {
-  kind: "overflow_x" | "tiny_text" | "overlap" | "offscreen_fixed";
+  kind:
+    | "overflow_x"
+    | "tiny_text"
+    | "overlap"
+    | "offscreen_fixed"
+    | "tiny_tap_target" // < 32×32 px — smaller than recommended HIG minimum
+    | "edge_touch" // interactive element within 2px of viewport edge
+    | "scroll_trap"; // sticky/fixed bar covers content that can't be scrolled past
   selector: string;
   text?: string;
   detail?: string;
@@ -76,7 +89,14 @@ interface LayoutIssue {
 async function detectIssues(page: Page): Promise<LayoutIssue[]> {
   return page.evaluate(() => {
     const issues: {
-      kind: "overflow_x" | "tiny_text" | "overlap" | "offscreen_fixed";
+      kind:
+        | "overflow_x"
+        | "tiny_text"
+        | "overlap"
+        | "offscreen_fixed"
+        | "tiny_tap_target"
+        | "edge_touch"
+        | "scroll_trap";
       selector: string;
       text?: string;
       detail?: string;
@@ -117,11 +137,30 @@ async function detectIssues(page: Page): Promise<LayoutIssue[]> {
         // Skip elements with hidden overflow — they'll clip silently,
         // which is sometimes a bug but is harder to triage automatically.
         if (cs.overflowX === "hidden") continue;
-        if (el.scrollWidth - el.clientWidth > 1) {
+        // 5px noise floor: animations (animate-ping, scale transitions,
+        // pulse rings) frequently transient-overflow by 1–4px during
+        // the keyframe loop. Real layout overflows are usually ≥ 10px.
+        if (el.scrollWidth - el.clientWidth > 5) {
+          // Skip decorative containers: empty text, no images, only
+          // absolute-positioned children. These are usually animated
+          // overlays (animate-ping pulses, gradient halos) where the
+          // visual extent is intentional and doesn't affect layout.
+          const text = (el.textContent || "").trim();
+          const hasMedia = el.querySelector("img,svg,canvas,video") !== null;
+          if (!text && !hasMedia) {
+            const kids = Array.from(el.children) as HTMLElement[];
+            const allOutOfFlow =
+              kids.length > 0 &&
+              kids.every((k) => {
+                const ks = getComputedStyle(k);
+                return ks.position === "absolute" || ks.position === "fixed";
+              });
+            if (allOutOfFlow) continue;
+          }
           issues.push({
             kind: "overflow_x",
             selector: shortSelector(el),
-            text: clip(el.textContent || "", 60),
+            text: clip(text, 60),
             detail: `${el.scrollWidth}px content / ${el.clientWidth}px container`,
           });
         }
@@ -192,6 +231,12 @@ async function detectIssues(page: Page): Promise<LayoutIssue[]> {
             const a = boxes[i];
             const b = boxes[j];
             if (!a.text || !b.text) continue;
+            // Skip pairs where either side is intentionally floating
+            // (fixed/absolute/sticky titlebars, modal backdrops, popovers).
+            const aPos = getComputedStyle(a.el).position;
+            const bPos = getComputedStyle(b.el).position;
+            if (aPos === "fixed" || aPos === "absolute" || aPos === "sticky") continue;
+            if (bPos === "fixed" || bPos === "absolute" || bPos === "sticky") continue;
             // Bounding-box intersection.
             const overlap =
               a.rect.left < b.rect.right &&
@@ -229,7 +274,13 @@ async function detectIssues(page: Page): Promise<LayoutIssue[]> {
         const cs = getComputedStyle(el);
         if (cs.position !== "fixed" && cs.position !== "absolute") continue;
         if (cs.display === "none" || cs.visibility === "hidden") continue;
+        // Skip a11y patterns deliberately positioned off-screen until
+        // focused or read by an assistive tool.
+        if (el.classList.contains("skip-link") || el.classList.contains("sr-only")) continue;
+        if (el.id === "a11y-announcer") continue;
+        // Skip 1×1 visually-hidden announcers (common pattern: clip:rect)
         const r = el.getBoundingClientRect();
+        if (r.width <= 1 && r.height <= 1) continue;
         if (r.width === 0 || r.height === 0) continue;
         // Element is entirely off-screen on the right or bottom.
         if (r.left >= vw || r.top >= vh || r.right <= 0 || r.bottom <= 0) {
@@ -240,6 +291,151 @@ async function detectIssues(page: Page): Promise<LayoutIssue[]> {
             detail: `rect ${r.left.toFixed(0)},${r.top.toFixed(0)} ${r.width.toFixed(0)}×${r.height.toFixed(0)} / vp ${vw}×${vh}`,
           });
         }
+      }
+    }
+
+    // ── 5. Tap targets smaller than recommended minimum ──
+    // Desktop-first app, so 24px floor (a typical icon button) rather
+    // than the iOS HIG 44pt or Material 48dp. Anything smaller than a
+    // typical menu icon is hard to hit even with a mouse.
+    {
+      const interactive = document.body.querySelectorAll<HTMLElement>(
+        'button, a, [role="button"], [role="link"], input:not([type="hidden"]), select, summary',
+      );
+      const MIN_TAP_PX = 24;
+      for (const el of interactive) {
+        if (issues.length >= MAX_ISSUES) break;
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        let r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        // ── False-positive filters specific to this codebase ──
+        // Window-control buttons in the Tauri titlebar (close/min/max)
+        // are intentionally 30×30, sized to match macOS HIG.
+        const cls = el.className?.toString() || "";
+        if (cls.includes("svelte-sm4m8n")) continue; // titlebar.svelte module
+        // Resize handles (col-resize / row-resize) are intentionally
+        // narrow — the cursor area extends well beyond the visible bar.
+        if (cls.includes("cursor-col-resize") || cls.includes("cursor-row-resize")) continue;
+        // Inline links inside text aren't point targets — text-flow
+        // wraps them. Only flag links that LOOK like buttons.
+        if (el.tagName === "A") {
+          const parent = el.parentElement;
+          if (parent && /^(P|SPAN|LI|TD|ARTICLE|SECTION)$/.test(parent.tagName)) continue;
+        }
+        // Native checkboxes / radios are tiny (14×14) by browser default,
+        // but the click area normally extends to the associated <label>
+        // (the spec says label-clicks toggle the input). Look both for
+        // a wrapping label and a `<label for="…">` association.
+        if (el.tagName === "INPUT") {
+          const t = (el as HTMLInputElement).type;
+          if (t === "checkbox" || t === "radio") {
+            const wrap = el.closest("label");
+            const forLabel = el.id ? document.querySelector<HTMLLabelElement>(`label[for="${el.id}"]`) : null;
+            if (wrap || forLabel) {
+              // Either form is good a11y — the whole label is clickable
+              // and that's the effective tap target.
+              continue;
+            }
+          }
+        }
+        // Full-row buttons (w-full / 100%) where one dimension is large
+        // — e.g. sidebar items 803×20 — have plenty of click area even
+        // when the height looks short. Skip if total area ≥ 24² = 576px².
+        const area = r.width * r.height;
+        if (area >= MIN_TAP_PX * MIN_TAP_PX) continue;
+        if (r.width < MIN_TAP_PX || r.height < MIN_TAP_PX) {
+          issues.push({
+            kind: "tiny_tap_target",
+            selector: shortSelector(el),
+            text: clip(el.textContent || "", 30),
+            detail: `${r.width.toFixed(0)}×${r.height.toFixed(0)}px (min ${MIN_TAP_PX}px)`,
+          });
+        }
+      }
+    }
+
+    // ── 6. Interactive elements touching the viewport edge ──
+    // Buttons/inputs flush against (or beyond) the viewport edge mean
+    // padding broke at this size. 2px tolerance accounts for borders.
+    {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const interactive = document.body.querySelectorAll<HTMLElement>(
+        'button, a, [role="button"], input:not([type="hidden"]), select',
+      );
+      const TOL = 2;
+      for (const el of interactive) {
+        if (issues.length >= MAX_ISSUES) break;
+        const cs = getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        // Skip floating elements (toolbars, modals) — those frequently
+        // hug the edge by design.
+        if (cs.position === "fixed" || cs.position === "sticky") continue;
+        // Skip elements that are children of a fixed/sticky ancestor
+        // (those are intentionally pinned).
+        let p: HTMLElement | null = el.parentElement;
+        let pinned = false;
+        for (let depth = 0; p && depth < 5; depth++, p = p.parentElement) {
+          const ps = getComputedStyle(p);
+          if (ps.position === "fixed" || ps.position === "sticky") {
+            pinned = true;
+            break;
+          }
+        }
+        if (pinned) continue;
+        // Skip resize handles (intentionally flush against the column
+        // they resize) and full-width sidebar rows (w-full extends to
+        // edge by design).
+        const cls = el.className?.toString() || "";
+        if (cls.includes("cursor-col-resize") || cls.includes("cursor-row-resize")) continue;
+        if (cls.includes("w-full")) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        // Only consider elements actually IN the viewport.
+        if (r.right <= 0 || r.bottom <= 0 || r.left >= vw || r.top >= vh) continue;
+        // Vertical edges are too noisy: top is usually a header pinned
+        // to the top by an ancestor flex layout (false positive), and
+        // bottom is the natural fold of any internally-scrollable
+        // container (false positive). Only flag horizontal-edge touches,
+        // which always indicate a real responsive layout bug.
+        const onLeft = r.left < TOL;
+        const onRight = r.right > vw - TOL;
+        if (onLeft || onRight) {
+          const sides = [onLeft && "left", onRight && "right"].filter(Boolean).join("+");
+          issues.push({
+            kind: "edge_touch",
+            selector: shortSelector(el),
+            text: clip(el.textContent || "", 30),
+            detail: `${sides}; rect ${r.left.toFixed(0)},${r.top.toFixed(0)} ${r.width.toFixed(0)}×${r.height.toFixed(0)} / vp ${vw}×${vh}`,
+          });
+        }
+      }
+    }
+
+    // ── 7. Scroll trap: sticky/fixed bar covers content that's not reachable ──
+    // Fires when a sticky/fixed element is taller than 50% of viewport
+    // height, leaving little space for content. Common when a header
+    // fails to collapse on a small viewport.
+    {
+      const vh = window.innerHeight;
+      const all = document.body.querySelectorAll<HTMLElement>("*");
+      const sample = all.length > 1500 ? Array.from(all).slice(0, 1500) : Array.from(all);
+      for (const el of sample) {
+        if (issues.length >= MAX_ISSUES) break;
+        const cs = getComputedStyle(el);
+        if (cs.position !== "fixed" && cs.position !== "sticky") continue;
+        if (cs.display === "none" || cs.visibility === "hidden") continue;
+        const r = el.getBoundingClientRect();
+        if (r.height < vh * 0.5) continue; // not big enough to be a trap
+        // Skip full-viewport overlays (modals) — they're covers, not traps.
+        if (r.height > vh * 0.95 && r.width > window.innerWidth * 0.95) continue;
+        issues.push({
+          kind: "scroll_trap",
+          selector: shortSelector(el),
+          text: clip(el.textContent || "", 30),
+          detail: `${cs.position} bar ${r.width.toFixed(0)}×${r.height.toFixed(0)}px occupies ${((r.height / vh) * 100).toFixed(0)}% of viewport`,
+        });
       }
     }
 
@@ -258,43 +454,17 @@ interface RouteResult {
   screenshot: string;
 }
 
-const allResults: RouteResult[] = [];
+// Per-test results are written to disk under `OUT_DIR/_findings/` so that
+// every Playwright worker contributes (afterAll runs per-worker, so a
+// shared in-memory array would only capture one worker's slice). After
+// the suite finishes, run `node scripts/aggregate-visual-report.mjs`
+// to merge into `report.json` + `summary.txt`.
+
+const FINDINGS_DIR = path.join(OUT_DIR, "_findings");
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-});
-
-test.afterAll(() => {
-  // Aggregate report.
-  const summary = {
-    total_combinations: allResults.length,
-    issue_counts_by_kind: allResults
-      .flatMap((r) => r.issues.map((i) => i.kind))
-      .reduce<Record<string, number>>((acc, k) => {
-        acc[k] = (acc[k] ?? 0) + 1;
-        return acc;
-      }, {}),
-    worst_offenders: [...allResults]
-      .sort((a, b) => b.issueCount - a.issueCount)
-      .slice(0, 20)
-      .map((r) => ({ route: r.route, viewport: r.viewport, scale: r.scale, issues: r.issueCount })),
-    results: allResults,
-  };
-  fs.writeFileSync(path.join(OUT_DIR, "report.json"), JSON.stringify(summary, null, 2));
-
-  // Compact human-readable summary.
-  const lines: string[] = [];
-  lines.push(`Visual layout audit — ${allResults.length} combinations`);
-  for (const [k, v] of Object.entries(summary.issue_counts_by_kind)) {
-    lines.push(`  ${k}: ${v}`);
-  }
-  lines.push("");
-  lines.push("Top offenders:");
-  for (const o of summary.worst_offenders) {
-    if (o.issues === 0) break;
-    lines.push(`  ${o.route} @ ${o.viewport} ${o.scale}% — ${o.issues}`);
-  }
-  fs.writeFileSync(path.join(OUT_DIR, "summary.txt"), lines.join("\n"));
+  fs.mkdirSync(FINDINGS_DIR, { recursive: true });
 });
 
 for (const route of ROUTES) {
@@ -330,14 +500,17 @@ for (const route of ROUTES) {
         await page.screenshot({ path: shot, fullPage: true });
 
         const issues = await detectIssues(page);
-        allResults.push({
+        const result: RouteResult = {
           route,
           viewport: `${vp.name} ${vp.width}x${vp.height}`,
           scale: scale.label,
           issueCount: issues.length,
           issues,
           screenshot: path.relative(process.cwd(), shot),
-        });
+        };
+        // Worker-safe: each test writes its own JSON. Aggregator merges them.
+        const findingPath = path.join(FINDINGS_DIR, `${slug}_${fileBase}.json`);
+        fs.writeFileSync(findingPath, JSON.stringify(result));
 
         // Soft-fail threshold: > 30 issues on a single page is almost
         // certainly a real layout bug worth attention. Single-digit
