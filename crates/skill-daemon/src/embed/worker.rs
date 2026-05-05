@@ -628,32 +628,38 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
             }
             #[cfg(feature = "embed-zuna-gpu-f16")]
             if try_gpu {
-                // Wrap in catch_unwind: on adapters where wgpu does not expose
-                // SHADER_F16 (e.g. Vulkan/DX12 without storageInputOutput16),
-                // burn's naga validation panics with "Using f16 values requires
-                // the naga::valid::Capabilities::FLOAT16 flag".  Without this
-                // guard the entire embed worker thread would die and epochs
-                // would be silently dropped for the rest of the session.
-                let f16_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load_zuna_gpu_f16(config)));
-                match f16_result {
-                    Ok(Some(s)) => {
-                        info!("ZUNA GPU f16 encoder loaded");
-                        return Some(Encoder::ZunaGpuF16(Box::new(s)));
+                // Preflight the adapter: skip f16 unless wgpu advertises
+                // SHADER_F16. On Vulkan/DX12 without storageInputOutput16,
+                // naga's validator panics on f16 even when the driver claims
+                // shaderFloat16 — the catch_unwind below remains as a safety
+                // net for the (rare) case where the preflight passes but
+                // burn/zuna still fail at compile time.
+                if !wgpu_supports_shader_f16() {
+                    info!("adapter lacks SHADER_F16 — skipping ZUNA GPU f16, trying GPU f32");
+                } else {
+                    let f16_result =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load_zuna_gpu_f16(config)));
+                    match f16_result {
+                        Ok(Some(s)) => {
+                            info!("ZUNA GPU f16 encoder loaded");
+                            return Some(Encoder::ZunaGpuF16(Box::new(s)));
+                        }
+                        Ok(None) => warn!("GPU f16 unavailable, trying GPU f32"),
+                        Err(_) => warn!("ZUNA GPU f16 panicked despite preflight — falling back to GPU f32"),
                     }
-                    Ok(None) => warn!("GPU f16 unavailable, trying GPU f32"),
-                    Err(_) => warn!(
-                        "ZUNA GPU f16 panicked — adapter likely lacks SHADER_F16 \
-                         (naga FLOAT16 capability); falling back to GPU f32"
-                    ),
                 }
             }
             #[cfg(feature = "embed-zuna-gpu")]
             if try_gpu {
-                if let Some(s) = load_zuna_gpu(config) {
-                    info!("ZUNA GPU encoder loaded");
-                    return Some(Encoder::ZunaGpu(Box::new(s)));
+                let f32_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load_zuna_gpu(config)));
+                match f32_result {
+                    Ok(Some(s)) => {
+                        info!("ZUNA GPU encoder loaded");
+                        return Some(Encoder::ZunaGpu(Box::new(s)));
+                    }
+                    Ok(None) => warn!("GPU f32 unavailable, falling back to CPU"),
+                    Err(_) => warn!("ZUNA GPU f32 panicked — falling back to CPU"),
                 }
-                warn!("GPU f32 unavailable, falling back to CPU");
             }
             load_zuna(config)
                 .map(|s| {
@@ -1082,6 +1088,38 @@ fn encode_zuna_gpu(state: &ZunaGpuState, msg: &EpochMsg) -> Option<Vec<f32>> {
 // Currently unused for batch reembed (burn f16→f32 extraction bug).
 // Kept for future use when zuna-rs/burn fix the TypeMismatch issue.
 
+/// Probe the default wgpu adapter once and report whether it exposes
+/// `SHADER_F16`. Cached per-process — adapter selection doesn't change at
+/// runtime and `request_adapter` is non-trivial.
+#[cfg(feature = "embed-zuna-gpu-f16")]
+fn wgpu_supports_shader_f16() -> bool {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        let result = std::panic::catch_unwind(|| {
+            let instance = wgpu::Instance::default();
+            let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
+                compatible_surface: None,
+            }))
+            .ok()?;
+            Some(adapter.features().contains(wgpu::Features::SHADER_F16))
+        });
+        match result {
+            Ok(Some(supported)) => supported,
+            Ok(None) => {
+                warn!("wgpu adapter request failed during SHADER_F16 preflight");
+                false
+            }
+            Err(_) => {
+                warn!("wgpu SHADER_F16 preflight panicked");
+                false
+            }
+        }
+    })
+}
+
 #[cfg(feature = "embed-zuna-gpu-f16")]
 #[allow(dead_code)]
 fn load_zuna_gpu_f16(config: &ExgModelConfig) -> Option<ZunaGpuF16State> {
@@ -1268,10 +1306,12 @@ pub fn load_encoder_public(config: &ExgModelConfig, skill_dir: &Path) -> Option<
         // GPU f32 — works correctly with TensorData extraction.
         #[cfg(feature = "embed-zuna-gpu")]
         {
-            if let Some(gpu) = load_zuna_gpu(config) {
-                return Some(PublicEncoder::Gpu(Box::new(gpu)));
+            let f32_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load_zuna_gpu(config)));
+            match f32_result {
+                Ok(Some(gpu)) => return Some(PublicEncoder::Gpu(Box::new(gpu))),
+                Ok(None) => warn!("GPU f32 unavailable, falling back to CPU"),
+                Err(_) => warn!("ZUNA GPU f32 panicked during batch-reembed load — falling back to CPU"),
             }
-            warn!("GPU f32 unavailable, falling back to CPU");
         }
     }
     load_encoder(config, skill_dir).map(PublicEncoder::Cpu)

@@ -633,13 +633,30 @@ fn extract_epoch_samples(data: &RawDayData, epoch_ts_secs: f64, epoch_samples: u
 }
 
 /// Encode raw samples using the loaded encoder.
+///
+/// Wrapped in `catch_unwind` so a single bad epoch (e.g. burn/wgpu validation
+/// panic on an unusual channel count) does not abort the whole batch-reembed
+/// task. Idle reembed runs in `spawn_blocking` and a panic there is invisible.
 fn encode_raw_samples(
     encoder: &crate::embed::PublicEncoder,
     samples: &[Vec<f32>],
     channel_names: &[String],
     sample_rate: f64,
 ) -> Option<Vec<f32>> {
-    crate::embed::encode_raw_public(encoder, samples, channel_names, sample_rate)
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        crate::embed::encode_raw_public(encoder, samples, channel_names, sample_rate)
+    }));
+    match result {
+        Ok(emb) => emb,
+        Err(_) => {
+            tracing::warn!(
+                channels = channel_names.len(),
+                sample_rate,
+                "[reembed] encode panicked — skipping epoch"
+            );
+            None
+        }
+    }
 }
 
 pub(crate) async fn trigger_weights_download_impl(State(state): State<AppState>) -> Json<serde_json::Value> {

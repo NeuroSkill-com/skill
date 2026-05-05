@@ -132,12 +132,13 @@ function ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranc
 
   // The remote-tag check requires HEAD's commit to be reachable on the remote,
   // so the branch must be pushed before we push the tag.
+  // --no-verify: bump's preflight already ran the full suite; skip the pre-push hook.
   if (!gitTracksRemote(branchName)) {
     log(`git push -u origin ${branchName} (recovery)`);
-    sh("git", ["push", "-u", "origin", branchName], { check: true });
+    sh("git", ["push", "--no-verify", "-u", "origin", branchName], { check: true });
   } else {
     log("git push (recovery)");
-    sh("git", ["push"], { check: true });
+    sh("git", ["push", "--no-verify"], { check: true });
   }
 
   log("npm run tag (recovery)");
@@ -305,12 +306,14 @@ async function main() {
   }
 
   // ── 3. Push branch ──────────────────────────────────────────────────────
+  // --no-verify: bump's preflight already ran the full test suite; skip the
+  // pre-push hook to avoid re-running the same cargo/vitest checks.
   if (!gitTracksRemote(branchName)) {
     log(`git push -u origin ${branchName}`);
-    sh("git", ["push", "-u", "origin", branchName], { check: true });
+    sh("git", ["push", "--no-verify", "-u", "origin", branchName], { check: true });
   } else {
     log("git push");
-    sh("git", ["push"], { check: true });
+    sh("git", ["push", "--no-verify"], { check: true });
   }
 
   // ── 4. Tag + push tag (existing primitive) ─────────────────────────────
