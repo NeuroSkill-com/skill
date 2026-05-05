@@ -1947,6 +1947,15 @@ useWindowTitle("window.title.history");
                     </span>
                   {/if}
 
+                  {#if (session.chunk_count ?? 1) > 1}
+                    <span
+                      class="text-ui-2xs px-1.5 py-0.5 rounded-sm bg-muted/30 text-muted-foreground/60 tabular-nums shrink-0"
+                      title="Recorded as {session.chunk_count} rollover chunks"
+                    >
+                      {session.chunk_count} chunks
+                    </span>
+                  {/if}
+
                   {#if session.labels.length > 0}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <div class="flex items-center gap-0.5 shrink-0" role="toolbar" tabindex="-1" aria-label="Labels" onclick={(e) => e.stopPropagation()}>
