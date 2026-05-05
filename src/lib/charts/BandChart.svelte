@@ -52,6 +52,7 @@ export interface BandSnapshot {
   sample_entropy?: number;
   pac_theta_gamma?: number;
   laterality_index?: number;
+  echt?: number;
   // PPG-derived
   hr?: number;
   rmssd?: number;

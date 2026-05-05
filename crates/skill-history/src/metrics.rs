@@ -132,6 +132,9 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
         let gpu_v = f(x + 43);
         let gpu_r_v = f(x + 44);
         let gpu_t_v = f(x + 45);
+        // echt is appended at the end of the cross-channel block; missing in
+        // older recordings → f() returns 0.0 silently.
+        let echt_v = f(x + 46);
 
         let mut sr = 0.0f64;
         let mut se2 = 0.0f64;
@@ -182,6 +185,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
             se: se_v,
             pac: pac_v,
             lat: lat_v,
+            echt: echt_v,
             mood: mood_v,
             hr: hr_v,
             rmssd: rmssd_v,
@@ -237,6 +241,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
         sum.sample_entropy += se_v;
         sum.pac_theta_gamma += pac_v;
         sum.laterality_index += lat_v;
+        sum.echt += echt_v;
         sum.hr += hr_v;
         sum.rmssd += rmssd_v;
         sum.sdnn += sdnn_v;
@@ -297,6 +302,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     sum.sample_entropy /= n;
     sum.pac_theta_gamma /= n;
     sum.laterality_index /= n;
+    sum.echt /= n;
     sum.hr /= n;
     sum.rmssd /= n;
     sum.sdnn /= n;
@@ -432,6 +438,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
             let gpu_v = f(x + 43);
             let gpu_r_v = f(x + 44);
             let gpu_t_v = f(x + 45);
+            let echt_v = f(x + 46);
 
             let mut sr = 0.0f64;
             let mut se2 = 0.0f64;
@@ -482,6 +489,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
                 se: se_v,
                 pac: pac_v,
                 lat: lat_v,
+                echt: echt_v,
                 mood: mood_v,
                 hr: hr_v,
                 rmssd: rmssd_v,
@@ -537,6 +545,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
             sum.sample_entropy += se_v;
             sum.pac_theta_gamma += pac_v;
             sum.laterality_index += lat_v;
+            sum.echt += echt_v;
             sum.hr += hr_v;
             sum.rmssd += rmssd_v;
             sum.sdnn += sdnn_v;
@@ -597,6 +606,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
     sum.sample_entropy /= n;
     sum.pac_theta_gamma /= n;
     sum.laterality_index /= n;
+    sum.echt /= n;
     sum.hr /= n;
     sum.rmssd /= n;
     sum.sdnn /= n;

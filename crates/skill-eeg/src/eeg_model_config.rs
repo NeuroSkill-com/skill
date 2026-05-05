@@ -348,6 +348,7 @@ pub struct LatestEpochMetrics {
     pub sample_entropy: f32,
     pub pac_theta_gamma: f32,
     pub laterality_index: f32,
+    pub echt: f32,
     // PPG-derived
     pub hr: f64,
     pub rmssd: f64,

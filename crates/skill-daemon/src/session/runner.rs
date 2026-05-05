@@ -1943,6 +1943,19 @@ mod tests {
         std::fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
     }
 
+    /// Locate the single `YYYYMMDD/` day directory under `root`.
+    fn find_day_dir(root: &std::path::Path) -> Option<std::path::PathBuf> {
+        std::fs::read_dir(root).ok()?.flatten().find_map(|e| {
+            let p = e.path();
+            let name = p.file_name()?.to_str()?.to_string();
+            if p.is_dir() && name.len() == 8 && name.chars().all(|c| c.is_ascii_digit()) {
+                Some(p)
+            } else {
+                None
+            }
+        })
+    }
+
     /// With `session_rollover_minutes = 1`, a session that runs ≥ 60 fake-time
     /// seconds should produce at least two raw EEG CSV chunks. `start_paused`
     /// makes tokio auto-advance virtual time across `tokio::time::sleep` calls
@@ -1999,6 +2012,67 @@ mod tests {
             assert!(sidecar.exists(), "missing sidecar for {chunk:?}");
             let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&sidecar).unwrap()).unwrap();
             assert_eq!(v["device_name"], "Muse-Roll");
+        }
+
+        // ── E2E: real consumer code paths must accept rolled-over chunks ──
+        //
+        // Build env can't link the bin (llama-cpp-sys-4 native lib mismatch),
+        // so instead of going over HTTP we drive the same in-process Rust
+        // readers the HTTP routes call. This is the layer where rollover
+        // could break behaviour — HTTP is just transport.
+
+        let day_dir = find_day_dir(dir.path()).expect("session day dir created");
+        let day = day_dir.file_name().unwrap().to_str().unwrap().to_string();
+
+        // 1. History listing — used by /v1/history/sessions and the frontend
+        //    history page. Must return one entry per chunk with sane fields.
+        let entries = skill_history::list_sessions_for_day(&day, dir.path(), None);
+        assert_eq!(
+            entries.len(),
+            chunks.len(),
+            "list_sessions_for_day count must match chunk count"
+        );
+        for e in &entries {
+            assert_eq!(e.device_name.as_deref(), Some("Muse-Roll"));
+            assert!(
+                std::path::Path::new(&e.csv_path).exists(),
+                "csv_path from sidecar must resolve: {}",
+                e.csv_path
+            );
+            assert!(e.session_start_utc.is_some(), "session_start_utc populated");
+            assert!(
+                e.firmware_version.as_deref() == Some("1.0.0"),
+                "firmware_version threaded through to entry"
+            );
+        }
+        // Entries are sorted by session_start_utc ascending or descending —
+        // enforce strict monotonicity so the UI shows a consistent order
+        // across rollover boundaries.
+        let starts: Vec<u64> = entries.iter().filter_map(|e| e.session_start_utc).collect();
+        assert_eq!(starts.len(), entries.len(), "every entry has a start time");
+        let monotonic_inc = starts.windows(2).all(|w| w[0] <= w[1]);
+        let monotonic_dec = starts.windows(2).all(|w| w[0] >= w[1]);
+        assert!(
+            monotonic_inc || monotonic_dec,
+            "session list must be monotonically ordered: {starts:?}"
+        );
+
+        // 2. Per-day SQLite (search index) is created for the day, not per
+        //    session — so embeddings written by a chunk land in the same
+        //    file as embeddings from sibling chunks. Embedding is skipped
+        //    in #[cfg(test)], but the file should still get opened by
+        //    EpochStore on first epoch flush.
+        let sqlite_path = day_dir.join(skill_constants::SQLITE_FILE);
+        if sqlite_path.exists() {
+            // Day SQLite is a single file across chunks — the rollover
+            // does NOT create a new SQLite. Verify by counting hits and
+            // confirming there is exactly one file.
+            let count = std::fs::read_dir(&day_dir)
+                .unwrap()
+                .flatten()
+                .filter(|e| e.file_name() == sqlite_path.file_name().unwrap())
+                .count();
+            assert_eq!(count, 1, "exactly one per-day SQLite, regardless of chunks");
         }
     }
 

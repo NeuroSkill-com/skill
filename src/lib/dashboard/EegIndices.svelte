@@ -32,6 +32,7 @@ interface Props {
   se: number;
   pac: number;
   lat: number;
+  echt: number;
   headache: number;
   migraine: number;
   /**
@@ -65,6 +66,7 @@ let {
   se,
   pac,
   lat,
+  echt,
   headache,
   migraine,
   showMu = true,
@@ -96,6 +98,7 @@ let {
         { k: "sampleEntropy", v: se.toFixed(3), c: '#6b7280' },
         { k: "pacThetaGamma", v: pac.toFixed(3), c: pac>0.5?'var(--color-violet-500)':'#6b7280', bar: pac*100, bg:'bg-violet-500' },
         { k: "lateralityIndex", v: (lat>=0?'+':'')+lat.toFixed(3), c: '#6b7280' },
+        { k: "echt", v: echt.toFixed(3), c: echt>0.5?'#22c55e':'#6b7280', bar: echt*100, bg:'bg-emerald-500' },
         { k: "headache", v: headache.toFixed(0), c: headache>60?'#f43f5e':headache>30?'#f59e0b':'#22c55e', bar: Math.min(100,headache), grad:'linear-gradient(90deg,#f87171,#ef4444)' },
         { k: "migraine", v: migraine.toFixed(0), c: migraine>60?'#f43f5e':migraine>30?'#f59e0b':'#22c55e', bar: Math.min(100,migraine), grad:'linear-gradient(90deg,#fb7185,#f43f5e)' },
       ] as item}

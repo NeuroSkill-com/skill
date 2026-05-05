@@ -428,6 +428,7 @@ impl ParquetState {
         row.extend_from_slice(&[opt(snap.meditation), opt(snap.cognitive_load), opt(snap.drowsiness)]);
         row.push(opt_u16(snap.temperature_raw));
         row.extend_from_slice(&[opt(snap.gpu_overall), opt(snap.gpu_render), opt(snap.gpu_tiler)]);
+        row.push(snap.echt as f64);
 
         self.metrics_pending.push(row);
         self.metrics_rows += 1;

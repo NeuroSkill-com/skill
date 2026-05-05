@@ -208,6 +208,10 @@ pub struct BandSnapshot {
     /// Laterality Index — generalised L/R asymmetry across all bands.  [Homan 1987]
     pub laterality_index: f32,
 
+    /// Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1)
+    /// from causal-Morlet instantaneous phase.  [Schreglmann et al. 2021]
+    pub echt: f32,
+
     // ── Headache / Migraine EEG correlate indices (0–100) ───────────────────
     // Research biomarkers derived from published literature.
     // NOT clinical diagnostic tools — for informational/research purposes only.
@@ -840,6 +844,7 @@ impl BandAnalyzer {
         let mut dfa_sum = 0.0f32;
         let mut se_sum = 0.0f32;
         let mut pac_sum = 0.0f32;
+        let mut echt_sum = 0.0f32;
         for ch_idx in 0..EEG_CHANNELS {
             let raw: Vec<f32> = self.window[ch_idx].iter().copied().collect();
             let (ha, hm, hc) = hjorth_params(&raw);
@@ -851,6 +856,7 @@ impl BandAnalyzer {
             dfa_sum += dfa_exponent(&raw);
             se_sum += sample_entropy_fn(&raw);
             pac_sum += pac_theta_gamma_fn(&raw, self.sample_rate);
+            echt_sum += echt_fn(&raw, self.sample_rate);
         }
         let hjorth_activity = ha_sum / safe_nch;
         let hjorth_mobility = hm_sum / safe_nch;
@@ -860,6 +866,7 @@ impl BandAnalyzer {
         let dfa_exponent_val = dfa_sum / safe_nch;
         let sample_entropy_val = se_sum / safe_nch;
         let pac_theta_gamma = pac_sum / safe_nch;
+        let echt = echt_sum / safe_nch;
 
         // ── Laterality Index ─────────────────────────────────────────────────
         let laterality_index = laterality_index_fn(&ch_powers);
@@ -989,6 +996,7 @@ impl BandAnalyzer {
             sample_entropy: sample_entropy_val,
             pac_theta_gamma,
             laterality_index,
+            echt,
             headache_index,
             migraine_index,
             consciousness_lzc,
