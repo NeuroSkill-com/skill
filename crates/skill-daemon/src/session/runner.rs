@@ -152,6 +152,10 @@ pub(crate) async fn run_adapter_session(
                                 p.firmware_version = info.firmware_version.clone();
                                 p.device_kind = device_kind.to_string();
                                 p.fnirs_channel_names = current_desc.fnirs_channel_names.clone();
+                                // Drop a partial sidecar before any samples
+                                // flow so a crash here leaves a readable
+                                // session entry for list_sessions_for_day.
+                                p.write_partial_sidecar();
                                 if let Ok(mut s) = state.status.lock() {
                                     s.csv_path = Some(p.csv_path.display().to_string());
                                 }
@@ -2025,37 +2029,39 @@ mod tests {
         let day = day_dir.file_name().unwrap().to_str().unwrap().to_string();
 
         // 1. History listing — used by /v1/history/sessions and the frontend
-        //    history page. Must return one entry per chunk with sane fields.
+        //    history page. Same-device adjacent chunks are now collapsed
+        //    into one logical entry whose `chunk_count` reflects the roll
+        //    count. With this test pushing N chunks of "Muse-Roll", expect
+        //    a single merged entry covering all of them.
         let entries = skill_history::list_sessions_for_day(&day, dir.path(), None);
         assert_eq!(
             entries.len(),
-            chunks.len(),
-            "list_sessions_for_day count must match chunk count"
+            1,
+            "{} same-device chunks must collapse into 1 logical entry",
+            chunks.len()
         );
-        for e in &entries {
-            assert_eq!(e.device_name.as_deref(), Some("Muse-Roll"));
-            assert!(
-                std::path::Path::new(&e.csv_path).exists(),
-                "csv_path from sidecar must resolve: {}",
-                e.csv_path
-            );
-            assert!(e.session_start_utc.is_some(), "session_start_utc populated");
-            assert!(
-                e.firmware_version.as_deref() == Some("1.0.0"),
-                "firmware_version threaded through to entry"
-            );
-        }
-        // Entries are sorted by session_start_utc ascending or descending —
-        // enforce strict monotonicity so the UI shows a consistent order
-        // across rollover boundaries.
-        let starts: Vec<u64> = entries.iter().filter_map(|e| e.session_start_utc).collect();
-        assert_eq!(starts.len(), entries.len(), "every entry has a start time");
-        let monotonic_inc = starts.windows(2).all(|w| w[0] <= w[1]);
-        let monotonic_dec = starts.windows(2).all(|w| w[0] >= w[1]);
+        let merged = &entries[0];
+        assert_eq!(
+            u32::try_from(chunks.len()).unwrap(),
+            merged.chunk_count,
+            "merged entry's chunk_count must match the on-disk chunk count"
+        );
+        assert_eq!(merged.device_name.as_deref(), Some("Muse-Roll"));
         assert!(
-            monotonic_inc || monotonic_dec,
-            "session list must be monotonically ordered: {starts:?}"
+            std::path::Path::new(&merged.csv_path).exists(),
+            "canonical csv_path resolves: {}",
+            merged.csv_path
         );
+        assert!(merged.session_start_utc.is_some(), "session_start_utc populated");
+        assert!(
+            merged.firmware_version.as_deref() == Some("1.0.0"),
+            "firmware_version threaded through to merged entry"
+        );
+        let chunk_paths = merged.chunks.as_ref().expect("chunks list present on merged entry");
+        assert_eq!(chunk_paths.len(), chunks.len(), "every chunk path preserved");
+        for p in chunk_paths {
+            assert!(std::path::Path::new(p).exists(), "every chunk path resolves: {p}");
+        }
 
         // 2. Per-day SQLite (search index) is created for the day, not per
         //    session — so embeddings written by a chunk land in the same

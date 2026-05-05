@@ -126,6 +126,20 @@ pub struct SessionEntry {
     /// Average signal-to-noise ratio (dB) for the session.
     /// `None` for legacy sessions recorded before SNR tracking.
     pub avg_snr_db: Option<f64>,
+    /// Number of underlying rollover chunks merged into this entry. `1`
+    /// for ordinary single-chunk sessions; `>1` when adjacent same-device
+    /// chunks have been collapsed into one logical session for the UI.
+    #[serde(default = "default_chunk_count")]
+    pub chunk_count: u32,
+    /// CSV paths of every chunk in this logical session, oldest first.
+    /// `None` for non-collapsed entries (the canonical `csv_path` is the
+    /// only chunk).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunks: Option<Vec<String>>,
+}
+
+fn default_chunk_count() -> u32 {
+    1
 }
 
 // ── Typed session JSON sidecar (replaces serde_json::Value for speed) ─────────
@@ -574,6 +588,8 @@ pub fn list_sessions_for_day(
                 labels: vec![],
                 file_size_bytes: csv_size,
                 avg_snr_db: meta.avg_snr_db,
+                chunk_count: 1,
+                chunks: None,
             },
             start,
             end,
@@ -618,6 +634,8 @@ pub fn list_sessions_for_day(
                 labels: vec![],
                 file_size_bytes: csv_size,
                 avg_snr_db: None, // no sidecar available
+                chunk_count: 1,
+                chunks: None,
             },
             ts,
             end_ts,
@@ -642,7 +660,100 @@ pub fn list_sessions_for_day(
 
     let mut sessions: Vec<SessionEntry> = raw.into_iter().map(|(s, _, _)| s).collect();
     sessions.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
-    sessions
+    collapse_adjacent_chunks(sessions)
+}
+
+/// Maximum gap (seconds) between two same-device chunks for them to be
+/// considered the "same logical session" and merged into one entry.
+/// Rollover boundaries normally produce 0–1s gaps; tolerate up to 5s for
+/// LSL/BLE jitter or a brief reconnect.
+const ROLLOVER_GAP_TOLERANCE_S: u64 = 5;
+
+/// Collapse adjacent same-device chunks into single logical entries.
+///
+/// Rollover (`session_rollover_minutes`) splits long recordings into many
+/// chunk files. For UI listing, runs of chunks with the same `device_name`
+/// and ≤ `ROLLOVER_GAP_TOLERANCE_S` seconds between adjacent end → start
+/// are merged into one entry that aggregates `total_samples`,
+/// `session_duration_s`, `file_size_bytes`, and labels. The newest
+/// chunk's `csv_path` is kept as the canonical reference; every chunk's
+/// path is preserved in the new `chunks` field for drill-down.
+///
+/// Crate-internal alias so sibling modules (`local_days`) can re-collapse
+/// after dir-merging. Kept thin and named to match its private twin.
+pub(crate) fn collapse_adjacent_chunks_pub(sorted_desc: Vec<SessionEntry>) -> Vec<SessionEntry> {
+    collapse_adjacent_chunks(sorted_desc)
+}
+
+/// Input must be sorted by `session_start_utc` descending.
+fn collapse_adjacent_chunks(sorted_desc: Vec<SessionEntry>) -> Vec<SessionEntry> {
+    if sorted_desc.is_empty() {
+        return sorted_desc;
+    }
+
+    let mut out: Vec<SessionEntry> = Vec::with_capacity(sorted_desc.len());
+    for s in sorted_desc {
+        let Some(head) = out.last_mut() else {
+            out.push(s);
+            continue;
+        };
+        // `s` is older than head (input sorted DESC). Adjacent if `s.end`
+        // is within ROLLOVER_GAP_TOLERANCE_S of `head.start`, AND device
+        // names match (skip merging across device swaps).
+        let same_device = match (&head.device_name, &s.device_name) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        };
+        let adjacent = match (head.session_start_utc, s.session_end_utc) {
+            (Some(hs), Some(se)) => hs.saturating_sub(se) <= ROLLOVER_GAP_TOLERANCE_S && hs >= se,
+            _ => false,
+        };
+        if !same_device || !adjacent {
+            out.push(s);
+            continue;
+        }
+        // Merge `s` into `head` (head is the newer one; absorb older).
+        head.session_start_utc = s.session_start_utc.or(head.session_start_utc);
+        if let (Some(hs), Some(he)) = (head.session_start_utc, head.session_end_utc) {
+            head.session_duration_s = Some(he.saturating_sub(hs));
+        }
+        head.total_samples = match (head.total_samples, s.total_samples) {
+            (Some(a), Some(b)) => Some(a + b),
+            (Some(a), None) | (None, Some(a)) => Some(a),
+            (None, None) => None,
+        };
+        head.file_size_bytes = head.file_size_bytes.saturating_add(s.file_size_bytes);
+        head.chunk_count = head.chunk_count.saturating_add(1);
+        // Inherit identity / hardware fields from the absorbed chunk if
+        // the head is missing them (e.g. an in-progress chunk with a
+        // partial sidecar).
+        head.firmware_version = head.firmware_version.clone().or(s.firmware_version);
+        head.serial_number = head.serial_number.clone().or(s.serial_number);
+        head.mac_address = head.mac_address.clone().or(s.mac_address);
+        head.hardware_version = head.hardware_version.clone().or(s.hardware_version);
+        head.sample_rate_hz = head.sample_rate_hz.or(s.sample_rate_hz);
+        // Keep all chunk paths; the canonical csv_path stays as head's.
+        let chunks = head.chunks.get_or_insert_with(|| vec![head.csv_path.clone()]);
+        chunks.push(s.csv_path);
+        // Concatenate labels (oldest first → newest last after the rev).
+        head.labels.extend(s.labels);
+        // avg_snr_db: take the simple average of available values for now
+        // (a sample-weighted average would require keeping per-chunk
+        // counts; not worth the extra plumbing for a UI summary field).
+        head.avg_snr_db = match (head.avg_snr_db, s.avg_snr_db) {
+            (Some(a), Some(b)) => Some((a + b) / 2.0),
+            (Some(a), None) | (None, Some(a)) => Some(a),
+            (None, None) => None,
+        };
+    }
+    // Each merged entry's `chunks` was built head-then-older; reverse so
+    // it reads oldest → newest, matching frontend expectations.
+    for entry in &mut out {
+        if let Some(c) = entry.chunks.as_mut() {
+            c.reverse();
+        }
+    }
+    out
 }
 
 /// Compute average SNR (dB) from the embeddings SQLite for sessions that
@@ -1432,5 +1543,136 @@ mod session_listing_tests {
         assert!(!json.exists());
         assert!(!metrics.exists());
         assert!(!ppg.exists());
+    }
+
+    // ── collapse_adjacent_chunks ──────────────────────────────────────────
+
+    /// Helper: build a SessionEntry with the fields the collapser actually
+    /// reads, defaulting the rest. Input `(start, end, samples, dev)`.
+    fn mk(start: u64, end: u64, samples: u64, device: &str, path: &str) -> super::SessionEntry {
+        super::SessionEntry {
+            csv_file: format!("{path}.csv"),
+            csv_path: path.to_string(),
+            session_start_utc: Some(start),
+            session_end_utc: Some(end),
+            session_duration_s: Some(end - start),
+            device_name: Some(device.to_string()),
+            device_id: None,
+            serial_number: None,
+            mac_address: None,
+            firmware_version: None,
+            hardware_version: None,
+            headset_preset: None,
+            battery_pct: None,
+            total_samples: Some(samples),
+            sample_rate_hz: Some(256),
+            labels: vec![],
+            file_size_bytes: 100,
+            avg_snr_db: Some(15.0),
+            chunk_count: 1,
+            chunks: None,
+        }
+    }
+
+    #[test]
+    fn collapse_merges_60_adjacent_chunks_into_one_entry() {
+        // Mirror the 1-hour test: 60 chunks back-to-back, same device.
+        let mut chunks: Vec<super::SessionEntry> = (0..60)
+            .map(|i| {
+                let start = 1_777_900_000 + i as u64 * 60;
+                mk(start, start + 60, 15360, "Muse-Roll", &format!("p{i}"))
+            })
+            .collect();
+        chunks.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
+
+        let merged = super::collapse_adjacent_chunks(chunks);
+        assert_eq!(merged.len(), 1, "60 adjacent chunks must collapse to one");
+        let m = &merged[0];
+        assert_eq!(m.chunk_count, 60);
+        assert_eq!(m.total_samples, Some(15360 * 60));
+        assert_eq!(m.session_duration_s, Some(60 * 60));
+        assert_eq!(m.session_start_utc, Some(1_777_900_000));
+        assert_eq!(m.session_end_utc, Some(1_777_900_000 + 60 * 60));
+        let chunk_paths = m.chunks.as_ref().expect("chunks list populated");
+        assert_eq!(chunk_paths.len(), 60);
+        assert_eq!(chunk_paths.first().unwrap(), "p0", "oldest first");
+        assert_eq!(chunk_paths.last().unwrap(), "p59", "newest last");
+    }
+
+    #[test]
+    fn collapse_keeps_non_adjacent_separate() {
+        // Two clusters separated by a 5-minute gap.
+        let mut entries = vec![
+            mk(1000, 1060, 100, "Muse", "a1"),
+            mk(1060, 1120, 100, "Muse", "a2"),
+            mk(1500, 1560, 100, "Muse", "b1"), // 380s gap → separate
+            mk(1560, 1620, 100, "Muse", "b2"),
+        ];
+        entries.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
+
+        let merged = super::collapse_adjacent_chunks(entries);
+        assert_eq!(merged.len(), 2, "two distinct sessions must remain");
+        assert_eq!(merged[0].chunk_count, 2);
+        assert_eq!(merged[1].chunk_count, 2);
+    }
+
+    #[test]
+    fn collapse_keeps_different_devices_separate() {
+        let mut entries = vec![
+            mk(1000, 1060, 100, "Muse", "muse1"),
+            mk(1060, 1120, 100, "Muse", "muse2"),
+            mk(1120, 1180, 100, "OpenBCI", "obci1"), // device swap
+            mk(1180, 1240, 100, "OpenBCI", "obci2"),
+        ];
+        entries.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
+
+        let merged = super::collapse_adjacent_chunks(entries);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].device_name.as_deref(), Some("OpenBCI"));
+        assert_eq!(merged[0].chunk_count, 2);
+        assert_eq!(merged[1].device_name.as_deref(), Some("Muse"));
+        assert_eq!(merged[1].chunk_count, 2);
+    }
+
+    #[test]
+    fn collapse_tolerates_gaps_within_5s() {
+        // 3-second BLE jitter between chunks — must still merge.
+        let mut entries = vec![
+            mk(1000, 1060, 100, "Muse", "a"),
+            mk(1063, 1123, 100, "Muse", "b"), // 3s gap
+            mk(1128, 1188, 100, "Muse", "c"), // 5s gap (boundary)
+        ];
+        entries.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
+
+        let merged = super::collapse_adjacent_chunks(entries);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].chunk_count, 3);
+    }
+
+    #[test]
+    fn collapse_breaks_on_6s_gap() {
+        let mut entries = vec![
+            mk(1000, 1060, 100, "Muse", "a"),
+            mk(1066, 1126, 100, "Muse", "b"), // 6s gap → split
+        ];
+        entries.sort_by_key(|s| std::cmp::Reverse(s.session_start_utc));
+
+        let merged = super::collapse_adjacent_chunks(entries);
+        assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn collapse_singleton_unchanged() {
+        let entries = vec![mk(1000, 1060, 100, "Muse", "solo")];
+        let merged = super::collapse_adjacent_chunks(entries);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].chunk_count, 1);
+        assert!(merged[0].chunks.is_none(), "singleton has no chunks list");
+    }
+
+    #[test]
+    fn collapse_empty_input() {
+        let merged = super::collapse_adjacent_chunks(vec![]);
+        assert!(merged.is_empty());
     }
 }
