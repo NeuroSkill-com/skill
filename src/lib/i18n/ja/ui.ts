@@ -36,6 +36,7 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "サンプルエントロピー — 信号の不規則性。高いほど予測不可能。",
   "tip.pacThetaGamma": "シータ位相とガンマ振幅の位相振幅結合。記憶のエンコーディングに関連。",
   "tip.lateralityIndex": "すべての帯域にわたる左右パワー非対称性。正 = 右優位。",
+  "tip.echt": "端点補正ヒルベルト変換 — α帯リズム性 (0–1)。高 = 強く位相が安定したα振動。[Schreglmann 2021]",
   "tip.hr": "PPG拍間間隔から導出された心拍数。",
   "tip.rmssd": "連続する心拍間隔の差の二乗平均平方根。主要な副交感HRV指標。",
   "tip.sdnn": "拍間間隔の標準偏差。全体的なHRVを反映。",

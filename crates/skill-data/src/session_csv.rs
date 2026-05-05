@@ -67,7 +67,7 @@ pub fn fnirs_csv_path(eeg_path: &Path) -> PathBuf {
 /// - 3 GPU utilisation
 ///
 /// Cross-channel metric column names (after the per-channel band powers).
-pub const METRICS_CROSS_CHANNEL_HEADER: [&str; 46] = [
+pub const METRICS_CROSS_CHANNEL_HEADER: [&str; 47] = [
     // ── Cross-channel EEG indices ──
     "faa",
     "tar",
@@ -121,6 +121,10 @@ pub const METRICS_CROSS_CHANNEL_HEADER: [&str; 46] = [
     "gpu_overall_pct",
     "gpu_render_pct",
     "gpu_tiler_pct",
+    // ── Phase metrics ──
+    // Appended at the end so older recordings (without this column) remain
+    // readable with the existing fixed-offset parser in skill-history.
+    "echt",
 ];
 
 /// Band-power suffixes for each channel (6 absolute + 6 relative = 12 per channel).
@@ -158,7 +162,7 @@ pub fn build_metrics_header(channel_names: &[&str]) -> Vec<String> {
 }
 
 /// Legacy fixed header for 4-channel Muse (kept for backward-compat reading).
-pub const METRICS_CSV_HEADER: [&str; 95] = [
+pub const METRICS_CSV_HEADER: [&str; 96] = [
     "timestamp_s",
     "TP9_delta",
     "TP9_theta",
@@ -254,6 +258,7 @@ pub const METRICS_CSV_HEADER: [&str; 95] = [
     "gpu_overall_pct",
     "gpu_render_pct",
     "gpu_tiler_pct",
+    "echt",
 ];
 
 // ── CSV writer ────────────────────────────────────────────────────────────────
@@ -657,6 +662,9 @@ impl CsvState {
             row.push(opt_f64(snap.gpu_overall));
             row.push(opt_f64(snap.gpu_render));
             row.push(opt_f64(snap.gpu_tiler));
+
+            // Phase metrics (appended at end for backward-compat).
+            row.push(format!("{:.6}", snap.echt));
 
             let refs: Vec<&str> = row.iter().map(String::as_str).collect();
             let _ = wtr.write_record(&refs);

@@ -28,6 +28,7 @@ const dashboard: Record<string, string> = {
   "dashboard.sampleEntropy": "אנטר. דגימה",
   "dashboard.pacThetaGamma": "PAC (θ–γ)",
   "dashboard.lateralityIndex": "לטרליות",
+  "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "מדדי PPG",
   "dashboard.hr": "דופק",
   "dashboard.rmssd": "RMSSD",

@@ -207,6 +207,8 @@ struct MetricsBlob {
     #[serde(default, deserialize_with = "null_as_zero")]
     laterality_index: f64,
     #[serde(default, deserialize_with = "null_as_zero")]
+    echt: f64,
+    #[serde(default, deserialize_with = "null_as_zero")]
     hr: f64,
     #[serde(default, deserialize_with = "null_as_zero")]
     rmssd: f64,
@@ -324,6 +326,7 @@ impl MetricsBlob {
             se: self.sample_entropy,
             pac: self.pac_theta_gamma,
             lat: self.laterality_index,
+            echt: self.echt,
             hr: self.hr,
             rmssd: self.rmssd,
             sdnn: self.sdnn,
@@ -380,6 +383,7 @@ impl MetricsBlob {
         total.sample_entropy += self.sample_entropy;
         total.pac_theta_gamma += self.pac_theta_gamma;
         total.laterality_index += self.laterality_index;
+        total.echt += self.echt;
         total.hr += self.hr;
         total.rmssd += self.rmssd;
         total.sdnn += self.sdnn;
@@ -704,6 +708,7 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
         total.sample_entropy /= n;
         total.pac_theta_gamma /= n;
         total.laterality_index /= n;
+        total.echt /= n;
         total.hr /= n;
         total.rmssd /= n;
         total.sdnn /= n;
@@ -1501,6 +1506,7 @@ struct MetricsBlobOut {
     sample_entropy: f64,
     pac_theta_gamma: f64,
     laterality_index: f64,
+    echt: f64,
     hr: f64,
     rmssd: f64,
     sdnn: f64,
@@ -1555,6 +1561,7 @@ fn epoch_row_to_metrics_json(row: &EpochRow) -> String {
         sample_entropy: row.se,
         pac_theta_gamma: row.pac,
         laterality_index: row.lat,
+        echt: row.echt,
         hr: row.hr,
         rmssd: row.rmssd,
         sdnn: row.sdnn,

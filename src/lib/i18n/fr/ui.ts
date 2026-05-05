@@ -49,6 +49,7 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "Entropie d'échantillon - irrégularité du signal. Plus élevé = moins prévisible.",
   "tip.pacThetaGamma": "Couplage phase-amplitude thêta-gamma. Lié à l'encodage mnésique.",
   "tip.lateralityIndex": "Asymétrie gauche-droite de puissance. Positif = dominance droite.",
+  "tip.echt": "Transformée de Hilbert à correction d'extrémité — rythmicité de la bande alpha (0–1). Élevé = oscillation alpha forte et phase stable. [Schreglmann 2021]",
   "tip.hr": "Fréquence cardiaque dérivée des intervalles inter-battements PPG.",
   "tip.rmssd": "Racine carrée des différences successives. Métrique parasympathique clé de la VFC.",
   "tip.sdnn": "Écart type des intervalles battement par battement. Reflète la VFC globale.",
