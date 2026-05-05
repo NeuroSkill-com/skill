@@ -12121,6 +12121,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit",
  "osf-rs",
+ "pollster",
  "rand 0.10.1",
  "regex",
  "reve-rs",
@@ -12171,6 +12172,7 @@ dependencies = [
  "ureq 3.3.0",
  "urlencoding",
  "uuid",
+ "wgpu",
  "zstd",
  "zuna-rs",
 ]
