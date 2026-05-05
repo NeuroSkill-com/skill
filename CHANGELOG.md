@@ -5455,6 +5455,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - normalized fonts
 
+## [0.0.130-rc.16] — 2026-05-05
+
+### Features
+
+- Minor updates and improvements
+
 ## [0.0.130-rc.2] — 2026-04-29
 
 ### Features
