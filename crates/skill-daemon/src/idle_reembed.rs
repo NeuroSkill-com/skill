@@ -112,28 +112,53 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             let throttle_ms = cfg.idle_reembed_throttle_ms;
             let batch_size = cfg.batch_size.max(1);
 
-            tokio::task::spawn_blocking(move || {
-                if let Err(e) = run_idle_reembed(&state_clone, use_gpu, throttle_ms, batch_size) {
-                    warn!("[idle-reembed] failed: {e}");
-                }
-                // Rebuild label EEG index so interactive search picks up new embeddings.
-                let skill_dir = state_clone.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-                let stats = skill_label_index::rebuild(&skill_dir, &state_clone.label_index);
-                info!(
-                    "[idle-reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
-                    stats.text_nodes, stats.eeg_nodes, stats.eeg_skipped
-                );
-                // Mark idle reembed as done.
+            let handle = tokio::task::spawn_blocking(move || {
+                // Wrap the reembed body in catch_unwind so a panic in encoder
+                // load, encode, or label-index rebuild surfaces as a logged
+                // join error rather than a silently orphaned task.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if let Err(e) = run_idle_reembed(&state_clone, use_gpu, throttle_ms, batch_size) {
+                        warn!("[idle-reembed] failed: {e}");
+                    }
+                    // Rebuild label EEG index so interactive search picks up new embeddings.
+                    let skill_dir = state_clone.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+                    let stats = skill_label_index::rebuild(&skill_dir, &state_clone.label_index);
+                    info!(
+                        "[idle-reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
+                        stats.text_nodes, stats.eeg_nodes, stats.eeg_skipped
+                    );
+                }));
+
+                let panicked = result.is_err();
+
+                // Always drop the active flag and signal completion, even on panic,
+                // so the UI doesn't get stuck in an "active" state forever.
                 if let Ok(mut st) = state_clone.idle_reembed_state.lock() {
                     st.active = false;
                 }
-                // Signal completion.
+                let status = if panicked { "idle_panic" } else { "idle_done" };
                 let _ = state_clone.events_tx.send(skill_daemon_common::EventEnvelope {
                     r#type: "reembed-progress".into(),
                     ts_unix_ms: now_unix_ms(),
                     correlation_id: None,
-                    payload: serde_json::json!({ "status": "idle_done" }),
+                    payload: serde_json::json!({ "status": status }),
                 });
+
+                if panicked {
+                    warn!("[idle-reembed] worker panicked — task body unwound, state cleared");
+                }
+            });
+
+            // Watcher: log if the spawn_blocking task itself fails to join
+            // (panic that escaped the catch_unwind, or runtime cancellation).
+            tokio::spawn(async move {
+                if let Err(join_err) = handle.await {
+                    if join_err.is_panic() {
+                        warn!("[idle-reembed] task panicked outside catch_unwind: {join_err}");
+                    } else if join_err.is_cancelled() {
+                        info!("[idle-reembed] task cancelled");
+                    }
+                }
             });
         }
     });
