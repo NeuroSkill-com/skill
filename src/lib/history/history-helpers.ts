@@ -26,6 +26,14 @@ export interface SessionEntry {
   file_size_bytes: number;
   /** Average signal-to-noise ratio (dB) for the session. `null` for very old sessions. */
   avg_snr_db: number | null;
+  /**
+   * Number of underlying rollover chunks merged into this entry. `1` for
+   * ordinary single-chunk sessions; `>1` when adjacent same-device chunks
+   * were collapsed into one logical session by the backend.
+   */
+  chunk_count?: number;
+  /** CSV paths of every chunk in this logical session, oldest first. */
+  chunks?: string[];
 }
 
 export interface HistoryStatsData {
