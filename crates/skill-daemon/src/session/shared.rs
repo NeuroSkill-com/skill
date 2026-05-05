@@ -182,3 +182,42 @@ pub fn write_session_meta_full(
         let _ = std::fs::write(csv_path.with_extension("json"), json);
     }
 }
+
+/// Write a minimal in-progress sidecar JSON immediately after opening a
+/// recording, before any samples are flushed. Crash-resilience: a daemon
+/// killed mid-chunk leaves a sidecar with the known device/channel/rate
+/// fields, so `list_sessions_for_day` doesn't have to fall back to
+/// CSV-header sniffing for partial recordings.
+///
+/// Carries an `in_progress: true` marker; the full writer overwrites this
+/// file on `finalize()` and that flag is dropped.
+pub fn write_session_meta_partial(
+    csv_path: &Path,
+    device_name: &str,
+    channel_names: &[String],
+    sample_rate: f64,
+    start_utc: u64,
+    device_id: &SessionDeviceId<'_>,
+    device_kind: &str,
+) {
+    let meta = serde_json::json!({
+        "csv_file": csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
+        "session_start_utc": start_utc,
+        "total_samples": 0,
+        "sample_rate_hz": sample_rate,
+        "device_name": device_name,
+        "device_kind": device_kind,
+        "channel_names": channel_names,
+        "channel_count": channel_names.len(),
+        "firmware_version": device_id.firmware_version,
+        "serial_number": device_id.serial_number,
+        "daemon": true,
+        "in_progress": true,
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    });
+
+    if let Ok(json) = serde_json::to_string_pretty(&meta) {
+        let _ = std::fs::write(csv_path.with_extension("json"), json);
+    }
+}
