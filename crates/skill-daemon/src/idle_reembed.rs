@@ -25,6 +25,9 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
 
         loop {
             tokio::time::sleep(Duration::from_secs(10)).await;
+            // Heartbeat marks the polling loop tick (not the actual embed run,
+            // which spawn_blocking does separately and updates `idle_reembed_state`).
+            state.record_task_heartbeat("idle-reembed", 0);
 
             // Load current settings every tick (user may change them).
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -210,9 +213,15 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
     // Subscribe to progress events so we can mirror them into the observable state.
     let mut rx = state.events_tx.subscribe();
 
-    // Spawn a helper thread to update idle_reembed_state from progress events.
+    // Spawn a helper thread to update idle_reembed_state from progress events
+    // *and* record a real heartbeat for each batch — so the activity panel
+    // shows actual embed throughput (e.g. "took 240 ms · 1234 ticks") rather
+    // than the 0-ms ticks of the outer 10s polling loop.
     let idle_state_clone = idle_state.clone();
+    let state_for_hb = state.clone();
     let updater = std::thread::spawn(move || {
+        let mut prev_done: u64 = 0;
+        let mut prev_progress_at = std::time::Instant::now();
         while let Ok(ev) = rx.blocking_recv() {
             if ev.r#type != "reembed-progress" {
                 continue;
@@ -230,6 +239,17 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
                     st.current_day = day;
                 }
             }
+
+            // If `done` advanced, that batch finished work — record a heartbeat
+            // with the elapsed wall-clock for that batch. We use saturating
+            // arithmetic in case events arrive out of order.
+            if done > prev_done {
+                let elapsed_ms = prev_progress_at.elapsed().as_millis() as u64;
+                state_for_hb.record_task_heartbeat("idle-reembed", elapsed_ms);
+                prev_done = done;
+                prev_progress_at = std::time::Instant::now();
+            }
+
             if matches!(status, "done" | "idle_done" | "complete" | "paused") {
                 break;
             }

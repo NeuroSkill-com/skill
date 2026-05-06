@@ -1329,7 +1329,17 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
     let mut settings_gen = state.settings_generation.load(Ordering::Relaxed);
 
     loop {
-        std::thread::sleep(Duration::from_secs(1));
+        // 3s cadence is fast enough for app-switch tracking (humans rarely
+        // bounce between windows faster than that) but ~3x cheaper than the
+        // old 1s wakeup. The cost adds up because every tick re-runs the
+        // platform active-window probe (Accessibility on macOS, X11/Wayland
+        // calls on Linux).
+        std::thread::sleep(Duration::from_secs(3));
+        let tick_start = std::time::Instant::now();
+        // Record the heartbeat before any early-continue branches so that
+        // "running but tracking disabled" still shows a live loop rather
+        // than a stale last_tick_unix_ms.
+        state.record_task_heartbeat("active-window-poll", 0);
 
         if !state.track_active_window.load(Ordering::Relaxed) {
             if let Some(snap) = snapshot.take() {
@@ -1510,6 +1520,10 @@ fn run_poller(state: AppState, store: Arc<ActivityStore>) {
             // Reclaim space from pruned rows (incremental auto-vacuum).
             store.optimize();
         }
+        // Update with the measured tick duration. The earlier no-op heartbeat
+        // already published a `last_tick_unix_ms`; this overwrite refines
+        // `last_duration_ms` for ticks that did real work.
+        state.record_task_heartbeat("active-window-poll", tick_start.elapsed().as_millis() as u64);
     }
 }
 
@@ -2695,13 +2709,86 @@ mod tests {
 
 // ── Clipboard monitor (macOS only) ───────────────────────────────────────────
 
+/// Read NSPasteboard.changeCount via objc2 — increments every time the
+/// pasteboard contents change, no IPC, no permission prompt. Replaces the
+/// previous `osascript "the clipboard info"` which forked a subprocess every
+/// 2 seconds even when nothing had been copied.
+#[cfg(target_os = "macos")]
+fn ns_pasteboard_change_count() -> Option<i64> {
+    use objc2_app_kit::NSPasteboard;
+    let pb = NSPasteboard::generalPasteboard();
+    Some(pb.changeCount() as i64)
+}
+
+/// Native (no-osascript, no-permission-prompt) read of pasteboard content
+/// type and size. Returns `(content_type, content_size_bytes)` matching
+/// the legacy osascript classifier so the activity store schema is stable.
+///
+/// `content_type` is one of "image" | "file" | "text" — we don't need finer
+/// granularity downstream and copying e.g. an RTF document still falls back
+/// to "text" (the activity store doesn't distinguish text variants).
+#[cfg(target_os = "macos")]
+fn ns_pasteboard_classify() -> (&'static str, u64) {
+    use objc2_app_kit::{
+        NSPasteboard, NSPasteboardTypeFileURL, NSPasteboardTypePNG, NSPasteboardTypeString, NSPasteboardTypeTIFF,
+    };
+
+    let pb = NSPasteboard::generalPasteboard();
+
+    // `types()` returns the UTI list currently on the pasteboard, ordered by
+    // richness. We probe in the same order the old osascript classifier did:
+    // image first (PNG/TIFF), then file URL, then any text. Compare as
+    // Rust strings since NSPasteboardType is a typedef for NSString and
+    // we don't want to depend on objc2 protocol traits.
+    let Some(types) = pb.types() else {
+        return ("text", 0);
+    };
+
+    let mut have_png = false;
+    let mut have_tiff = false;
+    let mut have_file_url = false;
+    let mut have_string = false;
+    for i in 0..types.count() {
+        let item = types.objectAtIndex(i);
+        let s = item.to_string();
+        match s.as_str() {
+            "public.png" => have_png = true,
+            "public.tiff" => have_tiff = true,
+            "public.file-url" => have_file_url = true,
+            "public.utf8-plain-text" => have_string = true,
+            _ => {}
+        }
+    }
+
+    let (content_type, probe_type): (&'static str, Option<&objc2_app_kit::NSPasteboardType>) = unsafe {
+        if have_png {
+            ("image", Some(NSPasteboardTypePNG))
+        } else if have_tiff {
+            ("image", Some(NSPasteboardTypeTIFF))
+        } else if have_file_url {
+            ("file", Some(NSPasteboardTypeFileURL))
+        } else if have_string {
+            ("text", Some(NSPasteboardTypeString))
+        } else {
+            ("text", None)
+        }
+    };
+
+    let content_size = probe_type
+        .and_then(|t| pb.dataForType(t))
+        .map(|d| d.length() as u64)
+        .unwrap_or(0);
+
+    (content_type, content_size)
+}
+
 #[cfg(target_os = "macos")]
 fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
     let mut last_change_count: i64 = -1;
-    let mut permission_denied_until: u64 = 0; // backoff when permission denied
 
     loop {
         std::thread::sleep(Duration::from_secs(2));
+        state.record_task_heartbeat("clipboard-monitor", 0);
 
         // Check if clipboard tracking is enabled.
         let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -2710,52 +2797,19 @@ fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
             continue;
         }
 
-        // Backoff when permission was recently denied (re-check every 60s).
-        let now = unix_secs();
-        if now < permission_denied_until {
-            continue;
-        }
-
-        // Query macOS pasteboard change count via osascript.
-        // If Automation permission is not granted, this will fail.
-        let out = match run_osascript("the clipboard info") {
-            Some(s) => s,
-            None => {
-                // Permission denied or osascript failed/timed out — back off for 60s.
-                permission_denied_until = now + 60;
+        // Cheap native gate: NSPasteboard.changeCount only changes when the
+        // pasteboard's contents change. While the user isn't copying, this
+        // is the only call we make.
+        if let Some(cc) = ns_pasteboard_change_count() {
+            if cc == last_change_count {
                 continue;
             }
-        };
-
-        // The output looks like: {{«class utf8», 42}, {string, 42}}
-        // We hash the output to detect changes.
-        let hash = {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            out.hash(&mut h);
-            h.finish() as i64
-        };
-
-        if hash == last_change_count {
-            continue;
+            last_change_count = cc;
         }
-        last_change_count = hash;
 
-        // Determine content size from the info string.
-        let content_size: u64 = out
-            .split(',')
-            .filter_map(|s| s.trim().trim_end_matches('}').trim().parse::<u64>().ok())
-            .next()
-            .unwrap_or(0);
-
-        // Detect content type from clipboard info.
-        let content_type = if out.contains("«class PNGf»") || out.contains("TIFF") {
-            "image"
-        } else if out.contains("«class furl»") {
-            "file"
-        } else {
-            "text"
-        };
+        // Native classification — no osascript, no Automation permission
+        // prompt, no subprocess fork even on copy events.
+        let (content_type, content_size) = ns_pasteboard_classify();
 
         // Get current active window as the "source app".
         let source_app = poll_active_window().map(|w| w.app_name).unwrap_or_default();
@@ -2801,26 +2855,21 @@ fn run_clipboard_monitor(state: AppState, store: Arc<ActivityStore>) {
 /// Returns the path to the temp file, or None if extraction fails.
 #[cfg(target_os = "macos")]
 fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
+    use objc2_app_kit::{NSPasteboard, NSPasteboardTypePNG};
+
     let tmp_dir = std::env::temp_dir();
     let tmp_path = tmp_dir.join(format!("skill_clipboard_{}.png", unix_secs()));
-    // Use osascript to write clipboard PNG data to a file.
-    let script = format!(
-        r#"
-        set pngData to the clipboard as «class PNGf»
-        set filePath to POSIX file "{}"
-        set fileRef to open for access filePath with write permission
-        write pngData to fileRef
-        close access fileRef
-        "#,
-        tmp_path.display()
-    );
-    match run_osascript(&script) {
-        Some(_) if tmp_path.exists() => Some(tmp_path),
-        _ => {
-            let _ = std::fs::remove_file(&tmp_path);
-            None
-        }
+
+    // Read PNG data straight from NSPasteboard — no osascript subprocess,
+    // no Apple Events permission prompt, no temp-file race.
+    let pb = NSPasteboard::generalPasteboard();
+    let data = pb.dataForType(unsafe { NSPasteboardTypePNG })?;
+    let bytes = data.to_vec();
+    if bytes.is_empty() {
+        return None;
     }
+    std::fs::write(&tmp_path, bytes).ok()?;
+    Some(tmp_path)
 }
 
 /// Extract clipboard image data to a temporary PNG file (Windows).

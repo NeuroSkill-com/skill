@@ -40,47 +40,65 @@ function runOrThrow(cmd, args) {
 }
 
 const triple = process.env.SKILL_DAEMON_TARGET || detectTargetTriple();
-console.log(`🔧 Building skill-daemon for ${triple || "native"} (release)…`);
+const ext = triple.includes("windows") ? ".exe" : "";
+const tripleLabel = triple || "native";
+const isWindows = triple.includes("windows") || platform() === "win32";
 
-const cargoArgs = ["build", "-p", "skill-daemon", "--release"];
+// skill-tty is unix-only — Windows shell hooks don't invoke it. Build it on
+// macOS/Linux only so the Windows pipeline doesn't waste CI minutes on it.
+const cratesToBuild = ["skill-daemon"];
+if (!isWindows) {
+  cratesToBuild.push("skill-tty");
+}
+
+console.log(`🔧 Building ${cratesToBuild.join(", ")} for ${triple || "native"} (release)…`);
+
+const cargoArgs = ["build", "--release"];
+for (const c of cratesToBuild) {
+  cargoArgs.push("-p", c);
+}
 if (triple) {
   cargoArgs.push("--target", triple);
 }
 
 runOrThrow("cargo", cargoArgs);
 
-const ext = triple.includes("windows") ? ".exe" : "";
-const candidates = [
-  triple ? resolve(targetDir, triple, "release", `skill-daemon${ext}`) : null,
-  resolve(targetDir, "release", `skill-daemon${ext}`),
-].filter(Boolean);
-
-const src = candidates.find((p) => existsSync(p));
-if (!src) {
-  console.error("❌ skill-daemon binary not found after build");
-  process.exit(1);
-}
-
 mkdirSync(binDir, { recursive: true });
-const tripleLabel = triple || "native";
-const dst = resolve(binDir, `skill-daemon-${tripleLabel}${ext}`);
-copyFileSync(src, dst);
 
-try {
-  chmodSync(dst, 0o755);
-} catch {
-  // Windows may ignore chmod; safe to continue.
+function stageBinary(name) {
+  const candidates = [
+    triple ? resolve(targetDir, triple, "release", `${name}${ext}`) : null,
+    resolve(targetDir, "release", `${name}${ext}`),
+  ].filter(Boolean);
+
+  const src = candidates.find((p) => existsSync(p));
+  if (!src) {
+    console.error(`❌ ${name} binary not found after build`);
+    process.exit(1);
+  }
+
+  const dst = resolve(binDir, `${name}-${tripleLabel}${ext}`);
+  copyFileSync(src, dst);
+  try {
+    chmodSync(dst, 0o755);
+  } catch {
+    // Windows may ignore chmod; safe to continue.
+  }
+
+  const releaseDir = triple ? resolve(targetDir, triple, "release") : resolve(targetDir, "release");
+  const releaseDst = resolve(releaseDir, `${name}${ext}`);
+  if (existsSync(releaseDir) && src !== releaseDst) {
+    copyFileSync(src, releaseDst);
+    console.log(`Copied to ${releaseDst}`);
+  } else if (src === releaseDst) {
+    console.log(`${name} already at ${releaseDst}`);
+  }
+
+  const size = statSync(dst).size;
+  const mb = (size / (1024 * 1024)).toFixed(1);
+  console.log(`✅ ${name} sidecar ready: ${dst} (${mb} MiB)`);
 }
 
-const releaseDir = triple ? resolve(targetDir, triple, "release") : resolve(targetDir, "release");
-const releaseDst = resolve(releaseDir, `skill-daemon${ext}`);
-if (existsSync(releaseDir) && src !== releaseDst) {
-  copyFileSync(src, releaseDst);
-  console.log(`Copied to ${releaseDst}`);
-} else if (src === releaseDst) {
-  console.log(`Daemon already at ${releaseDst}`);
+for (const c of cratesToBuild) {
+  stageBinary(c);
 }
-
-const size = statSync(dst).size;
-const mb = (size / (1024 * 1024)).toFixed(1);
-console.log(`✅ Daemon sidecar ready: ${dst} (${mb} MiB)`);

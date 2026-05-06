@@ -86,6 +86,7 @@ mod update_channel;
 mod window_cmds;
 
 mod daemon_cmds;
+mod daemon_upgrade;
 mod label_cmds;
 mod settings_cmds;
 

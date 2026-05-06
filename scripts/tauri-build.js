@@ -959,9 +959,14 @@ if (subcommand === "dev") {
 
 let daemonChild = null;
 if (subcommand === "dev" && !tuiTauriPane) {
-  console.log("\n🔧 Building skill-daemon…");
+  console.log("\n🔧 Building skill-daemon + skill-tty…");
   try {
+    // skill-tty is the sibling PTY proxy; build it alongside the daemon so
+    // dev shells exec into a separate process (and aren't killed when Tauri
+    // hot-reloads the daemon). Windows doesn't use the PTY proxy.
     const daemonBuildArgs = ["build", "-p", "skill-daemon"];
+    const isWin = process.platform === "win32" || (explicitTarget || "").includes("windows");
+    if (!isWin) daemonBuildArgs.push("-p", "skill-tty");
     if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
     execFileSync("cargo", daemonBuildArgs, { cwd: root, stdio: "inherit", env: process.env });
 

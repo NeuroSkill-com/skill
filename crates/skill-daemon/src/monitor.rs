@@ -55,6 +55,7 @@ pub fn spawn_status_monitor(state: AppState) {
 
         loop {
             tokio::time::sleep(Duration::from_secs(3)).await;
+            state.record_task_heartbeat("status-monitor", 0);
 
             let status = match state.status.lock() {
                 Ok(s) => s.clone(),

@@ -168,6 +168,7 @@ fn spawn_skills_sync(state: AppState) {
         tokio::time::sleep(Duration::from_secs(45)).await;
         let mut first_run = true;
         loop {
+            let tick_start = std::time::Instant::now();
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
             let settings = load_user_settings(&state);
             let interval_secs = settings.llm.tools.skills_refresh_interval_secs;
@@ -200,6 +201,7 @@ fn spawn_skills_sync(state: AppState) {
                 }
             }
 
+            state.record_task_heartbeat("skills-sync", tick_start.elapsed().as_millis() as u64);
             let sleep_secs = if interval_secs == 0 {
                 300
             } else {
