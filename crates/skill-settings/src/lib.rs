@@ -1086,7 +1086,11 @@ impl Default for ReembedConfig {
             idle_reembed_delay_secs: 1800, // 30 minutes
             idle_reembed_gpu: true,
             gpu_precision: "f16".into(),
-            idle_reembed_throttle_ms: 10,
+            // Sleep between epochs during background reembed. The previous
+            // default (10ms) drove the daemon to ~100% CPU on machines without
+            // a discrete GPU; 200ms keeps a typical day's backlog finishing
+            // overnight while leaving headroom for foreground work.
+            idle_reembed_throttle_ms: 200,
         }
     }
 }
@@ -1292,6 +1296,7 @@ fn default_brainmaster_model() -> String {
 pub fn load_settings(skill_dir: &Path) -> UserSettings {
     let path = settings_path(skill_dir);
     let mut s: UserSettings = skill_data::util::load_json_or_default(&path);
+    let mut json_dirty = false;
 
     // ── Shortcut migrations ──────────────────────────────────────────────
     if s.search_shortcut == "CmdOrCtrl+Shift+F" {
@@ -1299,6 +1304,19 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
     }
     if s.settings_shortcut == "CmdOrCtrl+Shift+S" {
         s.settings_shortcut = default_settings_shortcut();
+    }
+
+    // ── Idle re-embed throttle migration ─────────────────────────────────
+    // The original default was 10 ms, which kept the encoder running flat
+    // out and pinned a core to ~100% on machines without a fast GPU. The new
+    // default is 200 ms. We can't tell whether a user-saved 10 was an
+    // explicit choice or just the previous default, but anyone who set 10
+    // intentionally was almost certainly hitting the same CPU complaint —
+    // so promote the value either way and re-save so the migration sticks.
+    if s.reembed.idle_reembed_throttle_ms == 10 {
+        tracing::info!("[settings] migrating idle_reembed_throttle_ms 10 -> 200 (CPU-pinning legacy default)");
+        s.reembed.idle_reembed_throttle_ms = 200;
+        json_dirty = true;
     }
 
     // ── Secret migration: plaintext JSON → system keychain ───────────────
@@ -1316,7 +1334,7 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         neurosity_password: s.device_api.neurosity_password.clone(),
         neurosity_device_id: s.device_api.neurosity_device_id.clone(),
     });
-    if migrated {
+    if migrated || json_dirty {
         // Re-save without the secret fields (skip_serializing takes care of it).
         if let Ok(json) = serde_json::to_string_pretty(&s) {
             let _ = std::fs::write(&path, &json);

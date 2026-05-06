@@ -841,6 +841,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "productif %",
   "activity.totalReadingTime": "temps de lecture",
   "activity.avgScrollDepth": "profondeur moy.",
+
+  "daemonActivity.title": "Activité en arrière-plan du daemon",
+  "daemonActivity.intro":
+    "Tâches récurrentes exécutées par le daemon en arrière-plan : ce qu'elles font, à quoi elles servent et à quelle fréquence elles s'exécutent. Désactive les trackers inutilisés pour réduire la charge CPU.",
+  "daemonActivity.loading": "Chargement…",
+  "daemonActivity.running": "actif",
+  "daemonActivity.idle": "inactif",
+  "daemonActivity.eventDriven": "événementiel",
+  "daemonActivity.whyPrefix": "Pourquoi :",
+  "daemonActivity.costLow": "charge faible",
+  "daemonActivity.costMedium": "charge moyenne",
+  "daemonActivity.costHigh": "charge élevée",
+  "daemonActivity.never": "pas encore exécuté",
+  "daemonActivity.lastRanSecondsAgo": "il y a {n} s",
+  "daemonActivity.lastRanMinutesAgo": "il y a {n} min",
+  "daemonActivity.lastRanHoursAgo": "il y a {n} h",
+  "daemonActivity.tickDuration": "durée : {n} ms",
+  "daemonActivity.tickCount": "cycles : {n}",
 };
 
 export default settings;

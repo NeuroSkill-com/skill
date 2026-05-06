@@ -44,6 +44,7 @@ members = [
     "crates/skill-tools",
     "crates/skill-tray",
     "crates/skill-tts",
+    "crates/skill-tty",
     "crates/skill-vision",
     "crates/iroh_test_client",
     "crates/iroh-example-client",

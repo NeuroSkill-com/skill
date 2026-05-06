@@ -25,8 +25,10 @@ pub fn spawn(state: AppState) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(TICK).await;
+            let tick_start = std::time::Instant::now();
             let s = state.clone();
             let _ = tokio::task::spawn_blocking(move || run_once(&s)).await;
+            state.record_task_heartbeat("tty-embedder", tick_start.elapsed().as_millis() as u64);
         }
     });
 }

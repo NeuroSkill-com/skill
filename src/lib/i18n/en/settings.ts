@@ -807,6 +807,24 @@ const settings: Record<string, string> = {
   "settings.hfEndpointDesc":
     "Optional mirror/base URL for model downloads (LLM + EXG + TTS). Default follows HF_ENDPOINT or https://huggingface.co.",
   "settings.hfEndpointCurrent": "Current",
+
+  "daemonActivity.title": "Daemon Background Activity",
+  "daemonActivity.intro":
+    "Every recurring task the daemon runs in the background — what it does, why it exists, and how often it wakes up. Disable any tracker you don't use to free CPU.",
+  "daemonActivity.loading": "Loading…",
+  "daemonActivity.running": "running",
+  "daemonActivity.idle": "idle",
+  "daemonActivity.eventDriven": "event-driven",
+  "daemonActivity.whyPrefix": "Why:",
+  "daemonActivity.costLow": "low cost",
+  "daemonActivity.costMedium": "medium cost",
+  "daemonActivity.costHigh": "high cost",
+  "daemonActivity.never": "never run yet",
+  "daemonActivity.lastRanSecondsAgo": "last ran {n}s ago",
+  "daemonActivity.lastRanMinutesAgo": "last ran {n}m ago",
+  "daemonActivity.lastRanHoursAgo": "last ran {n}h ago",
+  "daemonActivity.tickDuration": "took {n} ms",
+  "daemonActivity.tickCount": "{n} ticks",
 };
 
 export default settings;

@@ -9,7 +9,7 @@ use futures::StreamExt;
 use skill_daemon_common::{DiscoveredDeviceResponse, ScannerWifiConfigRequest};
 use tokio::sync::oneshot;
 
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::state::AppState;
 use crate::util::{now_unix_secs, push_device_log};
@@ -637,13 +637,28 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
     // CoreBluetooth/BlueZ adapter stays alive between ticks.
     tokio::spawn(run_ble_listener_task(state.clone()));
 
-    let mut tick = tokio::time::interval(Duration::from_secs(5));
+    // Adaptive scan cadence. The scanner auto-starts at daemon boot and would
+    // otherwise probe every transport (USB serial, BLE cache, Cortex,
+    // NeuroField, BrainBit, g.tec, ANT Neuro, BrainMaster) every 5s forever —
+    // including for users with no device paired and nothing on the bus, which
+    // is the most expensive shape because every probe runs to completion. We
+    // start at the fast cadence so a freshly-plugged-in device appears within
+    // a few seconds, then back off to a 30s cadence after ~5 minutes of no
+    // discoveries and no paired devices. Any discovery or user-driven
+    // start/stop resets us to the fast cadence.
+    const FAST_TICK: Duration = Duration::from_secs(5);
+    const SLOW_TICK: Duration = Duration::from_secs(30);
+    const EMPTY_TICKS_BEFORE_BACKOFF: u32 = 60; // 60 * 5s = 5 min
+    let mut tick = tokio::time::interval(FAST_TICK);
+    let mut current_period = FAST_TICK;
+    let mut empty_ticks: u32 = 0;
     let mut cortex_tick = 0u64;
 
     loop {
         tokio::select! {
             _ = &mut stop_rx => break,
             _ = tick.tick() => {
+                let tick_start = std::time::Instant::now();
                 // Timeout serial port enumeration — on Windows the FTDI
                 // driver can occasionally stall `serialport::available_ports()`
                 // for 10+ seconds when a dongle is mid-reset.  Without a
@@ -852,6 +867,40 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
                     "scanner",
                     &format!("scan tick discovered {} devices", discovered_count),
                 );
+
+                // Adaptive backoff: count this tick as "empty" only when we
+                // have no paired devices to reconnect to AND no transport
+                // turned anything up. With paired devices we keep the fast
+                // cadence so a quick plug-in gets reconnected promptly.
+                let has_paired = state
+                    .status
+                    .lock()
+                    .map(|s| !s.paired_devices.is_empty())
+                    .unwrap_or(false);
+                if discovered_count == 0 && !has_paired {
+                    empty_ticks = empty_ticks.saturating_add(1);
+                } else {
+                    if current_period != FAST_TICK {
+                        info!("[scanner] device activity — returning to fast scan cadence");
+                        tick = tokio::time::interval(FAST_TICK);
+                        // Skip the immediate first tick (interval fires once on creation).
+                        tick.tick().await;
+                        current_period = FAST_TICK;
+                    }
+                    empty_ticks = 0;
+                }
+                if empty_ticks >= EMPTY_TICKS_BEFORE_BACKOFF && current_period != SLOW_TICK {
+                    info!(
+                        "[scanner] no devices found in {} ticks and none paired — backing off to {}s cadence",
+                        empty_ticks,
+                        SLOW_TICK.as_secs()
+                    );
+                    tick = tokio::time::interval(SLOW_TICK);
+                    tick.tick().await;
+                    current_period = SLOW_TICK;
+                }
+
+                state.record_task_heartbeat("device-scanner", tick_start.elapsed().as_millis() as u64);
             }
         }
     }

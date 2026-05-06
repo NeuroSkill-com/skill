@@ -17,6 +17,7 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { SettingsCard } from "$lib/components/ui/settings-card";
 import { ToggleRow } from "$lib/components/ui/toggle-row";
+import DaemonActivityPanel from "$lib/components/DaemonActivityPanel.svelte";
 import {
   getActiveWindow,
   getActiveWindowTracking,
@@ -1018,4 +1019,6 @@ onDestroy(() => {
     </CardContent>
   </SettingsCard>
 </section>
+
+<DaemonActivityPanel />
 

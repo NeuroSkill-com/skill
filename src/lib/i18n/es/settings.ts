@@ -839,6 +839,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "% productivo",
   "activity.totalReadingTime": "tiempo de lectura",
   "activity.avgScrollDepth": "profundidad media",
+
+  "daemonActivity.title": "Actividad en segundo plano del daemon",
+  "daemonActivity.intro":
+    "Tareas recurrentes que el daemon ejecuta en segundo plano: qué hacen, para qué sirven y con qué frecuencia se ejecutan. Desactiva los rastreadores que no uses para reducir la carga de CPU.",
+  "daemonActivity.loading": "Cargando…",
+  "daemonActivity.running": "activo",
+  "daemonActivity.idle": "inactivo",
+  "daemonActivity.eventDriven": "por eventos",
+  "daemonActivity.whyPrefix": "Por qué:",
+  "daemonActivity.costLow": "carga baja",
+  "daemonActivity.costMedium": "carga media",
+  "daemonActivity.costHigh": "carga alta",
+  "daemonActivity.never": "aún no se ha ejecutado",
+  "daemonActivity.lastRanSecondsAgo": "hace {n} s",
+  "daemonActivity.lastRanMinutesAgo": "hace {n} min",
+  "daemonActivity.lastRanHoursAgo": "hace {n} h",
+  "daemonActivity.tickDuration": "duración: {n} ms",
+  "daemonActivity.tickCount": "ciclos: {n}",
 };
 
 export default settings;

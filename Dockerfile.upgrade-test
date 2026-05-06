@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7
+# Linux end-to-end test harness for the daemon failsafe upgrade flow.
+# Used by scripts/test-upgrade-linux-docker.sh.
+#
+# Two scopes:
+#   A — primitives e2e (kill / port / state / hash / atomic copy) against real
+#       Python subprocesses. Covers daemon_upgrade::*.
+#   B — orchestrator e2e (full ensure_daemon_runtime_ready state machine)
+#       against a real skill-daemon build. Covers daemon_cmds::ensure_*.
+#
+# Both scopes run inside the same image; SCOPE env var selects which.
+# Uses BuildKit cache mounts so cargo registry + target cache survive rebuilds.
+
+# Stable Rust 1.85+ required: workspace transitively depends on cubek-matmul
+# which uses the (now-stabilized) edition2024 feature.
+FROM rust:1-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    CARGO_TERM_COLOR=always \
+    RUST_BACKTRACE=1 \
+    CARGO_HOME=/usr/local/cargo \
+    CARGO_TARGET_DIR=/work/target
+
+# System deps. The libwebkit2gtk + libsoup + libgtk set is overkill for the
+# upgrade tests (no Tauri/webview at runtime), but the `skill` crate's
+# dependency graph still pulls them in at *compile* time on Linux.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 \
+      pkg-config \
+      libssl-dev \
+      libdbus-1-dev \
+      libudev-dev \
+      libasound2-dev \
+      libxdo-dev \
+      libgtk-3-dev \
+      libwebkit2gtk-4.1-dev \
+      libsoup-3.0-dev \
+      libjavascriptcoregtk-4.1-dev \
+      procps \
+      lsof \
+      psmisc \
+      curl \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+COPY . .
+
+ENV SCOPE=A
+
+CMD ["bash", "-c", "/work/scripts/run-upgrade-tests-in-container.sh"]
