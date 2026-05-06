@@ -179,6 +179,7 @@ jobs:
             # llama-cpp-sys-4 with mtmd+metal+q1 via skill-llm's target-specific deps.
             # Building skill second reuses the cached native libs.
             cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --timings
+            cargo build -p skill-tty --release --locked --target aarch64-apple-darwin --timings
             cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol --timings
             
             # Fix @rpath for skill-daemon immediately after build
