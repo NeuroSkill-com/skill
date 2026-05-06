@@ -10,8 +10,8 @@ use crate::state::AppState;
 ///        <dir>/skill-tty[.exe]
 ///   2. macOS production .app: each binary lives in its own .app bundle
 ///      under the outer app's MacOS dir, e.g.
-///        <outer>/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon
-///        <outer>/MacOS/skill-tty.app/Contents/MacOS/skill-tty
+///      <outer>/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon
+///      <outer>/MacOS/skill-tty.app/Contents/MacOS/skill-tty
 ///      so we walk up four parents from the daemon binary to reach
 ///      `<outer>/MacOS/`, then descend into `skill-tty.app`.
 ///
