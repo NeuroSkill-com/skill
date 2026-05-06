@@ -127,6 +127,7 @@ fi
 # (so TCC permissions are tracked separately), Info.plist with LSUIElement so
 # Activity Monitor / Force Quit can identify it, and code signing.
 TTY_SRC="$TAURI_DIR/target/$TARGET/release/skill-tty"
+TTY_APP=""
 if [[ -f "$TTY_SRC" ]]; then
   TTY_APP="$MACOS_DIR/skill-tty.app"
   TTY_CONTENTS="$TTY_APP/Contents"
