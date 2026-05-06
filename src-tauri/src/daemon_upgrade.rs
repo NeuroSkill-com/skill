@@ -197,7 +197,8 @@ pub fn process_alive(pid: u32) -> bool {
     #[cfg(unix)]
     {
         // signal 0: existence check, no actual signal sent.
-        return unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
+        // SAFETY: kill with signal 0 is always safe; it only checks process existence.
+        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
     }
     #[cfg(target_os = "windows")]
     {
@@ -231,6 +232,7 @@ pub fn kill_pidfile_daemon() -> bool {
 
     log_event("stop", "sigterm", Some(&pid.to_string()));
     #[cfg(unix)]
+    // SAFETY: pid was read from our pidfile and validated; sending SIGTERM is safe.
     unsafe {
         libc::kill(pid as libc::pid_t, libc::SIGTERM);
     }
@@ -253,6 +255,7 @@ pub fn kill_pidfile_daemon() -> bool {
 
     log_event("stop", "sigkill", Some(&pid.to_string()));
     #[cfg(unix)]
+    // SAFETY: pid was read from our pidfile and validated; sending SIGKILL is safe.
     unsafe {
         libc::kill(pid as libc::pid_t, libc::SIGKILL);
     }
@@ -340,6 +343,7 @@ pub fn unload_os_service_best_effort() {
         // bootout cleanly stops & unloads without disabling the plist
         // (which `launchctl unload -w` would do). Falls back to plain `unload`
         // on macOS versions where bootout is unavailable.
+        // SAFETY: getuid() is always safe to call.
         let uid_str = format!("gui/{}", unsafe { libc::getuid() });
         let bootout_ok = std::process::Command::new("launchctl")
             .args(["bootout", &uid_str])
