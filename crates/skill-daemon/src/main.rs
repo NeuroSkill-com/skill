@@ -87,6 +87,9 @@ fn tty_shim_dispatch(forward_args: &[String]) -> ! {
         let mut argv: Vec<*const libc::c_char> = owned.iter().map(|s| s.as_ptr()).collect();
         argv.push(std::ptr::null());
         // execv replaces this process; only returns on failure.
+        // SAFETY: `owned[0]` is a valid NUL-terminated CString and `argv` is a
+        // NULL-terminated array of pointers to valid CStrings, all kept alive for
+        // the duration of this call.
         unsafe { libc::execv(owned[0].as_ptr(), argv.as_ptr()) };
         eprintln!(
             "skill-daemon tty: execv({}) failed: {} — falling back to in-process shim",

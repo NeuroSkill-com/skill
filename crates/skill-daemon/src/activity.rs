@@ -2760,6 +2760,8 @@ fn ns_pasteboard_classify() -> (&'static str, u64) {
         }
     }
 
+    // SAFETY: NSPasteboardType* constants are static Objective-C string references
+    // defined by the framework; accessing them is always safe.
     let (content_type, probe_type): (&'static str, Option<&objc2_app_kit::NSPasteboardType>) = unsafe {
         if have_png {
             ("image", Some(NSPasteboardTypePNG))
@@ -2863,6 +2865,7 @@ fn extract_clipboard_image_to_temp() -> Option<std::path::PathBuf> {
     // Read PNG data straight from NSPasteboard — no osascript subprocess,
     // no Apple Events permission prompt, no temp-file race.
     let pb = NSPasteboard::generalPasteboard();
+    // SAFETY: NSPasteboardTypePNG is a static Objective-C string constant defined by AppKit.
     let data = pb.dataForType(unsafe { NSPasteboardTypePNG })?;
     let bytes = data.to_vec();
     if bytes.is_empty() {
