@@ -1187,44 +1187,67 @@ async fn uninstall_shell_hook(
 ) -> Json<serde_json::Value> {
     let shell: String = body.get("shell").and_then(|v| v.as_str()).unwrap_or("zsh").to_string();
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let result = tokio::task::spawn_blocking(move || {
-        let shell = shell.as_str();
-        let hook_dir = skill_dir.join("shell-hooks");
-        let (ext, rc_path) = shell_rc_info(shell);
-        let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
-
-        // Delete the hook script
-        let _ = std::fs::remove_file(&hook_file);
-
-        // Remove the source line from the rc file
-        if let Some(ref rc) = rc_path {
-            if let Ok(content) = std::fs::read_to_string(rc) {
-                let cleaned: String = content
-                    .lines()
-                    .filter(|line| !line.contains("neuroskill"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                // Preserve trailing newline
-                let cleaned = if content.ends_with('\n') && !cleaned.ends_with('\n') {
-                    cleaned + "\n"
-                } else {
-                    cleaned
-                };
-                if let Err(e) = std::fs::write(rc, &cleaned) {
-                    return serde_json::json!({"ok": false, "error": format!("failed to update {}: {e}", rc.display())});
-                }
-            }
-        }
-
-        serde_json::json!({
+    let result = tokio::task::spawn_blocking(move || match uninstall_one_shell_hook(&skill_dir, &shell) {
+        Ok(rc) => serde_json::json!({
             "ok": true,
             "removed": true,
-            "rc_file": rc_path.map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
-        })
+            "rc_file": rc.map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+        }),
+        Err(e) => serde_json::json!({"ok": false, "error": e}),
     })
     .await
     .unwrap_or_else(|e| serde_json::json!({"ok": false, "error": e.to_string()}));
     Json(result)
+}
+
+/// Remove a single shell's hook (delete the generated script and strip the
+/// source line from the rc file). Used by both the HTTP uninstall route and
+/// the daemon-level `--uninstall` cleanup so the same logic stays in sync.
+pub(crate) fn uninstall_one_shell_hook(
+    skill_dir: &std::path::Path,
+    shell: &str,
+) -> Result<Option<std::path::PathBuf>, String> {
+    let hook_dir = skill_dir.join("shell-hooks");
+    let (ext, rc_path) = shell_rc_info(shell);
+    let hook_file = hook_dir.join(format!("neuroskill.{ext}"));
+
+    let _ = std::fs::remove_file(&hook_file);
+
+    if let Some(ref rc) = rc_path {
+        if let Ok(content) = std::fs::read_to_string(rc) {
+            let cleaned: String = content
+                .lines()
+                .filter(|line| !line.contains("neuroskill"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let cleaned = if content.ends_with('\n') && !cleaned.ends_with('\n') {
+                cleaned + "\n"
+            } else {
+                cleaned
+            };
+            std::fs::write(rc, &cleaned).map_err(|e| format!("failed to update {}: {e}", rc.display()))?;
+        }
+    }
+
+    Ok(rc_path)
+}
+
+/// Best-effort: remove every installed shell hook. Called from the daemon's
+/// `--uninstall` path so app-removal leaves the user's rc files clean instead
+/// of with stale `source ~/.skill/shell-hooks/...` lines that error out on
+/// every new shell after the binaries are gone.
+pub(crate) fn uninstall_all_shell_hooks(skill_dir: &std::path::Path) -> Vec<(String, String)> {
+    let mut report = Vec::new();
+    for shell in ["zsh", "bash", "fish", "powershell"] {
+        match uninstall_one_shell_hook(skill_dir, shell) {
+            Ok(Some(rc)) => report.push((shell.to_string(), rc.display().to_string())),
+            Ok(None) => report.push((shell.to_string(), String::new())),
+            Err(e) => report.push((shell.to_string(), format!("error: {e}"))),
+        }
+    }
+    // Best-effort: remove the now-empty shell-hooks dir so the .skill tree is tidy.
+    let _ = std::fs::remove_dir(skill_dir.join("shell-hooks"));
+    report
 }
 
 /// Get the rc file path for a given shell.
@@ -1245,13 +1268,27 @@ fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
 /// Generate the hook script content for a given shell. Self-contained — no external file deps.
 pub(crate) fn generate_shell_hook(shell: &str) -> String {
     let port = 18444;
-    // Absolute path to this daemon binary — the hook invokes it as `<daemon> tty <log>`
-    // so the PTY shim handles SIGWINCH propagation correctly. Auto-refresh on
-    // daemon startup re-bakes this path if the user moves/upgrades the app.
+    // The PTY shim now lives in a sibling `skill-tty` binary. Splitting it
+    // out means blanket process-name kills against `skill-daemon` (Tauri
+    // sidecar reload, kill-old-daemon-on-upgrade) no longer terminate active
+    // recorded shells. We bake the absolute path in so user shells survive
+    // PATH changes; auto-refresh on daemon startup re-bakes this path if the
+    // user moves/upgrades the app.
+    //
+    // Fallback for upgrades from old builds where `skill-tty` does not yet
+    // exist beside the daemon: invoke `skill-daemon tty`, which detects the
+    // sibling and execs it (and otherwise runs the in-process PTY proxy).
     let daemon_path = std::env::current_exe()
         .ok()
         .and_then(|p| p.to_str().map(String::from))
         .unwrap_or_else(|| "skill-daemon".to_string());
+    // Sibling skill-tty location — see crate::util::resolve_skill_tty_path
+    // for the macOS .app vs. flat-sibling layout it has to handle.
+    let tty_path = crate::util::resolve_skill_tty_path().and_then(|p| p.to_str().map(String::from));
+    let (tty_cmd, tty_guard) = match tty_path {
+        Some(p) => (format!("\"{p}\""), p),
+        None => (format!("\"{daemon_path}\" tty"), daemon_path.clone()),
+    };
     match shell {
         "zsh" => format!(
             r#"# NeuroSkill terminal tracking hook (zsh)
@@ -1296,17 +1333,24 @@ if [[ -n "$NEUROSKILL_RECORDING" ]]; then
   add-zsh-hook precmd _neuroskill_set_title
 fi
 
-# Session recording. The daemon's `tty` subcommand wraps the shell on a
-# fresh PTY and proxies stdin/stdout while forwarding SIGWINCH correctly.
-# Log path is chosen internally (under ~/.skill/terminal-logs/) so it never
-# appears in argv or the terminal title. Set NEUROSKILL_RECORDING=1 to opt out.
+# Session recording. The `skill-tty` binary wraps the shell on a fresh PTY
+# and proxies stdin/stdout while forwarding SIGWINCH correctly. (Older
+# installs invoke `skill-daemon tty`, which now execs into skill-tty if it
+# can find it.) Log path is chosen internally (under ~/.skill/terminal-logs/)
+# so it never appears in argv or the terminal title.
+#
+# Per-terminal opt-out: set NEUROSKILL_SKIP_RECORDING=1 in the env (e.g. in
+# .zshenv before it sources .zshrc, or pass it on the command line) to skip
+# recording for a single shell without uninstalling the global hook.
+# NEUROSKILL_RECORDING=1 is set by the wrapper itself to prevent re-entry.
+#
 # We intentionally avoid `exec` here: if the shim exits with code 126 it
-# means startup failed (not a tty, can't open PTY, etc.) and we fall through
-# to a plain interactive shell. For any other exit code (normal user exit,
-# Ctrl-D, …) we forward it and close this shell too.
-if [[ -z "$NEUROSKILL_RECORDING" && -x "{daemon_path}" ]]; then
+# means startup failed (not a tty, can't open PTY, etc.) and we fall
+# through to a plain interactive shell. For any other exit code (normal user
+# exit, Ctrl-D, …) we forward it and close this shell too.
+if [[ -z "$NEUROSKILL_RECORDING" && -z "$NEUROSKILL_SKIP_RECORDING" && -x "{tty_guard}" ]]; then
   export NEUROSKILL_RECORDING=1
-  "{daemon_path}" tty
+  {tty_cmd}
   _ns_rc=$?
   unset NEUROSKILL_RECORDING
   [[ $_ns_rc -ne 126 ]] && exit $_ns_rc
@@ -1361,12 +1405,14 @@ if [[ -n "$NEUROSKILL_RECORDING" ]]; then
   PROMPT_COMMAND="_neuroskill_set_title;${{PROMPT_COMMAND}}"
 fi
 
-# Session recording via the daemon's `tty` PTY shim (forwards SIGWINCH).
+# Session recording via the `skill-tty` PTY shim (forwards SIGWINCH).
+# Older installs invoke `skill-daemon tty`, which now execs into skill-tty.
 # Log path chosen internally — nothing leaks into argv or the tab title.
+# Set NEUROSKILL_SKIP_RECORDING=1 to skip recording for a single shell.
 # See zsh block above for the fallback-on-failure rationale.
-if [[ -z "$NEUROSKILL_RECORDING" && -x "{daemon_path}" ]]; then
+if [[ -z "$NEUROSKILL_RECORDING" && -z "$NEUROSKILL_SKIP_RECORDING" && -x "{tty_guard}" ]]; then
   export NEUROSKILL_RECORDING=1
-  "{daemon_path}" tty
+  {tty_cmd}
   _ns_rc=$?
   unset NEUROSKILL_RECORDING
   [[ $_ns_rc -ne 126 ]] && exit $_ns_rc

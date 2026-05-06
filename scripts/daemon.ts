@@ -288,13 +288,19 @@ ${B}Examples:${R}
       process.exit(1);
     }
 
-    // Codesign on macOS
+    // Codesign on macOS — sign daemon and the sibling skill-tty if present.
     if (opts.sign && platform() === "darwin") {
       try {
         const ids = execSync("security find-identity -v -p codesigning", { encoding: "utf8" });
         if (ids.includes("NeuroSkill Dev")) {
           execSync(`codesign -s "NeuroSkill Dev" -f "${bin}"`, { stdio: "ignore" });
-          ok("codesigned");
+          const tty = bin.replace(/skill-daemon$/, "skill-tty");
+          if (tty !== bin && existsSync(tty)) {
+            execSync(`codesign -s "NeuroSkill Dev" -f "${tty}"`, { stdio: "ignore" });
+            ok("codesigned daemon + tty");
+          } else {
+            ok("codesigned");
+          }
         }
       } catch {
         /* non-fatal */

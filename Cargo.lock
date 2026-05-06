@@ -12531,6 +12531,8 @@ dependencies = [
  "skill-eeg",
  "skill-llm",
  "skill-tts",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -12594,6 +12596,17 @@ dependencies = [
  "sha2 0.10.9",
  "skill-constants",
  "tokio",
+]
+
+[[package]]
+name = "skill-tty"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "libc",
+ "zstd",
 ]
 
 [[package]]
