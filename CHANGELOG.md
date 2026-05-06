@@ -5491,6 +5491,13 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - Translated all `daemonActivity.*` keys (title, intro, loading, running, idle, eventDriven, whyPrefix, costLow/Medium/High, never, lastRanSecondsAgo / MinutesAgo / HoursAgo, tickDuration, tickCount) into all 9 locales: `en`, `de`, `es`, `fr`, `he`, `ja`, `ko`, `uk`, `zh`. Strings are now idiomatic (e.g. ES "carga baja" instead of "coste bajo", JA "実行回数: {n}" instead of "{n} 回実行", FR "il y a {n} s" instead of "{n} ms écoulées") and avoid singular/plural mismatches by using register-neutral phrasings ("Cycles : {n}" rather than "{n} exécutions").
 
+## [0.0.130-rc.19] — 2026-05-06
+
+### Features
+
+- cargo deny
+- fix tty
+
 ## [0.0.130-rc.2] — 2026-04-29
 
 ### Features
