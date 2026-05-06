@@ -22,7 +22,7 @@ default    = ["tts-kitten", "mw75-rfcomm", "gps"]
 gps        = ["skill-data/gps"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
 tts-kitten = ["dep:kittentts", "dep:rodio", "skill-tts/tts-kitten"]
-tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound", "skill-tts/tts-neutts"]
+tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:hound", "skill-tts/tts-neutts"]
 
 # ── Frontend asset embedding ──────────────────────────────────────────────────
 #
@@ -126,8 +126,8 @@ neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu"],
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
 
-# SHA-256 for NeuTTS WAV cache keys — already compiled transitively via neutts.
-sha2 = { version = "0.10", optional = true }
+# SHA-256: NeuTTS WAV cache keys + daemon binary identity for upgrade flow.
+sha2 = "0.10"
 
 # WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
 hound = { version = "3", optional = true }

@@ -85,26 +85,29 @@ mkdir -p "$package_root/resources"
 cp "$binary_path" "$package_root/skill"
 chmod +x "$package_root/skill"
 
-# ── Bundle skill-daemon Tauri sidecar ─────────────────────────────────────────
+# ── Bundle skill-daemon + skill-tty Tauri sidecars ───────────────────────────
 # Try the release target directory first (CI build), then Tauri sidecar dir.
-daemon_candidates=(
-  "$ROOT_DIR/src-tauri/target/$target/release/skill-daemon"
-  "$ROOT_DIR/src-tauri/binaries/skill-daemon-${target}"
-)
-daemon_found=0
-for sidecar_bin in "${daemon_candidates[@]}"; do
-  if [[ -f "$sidecar_bin" ]]; then
-    cp "$sidecar_bin" "$package_root/skill-daemon"
-    chmod +x "$package_root/skill-daemon"
-    echo "✓ Bundled skill-daemon sidecar: $sidecar_bin"
-    daemon_found=1
-    break
-  fi
-done
-if [[ "$daemon_found" -eq 0 ]]; then
-  echo "⚠ skill-daemon sidecar not found for $target" >&2
-  echo "  Checked: ${daemon_candidates[*]}" >&2
-fi
+bundle_sidecar() {
+  local name="$1"
+  local candidates=(
+    "$ROOT_DIR/src-tauri/target/$target/release/$name"
+    "$ROOT_DIR/src-tauri/binaries/${name}-${target}"
+  )
+  for sidecar_bin in "${candidates[@]}"; do
+    if [[ -f "$sidecar_bin" ]]; then
+      cp "$sidecar_bin" "$package_root/$name"
+      chmod +x "$package_root/$name"
+      echo "✓ Bundled $name sidecar: $sidecar_bin"
+      return 0
+    fi
+  done
+  echo "⚠ $name sidecar not found for $target" >&2
+  echo "  Checked: ${candidates[*]}" >&2
+  return 1
+}
+
+bundle_sidecar skill-daemon || true
+bundle_sidecar skill-tty || true
 
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────
 # ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.

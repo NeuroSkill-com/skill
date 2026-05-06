@@ -805,6 +805,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "生産的 %",
   "activity.totalReadingTime": "閲覧時間",
   "activity.avgScrollDepth": "平均スクロール深度",
+
+  "daemonActivity.title": "デーモンのバックグラウンド処理",
+  "daemonActivity.intro":
+    "デーモンがバックグラウンドで実行している定期タスクの一覧。各タスクの動作内容・存在理由・実行頻度を確認できます。使わない監視機能をオフにすれば CPU 負荷を抑えられます。",
+  "daemonActivity.loading": "読み込み中…",
+  "daemonActivity.running": "実行中",
+  "daemonActivity.idle": "待機中",
+  "daemonActivity.eventDriven": "イベント駆動",
+  "daemonActivity.whyPrefix": "理由:",
+  "daemonActivity.costLow": "負荷: 低",
+  "daemonActivity.costMedium": "負荷: 中",
+  "daemonActivity.costHigh": "負荷: 高",
+  "daemonActivity.never": "未実行",
+  "daemonActivity.lastRanSecondsAgo": "{n} 秒前",
+  "daemonActivity.lastRanMinutesAgo": "{n} 分前",
+  "daemonActivity.lastRanHoursAgo": "{n} 時間前",
+  "daemonActivity.tickDuration": "実行時間: {n} ms",
+  "daemonActivity.tickCount": "実行回数: {n}",
 };
 
 export default settings;

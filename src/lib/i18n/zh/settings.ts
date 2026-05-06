@@ -777,6 +777,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "高效 %",
   "activity.totalReadingTime": "阅读时间",
   "activity.avgScrollDepth": "平均滚动深度",
+
+  "daemonActivity.title": "守护进程后台活动",
+  "daemonActivity.intro":
+    "守护进程在后台运行的定期任务列表：每个任务做什么、为何存在、多久执行一次。关闭不使用的追踪器即可降低 CPU 占用。",
+  "daemonActivity.loading": "加载中…",
+  "daemonActivity.running": "运行中",
+  "daemonActivity.idle": "空闲",
+  "daemonActivity.eventDriven": "事件驱动",
+  "daemonActivity.whyPrefix": "原因：",
+  "daemonActivity.costLow": "负载低",
+  "daemonActivity.costMedium": "负载中",
+  "daemonActivity.costHigh": "负载高",
+  "daemonActivity.never": "尚未运行",
+  "daemonActivity.lastRanSecondsAgo": "{n} 秒前",
+  "daemonActivity.lastRanMinutesAgo": "{n} 分钟前",
+  "daemonActivity.lastRanHoursAgo": "{n} 小时前",
+  "daemonActivity.tickDuration": "耗时 {n} ms",
+  "daemonActivity.tickCount": "已执行 {n} 次",
 };
 
 export default settings;

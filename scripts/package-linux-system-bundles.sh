@@ -122,6 +122,21 @@ else
   echo "⚠ skill-daemon not found at $daemon_path" >&2
 fi
 
+# ── Bundle skill-tty sidecar ─────────────────────────────────────────────────
+# The PTY proxy that wraps the user's shell for terminal-session recording.
+# Lives next to skill-daemon so the shell hook (and the daemon's tty exec-shim)
+# can find it via current_exe()'s parent directory. Splitting it out means
+# blanket process-name kills of skill-daemon don't sweep up active recorded
+# shells.
+tty_path="$ROOT_DIR/src-tauri/target/$target/release/skill-tty"
+if [[ -f "$tty_path" ]]; then
+  cp "$tty_path" "$stage_root/opt/neuroskill/skill-tty"
+  chmod +x "$stage_root/opt/neuroskill/skill-tty"
+  echo "✓ Bundled skill-tty sidecar"
+else
+  echo "⚠ skill-tty not found at $tty_path" >&2
+fi
+
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────
 # ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.
 # The binary links against it dynamically (DT_NEEDED: libonnxruntime.so.1).

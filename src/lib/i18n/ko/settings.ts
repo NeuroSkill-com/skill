@@ -789,6 +789,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "생산적 %",
   "activity.totalReadingTime": "읽기 시간",
   "activity.avgScrollDepth": "평균 스크롤 깊이",
+
+  "daemonActivity.title": "데몬 백그라운드 작업",
+  "daemonActivity.intro":
+    "데몬이 백그라운드에서 실행하는 반복 작업 목록입니다. 각 작업의 동작·존재 이유·실행 주기를 확인할 수 있습니다. 사용하지 않는 추적기를 끄면 CPU 부하를 줄일 수 있습니다.",
+  "daemonActivity.loading": "불러오는 중…",
+  "daemonActivity.running": "실행 중",
+  "daemonActivity.idle": "대기 중",
+  "daemonActivity.eventDriven": "이벤트 기반",
+  "daemonActivity.whyPrefix": "이유:",
+  "daemonActivity.costLow": "부하 낮음",
+  "daemonActivity.costMedium": "부하 보통",
+  "daemonActivity.costHigh": "부하 높음",
+  "daemonActivity.never": "실행되지 않음",
+  "daemonActivity.lastRanSecondsAgo": "{n}초 전",
+  "daemonActivity.lastRanMinutesAgo": "{n}분 전",
+  "daemonActivity.lastRanHoursAgo": "{n}시간 전",
+  "daemonActivity.tickDuration": "소요 시간: {n} ms",
+  "daemonActivity.tickCount": "실행 횟수: {n}",
 };
 
 export default settings;

@@ -1,0 +1,36 @@
+# Heavy artifacts that should never be sent to the Docker build context.
+# Without this, `docker build` for Dockerfile.upgrade-test transfers tens of
+# GB of local target/ output and chokes on I/O.
+
+# Rust build artifacts
+target/
+src-tauri/target/
+crates/*/target/
+**/*.rlib
+
+# Node / frontend
+node_modules/
+.svelte-kit/
+build/
+.vite/
+
+# IDE / OS
+.git/
+.idea/
+.vscode/
+.DS_Store
+
+# Logs / test results
+test-results/
+playwright-report/
+logs/
+*.log
+*.log.zst
+
+# Local data
+.skill/
+data/
+fixtures/
+
+# Cargo registry should come from the volume mount, not the context
+.cargo/
