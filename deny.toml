@@ -95,6 +95,7 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-tools" },
     { allow = ["GPL-3.0-only"], crate = "skill-tray" },
     { allow = ["GPL-3.0-only"], crate = "skill-tts" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tty" },
     { allow = ["GPL-3.0-only"], crate = "skill-vision" },
     # Third-party GPL crates pulled in by device drivers.
     # mw75 uses the deprecated "GPL-3.0" SPDX identifier (no license file),
