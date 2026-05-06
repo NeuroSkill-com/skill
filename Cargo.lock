@@ -11967,7 +11967,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skill"
-version = "0.0.130-rc.17"
+version = "0.0.130-rc.18"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
