@@ -58,9 +58,14 @@ if [[ "$VERSION" != "$VERSION_CHECK" ]]; then
   echo "  Using config version: $VERSION"
 fi
 
-# ── Sign the .app ─────────────────────────────────────────────────────────
+# ── Re-sign the .app (outer bundle only) ─────────────────────────────────
+# Inner bundles (skill-daemon.app, skill-tty.app) were already signed
+# individually with their entitlements by assemble-macos-app.sh (inside-out).
+# Using --deep here would re-sign them WITHOUT entitlements (--deep applies
+# entitlements only to the outermost bundle), stripping the daemon's
+# Bluetooth/networking capabilities. Sign outer only, no --deep.
 echo "  Signing .app with identity: $SIGN_ID"
-SIGN_ARGS=(--deep --force --verify --verbose --sign "$SIGN_ID")
+SIGN_ARGS=(--force --verify --verbose --sign "$SIGN_ID")
 if [[ "$SIGN_ID" != "-" ]]; then
   SIGN_ARGS+=(--timestamp --options runtime)
 fi
