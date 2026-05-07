@@ -5504,6 +5504,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - fix win/linux
 
+## [0.0.130-rc.20] — 2026-05-07
+
+### Features
+
+- fix --deep signature
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
