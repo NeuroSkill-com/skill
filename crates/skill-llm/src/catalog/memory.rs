@@ -131,6 +131,7 @@ mod tests {
             family_desc: String::new(),
             tags: vec![],
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             params_b: 0.0, // no metadata
@@ -158,6 +159,7 @@ mod tests {
             family_desc: String::new(),
             tags: vec![],
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             params_b: 7.0,

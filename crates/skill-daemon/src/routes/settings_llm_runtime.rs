@@ -677,6 +677,7 @@ pub(crate) async fn llm_add_model_impl(
                 tags: vec!["external".to_string()],
                 is_mmproj: req.mmproj.as_ref().map(|m| m == &req.filename).unwrap_or(false)
                     || req.filename.to_ascii_lowercase().contains("mmproj"),
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 0.0,
