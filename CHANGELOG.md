@@ -5510,6 +5510,26 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - fix --deep signature
 
+## [0.0.130-rc.21] — 2026-05-08
+
+### Features
+
+- deps(npm): bump the npm-all group with 10 updates (#60)
+- Bumps the npm-all group with 10 updates:
+- | Package | From | To |
+- Updates `@tauri-apps/api` from 2.10.1 to 2.11.0
+- Updates `@tauri-apps/plugin-opener` from 2.5.3 to 2.5.4
+- Updates `@threlte/core` from 8.5.9 to 8.5.11
+- Updates `@threlte/extras` from 9.14.9 to 9.15.1
+- Updates `bits-ui` from 2.18.0 to 2.18.1
+- Updates `marked` from 18.0.2 to 18.0.3
+- Updates `@biomejs/biome` from 2.4.13 to 2.4.14
+- Updates `@sveltejs/kit` from 2.58.0 to 2.59.0
+- Updates `@tauri-apps/cli` from 2.10.1 to 2.11.0
+- Updates `svelte-check` from 4.4.6 to 4.4.7
+- ---
+- Signed-off-by: dependabot[bot] <support@github.com>
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
