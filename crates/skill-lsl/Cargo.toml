@@ -11,12 +11,12 @@ skill-devices   = { path = "../skill-devices" }
 
 # LSL core + iroh bridge (published on crates.io)
 rlsl      = "0.0.4"
-rlsl-iroh = "0.0.4"
+rlsl-iroh = "0.0.5"
 
 tokio       = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 async-trait = "0.1"
 log         = "0.4"
-iroh        = "0.97"
+iroh        = "1.0.0-rc.0"
 serde       = { workspace = true, features = ["derive"] }
 serde_json  = { workspace = true }
 anyhow      = { workspace = true }
