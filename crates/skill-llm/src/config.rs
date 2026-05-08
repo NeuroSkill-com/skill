@@ -154,6 +154,15 @@ pub struct LlmConfig {
     /// particular model.
     #[serde(default)]
     pub attn_rot_disabled: bool,
+
+    // ── Multi-Token Prediction (requires `llm-mtp` feature) ──────────────────
+    /// Number of MTP draft tokens generated per decode step.
+    ///
+    /// `0` = MTP disabled (default).  Typical values: `1` for Q4 models,
+    /// `3` for Q8 models.  Requires an MTP-capable model (e.g. the
+    /// `froggeric/Qwen3.6-27B-MTP-GGUF` family).
+    #[serde(default)]
+    pub mtp_draft_count: u32,
 }
 
 fn default_llm_parallel() -> usize {
@@ -212,6 +221,7 @@ impl Default for LlmConfig {
             cache_type_k: default_cache_type_k(),
             cache_type_v: default_cache_type_v(),
             attn_rot_disabled: false,
+            mtp_draft_count: 0,
         }
     }
 }

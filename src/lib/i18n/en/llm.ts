@@ -95,6 +95,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Language Models",
   "llm.section.mmproj": "Multimodal Projectors",
   "llm.section.inference": "Inference Settings",
+  "llm.section.mtp": "Multi-Token Prediction",
   "llm.enabled": "Enable LLM server",
   "llm.enabledDesc":
     "Run an OpenAI-compatible inference server on the same port as the WebSocket API. Requires the llm Cargo feature and a downloaded model.",
@@ -291,6 +292,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "Offload KQV to GPU",
   "llm.inference.offloadKqvDesc":
     "Offload K/Q/V tensor operations to the GPU even when not all transformer layers are GPU-offloaded. Recommended for hybrid CPU+GPU setups.",
+
+  "llm.mtp.draftTokens": "Draft tokens",
+  "llm.mtp.draftTokensDesc":
+    "Number of tokens to speculatively draft per decode step. Higher values increase throughput but require more memory. Requires an MTP-enabled model.",
 
   "chat.status.running": "Running",
   "chat.status.loading": "Loading model…",

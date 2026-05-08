@@ -83,6 +83,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Modelos de lenguaje",
   "llm.section.mmproj": "Proyectores multimodales",
   "llm.section.inference": "Configuración de inferencia",
+  "llm.section.mtp": "Predicción multi-token",
   "llm.enabled": "Habilitar servidor LLM",
   "llm.enabledDesc":
     "Ejecute un servidor de inferencia compatible con OpenAI en el mismo puerto que la API WebSocket. Requiere la función llm Cargo y un modelo descargado.",
@@ -292,6 +293,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "Descargar KQV a GPU",
   "llm.inference.offloadKqvDesc":
     "Descargar operaciones de tensores K/Q/V a la GPU incluso cuando no todas las capas están en GPU.",
+
+  "llm.mtp.draftTokens": "Tokens de borrador",
+  "llm.mtp.draftTokensDesc":
+    "Número de tokens generados especulativamente por paso de decodificación. Valores más altos aumentan el rendimiento pero requieren más memoria. Requiere un modelo con MTP habilitado.",
 
   "chat.status.running": "Correr",
   "chat.status.loading": "Cargando modelo…",

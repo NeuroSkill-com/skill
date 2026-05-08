@@ -83,6 +83,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "言語モデル",
   "llm.section.mmproj": "マルチモーダルプロジェクター",
   "llm.section.inference": "推論設定",
+  "llm.section.mtp": "マルチトークン予測",
   "llm.enabled": "LLMサーバーを有効化",
   "llm.enabledDesc":
     "WebSocket APIと同じポートでOpenAI互換推論サーバーを実行します。llm Cargoフィーチャーとダウンロード済みモデルが必要です。",
@@ -282,6 +283,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "KQVをGPUにオフロード",
   "llm.inference.offloadKqvDesc":
     "すべてのトランスフォーマーレイヤーがGPUオフロードされていなくても、K/Q/Vテンソル操作をGPUにオフロードします。ハイブリッドCPU+GPUセットアップに推奨。",
+
+  "llm.mtp.draftTokens": "ドラフトトークン数",
+  "llm.mtp.draftTokensDesc":
+    "デコードステップごとに投機的に生成するトークン数。値が大きいほどスループットが向上しますが、メモリをより多く消費します。MTP対応モデルが必要です。",
 
   "chat.status.running": "実行中",
   "chat.status.loading": "モデルを読み込み中…",

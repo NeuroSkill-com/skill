@@ -81,6 +81,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Мовні моделі",
   "llm.section.mmproj": "Мультимодальні проектори",
   "llm.section.inference": "Налаштування інференсу",
+  "llm.section.mtp": "Багатотокенне прогнозування",
   "llm.enabled": "Увімкнути LLM сервер",
   "llm.enabledDesc":
     "Запустити OpenAI-сумісний сервер інференсу на тому ж порту, що й WebSocket API. Потрібен Cargo feature llm і завантажена модель.",
@@ -272,6 +273,10 @@ const llm: Record<string, string> = {
     "Використовувати flash attention для швидшої та ефективнішої self-attention. Підтримується на Metal, CUDA та Vulkan.",
   "llm.inference.offloadKqv": "Вивантажити KQV на GPU",
   "llm.inference.offloadKqvDesc": "Вивантажити тензорні операції K/Q/V на GPU, навіть якщо не всі шари вивантажені.",
+
+  "llm.mtp.draftTokens": "Токени чернетки",
+  "llm.mtp.draftTokensDesc":
+    "Кількість токенів, що генеруються спекулятивно на кожному кроці декодування. Більші значення підвищують пропускну здатність, але потребують більше пам'яті. Потребує MTP-сумісну модель.",
 
   "llm.hfSearch.title": "Пошук моделей на HuggingFace",
   "llm.hfSearch.placeholder": "Шукати GGUF-моделі на HuggingFace…",
