@@ -79,6 +79,12 @@ target-dir = "src-tauri/target"
 # On non-Windows platforms cmake ignores this variable.
 CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDLL"
 
+# ── macOS: cmake path ─────────────────────────────────────────────────────────
+# Homebrew cmake is not on the default PATH when cargo invokes build scripts.
+# The cmake-0.1.x crate respects the CMAKE env var as the binary path.
+CMAKE        = { value = "/opt/homebrew/bin/cmake",   force = false }
+SCCACHE_PATH = { value = "/opt/homebrew/bin/sccache", force = false }
+
 # ── macOS deployment target ───────────────────────────────────────────────────
 #
 # 14.0 satisfies both:

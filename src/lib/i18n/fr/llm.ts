@@ -83,6 +83,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Modèles de langage",
   "llm.section.mmproj": "Projecteurs multimodaux",
   "llm.section.inference": "Paramètres d'inférence",
+  "llm.section.mtp": "Prédiction multi-token",
   "llm.enabled": "Activer le serveur LLM",
   "llm.enabledDesc":
     "Exécutez un serveur d'inférence compatible OpenAI sur le même port que l'API WebSocket. Nécessite la fonctionnalité llm Cargo et un modèle téléchargé.",
@@ -281,6 +282,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "Décharger KQV sur GPU",
   "llm.inference.offloadKqvDesc":
     "Décharger les opérations tensorielles K/Q/V sur le GPU même si toutes les couches ne sont pas sur GPU.",
+
+  "llm.mtp.draftTokens": "Tokens brouillon",
+  "llm.mtp.draftTokensDesc":
+    "Nombre de tokens générés spéculativement par étape de décodage. Des valeurs plus élevées augmentent le débit mais nécessitent plus de mémoire. Nécessite un modèle compatible MTP.",
 
   "llm.hfSearch.title": "Rechercher des modèles HuggingFace",
   "llm.hfSearch.placeholder": "Rechercher des modèles GGUF sur HuggingFace…",

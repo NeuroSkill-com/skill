@@ -49,6 +49,7 @@ function entry(overrides: Partial<LlmModelEntry> = {}): LlmModelEntry {
     max_context_length: 32768,
     shard_files: [],
     local_path: null,
+    mtp: false,
     state: "not_downloaded",
     status_msg: null,
     progress: 0,

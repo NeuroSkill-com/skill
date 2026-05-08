@@ -43,6 +43,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "העברת KQV ל-GPU",
   "llm.inference.offloadKqvDesc": "העברת פעולות טנזור K/Q/V ל-GPU גם כאשר לא כל השכבות מועברות.",
 
+  "llm.mtp.draftTokens": "אסימוני טיוטה",
+  "llm.mtp.draftTokensDesc":
+    "מספר האסימונים שנוצרים בצורה ספקולטיבית בכל שלב פענוח. ערכים גבוהים יותר מגבירים את התפוקה אך דורשים יותר זיכרון. מחייב מודל עם תמיכה ב-MTP.",
+
   "llm.hfSearch.title": "חיפוש מודלים ב-HuggingFace",
   "llm.hfSearch.placeholder": "חיפוש מודלי GGUF ב-HuggingFace…",
   "llm.hfSearch.searchBtn": "חיפוש",
@@ -138,6 +142,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "מודלי שפה",
   "llm.section.mmproj": "מקרנים מולטימודליים",
   "llm.section.inference": "הגדרות אינפרנס",
+  "llm.section.mtp": "חיזוי רב-אסימון",
   "llm.enabled": "הפעל שרת LLM",
   "llm.enabledDesc":
     "הפעל שרת אינפרנס תואם OpenAI על אותו פורט של WebSocket API. דורש את פיצ׳ר llm ב-Cargo ומודל שהורד.",

@@ -7266,9 +7266,9 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llama-cpp-4"
-version = "0.2.52"
+version = "0.2.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "091677d85cf60d8130fede951c46720527f83daa319d93f4be3af06b2d8f6c56"
+checksum = "2b2407fce02de1ede46606c8f888559ed667a47d6fa94d01ae28962d3cf699df"
 dependencies = [
  "enumflags2",
  "llama-cpp-sys-4",
@@ -7278,14 +7278,15 @@ dependencies = [
 
 [[package]]
 name = "llama-cpp-sys-4"
-version = "0.2.52"
+version = "0.2.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee9e8dcac498fe70f6241e7e41298fecea4309b236522fbf2181c35d5d24aeaa"
+checksum = "fa959b6197039425238b19c7b18a7c0ef4af9d607f58a6390b16b6a2ad6c7e58"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
  "cmake",
  "glob",
+ "patch-apply",
  "winreg 0.56.0",
 ]
 
@@ -8386,6 +8387,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "nom_locate"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e3c83c053b0713da60c5b8de47fe8e494fe3ece5267b2f23090a07a053ba8f3"
+dependencies = [
+ "bytecount",
+ "memchr",
+ "nom 7.1.3",
 ]
 
 [[package]]
@@ -9541,6 +9553,17 @@ name = "pastey"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
+
+[[package]]
+name = "patch-apply"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fe95476ec50a4e9b95ed12a4677ff5996aba4329bf2535fb21c49afaad20809"
+dependencies = [
+ "chrono",
+ "nom 7.1.3",
+ "nom_locate",
+]
 
 [[package]]
 name = "pathdiff"

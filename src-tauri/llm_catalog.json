@@ -12,7 +12,7 @@
         "small"
       ],
       "is_mmproj": false,
-      "params_b": 4.0,
+      "params_b": 4,
       "max_context_length": 131072
     },
     "qwen35-9b": {
@@ -25,7 +25,7 @@
         "small"
       ],
       "is_mmproj": false,
-      "params_b": 9.0,
+      "params_b": 9,
       "max_context_length": 131072
     },
     "qwen251-coder-7b-instruct": {
@@ -51,7 +51,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 27.0,
+      "params_b": 27,
       "max_context_length": 131072
     },
     "qwen35-27b-claude-opus-distilled": {
@@ -64,7 +64,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 27.0,
+      "params_b": 27,
       "max_context_length": 131072
     },
     "qwen36-27b": {
@@ -78,7 +78,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 27.0,
+      "params_b": 27,
       "max_context_length": 131072
     },
     "qwen36-35b-a3b": {
@@ -92,7 +92,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 35.0,
+      "params_b": 35,
       "max_context_length": 131072
     },
     "glm-51": {
@@ -105,7 +105,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 9.0,
+      "params_b": 9,
       "max_context_length": 131072
     },
     "minimax-m27": {
@@ -118,7 +118,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 27.0,
+      "params_b": 27,
       "max_context_length": 131072
     },
     "gpt-oss-20b": {
@@ -131,7 +131,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 20.0,
+      "params_b": 20,
       "max_context_length": 131072
     },
     "qwen3-coder-next": {
@@ -144,7 +144,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 14.0,
+      "params_b": 14,
       "max_context_length": 65536
     },
     "qwen3-vl-30b": {
@@ -170,7 +170,7 @@
         "medium"
       ],
       "is_mmproj": false,
-      "params_b": 14.0,
+      "params_b": 14,
       "max_context_length": 128000
     },
     "ministral-14b-reasoning": {
@@ -182,7 +182,7 @@
         "medium"
       ],
       "is_mmproj": false,
-      "params_b": 14.0,
+      "params_b": 14,
       "max_context_length": 128000
     },
     "gemma3-270m": {
@@ -207,7 +207,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 31.0,
+      "params_b": 31,
       "max_context_length": 131072
     },
     "gemma4-26b-a4b": {
@@ -221,7 +221,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 26.0,
+      "params_b": 26,
       "max_context_length": 131072
     },
     "gemma4-e4b": {
@@ -234,7 +234,7 @@
         "small"
       ],
       "is_mmproj": false,
-      "params_b": 4.0,
+      "params_b": 4,
       "max_context_length": 131072
     },
     "gemma4-e2b": {
@@ -247,7 +247,7 @@
         "tiny"
       ],
       "is_mmproj": false,
-      "params_b": 2.0,
+      "params_b": 2,
       "max_context_length": 131072
     },
     "phi4-reasoning-plus": {
@@ -272,7 +272,7 @@
         "medium"
       ],
       "is_mmproj": false,
-      "params_b": 9.0,
+      "params_b": 9,
       "max_context_length": 32768
     },
     "qwen35-4b-hauhau-aggressive": {
@@ -285,7 +285,7 @@
         "small"
       ],
       "is_mmproj": false,
-      "params_b": 4.0,
+      "params_b": 4,
       "max_context_length": 131072
     },
     "qwen35-9b-hauhau-aggressive": {
@@ -298,7 +298,7 @@
         "small"
       ],
       "is_mmproj": false,
-      "params_b": 9.0,
+      "params_b": 9,
       "max_context_length": 131072
     },
     "qwen35-27b-hauhau-aggressive": {
@@ -311,7 +311,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 27.0,
+      "params_b": 27,
       "max_context_length": 131072
     },
     "qwen35-35b-a3b-hauhau-aggressive": {
@@ -324,7 +324,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 35.0,
+      "params_b": 35,
       "max_context_length": 131072
     },
     "qwen3-30b-a3b-instruct": {
@@ -338,7 +338,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 30.0,
+      "params_b": 30,
       "max_context_length": 131072
     },
     "lfm25-vl-1.6b": {
@@ -391,7 +391,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 456.0,
+      "params_b": 456,
       "max_context_length": 131072
     },
     "bonsai-8b": {
@@ -443,7 +443,7 @@
         "small"
       ],
       "is_mmproj": false,
-      "params_b": 4.0,
+      "params_b": 4,
       "max_context_length": 131072
     },
     "mistral-medium-3.5-128b": {
@@ -456,7 +456,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 128.0,
+      "params_b": 128,
       "max_context_length": 131072
     },
     "nemotron-3-nano-omni-30b": {
@@ -470,7 +470,22 @@
         "moe"
       ],
       "is_mmproj": true,
-      "params_b": 30.0,
+      "params_b": 30,
+      "max_context_length": 131072
+    },
+    "qwen36-27b-mtp": {
+      "name": "Qwen3.6 27B MTP",
+      "description": "froggeric's Qwen3.6 27B builds with multi-token prediction (MTP) enabled — drafts multiple tokens per step for higher throughput. Same weights as Qwen3.6 27B; requires MTP-capable runtime.",
+      "repo": "froggeric/Qwen3.6-27B-MTP-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large",
+        "mtp"
+      ],
+      "is_mmproj": false,
+      "mtp": true,
+      "params_b": 27,
       "max_context_length": 131072
     }
   },
@@ -4310,7 +4325,7 @@
       "family": "nemotron-3-nano-omni-30b",
       "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q5_K_M.gguf",
       "quant": "Q5_K_M",
-      "size_gb": 29.0,
+      "size_gb": 29,
       "description": "High quality; >= 32 GB VRAM",
       "advanced": true
     },
@@ -4344,6 +4359,78 @@
       "quant": "F16",
       "size_gb": 1.59,
       "description": "Nemotron-3 Nano Omni vision/audio projector -- FP16"
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-IQ2_M-mtp.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 9.74,
+      "description": "2-bit; fits 12 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-IQ3_M-mtp.gguf",
+      "quant": "IQ3_M",
+      "size_gb": 12.14,
+      "description": "Compact 3-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-IQ4_XS-mtp.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 14.47,
+      "description": "Compact 4-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-Q4_K_M-mtp.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 15.83,
+      "description": "Best quality/size balance with MTP; needs 16 GB VRAM or 24 GB RAM",
+      "recommended": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-Q5_K_M-mtp.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 18.33,
+      "description": "Higher quality 5-bit with MTP; needs 24 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-Q6_K-mtp.gguf",
+      "quant": "Q6_K",
+      "size_gb": 20.99,
+      "description": "6-bit with MTP; high quality, needs 32 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-Q8_0-mtp.gguf",
+      "quant": "Q8_0",
+      "size_gb": 27.05,
+      "description": "Near-lossless 8-bit with MTP; needs 48 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "Qwen3.6-27B-F16-mtp.gguf",
+      "quant": "F16",
+      "size_gb": 50.9,
+      "description": "Full FP16 precision with MTP; needs 64 GB RAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-27b-mtp",
+      "filename": "mmproj-Qwen3.6-27B-f16.gguf",
+      "quant": "F16",
+      "size_gb": 0.86,
+      "description": "Qwen3.6-27B vision projector — FP16",
+      "recommended": true
     }
   ]
 }
