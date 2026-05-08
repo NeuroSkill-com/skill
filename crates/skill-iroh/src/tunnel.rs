@@ -322,7 +322,7 @@ async fn proxy_api_stream(
                 tcp_write.shutdown().await.context("tcp shutdown failed")?;
                 return Ok::<(), anyhow::Error>(());
             };
-            tcp_write.write_all(&chunk.bytes).await.context("tcp write failed")?;
+            tcp_write.write_all(&chunk).await.context("tcp write failed")?;
         }
     };
 
@@ -397,7 +397,7 @@ pub fn rotate_secret_key(skill_dir: &Path) -> anyhow::Result<(String, String)> {
     std::fs::write(&history_path, hist_json).context("write history")?;
 
     // Generate new key
-    let new_key = SecretKey::generate(&mut rand::rng());
+    let new_key = SecretKey::generate();
     std::fs::write(&key_path, new_key.to_bytes()).context("write new key")?;
 
     #[cfg(unix)]
@@ -437,7 +437,7 @@ fn load_or_create_secret_key(skill_dir: &Path) -> anyhow::Result<SecretKey> {
         ));
     }
 
-    let secret = SecretKey::generate(&mut rand::rng());
+    let secret = SecretKey::generate();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
