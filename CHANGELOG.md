@@ -5530,6 +5530,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - ---
 - Signed-off-by: dependabot[bot] <support@github.com>
 
+## [0.0.130-rc.22] — 2026-05-08
+
+### Features
+
+- updated iroh
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
