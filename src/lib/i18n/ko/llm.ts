@@ -81,6 +81,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "언어 모델",
   "llm.section.mmproj": "멀티모달 프로젝터",
   "llm.section.inference": "추론 설정",
+  "llm.section.mtp": "멀티 토큰 예측",
   "llm.enabled": "LLM 서버 활성화",
   "llm.enabledDesc":
     "WebSocket API와 같은 포트에서 OpenAI 호환 추론 서버를 실행합니다. llm Cargo 기능과 다운로드된 모델이 필요합니다.",
@@ -277,6 +278,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "KQV GPU 오프로드",
   "llm.inference.offloadKqvDesc":
     "모든 트랜스포머 레이어가 GPU에 오프로드되지 않아도 K/Q/V 텐서 연산을 GPU에 오프로드합니다. 하이브리드 CPU+GPU 설정에 권장됩니다.",
+
+  "llm.mtp.draftTokens": "드래프트 토큰",
+  "llm.mtp.draftTokensDesc":
+    "디코딩 단계마다 투기적으로 생성할 토큰 수입니다. 값이 높을수록 처리량이 증가하지만 메모리를 더 많이 사용합니다. MTP 지원 모델이 필요합니다.",
 
   "chat.status.running": "실행 중",
   "chat.status.loading": "모델 로딩 중…",

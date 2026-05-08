@@ -162,6 +162,7 @@ pub(super) async fn cmd_llm_add_model(state: &AppState, msg: &Value) -> Result<V
                 family_desc: String::new(),
                 tags: vec!["external".to_string()],
                 is_mmproj,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 0.0,

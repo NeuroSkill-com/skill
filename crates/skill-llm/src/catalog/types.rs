@@ -66,6 +66,10 @@ pub struct LlmFamily {
     pub tags: Vec<String>,
     #[serde(default)]
     pub is_mmproj: bool,
+    /// Whether models in this family were compiled with multi-token prediction
+    /// (MTP) support.  Requires the `llm-mtp` feature at runtime.
+    #[serde(default)]
+    pub mtp: bool,
     #[serde(default)]
     pub params_b: f64,
     #[serde(default)]
@@ -169,6 +173,7 @@ impl LlmCatalogNormalized {
                 family_desc: fam.description.clone(),
                 tags: fam.tags.clone(),
                 is_mmproj: fam.is_mmproj,
+                mtp: fam.mtp,
                 recommended: m.recommended,
                 advanced: m.advanced,
                 params_b: fam.params_b,
@@ -207,6 +212,7 @@ impl LlmCatalog {
                 repo: e.repo.clone(),
                 tags: e.tags.clone(),
                 is_mmproj: e.is_mmproj,
+                mtp: e.mtp,
                 params_b: e.params_b,
                 max_context_length: e.max_context_length,
             });
@@ -289,6 +295,10 @@ pub struct LlmModelEntry {
     /// e.g. `["chat","reasoning","small"]`
     pub tags: Vec<String>,
     pub is_mmproj: bool,
+    /// Whether this model was compiled with multi-token prediction (MTP).
+    /// Inherited from the family; requires the `llm-mtp` feature at runtime.
+    #[serde(default)]
+    pub mtp: bool,
     pub recommended: bool,
     /// Hidden in simple view; shown under "Show all quants".
     pub advanced: bool,
@@ -465,6 +475,7 @@ mod tests {
             params_b: 4.0,
             max_context_length: 4096,
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             shard_files: shards.iter().map(|s| s.to_string()).collect(),
@@ -490,6 +501,7 @@ mod tests {
                     family_desc: "A great model.".into(),
                     tags: vec!["chat".into(), "reasoning".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 7.0,
@@ -512,6 +524,7 @@ mod tests {
                     family_desc: "A great model.".into(),
                     tags: vec!["chat".into(), "reasoning".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: false,
                     advanced: true,
                     params_b: 7.0,
@@ -534,6 +547,7 @@ mod tests {
                     family_desc: "Vision model.".into(),
                     tags: vec!["vision".into()],
                     is_mmproj: true,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 0.6,
@@ -796,6 +810,7 @@ mod tests {
             family_desc: "User's custom model.".into(),
             tags: vec!["chat".into()],
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             params_b: 13.0,
@@ -868,6 +883,7 @@ mod tests {
             family_desc: "A big model.".into(),
             tags: vec!["chat".into(), "large".into()],
             is_mmproj: false,
+            mtp: false,
             recommended: true,
             advanced: false,
             params_b: 70.0,
@@ -948,6 +964,7 @@ mod tests {
                     family_desc: String::new(),
                     tags: vec![],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: false,
                     advanced: false,
                     params_b: 1.0,
@@ -1003,6 +1020,7 @@ mod tests {
                     family_desc: "First description.".into(),
                     tags: vec!["chat".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 7.0,
@@ -1025,6 +1043,7 @@ mod tests {
                     family_desc: "Second description.".into(),
                     tags: vec!["reasoning".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: false,
                     advanced: true,
                     params_b: 7.0,
@@ -1191,6 +1210,7 @@ mod tests {
                     family_desc: "Vision-language.".into(),
                     tags: vec!["vision".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 30.0,
@@ -1213,6 +1233,7 @@ mod tests {
                     family_desc: "Multimodal projector.".into(),
                     tags: vec!["vision".into()],
                     is_mmproj: true,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 0.6,
@@ -1255,6 +1276,7 @@ mod tests {
                 family_desc: String::new(),
                 tags: vec![],
                 is_mmproj: false,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 1.0,

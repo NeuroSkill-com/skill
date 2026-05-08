@@ -17,6 +17,7 @@ import { onDaemonEvent } from "$lib/daemon/ws";
 import LlmHfSearchSection from "$lib/llm/LlmHfSearchSection.svelte";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
+import LlmMtpSection from "$lib/llm/LlmMtpSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
 import type { LlmCatalog } from "$lib/llm/llm-helpers";
@@ -76,6 +77,7 @@ interface LlmConfig {
   cache_type_k: string;
   cache_type_v: string;
   attn_rot_disabled: boolean;
+  mtp_draft_count: number;
 }
 
 interface ModelHardwareFit {
@@ -132,6 +134,7 @@ let config = $state<LlmConfig>({
   cache_type_k: "f16",
   cache_type_v: "f16",
   attn_rot_disabled: false,
+  mtp_draft_count: 0,
 });
 
 let configSaving = $state(false);
@@ -404,6 +407,18 @@ onDestroy(() => {
   onSelectModel={selectModel}
   onSelectMmproj={selectMmproj}
 />
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- MTP (Multi-Token Prediction) settings — only shown for MTP-capable models  -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+{#if activeEntry?.mtp}
+<LlmMtpSection
+  mtpDraftCount={config.mtp_draft_count}
+  {configSaving}
+  quant={activeEntry?.quant ?? ""}
+  onSetMtpDraftCount={async (val) => { config = { ...config, mtp_draft_count: val }; await saveConfig(); }}
+/>
+{/if}
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- HuggingFace model search                                                   -->

@@ -81,6 +81,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "语言模型",
   "llm.section.mmproj": "多模态投影器",
   "llm.section.inference": "推理设置",
+  "llm.section.mtp": "多令牌预测",
   "llm.enabled": "启用 LLM 服务器",
   "llm.enabledDesc": "在与 WebSocket API 相同的端口上运行 OpenAI 兼容的推理服务器。需要 llm Cargo 功能和已下载的模型。",
   "llm.autostart": "启动时自动加载",
@@ -269,6 +270,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "将 KQV 卸载到 GPU",
   "llm.inference.offloadKqvDesc":
     "即使并非所有 transformer 层都在 GPU 上，也将 K/Q/V 张量运算卸载到 GPU。推荐用于混合 CPU+GPU 设置。",
+
+  "llm.mtp.draftTokens": "草稿令牌数",
+  "llm.mtp.draftTokensDesc":
+    "每个解码步骤投机生成的令牌数。值越大吞吐量越高，但需要更多内存。需要支持 MTP 的模型。",
 
   "chat.status.running": "运行中",
   "chat.status.loading": "正在加载模型…",
