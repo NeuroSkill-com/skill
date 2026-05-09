@@ -308,6 +308,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "草稿令牌数",
+    "desc": "每个解码步骤投机生成的令牌数。值越大吞吐量越高，但需要更多内存。需要支持 MTP 的模型。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.size",
     "label": "{gb} GB"
   },

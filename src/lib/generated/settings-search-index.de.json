@@ -308,6 +308,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "Entwurfstoken",
+    "desc": "Anzahl der spekulativ generierten Token pro Dekodierungsschritt. Höhere Werte steigern den Durchsatz, benötigen aber mehr Speicher. Erfordert ein MTP-fähiges Modell."
+  },
+  {
+    "tab": "llm",
     "key": "llm.size",
     "label": "{gb} GB"
   },

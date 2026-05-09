@@ -308,6 +308,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "드래프트 토큰",
+    "desc": "디코딩 단계마다 투기적으로 생성할 토큰 수입니다. 값이 높을수록 처리량이 증가하지만 메모리를 더 많이 사용합니다. MTP 지원 모델이 필요합니다."
+  },
+  {
+    "tab": "llm",
     "key": "llm.size",
     "label": "{gb} GB"
   },
