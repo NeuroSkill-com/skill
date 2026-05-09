@@ -272,8 +272,7 @@ const llm: Record<string, string> = {
     "即使并非所有 transformer 层都在 GPU 上，也将 K/Q/V 张量运算卸载到 GPU。推荐用于混合 CPU+GPU 设置。",
 
   "llm.mtp.draftTokens": "草稿令牌数",
-  "llm.mtp.draftTokensDesc":
-    "每个解码步骤投机生成的令牌数。值越大吞吐量越高，但需要更多内存。需要支持 MTP 的模型。",
+  "llm.mtp.draftTokensDesc": "每个解码步骤投机生成的令牌数。值越大吞吐量越高，但需要更多内存。需要支持 MTP 的模型。",
 
   "chat.status.running": "运行中",
   "chat.status.loading": "正在加载模型…",
