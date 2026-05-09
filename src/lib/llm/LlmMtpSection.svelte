@@ -11,19 +11,12 @@ interface Props {
   onSetMtpDraftCount: (val: number) => void | Promise<void>;
 }
 
-let {
-  mtpDraftCount,
-  configSaving,
-  quant,
-  onSetMtpDraftCount,
-}: Props = $props();
+let { mtpDraftCount, configSaving, quant, onSetMtpDraftCount }: Props = $props();
 
 let showSection = $state(false);
 
 /** Recommended default based on quantisation: Q8 → 3, Q4 → 1, else 1. */
-const recommendedDraft = $derived(
-  quant.toUpperCase().startsWith("Q8") ? 3 : 1,
-);
+const recommendedDraft = $derived(quant.toUpperCase().startsWith("Q8") ? 3 : 1);
 
 const draftOptions: [number, string][] = [
   [0, "Off"],
