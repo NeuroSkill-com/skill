@@ -308,6 +308,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "Tokens brouillon",
+    "desc": "Nombre de tokens générés spéculativement par étape de décodage. Des valeurs plus élevées augmentent le débit mais nécessitent plus de mémoire. Nécessite un modèle compatible MTP."
+  },
+  {
+    "tab": "llm",
     "key": "llm.size",
     "label": "{gb} Go"
   },

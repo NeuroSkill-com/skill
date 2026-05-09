@@ -308,6 +308,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "Tokens de borrador",
+    "desc": "Número de tokens generados especulativamente por paso de decodificación. Valores más altos aumentan el rendimiento pero requieren más memoria. Requiere un modelo con MTP habilitado."
+  },
+  {
+    "tab": "llm",
     "key": "llm.size",
     "label": "{gb} ES"
   },

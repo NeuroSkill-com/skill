@@ -308,6 +308,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "Draft tokens",
+    "desc": "Number of tokens to speculatively draft per decode step. Higher values increase throughput but require more memory. Requires an MTP-enabled model."
+  },
+  {
+    "tab": "llm",
     "key": "llm.size",
     "label": "{gb} GB"
   },
