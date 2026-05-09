@@ -5536,6 +5536,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - updated iroh
 
+## [0.0.130-rc.23] — 2026-05-09
+
+### Features
+
+- upgraded llama.cpp and added mtp
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
