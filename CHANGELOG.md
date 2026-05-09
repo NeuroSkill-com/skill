@@ -5542,6 +5542,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - upgraded llama.cpp and added mtp
 
+## [0.0.130-rc.24] — 2026-05-09
+
+### Features
+
+- fixed biome
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
