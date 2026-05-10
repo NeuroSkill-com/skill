@@ -79,11 +79,16 @@ target-dir = "src-tauri/target"
 # On non-Windows platforms cmake ignores this variable.
 CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDLL"
 
-# ── macOS: cmake path ─────────────────────────────────────────────────────────
-# Homebrew cmake is not on the default PATH when cargo invokes build scripts.
-# The cmake-0.1.x crate respects the CMAKE env var as the binary path.
-CMAKE        = { value = "/opt/homebrew/bin/cmake",   force = false }
-SCCACHE_PATH = { value = "/opt/homebrew/bin/sccache", force = false }
+# ── macOS: cmake / sccache paths ──────────────────────────────────────────────
+# Homebrew cmake/sccache are not on the default PATH when cargo invokes build
+# scripts. The cmake-0.1.x crate respects the CMAKE env var as the binary path.
+#
+# These are NOT set here because cargo's [env] table is unconditional: a value
+# like "/opt/homebrew/bin/cmake" leaks to Windows / Linux runners where the
+# path doesn't exist, causing cmake-rs to panic with "is `cmake` not installed?"
+# (os error 3 / ENOENT). Instead they are exported only on macOS by:
+#   - .envrc (for `cargo build` via direnv)
+#   - scripts/tauri-build.js (for `npm run tauri:build`)
 
 # ── macOS deployment target ───────────────────────────────────────────────────
 #

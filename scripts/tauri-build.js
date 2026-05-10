@@ -341,6 +341,18 @@ if (isMingwTarget) {
     platformFlags = ["--target", "aarch64-apple-darwin", "--no-sign"];
   }
 
+  // Homebrew cmake/sccache are not on the default PATH when cargo invokes
+  // build scripts. The cmake-0.1.x crate respects CMAKE as the binary path.
+  // Kept out of .cargo/config.toml because [env] is unconditional and would
+  // leak these macOS paths to Windows / Linux runners (cmake-rs panics with
+  // "is `cmake` not installed?" / os error 3).
+  if (!process.env.CMAKE && existsSync("/opt/homebrew/bin/cmake")) {
+    process.env.CMAKE = "/opt/homebrew/bin/cmake";
+  }
+  if (!process.env.SCCACHE_PATH && existsSync("/opt/homebrew/bin/sccache")) {
+    process.env.SCCACHE_PATH = "/opt/homebrew/bin/sccache";
+  }
+
   // ── macOS: skip Tauri bundling for default local builds ──────────────────
   //
   // On recent macOS runners/hosts, the Tauri CLI can crash in the
