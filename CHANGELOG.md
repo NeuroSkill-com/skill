@@ -5548,6 +5548,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - fixed biome
 
+## [0.0.130-rc.25] — 2026-05-10
+
+### Features
+
+- fixed sscache + cmake
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
