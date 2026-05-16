@@ -5554,6 +5554,28 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - fixed sscache + cmake
 
+## [0.0.130-rc.26] — 2026-05-16
+
+### Performance
+
+- **Local-only `hotpath` profiling for skill-router**: added optional `hotpath = "0.16"` dep behind three opt-in features (`hotpath`, `hotpath-cpu`, `hotpath-alloc`) so the default build pulls nothing extra. Annotated the suspected UMAP hot paths (`load_embeddings_range`, `load_labels_range`, `analyze_umap_points`, `fit_umap_gpu`, `fit_umap_mlx`, `umap_compute_inner`) with `#[cfg_attr(feature = "hotpath", hotpath::measure)]` — zero-cost when the feature is off. New `crates/skill-router/examples/umap_hotpath.rs` runner uses `#[hotpath::main]` to seed 500+500 synthetic 32-dim embeddings and print a per-function timing table on exit. Run with `cargo run -p skill-router --release --example umap_hotpath --features='gpu,hotpath'` (add `hotpath-alloc` for allocation tracking; swap `gpu` for `mlx` on Apple). First run on Apple M4 Pro confirmed 99.37% of UMAP wall-clock is inside `fit_umap_gpu` (44.96s of 45.24s on 1000×32-dim points); I/O and post-processing are five orders of magnitude smaller — useful signal for where *not* to optimize.
+
+### Bugfixes
+
+- **Fix daemon WS command dispatch starvation under event load**: the `/v1/events` handler ran `socket.send` (broadcast events) and `socket.recv` (incoming commands) in the same `tokio::select!` arm-set. With a Muse @ 256 Hz producing ~300–500 frames/sec across `EegSample`/`EegBands`/`ImuSample`/`PpgSample`/`SignalQuality`, the event arm won repeatedly, `sender.send().await` kept the task busy filling the kernel TCP buffer, and incoming commands timed out client-side at 15s. The smoke test hit this on every WS command. Restructured `handle_ws`: split the socket into `(sender, receiver)` halves; sender task drains a two-channel priority queue (responses via `biased` select, then events) with per-command dispatch spawned so slow handlers (`umap`, `sessions`) can't block the loop. High-rate event types are gated behind a per-connection subscribed set (default: none) — clients opt in via `{command:"subscribe",events:["EegSample",...]}` or `events:["*"]`; the neuroskill UI (`src/lib/daemon/ws.ts`) and neuroloop CLI auto-subscribe to the types they consume. Two regression tests (`ws_command_responds_under_event_flood`, `ws_filters_high_rate_events_by_default`) lock in the priority-queue invariant + default-filter behavior.
+
+- **Fix `interactive_search` hang on empty query**: with `query=""` the SQL `text LIKE '%' || '' || '%'` matched every label in `labels.sqlite`, then looped `search_embeddings_in_range(±10 minutes)` across every daily DB — 30s+ before the test harness gave up. The daemon now short-circuits to `{"ok":false,"error":"empty query"}` when the query is empty or whitespace-only.
+
+- **Fix smoke-test port discovery latching onto VS Code / dev-tool ports**: `test.ts`'s mDNS-fallback used `pgrep -if 'skill'`, which matched any process whose command line contained the substring "skill" — including VS Code Helpers running in `/Users/Shared/skill/...` workspaces. Once a wrong port was picked, `testWs()`'s bare-WebSocket handshake accepted it (VS Code, Vite HMR, etc. all accept WS upgrades), and every command then timed out at 15s, burning the entire 180s smoke budget. Tightened the pgrep regex to `(^|/)skill-daemon($|\s)|target/(debug|release)/skill($|\s)`, swapped `testWs()` to use the daemon's `DaemonStarted` welcome envelope as a protocol discriminator, and moved auth-token loading ahead of discovery so the probe can authenticate.
+
+### LLM
+
+- **MTP (Multi-Token Prediction) speculative decoding**: wired the upstream MTP API from `llama-cpp-4` 0.2.56 into the text-only generation path. When the active model is catalog-flagged `mtp: true` (e.g. the `froggeric/Qwen3.6-27B-MTP-GGUF` family) and the user sets `mtp_draft_count > 0`, the actor builds the target context with `with_n_rs_seq` so partial KV rollback works on hybrid/recurrent models (Qwen3.6 M-RoPE), runs a one-shot draft-context smoke check at load time (downgrades to the standard path on failure), and per-request constructs a `LlamaContextType::Mtp` draft context plus `MtpSession` to drive the full `draft → verify-batch → match-prefix → KV-rollback → accept` loop. Acceptance rate is logged per request. Vision (mtmd) requests stay on the non-MTP path. Verified end-to-end against `Qwen3.6-27B-IQ2_M-mtp.gguf` on Apple M4 Pro (3/3 drafts accepted on a short greedy prompt) via the new `tests/llm_mtp_e2e.rs` integration test, which skips gracefully when no MTP-capable GGUF is cached.
+
+### Dependencies
+
+- **Update llama-cpp-4 to 0.2.56**: bumped `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.54 to 0.2.56, picking up upstream llama.cpp `64b38b561` (May 2026) which now ships MTP support natively (PR ggml-org/llama.cpp#22673). Breaking changes in the fork: the in-tree MTP patch is gone, so the `mtp` Cargo feature, `LlamaContext::set_mtp`, and `LlamaModelParams::with_override_arch` no longer exist. Dropped `"mtp"` from the metal/vulkan dependency feature lists in `skill-llm/Cargo.toml` and removed the dangling `llm-mtp` workspace feature (no downstream consumer). The new upstream API (`LlamaContextType::Mtp`, `with_ctx_type`, `with_n_rs_seq`, `llama_cpp_4::mtp::MtpSession`) is wired separately in the MTP speculative-decoding feature.
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
