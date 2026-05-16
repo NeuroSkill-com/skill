@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Fix smoke-test port discovery latching onto VS Code / dev-tool ports**: `test.ts`'s mDNS-fallback used `pgrep -if 'skill'`, which matched any process whose command line contained the substring "skill" — including VS Code Helpers running in `/Users/Shared/skill/...` workspaces. Once a wrong port was picked, `testWs()`'s bare-WebSocket handshake accepted it (VS Code, Vite HMR, etc. all accept WS upgrades), and every command then timed out at 15s, burning the entire 180s smoke budget. Tightened the pgrep regex to `(^|/)skill-daemon($|\s)|target/(debug|release)/skill($|\s)`, swapped `testWs()` to use the daemon's `DaemonStarted` welcome envelope as a protocol discriminator, and moved auth-token loading ahead of discovery so the probe can authenticate.
