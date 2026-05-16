@@ -439,6 +439,13 @@ pub(super) async fn cmd_sleep(state: &AppState, msg: &Value) -> Result<Value, St
 
 pub(super) async fn cmd_interactive_search(state: &AppState, msg: &Value) -> Result<Value, String> {
     let query = str_field(msg, "query").ok_or("missing query")?;
+    // Empty/whitespace query would match every label via `text LIKE '%%'`,
+    // then loop search_embeddings_in_range per label across all daily DBs —
+    // tens of seconds of work that callers never actually want. Smoke test
+    // expects this to error out fast.
+    if query.trim().is_empty() {
+        return Err("empty query".into());
+    }
     let k_text = u64_field(msg, "k_text").unwrap_or(5) as usize;
     let k_eeg = u64_field(msg, "k_eeg").unwrap_or(5) as usize;
     let k_labels = u64_field(msg, "k_labels").unwrap_or(3) as usize;

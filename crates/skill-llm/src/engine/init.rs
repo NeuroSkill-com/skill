@@ -121,6 +121,7 @@ pub fn init(
         config.params_b = entry.params_b;
         config.quant = entry.quant.clone();
         config.max_context_length = entry.max_context_length;
+        config.mtp_capable = entry.mtp;
 
         if config.ctx_size.is_none() {
             let recommended = crate::catalog::recommend_ctx_size(entry);
