@@ -14,14 +14,14 @@ use std::{
 use serde_json::{json, Value};
 
 use llama_cpp_4::{
-    context::params::{LlamaContextParams, LlamaPoolingType},
+    context::params::{LlamaContextParams, LlamaContextType, LlamaPoolingType},
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
     model::{params::LlamaModelParams, AddBos, LlamaModel},
     quantize::GgmlType,
 };
 
-use super::generation::{run_generation, GpuMemoryGuard};
+use super::generation::{run_generation, run_generation_mtp, GpuMemoryGuard};
 use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{InferRequest, InferToken};
 use crate::config::LlmConfig;
@@ -202,7 +202,20 @@ pub(super) fn run_actor(
     // n_ubatch: micro-batch for BLAS/GPU kernel dispatch.
     let n_ubatch = config.n_ubatch.unwrap_or_else(|| n_batch.min(2048));
 
-    let ctx_params = LlamaContextParams::default()
+    // MTP: when the active model is catalog-flagged MTP-capable AND the user
+    // has dialed in a draft count, the target context must be built with
+    // `with_n_rs_seq(n)` so partial KV rollback after rejected drafts
+    // succeeds on hybrid/recurrent models (Qwen3.6 M-RoPE).
+    let mtp_active = config.mtp_capable && config.mtp_draft_count > 0;
+    let mtp_n_rs_seq = if !mtp_active {
+        0
+    } else if config.mtp_n_rs_seq > 0 {
+        config.mtp_n_rs_seq
+    } else {
+        config.mtp_draft_count.saturating_add(1).max(4)
+    };
+
+    let mut ctx_params = LlamaContextParams::default()
         .with_n_ctx(ctx_size)
         .with_n_batch(n_batch)
         .with_n_ubatch(n_ubatch)
@@ -213,6 +226,11 @@ pub(super) fn run_actor(
         .with_cache_type_k(kv_type_k)
         .with_cache_type_v(kv_type_v)
         .with_attn_rot_disabled(config.attn_rot_disabled);
+    if mtp_active {
+        ctx_params = ctx_params
+            .with_ctx_type(LlamaContextType::Default)
+            .with_n_rs_seq(mtp_n_rs_seq);
+    }
 
     let mut ctx = match model.new_context(backend, ctx_params) {
         Ok(c) => c,
@@ -491,6 +509,43 @@ pub(super) fn run_actor(
         );
     }
 
+    // ── MTP smoke validation (load-time) ────────────────────────────────────
+    // When MTP is configured, build a throwaway draft context to verify the
+    // GGUF has MTP heads compiled in. Each request rebuilds the draft for
+    // its own KV state — this is purely an early-signal check that
+    // downgrades the per-request dispatch to the standard path on failure.
+    let mtp_use = mtp_active && {
+        let draft_params = LlamaContextParams::default()
+            .with_n_ctx(ctx_size)
+            .with_ctx_type(LlamaContextType::Mtp)
+            .with_n_rs_seq(mtp_n_rs_seq);
+        match model.new_context(backend, draft_params) {
+            Ok(draft_ctx) => {
+                llm_info!(
+                    &app,
+                    &log_buf,
+                    log_file,
+                    "[mtp] draft heads present — n_draft_max={}, n_rs_seq={}, draft_n_ctx={}",
+                    config.mtp_draft_count,
+                    mtp_n_rs_seq,
+                    draft_ctx.n_ctx()
+                );
+                drop(draft_ctx);
+                true
+            }
+            Err(e) => {
+                llm_warn!(
+                    &app,
+                    &log_buf,
+                    log_file,
+                    "[mtp] draft heads missing — disabling MTP for this session: {e}. \
+                     Try froggeric/Qwen3.6-27B-MTP-GGUF (e.g. Qwen3.6-27B-Q4_K_M-mtp.gguf)"
+                );
+                false
+            }
+        }
+    };
+
     // Signal that the model is fully loaded and warmed up.
     ready_flag.store(true, Ordering::Relaxed);
     let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
@@ -682,7 +737,7 @@ pub(super) fn run_actor(
 
                                 let resize_n_batch = config.n_batch.unwrap_or_else(|| new_ctx.min(4096));
                                 let resize_n_ubatch = config.n_ubatch.unwrap_or_else(|| resize_n_batch.min(2048));
-                                let new_ctx_params = LlamaContextParams::default()
+                                let mut new_ctx_params = LlamaContextParams::default()
                                     .with_n_ctx(NonZeroU32::new(new_ctx))
                                     .with_n_batch(resize_n_batch)
                                     .with_n_ubatch(resize_n_ubatch)
@@ -693,6 +748,11 @@ pub(super) fn run_actor(
                                     .with_cache_type_k(kv_type_k)
                                     .with_cache_type_v(kv_type_v)
                                     .with_attn_rot_disabled(config.attn_rot_disabled);
+                                if mtp_active {
+                                    new_ctx_params = new_ctx_params
+                                        .with_ctx_type(LlamaContextType::Default)
+                                        .with_n_rs_seq(mtp_n_rs_seq);
+                                }
 
                                 match model.new_context(backend, new_ctx_params) {
                                     Ok(new_c) => {
@@ -750,9 +810,26 @@ pub(super) fn run_actor(
                     }
                 }
 
-                run_generation(
-                    &model, &mut ctx, &app, &log_buf, log_file, prompt, params, token_tx, gpu_guard,
-                );
+                if mtp_use && images.is_empty() {
+                    run_generation_mtp(
+                        &model,
+                        &mut ctx,
+                        backend,
+                        &app,
+                        &log_buf,
+                        log_file,
+                        prompt,
+                        params,
+                        token_tx,
+                        gpu_guard,
+                        config.mtp_draft_count as i32,
+                        mtp_n_rs_seq,
+                    );
+                } else {
+                    run_generation(
+                        &model, &mut ctx, &app, &log_buf, log_file, prompt, params, token_tx, gpu_guard,
+                    );
+                }
             }
 
             InferRequest::Complete {
@@ -767,9 +844,26 @@ pub(super) fn run_actor(
                     "completion request — max_tokens={}",
                     params.max_tokens
                 );
-                run_generation(
-                    &model, &mut ctx, &app, &log_buf, log_file, prompt, params, token_tx, gpu_guard,
-                );
+                if mtp_use {
+                    run_generation_mtp(
+                        &model,
+                        &mut ctx,
+                        backend,
+                        &app,
+                        &log_buf,
+                        log_file,
+                        prompt,
+                        params,
+                        token_tx,
+                        gpu_guard,
+                        config.mtp_draft_count as i32,
+                        mtp_n_rs_seq,
+                    );
+                } else {
+                    run_generation(
+                        &model, &mut ctx, &app, &log_buf, log_file, prompt, params, token_tx, gpu_guard,
+                    );
+                }
             }
 
             InferRequest::Embed { inputs, result_tx } => {

@@ -114,6 +114,7 @@ pub struct RoundedScores {
 /// Uses [`skill_data::util::DualTimestampRange`] to match all three timestamp
 /// formats that may be stored in the `embeddings` table (Unix ms, 14-digit
 /// `YYYYMMDDHHmmss`, or 17-digit `YYYYMMDDHHmmss × 1000`).
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, Vec<f32>)> {
     let r = skill_data::util::DualTimestampRange::from_unix_secs(start_utc, end_utc);
     let ts_where = skill_data::util::DualTimestampRange::WHERE_CLAUSE;
@@ -170,6 +171,7 @@ pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> 
 
 /// Load all labels from `labels.sqlite` whose EEG window overlaps [start, end].
 /// Returns Vec<(eeg_start_unix, eeg_end_unix, text)>.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn load_labels_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, u64, String)> {
     let labels_db = skill_dir.join(LABELS_FILE);
     if !labels_db.exists() {
@@ -208,6 +210,7 @@ pub fn find_label_for_epoch(labels: &[(u64, u64, String)], epoch_utc: u64) -> Op
 // ── UMAP analysis ─────────────────────────────────────────────────────────────
 
 /// Cluster analysis of UMAP 3-D projection: centroids, separation score, outliers.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn analyze_umap_points(
     embedding: &[Vec<f64>],
     session_ids: &[u8], // 0 = A, 1 = B
@@ -450,6 +453,7 @@ macro_rules! fit_umap {
 type FitResult = Result<Vec<Vec<f64>>, Box<dyn std::any::Any + Send>>;
 
 #[cfg(feature = "gpu")]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 fn fit_umap_gpu(
     config: fast_umap::UmapConfig,
     data: Vec<Vec<f64>>,
@@ -465,6 +469,7 @@ fn fit_umap_gpu(
 }
 
 #[cfg(feature = "mlx")]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 fn fit_umap_mlx(
     config: fast_umap::UmapConfig,
     data: Vec<Vec<f64>>,
@@ -486,6 +491,7 @@ fn fit_umap_mlx(
 ///
 /// Available when the `gpu` or `mlx` feature is enabled.
 #[cfg(any(feature = "gpu", feature = "mlx"))]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn umap_compute_inner(
     skill_dir: &Path,
     a_start: u64,

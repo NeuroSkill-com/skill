@@ -929,4 +929,159 @@ mod tests {
         let _ = shutdown_tx.send(());
         let _ = handle.await;
     }
+
+    /// Regression: command dispatch must stay responsive while broadcast
+    /// events are flooding the connection.
+    ///
+    /// Before the priority-queue + subscribe-gating fix, ~300–500 high-rate
+    /// events/sec on a single WS connection would fill the kernel TCP send
+    /// buffer, block `sender.send(event).await`, and starve every command
+    /// response — the smoke test saw 15s per-command timeouts.
+    ///
+    /// This test subscribes to the high-rate stream, broadcasts 1000
+    /// EegSample envelopes, and asserts the response to `{command:"status"}`
+    /// arrives within 1500ms. The pre-fix daemon would take 5+s.
+    #[tokio::test]
+    async fn ws_command_responds_under_event_flood() {
+        use tokio_tungstenite::tungstenite::Message;
+
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("flood-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+        let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
+
+        let url = format!("ws://{addr}/v1/events?token=flood-token");
+        let (mut ws, _resp) = connect_async(url).await.expect("ws connect");
+
+        // 1) drain welcome envelope
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
+            .await
+            .expect("welcome timeout")
+            .expect("ws closed")
+            .expect("ws error");
+
+        // 2) opt in to the high-rate stream
+        ws.send(Message::Text(r#"{"command":"subscribe","events":["*"]}"#.into()))
+            .await
+            .expect("send subscribe");
+
+        // 3) drain the subscribe ack
+        for _ in 0..4 {
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
+                .await
+                .expect("ack timeout")
+                .expect("ws closed")
+                .expect("ws error");
+            if let Message::Text(t) = msg {
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                if v["command"] == "subscribe" {
+                    break;
+                }
+            }
+        }
+
+        // 4) flood the broadcast channel with high-rate envelopes
+        for i in 0..1000 {
+            let _ = state.events_tx.send(skill_daemon_common::EventEnvelope {
+                r#type: "EegSample".to_string(),
+                ts_unix_ms: i as u64,
+                correlation_id: None,
+                payload: serde_json::json!({"channels": [0.0, 0.0, 0.0, 0.0], "timestamp": i as f64}),
+            });
+        }
+
+        // 5) send a command and time its response
+        let t0 = std::time::Instant::now();
+        ws.send(Message::Text(r#"{"command":"status"}"#.into()))
+            .await
+            .expect("send status");
+
+        let mut saw_status = false;
+        let mut elapsed = std::time::Duration::ZERO;
+        // Drain up to ~2000 frames waiting for the response — most will
+        // be EegSample echoes that the sender task hasn't drained yet.
+        for _ in 0..2500 {
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(3), ws.next())
+                .await
+                .expect("response timeout")
+                .expect("ws closed")
+                .expect("ws error");
+            if let Message::Text(t) = msg {
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                if v["command"] == "status" {
+                    saw_status = true;
+                    elapsed = t0.elapsed();
+                    break;
+                }
+            }
+        }
+        assert!(saw_status, "status response never arrived under event flood");
+        assert!(
+            elapsed < std::time::Duration::from_millis(1500),
+            "status response took {elapsed:?} under event flood — \
+             priority-queue regression (pre-fix took 5+s)"
+        );
+
+        let _ = ws.close(None).await;
+        let _ = shutdown_tx.send(());
+        let _ = handle.await;
+    }
+
+    /// Regression: high-rate events MUST be filtered out when the client
+    /// hasn't subscribed. Otherwise dashboards that don't opt in still get
+    /// the firehose and the daemon's TCP send buffer fills.
+    #[tokio::test]
+    async fn ws_filters_high_rate_events_by_default() {
+        use tokio_tungstenite::tungstenite::Message;
+
+        let td = TempDir::new().unwrap();
+        let state = AppState::new("filter-token".to_string(), td.path().to_path_buf());
+        let app = test_app(state.clone());
+        let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
+
+        let url = format!("ws://{addr}/v1/events?token=filter-token");
+        let (mut ws, _resp) = connect_async(url).await.expect("ws connect");
+
+        // welcome
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), ws.next())
+            .await
+            .expect("welcome timeout")
+            .expect("ws closed")
+            .expect("ws error");
+
+        // Fire one high-rate and one low-rate event.
+        let _ = state.events_tx.send(skill_daemon_common::EventEnvelope {
+            r#type: "EegSample".to_string(),
+            ts_unix_ms: 1,
+            correlation_id: None,
+            payload: serde_json::json!({"x": 1}),
+        });
+        let _ = state.events_tx.send(skill_daemon_common::EventEnvelope {
+            r#type: "StatusUpdate".to_string(),
+            ts_unix_ms: 2,
+            correlation_id: None,
+            payload: serde_json::json!({"x": 2}),
+        });
+
+        let mut saw_eeg = false;
+        let mut saw_status = false;
+        for _ in 0..8 {
+            let res = tokio::time::timeout(std::time::Duration::from_millis(500), ws.next()).await;
+            let Ok(Some(Ok(Message::Text(t)))) = res else {
+                break;
+            };
+            let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+            match v["type"].as_str() {
+                Some("EegSample") => saw_eeg = true,
+                Some("StatusUpdate") => saw_status = true,
+                _ => {}
+            }
+        }
+        assert!(saw_status, "low-rate event must be forwarded");
+        assert!(!saw_eeg, "high-rate event must be filtered until client subscribes");
+
+        let _ = ws.close(None).await;
+        let _ = shutdown_tx.send(());
+        let _ = handle.await;
+    }
 }
