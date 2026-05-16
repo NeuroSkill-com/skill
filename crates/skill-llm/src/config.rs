@@ -155,14 +155,27 @@ pub struct LlmConfig {
     #[serde(default)]
     pub attn_rot_disabled: bool,
 
-    // ── Multi-Token Prediction (requires `llm-mtp` feature) ──────────────────
+    // ── Multi-Token Prediction ───────────────────────────────────────────────
     /// Number of MTP draft tokens generated per decode step.
     ///
     /// `0` = MTP disabled (default).  Typical values: `1` for Q4 models,
-    /// `3` for Q8 models.  Requires an MTP-capable model (e.g. the
-    /// `froggeric/Qwen3.6-27B-MTP-GGUF` family).
+    /// `3` for Q8 models (per the v0.2.53 bench: `=3` regressed, `=1` gained
+    /// +6.2% on Qwen3.6-27B-Q4_K_M-mtp). Requires an MTP-capable model
+    /// (e.g. the `froggeric/Qwen3.6-27B-MTP-GGUF` family).
     #[serde(default)]
     pub mtp_draft_count: u32,
+
+    /// Number of recurrent-state snapshots per sequence on the draft context.
+    /// Must be `>= mtp_draft_count` so partial KV rollback after rejected
+    /// drafts succeeds on hybrid/recurrent models (e.g. Qwen3.6 M-RoPE).
+    /// `0` lets the smoke-validation step pick a sensible default (4).
+    #[serde(default)]
+    pub mtp_n_rs_seq: u32,
+
+    /// Carries the catalog `mtp` flag for the active model into the actor.
+    /// Set by `init.rs` from `LlmModelEntry::mtp` — not user-configurable.
+    #[serde(default, skip_serializing)]
+    pub mtp_capable: bool,
 }
 
 fn default_llm_parallel() -> usize {
@@ -222,6 +235,8 @@ impl Default for LlmConfig {
             cache_type_v: default_cache_type_v(),
             attn_rot_disabled: false,
             mtp_draft_count: 0,
+            mtp_n_rs_seq: 0,
+            mtp_capable: false,
         }
     }
 }

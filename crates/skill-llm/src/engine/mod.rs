@@ -50,6 +50,7 @@ mod generation;
 pub mod images;
 mod init;
 mod sampling;
+mod sampling_mtp;
 mod think_tracker;
 pub mod tool_orchestration;
 
