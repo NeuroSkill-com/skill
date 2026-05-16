@@ -13,11 +13,52 @@ export interface DaemonEvent {
 
 export type EventHandler = (event: DaemonEvent) => void;
 
+// Per-sample event types the daemon filters by default — must opt in via
+// `{command:"subscribe",events:[...]}`. Mirrors `HIGH_RATE_EVENT_TYPES`
+// in `crates/skill-daemon/src/handlers.rs`. Adding a handler for any of
+// these via `onDaemonEvent` triggers an automatic subscribe; the last
+// handler being removed triggers unsubscribe.
+const HIGH_RATE_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "EegSample",
+  "EegBands",
+  "ImuSample",
+  "PpgSample",
+  "FnirsSample",
+  "SignalQuality",
+]);
+
 let _ws: WebSocket | null = null;
 const _handlers = new Map<string, Set<EventHandler>>();
 const _globalHandlers = new Set<EventHandler>();
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _token: string | null = null;
+
+/**
+ * Compute the high-rate event types that should be subscribed to right now.
+ * A global handler (`onAnyDaemonEvent`) wants everything; otherwise we only
+ * subscribe to types with at least one registered handler.
+ */
+function desiredHighRateSubscriptions(): string[] {
+  if (_globalHandlers.size > 0) {
+    return Array.from(HIGH_RATE_EVENT_TYPES);
+  }
+  return Array.from(HIGH_RATE_EVENT_TYPES).filter((t) => (_handlers.get(t)?.size ?? 0) > 0);
+}
+
+/**
+ * Send subscribe/unsubscribe so the daemon's per-connection subscribed set
+ * matches what this client actually wants. Idempotent: always clears then
+ * re-adds, so it's safe to call on initial connect, reconnect, or
+ * whenever handlers are added/removed.
+ */
+function syncSubscriptions(): void {
+  if (_ws?.readyState !== WebSocket.OPEN) return;
+  const desired = desiredHighRateSubscriptions();
+  _ws.send(JSON.stringify({ command: "unsubscribe", events: ["*"] }));
+  if (desired.length > 0) {
+    _ws.send(JSON.stringify({ command: "subscribe", events: desired }));
+  }
+}
 
 async function getWsUrl(): Promise<string> {
   const port = await getDaemonPort();
@@ -45,6 +86,9 @@ export async function connectDaemonWs(): Promise<void> {
 
   _ws.onopen = () => {
     import("./status.svelte").then(({ setDaemonConnected }) => setDaemonConnected()).catch(() => {});
+    // Re-sync subscriptions on every (re)connect so EEG/PPG/IMU streams
+    // resume automatically.
+    syncSubscriptions();
   };
 
   _ws.onmessage = (msg) => {
@@ -93,22 +137,30 @@ function scheduleReconnect() {
 
 /** Subscribe to a specific event type. Returns an unsubscribe function. */
 export function onDaemonEvent(type: string, handler: EventHandler): () => void {
+  const isHighRate = HIGH_RATE_EVENT_TYPES.has(type);
+  const wasEmpty = isHighRate && (_handlers.get(type)?.size ?? 0) === 0;
   if (!_handlers.has(type)) _handlers.set(type, new Set());
   _handlers.get(type)?.add(handler);
   // Auto-connect on first subscription
   connectDaemonWs().catch(() => {});
+  if (wasEmpty) syncSubscriptions();
   return () => {
     _handlers.get(type)?.delete(handler);
+    const becameEmpty = isHighRate && (_handlers.get(type)?.size ?? 0) === 0;
     if (_handlers.get(type)?.size === 0) _handlers.delete(type);
+    if (becameEmpty) syncSubscriptions();
   };
 }
 
 /** Subscribe to all events. Returns an unsubscribe function. */
 export function onAnyDaemonEvent(handler: EventHandler): () => void {
+  const wasEmpty = _globalHandlers.size === 0;
   _globalHandlers.add(handler);
   connectDaemonWs().catch(() => {});
+  if (wasEmpty) syncSubscriptions();
   return () => {
     _globalHandlers.delete(handler);
+    if (_globalHandlers.size === 0) syncSubscriptions();
   };
 }
 

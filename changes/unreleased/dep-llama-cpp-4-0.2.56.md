@@ -1,0 +1,3 @@
+### Dependencies
+
+- **Update llama-cpp-4 to 0.2.56**: bumped `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.54 to 0.2.56, picking up upstream llama.cpp `64b38b561` (May 2026) which now ships MTP support natively (PR ggml-org/llama.cpp#22673). Breaking changes in the fork: the in-tree MTP patch is gone, so the `mtp` Cargo feature, `LlamaContext::set_mtp`, and `LlamaModelParams::with_override_arch` no longer exist. Dropped `"mtp"` from the metal/vulkan dependency feature lists in `skill-llm/Cargo.toml` and removed the dangling `llm-mtp` workspace feature (no downstream consumer). The new upstream API (`LlamaContextType::Mtp`, `with_ctx_type`, `with_n_rs_seq`, `llama_cpp_4::mtp::MtpSession`) is wired separately in the MTP speculative-decoding feature.

@@ -4,11 +4,19 @@
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use llama_cpp_4::{llama_batch::LlamaBatch, model::AddBos};
+use llama_cpp_4::{
+    context::params::{LlamaContextParams, LlamaContextType},
+    llama_backend::LlamaBackend,
+    llama_batch::LlamaBatch,
+    model::AddBos,
+    mtp::MtpSession,
+    sampling::LlamaSampler,
+};
 
 use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{GenParams, InferToken};
 use super::sampling::run_sampling_loop;
+use super::sampling_mtp::run_sampling_loop_mtp;
 use crate::event::LlmEventEmitter;
 
 /// GPU memory safety thresholds (configurable via LlmConfig).
@@ -284,4 +292,174 @@ pub(super) fn run_generation_multimodal(
     run_sampling_loop(
         model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt, gpu_guard,
     );
+}
+
+// ── MTP (Multi-Token Prediction) generation ───────────────────────────────────
+
+/// Text-only generation with MTP speculative decoding.
+///
+/// Differences vs `run_generation`:
+/// * Prefill emits `logits = true` on every prompt position (required by MTP
+///   so the draft context can extract pre-norm embeddings from each position).
+/// * Builds a per-request `LlamaContextType::Mtp` draft context and
+///   `MtpSession` from `model + backend`. Both are dropped before this
+///   function returns — the cost is one set of recurrent-state allocations
+///   per request, which is acceptable for the win MTP offers (per the
+///   v0.2.53 fork benchmark: +6.2% on Q4_K_M with `n_draft_max=1`).
+/// * Hands off to `run_sampling_loop_mtp` for the draft/verify loop.
+///
+/// Vision (mtmd) requests do NOT route here — they stay on the
+/// non-speculative `run_generation_multimodal` path. Combining MTP with
+/// mtmd is not yet validated upstream.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn run_generation_mtp(
+    model: &llama_cpp_4::model::LlamaModel,
+    target_ctx: &mut llama_cpp_4::context::LlamaContext<'_>,
+    backend: &LlamaBackend,
+    app: &dyn LlmEventEmitter,
+    log_buf: &LlmLogBuffer,
+    log_file: Option<&LlmLogFile>,
+    prompt: String,
+    params: GenParams,
+    token_tx: UnboundedSender<InferToken>,
+    gpu_guard: GpuMemoryGuard,
+    n_draft_max: i32,
+    n_rs_seq: u32,
+) {
+    target_ctx.clear_kv_cache();
+
+    let prompt = if params.thinking_budget == Some(0) {
+        format!("{prompt}<think>\n\n</think>\n")
+    } else {
+        prompt
+    };
+
+    let Ok(tokens) = model.str_to_token(&prompt, AddBos::Always) else {
+        token_tx.send(InferToken::Error("tokenization failed".into())).ok();
+        return;
+    };
+    let n_prompt = tokens.len();
+    let n_ctx = target_ctx.n_ctx() as usize;
+
+    llm_info!(
+        app,
+        log_buf,
+        log_file,
+        "[mtp] prompt: {n_prompt} tokens, n_draft_max={n_draft_max}, thinking_budget={:?}",
+        params.thinking_budget
+    );
+    if n_prompt >= n_ctx {
+        let msg = format!("prompt too long ({n_prompt} ≥ n_ctx {n_ctx})");
+        llm_warn!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
+    let (mem_ok, free_gb) = gpu_memory_check(gpu_guard.decode_threshold);
+    if !mem_ok {
+        let msg = format!(
+            "Insufficient GPU memory for decode ({:.2} GB free, {:.2} GB required).",
+            free_gb.unwrap_or(0.0),
+            gpu_guard.decode_threshold,
+        );
+        llm_error!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
+    // Build per-request draft context. n_ctx matches target so KV positions
+    // line up. n_batch / n_ubatch are intentionally left at the library
+    // default for the draft side — the draft only ever processes
+    // `1 + n_draft_max` tokens per round, far below typical batch sizes.
+    let draft_n_ctx =
+        std::num::NonZeroU32::new(target_ctx.n_ctx()).unwrap_or_else(|| std::num::NonZeroU32::new(2048).unwrap());
+    let draft_params = LlamaContextParams::default()
+        .with_n_ctx(Some(draft_n_ctx))
+        .with_ctx_type(LlamaContextType::Mtp)
+        .with_n_rs_seq(n_rs_seq);
+    let mut draft_ctx = match model.new_context(backend, draft_params) {
+        Ok(c) => c,
+        Err(e) => {
+            llm_error!(app, log_buf, log_file, "[mtp] draft context build failed: {e}");
+            token_tx
+                .send(InferToken::Error(format!("MTP draft context build failed: {e}")))
+                .ok();
+            return;
+        }
+    };
+
+    let mut session = match MtpSession::new(target_ctx, &draft_ctx, 1, n_draft_max) {
+        Ok(s) => s,
+        Err(e) => {
+            llm_error!(app, log_buf, log_file, "[mtp] session init failed: {e}");
+            token_tx
+                .send(InferToken::Error(format!("MTP session init failed: {e}")))
+                .ok();
+            return;
+        }
+    };
+
+    // ── Prefill: decode the whole prompt with logits=true on every position.
+    // MTP requires this so pre-norm embeddings can be extracted by
+    // session.process(prefill_batch). Larger prompts are chunked at n_batch.
+    let n_batch = target_ctx.n_batch() as usize;
+    let prefill_cap = n_prompt.max(n_batch);
+    let mut prefill = LlamaBatch::new(prefill_cap, 1);
+    // Single-batch path is required by MTP to keep all positions visible to
+    // `session.process` in one call. If the prompt exceeds n_batch we have
+    // to grow the batch capacity here (the underlying llama_batch_init
+    // allocates per LlamaBatch::new).
+    for (i, tok) in tokens.iter().copied().enumerate() {
+        if prefill.add(tok, i as i32, &[0], true).is_err() {
+            token_tx.send(InferToken::Error("prefill batch overflow".into())).ok();
+            return;
+        }
+    }
+    if let Err(e) = target_ctx.decode(&mut prefill) {
+        llm_error!(app, log_buf, log_file, "[mtp] prefill decode failed: {e}");
+        token_tx.send(InferToken::Error(format!("prefill decode: {e}"))).ok();
+        return;
+    }
+    if let Err(e) = session.process(&prefill) {
+        llm_error!(app, log_buf, log_file, "[mtp] process(prefill) failed: {e}");
+        token_tx
+            .send(InferToken::Error(format!("MTP process(prefill): {e}")))
+            .ok();
+        return;
+    }
+    if let Err(e) = session.begin(0, &tokens) {
+        llm_error!(app, log_buf, log_file, "[mtp] session.begin failed: {e}");
+        token_tx.send(InferToken::Error(format!("MTP begin: {e}"))).ok();
+        return;
+    }
+
+    // Sample the first token from the prefill's last logits.
+    let first_sampler = LlamaSampler::chain_simple([
+        LlamaSampler::top_k(params.top_k),
+        LlamaSampler::top_p(params.top_p, 1),
+        LlamaSampler::temp(params.temperature),
+        LlamaSampler::dist(params.seed),
+    ]);
+    let first_token = first_sampler.sample(target_ctx, prefill.n_tokens() - 1);
+    drop(first_sampler);
+
+    run_sampling_loop_mtp(
+        model,
+        target_ctx,
+        &mut draft_ctx,
+        &mut session,
+        app,
+        log_buf,
+        log_file,
+        &params,
+        token_tx,
+        n_prompt,
+        first_token,
+        gpu_guard,
+    );
+
+    // Explicit drop order: session BEFORE draft_ctx, since session holds a
+    // raw pointer into draft_ctx's underlying llama_context_p.
+    drop(session);
+    drop(draft_ctx);
 }

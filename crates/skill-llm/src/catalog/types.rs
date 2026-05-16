@@ -67,7 +67,8 @@ pub struct LlmFamily {
     #[serde(default)]
     pub is_mmproj: bool,
     /// Whether models in this family were compiled with multi-token prediction
-    /// (MTP) support.  Requires the `llm-mtp` feature at runtime.
+    /// (MTP) support. As of llama-cpp-4 0.2.56, MTP lives upstream and is
+    /// activated via `LlamaContextType::Mtp` (not yet wired in the engine).
     #[serde(default)]
     pub mtp: bool,
     #[serde(default)]
@@ -296,7 +297,8 @@ pub struct LlmModelEntry {
     pub tags: Vec<String>,
     pub is_mmproj: bool,
     /// Whether this model was compiled with multi-token prediction (MTP).
-    /// Inherited from the family; requires the `llm-mtp` feature at runtime.
+    /// Inherited from the family. MTP activation lives upstream in
+    /// llama-cpp-4 0.2.56+ (`LlamaContextType::Mtp`); not yet wired here.
     #[serde(default)]
     pub mtp: bool,
     pub recommended: bool,

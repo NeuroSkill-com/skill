@@ -203,17 +203,51 @@ function afetch(url: string, opts: RequestInit = {}): Promise<Response> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * testWs(port) — Quick probe to check if a WebSocket server is listening.
- * Opens a connection, waits 1.5s for "open", then closes. Returns true/false.
+ * testWs(port) — Probe whether port speaks the Skill daemon protocol.
+ *
+ * A bare WebSocket handshake isn't enough: VS Code helpers, Vite HMR, and
+ * other dev tooling also accept WS upgrades and would pass that check.
+ *
+ * Discriminator: the Skill daemon's `/v1/events` handler sends a single
+ * `{ type: "DaemonStarted" }` envelope immediately upon WS upgrade, before
+ * entering its message-receive loop. Nothing else on the box speaks that
+ * frame, so it uniquely identifies the daemon without depending on
+ * command dispatch being quick (e.g. while ZUNA/Metal is initialising).
  */
 function testWs(p: number): Promise<boolean> {
   return new Promise((resolve) => {
+    const url = authToken
+      ? `ws://127.0.0.1:${p}/v1/events?token=${encodeURIComponent(authToken)}`
+      : `ws://127.0.0.1:${p}`;
+    let w: WebSocket;
     try {
-      const w = new WebSocket(`ws://127.0.0.1:${p}`);
-      const t = setTimeout(() => { try { w.close(); } catch {} resolve(false); }, 1500);
-      w.on("open", () => { clearTimeout(t); w.close(); resolve(true); });
-      w.on("error", () => { clearTimeout(t); resolve(false); });
-    } catch { resolve(false); }
+      w = new WebSocket(url);
+    } catch {
+      resolve(false);
+      return;
+    }
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      try { w.close(); } catch {}
+      resolve(ok);
+    };
+    const t = setTimeout(() => finish(false), 3000);
+    w.on("error", () => { clearTimeout(t); finish(false); });
+    w.on("message", (raw) => {
+      let data: any;
+      try { data = JSON.parse(raw.toString()); } catch { return; }
+      // First message after upgrade must be the daemon's welcome envelope.
+      if (data?.type === "DaemonStarted") {
+        clearTimeout(t);
+        finish(true);
+      } else {
+        // Any other shape — not the daemon.
+        clearTimeout(t);
+        finish(false);
+      }
+    });
   });
 }
 
@@ -357,10 +391,27 @@ async function discover(): Promise<number> {
     if (port) return port;
 
     // Strategy 2: lsof fallback (Unix)
+    //
+    // `pgrep -if 'skill'` is too loose — it matches any process whose
+    // command line contains "skill", which on macOS catches VS Code helpers
+    // running in `/Users/Shared/skill/...` workspaces, Code Helper IPC,
+    // node processes with the project path in argv, etc. Their listening
+    // ports also accept WebSocket upgrades, which used to cause testWs()
+    // to falsely identify them as the daemon and waste the whole 180s
+    // smoke-test budget on command timeouts.
+    //
+    // Match the daemon binary precisely instead: either `skill-daemon`
+    // (sidecar) or the Tauri main binary at `target/{debug,release}/skill`.
     try {
-      const ps = execSync("pgrep -if 'skill' 2>/dev/null || true", { encoding: "utf8" }).trim();
+      const ps = execSync(
+        "pgrep -ifl '(^|/)skill-daemon($|\\s)|target/(debug|release)/skill($|\\s)' 2>/dev/null || true",
+        { encoding: "utf8" },
+      ).trim();
       if (ps) {
-        const pids = ps.split("\n").map(s => s.trim()).filter(Boolean);
+        const pids = ps
+          .split("\n")
+          .map(line => line.trim().split(/\s+/)[0])
+          .filter(Boolean);
         for (const pid of pids) {
           try {
             const lsof = execSync(`lsof -iTCP -sTCP:LISTEN -nP -p ${pid} 2>/dev/null || true`, { encoding: "utf8" });
@@ -4926,13 +4977,11 @@ async function main(): Promise<void> {
   console.log(`${BOLD}║  Skill WebSocket + HTTP API — Smoke Test ║${RESET}`);
   console.log(`${BOLD}╚══════════════════════════════════════════╝${RESET}\n`);
 
-  // 1. Discover port
-  const port = await discover();
-  ok(`discovered port ${port}`);
-
-  httpBase = `http://127.0.0.1:${port}`;
-
-  // 1b. Load auth token
+  // 1a. Load auth token first so port discovery's testWs() probe can
+  // authenticate. Without this, the lsof fallback's `{"command":"status"}`
+  // probe gets dropped by the daemon's auth middleware → discovery falsely
+  // rejects the daemon's own port → wastes the smoke-test budget on
+  // unrelated processes whose WS upgrades happen to accept.
   authToken = process.env.SKILL_DAEMON_TOKEN || "";
   if (!authToken) {
     try {
@@ -4953,6 +5002,12 @@ async function main(): Promise<void> {
     } catch {}
   }
   authToken ? ok(`auth token loaded (${authToken.slice(0, 6)}…)`) : info("no auth token found — unauthenticated mode");
+
+  // 1b. Discover port
+  const port = await discover();
+  ok(`discovered port ${port}`);
+
+  httpBase = `http://127.0.0.1:${port}`;
 
   // 2. Establish transport
   if (FORCE_HTTP) {
