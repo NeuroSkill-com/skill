@@ -9,6 +9,43 @@ const search: Record<string, string> = {
   "embeddings.model": "Модель вбудовування",
   "embeddings.modelApplied": "Модель ембедингів застосовано",
   "embeddings.modelFailed": "Не вдалося застосувати модель",
+  "embeddings.backend": "Рантайм ембедингів",
+  "embeddings.backendDesc":
+    "Виберіть backend виконання для текстових ембедингів. FastEmbed використовує ORT; RLX запускає ті самі графи ембедингів через локальний рантайм RLX, якщо демон зібрано з підтримкою RLX.",
+  "embeddings.backendFastembed": "FastEmbed / ORT (типово)",
+  "embeddings.backendFastembedDesc": "Типово, сумісно з усіма моделями у списку.",
+  "embeddings.backendRlx": "RLX",
+  "embeddings.backendRlxDesc": "Експериментальний швидший шлях для safetensors BERT/Nomic моделей.",
+  "embeddings.indexBackend": "Індекс пошуку міток",
+  "embeddings.indexBackendDesc":
+    "Виберіть, який локальний векторний індекс обслуговує семантичний пошук міток. Побудуйте обидва, порівняйте на власному запиті, а потім виберіть швидший або якісніший варіант для ваших даних.",
+  "embeddings.indexBackend.hnsw": "HNSW",
+  "embeddings.indexBackend.hnswDesc": "Поточний типовий варіант. Висока повнота, більший граф у пам'яті.",
+  "embeddings.indexBackend.turboquant": "Індекс TurboQuant",
+  "embeddings.indexBackend.turboquantDesc":
+    "Стиснений індекс TurboVec. Менше використання пам'яті та диска, добре для великих наборів міток.",
+  "embeddings.indexCurrent": "Поточний backend пошуку: {backend}",
+  "embeddings.indexBackendApplied": "Backend індексу міток застосовано",
+  "embeddings.indexBackendFailed": "Не вдалося змінити backend індексу міток",
+  "embeddings.indexRebuild": "Перебудувати індекси",
+  "embeddings.indexRebuilding": "Перебудова…",
+  "embeddings.indexRebuilt": "Індекси міток перебудовано",
+  "embeddings.indexRebuildFailed": "Не вдалося перебудувати індекси міток",
+  "embeddings.indexBenchmark": "Порівняння швидкодії",
+  "embeddings.indexBenchmarking": "Виконується benchmark…",
+  "embeddings.indexBenchmarkPlaceholder": "Запит для benchmark, напр. зосереджена сесія кодування",
+  "embeddings.indexBenchmarkFailed": "Benchmark не вдався",
+  "embeddings.indexBenchmarkClose": "TurboQuant близько збігається з HNSW",
+  "embeddings.indexBenchmarkDiverged": "TurboQuant відрізняється від HNSW",
+  "embeddings.indexBenchmarkDelta": "дельта косинусної відстані сер. {avg}, макс. {max}",
+  "embeddings.indexBenchmarkNoResults": "Немає результатів",
+  "embeddings.indexUnavailable": "Індекс недоступний. Спочатку перебудуйте індекси.",
+  "embeddings.rlxDevice": "Пристрій RLX",
+  "embeddings.rlxMaxSeq": "Макс. послідовність",
+  "embeddings.rlxHint":
+    "RLX завантажує tokenizer.json і model.safetensors з Hugging Face, а потім локально пулить і нормалізує вектори.",
+  "embeddings.rlxQuantizedUnsupported":
+    "Квантовані моделі FastEmbed специфічні для ORT. Виберіть неквантовану safetensors модель, щоб використовувати RLX.",
   "embeddings.info":
     "Вбудовування генеруються для тексту та контексту кожної мітки. При першому використанні ваги моделі завантажуються один раз і кешуються локально. Менші моделі (≤384d) швидші; більші дають насиченіші представлення.",
   "embeddings.sharedNote":
@@ -298,6 +335,11 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "Знімки біля збігів",
 
   "search.maxTokens": "Токени",
+
+  // ── Auto-synced from en/ (2026-05-19) ──
+  "embeddings.indexMemory": "Розмір на диску",
+  "embeddings.indexMemoryRow": "{backend}: {total} ({text} текст · {context} контекст · {eeg} ЕЕГ)",
+  "embeddings.indexMemoryTotal": "Усього: {total}",
 };
 
 export default search;

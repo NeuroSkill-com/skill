@@ -78,6 +78,7 @@ pub(crate) async fn trigger_reembed_impl(State(state): State<AppState>) -> Json<
     let events_tx = state.events_tx.clone();
     let model_status = state.exg_model_status.clone();
     let label_index = state.label_index.clone();
+    let reembed_cfg = crate::routes::settings_io::load_user_settings(&state).reembed;
 
     // Check if reembed is already running (use model_status as a simple guard).
     {
@@ -95,9 +96,12 @@ pub(crate) async fn trigger_reembed_impl(State(state): State<AppState>) -> Json<
 
     tokio::task::spawn_blocking(move || {
         if let Err(e) = run_batch_reembed_with_cancel(
-            &skill_dir, &events_tx, &cancel, true, // use_gpu
-            10,   // throttle_ms
-            50,   // batch_size
+            &skill_dir,
+            &events_tx,
+            &cancel,
+            reembed_cfg.idle_reembed_gpu,
+            reembed_cfg.idle_reembed_throttle_ms,
+            reembed_cfg.batch_size.max(1),
         ) {
             tracing::error!("batch reembed failed: {e}");
             let _ = events_tx.send(skill_daemon_common::EventEnvelope {
@@ -276,130 +280,154 @@ pub(crate) fn run_batch_reembed_with_cancel(
             epochs_needed.len()
         );
 
-        // Load all raw CSV data for this day into a time-indexed buffer.
-        // Each segment carries its own channel names from the CSV header.
-        let raw_data = load_day_csv_data(day_dir, &csv_files, sample_rate);
-
         let epoch_samples = (sample_rate * 5.0) as usize; // 5-second epoch
         let commit_size = batch_size.max(10); // commit every N epochs for write efficiency
 
-        // Process in transaction batches for write performance.
-        for chunk in epochs_needed.chunks(commit_size) {
-            // Check cancel flag between batches (backpressure: device reconnected).
-            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                tracing::info!("[reembed] cancelled — device reconnected or user stopped");
+        // Process one CSV segment at a time. A 24h idle window can produce
+        // many rollover files; loading the whole day at once makes the idle
+        // worker's RSS look like a leak even though the data is eventually
+        // dropped.
+        let epochs_needed_len = epochs_needed.len();
+        let mut remaining_epochs = epochs_needed;
+        for csv_path in &csv_files {
+            if remaining_epochs.is_empty() {
+                break;
+            }
+
+            // Each segment carries its own channel names from the CSV header.
+            let raw_data = load_day_csv_data(day_dir, std::slice::from_ref(csv_path), sample_rate);
+            if raw_data.segments.is_empty() {
+                continue;
+            }
+
+            let mut next_remaining = Vec::new();
+
+            // Process in transaction batches for write performance.
+            for chunk in remaining_epochs.chunks(commit_size) {
+                // Check cancel flag between batches (backpressure: device reconnected).
+                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                    tracing::info!("[reembed] cancelled — device reconnected or user stopped");
+                    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                        r#type: "reembed-progress".into(),
+                        ts_unix_ms: now_unix_ms(),
+                        correlation_id: None,
+                        payload: serde_json::json!({
+                            "status": "paused",
+                            "total": total_needed,
+                            "done": total_done,
+                            "reason": "device_connected",
+                        }),
+                    });
+                    return Ok(());
+                }
+
+                let _ = conn.execute_batch("BEGIN");
+
+                for (row_id, ts_ms) in chunk {
+                    let ts_secs = skill_data::util::epoch_ts_to_unix(*ts_ms) as f64;
+
+                    let (samples, seg_ch_names) = extract_epoch_samples(&raw_data, ts_secs, epoch_samples);
+                    if samples.is_empty() {
+                        next_remaining.push((*row_id, *ts_ms));
+                        continue;
+                    }
+
+                    let n_ch = samples.len();
+
+                    // Skip channel counts that have failed repeatedly (prevents GPU
+                    // hangs on unsupported channel configurations).
+                    if skip_ch_counts.contains(&n_ch) {
+                        total_failed += 1;
+                        total_done += 1;
+                        continue;
+                    }
+
+                    // Log first encode attempt per channel count for diagnostics.
+                    if total_done == 0 || (total_done > 0 && total_done == total_failed) {
+                        tracing::info!(
+                            "[reembed] first encode: channels={n_ch}, samples_per_ch={}, ts={ts_secs:.1}s",
+                            samples.first().map(|s| s.len()).unwrap_or(0),
+                        );
+                    }
+
+                    let t0 = std::time::Instant::now();
+                    let embedding = encode_raw_samples(&encoder, &samples, &seg_ch_names, sample_rate);
+                    let ms = t0.elapsed().as_millis();
+
+                    if let Some(emb) = embedding {
+                        let blob: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+                        let _ = conn.execute(
+                            "UPDATE embeddings SET eeg_embedding = ?1 WHERE id = ?2",
+                            rusqlite::params![blob, row_id],
+                        );
+                        if ms > 2000 {
+                            tracing::warn!("[reembed] slow encode: {ms}ms for epoch {ts_ms}");
+                        }
+                        // Reset failure counter on success.
+                        consecutive_failures_by_ch.remove(&n_ch);
+                    } else {
+                        if total_failed == 0 {
+                            tracing::warn!(
+                                "[reembed] first encode failure at ts={ts_secs:.1}s (channels={n_ch}, samples_per_ch={}, rate={sample_rate}Hz)",
+                                samples.first().map(|s| s.len()).unwrap_or(0),
+                            );
+                        }
+                        total_failed += 1;
+                        let count = consecutive_failures_by_ch.entry(n_ch).or_insert(0);
+                        *count += 1;
+                        if *count >= CONSECUTIVE_FAIL_LIMIT {
+                            tracing::warn!(
+                                "[reembed] skipping all {n_ch}-channel epochs after {CONSECUTIVE_FAIL_LIMIT} consecutive failures"
+                            );
+                            skip_ch_counts.insert(n_ch);
+                        }
+                    }
+
+                    total_done += 1;
+                }
+
+                let _ = conn.execute_batch("COMMIT");
+
+                // Emit progress every batch.
                 let _ = events_tx.send(skill_daemon_common::EventEnvelope {
                     r#type: "reembed-progress".into(),
                     ts_unix_ms: now_unix_ms(),
                     correlation_id: None,
                     payload: serde_json::json!({
-                        "status": "paused",
+                        "status": "running",
                         "total": total_needed,
                         "done": total_done,
-                        "reason": "device_connected",
+                        "failed": total_failed,
+                        "date": day_name,
                     }),
                 });
-                return Ok(());
+
+                // Throttle between batches to reduce contention with other daemon tasks.
+                if throttle_ms > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(throttle_ms));
+                }
             }
 
-            let _ = conn.execute_batch("BEGIN");
+            remaining_epochs = next_remaining;
+        }
 
-            for (row_id, ts_ms) in chunk {
-                let ts_secs = skill_data::util::epoch_ts_to_unix(*ts_ms) as f64;
-
-                let (samples, seg_ch_names) = extract_epoch_samples(&raw_data, ts_secs, epoch_samples);
-                if samples.is_empty() {
-                    if total_failed == 0 {
-                        tracing::warn!(
-                            "[reembed] first empty extract at ts={ts_secs:.1}s (row_id={row_id}, epoch_samples={epoch_samples})",
-                        );
-                    }
-                    total_failed += 1;
-                    total_done += 1;
-                    continue;
-                }
-
-                let n_ch = samples.len();
-
-                // Skip channel counts that have failed repeatedly (prevents GPU
-                // hangs on unsupported channel configurations).
-                if skip_ch_counts.contains(&n_ch) {
-                    total_failed += 1;
-                    total_done += 1;
-                    continue;
-                }
-
-                // Log first encode attempt per channel count for diagnostics.
-                if total_done == 0 || (total_done > 0 && total_done == total_failed) {
-                    tracing::info!(
-                        "[reembed] first encode: channels={n_ch}, samples_per_ch={}, ts={ts_secs:.1}s",
-                        samples.first().map(|s| s.len()).unwrap_or(0),
-                    );
-                }
-
-                let t0 = std::time::Instant::now();
-                let embedding = encode_raw_samples(&encoder, &samples, &seg_ch_names, sample_rate);
-                let ms = t0.elapsed().as_millis();
-
-                if let Some(emb) = embedding {
-                    let blob: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
-                    let _ = conn.execute(
-                        "UPDATE embeddings SET eeg_embedding = ?1 WHERE id = ?2",
-                        rusqlite::params![blob, row_id],
-                    );
-                    if ms > 2000 {
-                        tracing::warn!("[reembed] slow encode: {ms}ms for epoch {ts_ms}");
-                    }
-                    // Reset failure counter on success.
-                    consecutive_failures_by_ch.remove(&n_ch);
-                } else {
-                    if total_failed == 0 {
-                        tracing::warn!(
-                            "[reembed] first encode failure at ts={ts_secs:.1}s (channels={n_ch}, samples_per_ch={}, rate={sample_rate}Hz)",
-                            samples.first().map(|s| s.len()).unwrap_or(0),
-                        );
-                    }
-                    total_failed += 1;
-                    let count = consecutive_failures_by_ch.entry(n_ch).or_insert(0);
-                    *count += 1;
-                    if *count >= CONSECUTIVE_FAIL_LIMIT {
-                        tracing::warn!(
-                            "[reembed] skipping all {n_ch}-channel epochs after {CONSECUTIVE_FAIL_LIMIT} consecutive failures"
-                        );
-                        skip_ch_counts.insert(n_ch);
-                    }
-                }
-
-                total_done += 1;
+        if !remaining_epochs.is_empty() {
+            if total_failed == 0 {
+                let (row_id, ts_ms) = remaining_epochs[0];
+                let ts_secs = skill_data::util::epoch_ts_to_unix(ts_ms) as f64;
+                tracing::warn!(
+                    "[reembed] first empty extract at ts={ts_secs:.1}s (row_id={row_id}, epoch_samples={epoch_samples})",
+                );
             }
-
-            let _ = conn.execute_batch("COMMIT");
-
-            // Emit progress every batch.
-            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
-                r#type: "reembed-progress".into(),
-                ts_unix_ms: now_unix_ms(),
-                correlation_id: None,
-                payload: serde_json::json!({
-                    "status": "running",
-                    "total": total_needed,
-                    "done": total_done,
-                    "failed": total_failed,
-                    "date": day_name,
-                }),
-            });
-
-            // Throttle between batches to reduce contention with other daemon tasks.
-            if throttle_ms > 0 {
-                std::thread::sleep(std::time::Duration::from_millis(throttle_ms));
-            }
+            total_failed += remaining_epochs.len() as u64;
+            total_done += remaining_epochs.len() as u64;
         }
 
         tracing::info!(
             "[reembed] {} done: {}/{} epochs embedded",
             day_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
             total_done - total_failed,
-            epochs_needed.len()
+            epochs_needed_len
         );
     }
 
@@ -1563,5 +1591,63 @@ mod tests {
         assert_eq!(samples.len(), 32);
         assert_eq!(samples[0].len(), 1280);
         assert_eq!(ch[0], "Ch1");
+    }
+
+    /// Mirrors the per-CSV `remaining_epochs` loop: an epoch in a later rollover file
+    /// must survive an empty extract on the first segment and succeed on the second.
+    #[test]
+    fn per_csv_segment_defers_epochs_until_matching_file() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        let sample_rate = 256.0;
+        let epoch_samples = (sample_rate * 5.0) as usize;
+
+        // Segment 1: ~2s of Muse data — too short for a 5s window at t=2005.
+        write_csv(d, "exg_100.csv", muse_header(), &gen_rows(100.0, 512, 4, sample_rate));
+        // Segment 2: 20s starting at 2000 — contains a full 5s epoch at 2005.
+        write_csv(
+            d,
+            "exg_2000.csv",
+            muse_header(),
+            &gen_rows(2000.0, 5120, 4, sample_rate),
+        );
+
+        let csvs = find_eeg_csvs(d);
+        assert_eq!(csvs.len(), 2);
+
+        let target_ts = 2005.0;
+        let mut remaining = vec![(1i64, target_ts)];
+
+        for csv_path in &csvs {
+            if remaining.is_empty() {
+                break;
+            }
+            let raw_data = load_day_csv_data(d, std::slice::from_ref(csv_path), sample_rate);
+            if raw_data.segments.is_empty() {
+                continue;
+            }
+            let mut next_remaining = Vec::new();
+            for (row_id, ts_secs) in &remaining {
+                let (samples, _) = extract_epoch_samples(&raw_data, *ts_secs, epoch_samples);
+                if samples.is_empty() {
+                    next_remaining.push((*row_id, *ts_secs));
+                }
+            }
+            remaining = next_remaining;
+        }
+
+        assert!(
+            remaining.is_empty(),
+            "epoch at {target_ts}s should embed from the second CSV only"
+        );
+
+        let first_only = load_day_csv_data(d, std::slice::from_ref(&csvs[0]), sample_rate);
+        let (samples, _) = extract_epoch_samples(&first_only, target_ts, epoch_samples);
+        assert!(samples.is_empty(), "first segment alone must not satisfy the epoch");
+
+        let second_only = load_day_csv_data(d, std::slice::from_ref(&csvs[1]), sample_rate);
+        let (samples, ch) = extract_epoch_samples(&second_only, target_ts, epoch_samples);
+        assert_eq!(samples.len(), 4);
+        assert_eq!(ch, vec!["TP9", "AF7", "AF8", "TP10"]);
     }
 }

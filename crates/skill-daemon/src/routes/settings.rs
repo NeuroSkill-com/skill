@@ -753,7 +753,12 @@ async fn get_exg_catalog(state: State<AppState>) -> Json<serde_json::Value> {
 
 async fn get_text_embedding_model(State(state): State<AppState>) -> Json<serde_json::Value> {
     let code = state.text_embedder.model_code();
-    Json(serde_json::json!({ "model": code }))
+    Json(serde_json::json!({
+        "model": code,
+        "backend": state.text_embedder.backend().as_str(),
+        "rlx_device": state.text_embedder.rlx_device(),
+        "rlx_max_seq": state.text_embedder.rlx_max_seq(),
+    }))
 }
 
 async fn set_text_embedding_model(
@@ -764,14 +769,48 @@ async fn set_text_embedding_model(
         return Json(serde_json::json!({ "ok": false, "error": "missing 'model' field" }));
     };
     let code = code.to_string();
+    let backend = match body.get("backend").and_then(|v| v.as_str()) {
+        Some(raw) => match crate::text_embedder::TextEmbeddingBackend::parse(raw) {
+            Some(backend) => Some(backend),
+            None => {
+                return Json(serde_json::json!({
+                    "ok": false,
+                    "error": "backend must be 'fastembed' or 'rlx'"
+                }));
+            }
+        },
+        None => None,
+    };
+    let rlx_device = body
+        .get("rlx_device")
+        .or_else(|| body.get("rlxDevice"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let rlx_max_seq = body
+        .get("rlx_max_seq")
+        .or_else(|| body.get("rlxMaxSeq"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize);
     let embedder = state.text_embedder.clone();
     let state_clone = state.clone();
     let result = tokio::task::spawn_blocking(move || {
         embedder.set_model_code(&code);
+        if let Some(backend) = backend {
+            embedder.set_backend(backend);
+        }
+        if let Some(device) = &rlx_device {
+            embedder.set_rlx_device(device);
+        }
+        if let Some(max_seq) = rlx_max_seq {
+            embedder.set_rlx_max_seq(max_seq);
+        }
         let ok = embedder.reload();
         if ok {
             let mut settings = load_user_settings(&state_clone);
             settings.text_embedding_model = code.clone();
+            settings.text_embedding_backend = embedder.backend().as_str().to_string();
+            settings.text_embedding_rlx_device = embedder.rlx_device();
+            settings.text_embedding_rlx_max_seq = embedder.rlx_max_seq();
             save_user_settings(&state_clone, &settings);
         }
         (ok, code)
@@ -779,7 +818,13 @@ async fn set_text_embedding_model(
     .await;
 
     match result {
-        Ok((true, code)) => Json(serde_json::json!({ "ok": true, "model": code })),
+        Ok((true, code)) => Json(serde_json::json!({
+            "ok": true,
+            "model": code,
+            "backend": state.text_embedder.backend().as_str(),
+            "rlx_device": state.text_embedder.rlx_device(),
+            "rlx_max_seq": state.text_embedder.rlx_max_seq(),
+        })),
         Ok((false, code)) => {
             Json(serde_json::json!({ "ok": false, "error": format!("failed to load model '{code}'") }))
         }
@@ -2210,6 +2255,7 @@ mod tests {
         cat.entries.push(skill_llm::catalog::LlmModelEntry {
             repo: "x/y".into(),
             filename: "model.gguf".into(),
+            remote_filename: None,
             quant: "Q4".into(),
             size_gb: 1.0,
             description: "m".into(),
@@ -2233,6 +2279,7 @@ mod tests {
         cat.entries.push(skill_llm::catalog::LlmModelEntry {
             repo: "x/y".into(),
             filename: "model-mmproj-f16.gguf".into(),
+            remote_filename: None,
             quant: "F16".into(),
             size_gb: 0.2,
             description: "mm".into(),

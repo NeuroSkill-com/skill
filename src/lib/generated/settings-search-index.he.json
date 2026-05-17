@@ -73,6 +73,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "זמן ריצה להטמעות",
+    "desc": "בחר את backend הביצוע להטמעות טקסט. FastEmbed משתמש ב-ORT; ‏RLX מריץ את אותם גרפי הטמעה דרך זמן הריצה המקומי של RLX כאשר הדמון נבנה עם תמיכת RLX."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.backendFastembed",
+    "label": "FastEmbed / ORT",
+    "desc": "ברירת המחדל, תואם לכל מודל ברשימה."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "מודל הטמעה"
   },

@@ -73,6 +73,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "埋め込みランタイム",
+    "desc": "テキスト埋め込みの実行バックエンドを選びます。FastEmbed は ORT を使い、RLX はデーモンが RLX 対応でビルドされている場合に同じ埋め込みグラフをローカル RLX ランタイムで実行します。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.backendFastembed",
+    "label": "FastEmbed / ORT",
+    "desc": "既定。一覧のすべてのモデルに対応します。"
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "埋め込みモデル"
   },

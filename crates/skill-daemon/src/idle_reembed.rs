@@ -6,12 +6,71 @@
 //! processing un-embedded epochs in the background.  Immediately pauses
 //! when a device reconnects (real-time embedding takes priority).
 
-use std::sync::atomic::Ordering;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::time::{Duration, Instant};
 
 use tracing::{info, warn};
 
 use crate::state::AppState;
+
+const NO_PROGRESS_BACKOFF: Duration = Duration::from_secs(60 * 60);
+
+/// Sample system memory usage and return (used_percent, used_bytes, total_bytes).
+/// Cheap enough to call once per 10s tick.
+fn sample_memory_percent() -> (u8, u64, u64) {
+    let sys = sysinfo::System::new_with_specifics(
+        sysinfo::RefreshKind::nothing().with_memory(sysinfo::MemoryRefreshKind::everything()),
+    );
+    let used = sys.used_memory();
+    let total = sys.total_memory();
+    if total == 0 {
+        return (0, used, total);
+    }
+    let pct = ((used as u128 * 100) / total as u128).min(100) as u8;
+    (pct, used, total)
+}
+
+/// Whether to record a no-progress cooldown after a run finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BackoffAfterRun {
+    /// Do not start the 1h cooldown (cancelled or embeddings were written).
+    Cleared,
+    /// Same or higher missing count — avoid restarting every 10s.
+    Set { remaining: i64 },
+}
+
+fn backoff_after_run(remaining: i64, started_missing: i64, cancelled: bool) -> BackoffAfterRun {
+    if cancelled {
+        BackoffAfterRun::Cleared
+    } else if remaining >= started_missing {
+        BackoffAfterRun::Set { remaining }
+    } else {
+        BackoffAfterRun::Cleared
+    }
+}
+
+fn should_back_off_no_progress(
+    no_progress_backoff: &Mutex<Option<(i64, Instant)>>,
+    needed: i64,
+    backoff_for: Duration,
+) -> bool {
+    no_progress_backoff
+        .lock()
+        .map(|mut guard| {
+            let (active, stale) = match guard.as_ref() {
+                Some((missing, started_at)) => (*missing == needed && started_at.elapsed() < backoff_for, true),
+                None => (false, false),
+            };
+            if stale && !active {
+                *guard = None;
+            }
+            active
+        })
+        .unwrap_or(false)
+}
 
 /// Spawn the background idle-reembed loop.
 /// Runs forever, checking device state every 10 seconds.
@@ -21,7 +80,11 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
         let mut last_connected = Instant::now();
-        let mut reembed_running = false;
+        let reembed_running = Arc::new(AtomicBool::new(false));
+        let no_progress_backoff: Arc<Mutex<Option<(i64, Instant)>>> = Arc::new(Mutex::new(None));
+        let mut last_throttle_log = Instant::now()
+            .checked_sub(Duration::from_secs(600))
+            .unwrap_or_else(Instant::now);
 
         loop {
             tokio::time::sleep(Duration::from_secs(10)).await;
@@ -35,9 +98,8 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             let cfg = &settings.reembed;
 
             if !cfg.idle_reembed_enabled {
-                if reembed_running {
+                if reembed_running.load(Ordering::Relaxed) {
                     state.idle_reembed_cancel.store(true, Ordering::Relaxed);
-                    reembed_running = false;
                 }
                 continue;
             }
@@ -50,10 +112,9 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             if is_connected {
                 last_connected = Instant::now();
                 // Cancel any running background reembed immediately.
-                if reembed_running {
+                if reembed_running.load(Ordering::Relaxed) {
                     info!("[idle-reembed] device connected — pausing background reembed");
                     state.idle_reembed_cancel.store(true, Ordering::Relaxed);
-                    reembed_running = false;
                 }
                 continue;
             }
@@ -65,7 +126,7 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             if let Ok(mut st) = state.idle_reembed_state.lock() {
                 st.idle_secs = idle_secs;
                 st.delay_secs = cfg.idle_reembed_delay_secs;
-                if !reembed_running {
+                if !reembed_running.load(Ordering::Relaxed) {
                     st.active = false;
                 }
             }
@@ -75,7 +136,7 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             }
 
             // Check if there's work to do.
-            if reembed_running {
+            if reembed_running.load(Ordering::Relaxed) {
                 continue; // Already processing.
             }
 
@@ -90,8 +151,41 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                     st.active = false;
                     st.total = 0;
                     st.done = 0;
+                    st.memory_throttled = false;
                 }
                 continue;
+            }
+
+            if should_back_off_no_progress(&no_progress_backoff, needed, NO_PROGRESS_BACKOFF) {
+                continue;
+            }
+
+            // Memory backpressure: skip the run if system memory is already
+            // saturated. Embedding (especially with GPU/Metal) can add hundreds
+            // of MB of resident memory and OOM the user's machine.
+            let (mem_pct, mem_used, mem_total) = sample_memory_percent();
+            let limit = cfg.max_resident_memory_percent.min(100);
+            if limit < 100 && mem_pct >= limit {
+                if let Ok(mut st) = state.idle_reembed_state.lock() {
+                    st.memory_throttled = true;
+                    st.memory_percent = mem_pct;
+                    st.active = false;
+                }
+                // Rate-limit the warning so we don't spam the log every 10s.
+                if last_throttle_log.elapsed() >= Duration::from_secs(300) {
+                    warn!(
+                        "[idle-reembed] deferring: system memory {mem_pct}% \
+                         ({} / {} MiB) >= max_resident_memory_percent={limit}",
+                        mem_used / (1024 * 1024),
+                        mem_total / (1024 * 1024),
+                    );
+                    last_throttle_log = Instant::now();
+                }
+                continue;
+            }
+            if let Ok(mut st) = state.idle_reembed_state.lock() {
+                st.memory_throttled = false;
+                st.memory_percent = mem_pct;
             }
 
             info!(
@@ -101,7 +195,7 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
 
             // Reset cancel flag and start.
             state.idle_reembed_cancel.store(false, Ordering::Relaxed);
-            reembed_running = true;
+            reembed_running.store(true, Ordering::Relaxed);
 
             if let Ok(mut st) = state.idle_reembed_state.lock() {
                 st.active = true;
@@ -111,6 +205,11 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             }
 
             let state_clone = state.clone();
+            let running_flag = reembed_running.clone();
+            let backoff_state = no_progress_backoff.clone();
+            let started_missing = needed;
+            let skill_dir_for_backoff = skill_dir.clone();
+            let cancel_for_backoff = state.idle_reembed_cancel.clone();
             let use_gpu = cfg.idle_reembed_gpu;
             let throttle_ms = cfg.idle_reembed_throttle_ms;
             let batch_size = cfg.batch_size.max(1);
@@ -155,13 +254,39 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             // Watcher: log if the spawn_blocking task itself fails to join
             // (panic that escaped the catch_unwind, or runtime cancellation).
             tokio::spawn(async move {
-                if let Err(join_err) = handle.await {
+                let join_result = handle.await;
+                if let Err(join_err) = &join_result {
                     if join_err.is_panic() {
                         warn!("[idle-reembed] task panicked outside catch_unwind: {join_err}");
                     } else if join_err.is_cancelled() {
                         info!("[idle-reembed] task cancelled");
                     }
                 }
+                let cancelled = cancel_for_backoff.load(Ordering::Relaxed);
+                let remaining = if cancelled {
+                    started_missing
+                } else {
+                    tokio::task::spawn_blocking(move || count_missing_embeddings(&skill_dir_for_backoff))
+                        .await
+                        .unwrap_or(started_missing)
+                };
+                match backoff_after_run(remaining, started_missing, cancelled) {
+                    BackoffAfterRun::Cleared => {
+                        if let Ok(mut guard) = backoff_state.lock() {
+                            *guard = None;
+                        }
+                    }
+                    BackoffAfterRun::Set { remaining } => {
+                        if let Ok(mut guard) = backoff_state.lock() {
+                            *guard = Some((remaining, Instant::now()));
+                        }
+                        warn!(
+                            "[idle-reembed] made no embedding progress ({remaining} still missing); backing off for {} minutes",
+                            NO_PROGRESS_BACKOFF.as_secs() / 60
+                        );
+                    }
+                }
+                running_flag.store(false, Ordering::Relaxed);
             });
         }
     });
@@ -250,7 +375,10 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
                 prev_progress_at = std::time::Instant::now();
             }
 
-            if matches!(status, "done" | "idle_done" | "complete" | "paused") {
+            if matches!(
+                status,
+                "done" | "idle_done" | "complete" | "paused" | "error" | "idle_panic"
+            ) {
                 break;
             }
         }
@@ -266,6 +394,82 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
         batch_size,
     );
 
+    if let Err(e) = &result {
+        let _ = state.events_tx.send(skill_daemon_common::EventEnvelope {
+            r#type: "reembed-progress".into(),
+            ts_unix_ms: now_unix_ms(),
+            correlation_id: None,
+            payload: serde_json::json!({ "status": "error", "message": e.to_string() }),
+        });
+    }
+
     let _ = updater.join();
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn idle_reembed_no_backoff_when_state_unset() {
+        let backoff = Mutex::new(None);
+        assert!(!should_back_off_no_progress(&backoff, 42, Duration::from_secs(60 * 60)));
+    }
+
+    #[test]
+    fn idle_reembed_backoff_active_for_same_missing_count() {
+        let backoff = Mutex::new(Some((42, Instant::now())));
+
+        assert!(should_back_off_no_progress(&backoff, 42, Duration::from_secs(60 * 60)));
+        assert!(backoff.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn idle_reembed_backoff_clears_when_missing_count_changes() {
+        let backoff = Mutex::new(Some((42, Instant::now())));
+
+        assert!(!should_back_off_no_progress(&backoff, 41, Duration::from_secs(60 * 60)));
+        assert!(backoff.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn idle_reembed_backoff_clears_after_cooldown() {
+        let backoff = Mutex::new(Some((
+            42,
+            Instant::now()
+                .checked_sub(Duration::from_secs(60 * 61))
+                .expect("test duration is within Instant range"),
+        )));
+
+        assert!(!should_back_off_no_progress(&backoff, 42, Duration::from_secs(60 * 60)));
+        assert!(backoff.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_when_no_progress() {
+        assert_eq!(
+            backoff_after_run(100, 100, false),
+            BackoffAfterRun::Set { remaining: 100 }
+        );
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_when_count_increased() {
+        assert_eq!(
+            backoff_after_run(110, 100, false),
+            BackoffAfterRun::Set { remaining: 110 }
+        );
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_cleared_on_partial_progress() {
+        assert_eq!(backoff_after_run(80, 100, false), BackoffAfterRun::Cleared);
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_cleared_when_cancelled() {
+        assert_eq!(backoff_after_run(100, 100, true), BackoffAfterRun::Cleared);
+        assert_eq!(backoff_after_run(110, 100, true), BackoffAfterRun::Cleared);
+    }
 }

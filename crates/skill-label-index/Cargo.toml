@@ -5,6 +5,10 @@ edition = "2021"
 license = "GPL-3.0-only"
 description = "Cross-modal label HNSW indices (text, context, EEG) — extracted workspace crate"
 
+[features]
+default = ["turbovec-index"]
+turbovec-index = ["dep:turbovec"]
+
 [dependencies]
 skill-constants = { path = "../skill-constants" }
 skill-commands  = { path = "../skill-commands" }
@@ -12,9 +16,13 @@ skill-data      = { path = "../skill-data" }
 fast-hnsw  = "1.0.1"
 rusqlite = { workspace = true }
 serde      = { version = "1", features = ["derive"] }
+turbovec   = { version = "0.4.1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accelerate-src = "0.3"
 
 [lints]
 workspace = true

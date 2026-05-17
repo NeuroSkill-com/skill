@@ -9,6 +9,43 @@ const search: Record<string, string> = {
   "embeddings.model": "Einbettungsmodell",
   "embeddings.modelApplied": "Einbettungsmodell angewendet",
   "embeddings.modelFailed": "Modell konnte nicht angewendet werden",
+  "embeddings.backend": "Embedding-Laufzeit",
+  "embeddings.backendDesc":
+    "Wählen Sie das Backend für Text-Embeddings. FastEmbed nutzt ORT; RLX führt dieselben Embedding-Graphen über die lokale RLX-Laufzeit aus, wenn der Daemon mit RLX-Unterstützung gebaut wurde.",
+  "embeddings.backendFastembed": "FastEmbed / ORT (Standard)",
+  "embeddings.backendFastembedDesc": "Standard, kompatibel mit jedem aufgeführten Modell.",
+  "embeddings.backendRlx": "RLX",
+  "embeddings.backendRlxDesc": "Experimenteller, schnellerer Pfad für Safetensors-BERT/Nomic-Modelle.",
+  "embeddings.indexBackend": "Label-Suchindex",
+  "embeddings.indexBackendDesc":
+    "Wählen Sie, welcher lokale Vektorindex die semantische Labelsuche antreibt. Erstellen Sie beide, benchmarken Sie mit Ihrer eigenen Abfrage und wählen Sie dann die schnellere oder qualitativ bessere Option für Ihre Daten.",
+  "embeddings.indexBackend.hnsw": "HNSW",
+  "embeddings.indexBackend.hnswDesc": "Aktueller Standard. Hohe Trefferqualität, größerer Graph im Arbeitsspeicher.",
+  "embeddings.indexBackend.turboquant": "TurboQuant-Index",
+  "embeddings.indexBackend.turboquantDesc":
+    "Komprimierter TurboVec-Index. Geringerer Speicher- und Plattenverbrauch, gut für große Label-Sammlungen.",
+  "embeddings.indexCurrent": "Aktueller Such-Backend: {backend}",
+  "embeddings.indexBackendApplied": "Label-Index-Backend angewendet",
+  "embeddings.indexBackendFailed": "Label-Index-Backend konnte nicht geändert werden",
+  "embeddings.indexRebuild": "Indizes neu erstellen",
+  "embeddings.indexRebuilding": "Neuaufbau läuft…",
+  "embeddings.indexRebuilt": "Label-Indizes neu erstellt",
+  "embeddings.indexRebuildFailed": "Label-Indizes konnten nicht neu erstellt werden",
+  "embeddings.indexBenchmark": "Leistungsvergleich",
+  "embeddings.indexBenchmarking": "Benchmark läuft…",
+  "embeddings.indexBenchmarkPlaceholder": "Benchmark-Abfrage, z. B. fokussierte Coding-Sitzung",
+  "embeddings.indexBenchmarkFailed": "Benchmark fehlgeschlagen",
+  "embeddings.indexBenchmarkClose": "TurboQuant stimmt eng mit HNSW überein",
+  "embeddings.indexBenchmarkDiverged": "TurboQuant weicht von HNSW ab",
+  "embeddings.indexBenchmarkDelta": "Kosinusdistanz-Delta Ø {avg}, max. {max}",
+  "embeddings.indexBenchmarkNoResults": "Keine Ergebnisse",
+  "embeddings.indexUnavailable": "Index nicht verfügbar. Erstellen Sie zuerst die Indizes neu.",
+  "embeddings.rlxDevice": "RLX-Gerät",
+  "embeddings.rlxMaxSeq": "Max. Sequenz",
+  "embeddings.rlxHint":
+    "RLX lädt tokenizer.json und model.safetensors von Hugging Face herunter, dann werden Vektoren lokal gepoolt und normalisiert.",
+  "embeddings.rlxQuantizedUnsupported":
+    "Quantisierte FastEmbed-Modelle sind ORT-spezifisch. Wählen Sie ein nicht quantisiertes Safetensors-Modell, um RLX zu verwenden.",
   "embeddings.info":
     "Einbettungen werden für den Text und Kontext jedes Labels generiert. Beim ersten Start werden die Modellgewichte einmalig heruntergeladen und lokal gespeichert. Kleinere Modelle (≤384d) sind schnell; größere erzeugen reichhaltigere Repräsentationen.",
   "embeddings.sharedNote":
@@ -304,6 +341,10 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "Screenshots in der Nähe",
 
   "search.maxTokens": "Token",
+
+  "embeddings.indexMemory": "Speicherverbrauch auf der Festplatte",
+  "embeddings.indexMemoryRow": "{backend}: {total} ({text} Text · {context} Kontext · {eeg} EEG)",
+  "embeddings.indexMemoryTotal": "Gesamt: {total}",
 };
 
 export default search;

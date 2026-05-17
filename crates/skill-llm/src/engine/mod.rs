@@ -49,6 +49,8 @@ mod actor;
 mod generation;
 pub mod images;
 mod init;
+#[cfg(feature = "llm-rlx")]
+mod rlx_backend;
 mod sampling;
 mod sampling_mtp;
 mod think_tracker;

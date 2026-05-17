@@ -11,6 +11,14 @@ pub use skill_tools::types::{LlmToolConfig, ToolExecutionMode};
 
 // ── LLM server configuration ─────────────────────────────────────────────────
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmInferenceRuntime {
+    #[default]
+    LlamaCpp,
+    Rlx,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LlmConfig {
@@ -22,6 +30,11 @@ pub struct LlmConfig {
     /// Absolute path to a GGUF model file.  Required when `enabled = true`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_path: Option<std::path::PathBuf>,
+
+    /// Inference runtime. Defaults to llama.cpp; `rlx` is experimental and
+    /// requires building with the `llm-rlx` or `llm-rlx-metal` feature.
+    #[serde(default)]
+    pub runtime: LlmInferenceRuntime,
 
     /// Number of transformer layers to offload to the GPU.
     /// `0` = CPU-only inference.  `-1` (stored as `u32::MAX`) = offload all.
@@ -176,6 +189,19 @@ pub struct LlmConfig {
     /// Set by `init.rs` from `LlmModelEntry::mtp` — not user-configurable.
     #[serde(default, skip_serializing)]
     pub mtp_capable: bool,
+
+    // ── RLX experimental runtime ─────────────────────────────────────────────
+    /// RLX device tag: `"cpu"`, `"metal"`, `"mlx"`, `"gpu"`, `"cuda"`, etc.
+    #[serde(default = "default_rlx_device")]
+    pub rlx_device: String,
+
+    /// RLX Qwen3 prefill/decode bucket length.
+    #[serde(default = "default_rlx_max_seq")]
+    pub rlx_max_seq: usize,
+
+    /// Optional RLX soft cap for F32 dequantized weight memory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rlx_max_memory_gb: Option<f32>,
 }
 
 fn default_llm_parallel() -> usize {
@@ -205,12 +231,23 @@ fn default_cache_type_k() -> String {
 fn default_cache_type_v() -> String {
     "f16".into()
 }
+fn default_rlx_device() -> String {
+    if cfg!(target_os = "macos") {
+        "metal".into()
+    } else {
+        "cpu".into()
+    }
+}
+fn default_rlx_max_seq() -> usize {
+    128
+}
 
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             enabled: false,
             model_path: None,
+            runtime: LlmInferenceRuntime::LlamaCpp,
             n_gpu_layers: u32::MAX,
             ctx_size: None,
             parallel: default_llm_parallel(),
@@ -237,6 +274,9 @@ impl Default for LlmConfig {
             mtp_draft_count: 0,
             mtp_n_rs_seq: 0,
             mtp_capable: false,
+            rlx_device: default_rlx_device(),
+            rlx_max_seq: default_rlx_max_seq(),
+            rlx_max_memory_gb: None,
         }
     }
 }

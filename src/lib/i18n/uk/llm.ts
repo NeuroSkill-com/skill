@@ -483,6 +483,12 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "Очікування періоду простою",
   "search.eegCoverage": "Покриття ЕЕГ",
   "search.eegCoverageLabel": "{embedded} з {total} ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "Відкладено — пам'ять системи {pct}% (ліміт {limit}%)",
+  "model.maxResidentMemory": "Макс. пам'ять системи",
+  "model.maxResidentMemoryDesc":
+    "Пропускати фонове вбудовування, коли пам'ять системи перевищує цю частку. 100% вимикає захист.",
+  "model.maxResidentMemoryDisabled": "вимк.",
 };
 
 export default llm;

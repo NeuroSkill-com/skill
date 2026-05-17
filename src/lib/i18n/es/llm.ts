@@ -501,6 +501,12 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "Esperando período de inactividad",
   "search.eegCoverage": "Cobertura EEG",
   "search.eegCoverageLabel": "{embedded} de {total} ({pct} %)",
+
+  "model.idleReembedMemoryThrottled": "Aplazado: memoria del sistema al {pct}% (límite {limit}%)",
+  "model.maxResidentMemory": "Memoria máxima del sistema",
+  "model.maxResidentMemoryDesc":
+    "Omitir la incrustación en segundo plano cuando la memoria del sistema supere este porcentaje. 100% desactiva el límite.",
+  "model.maxResidentMemoryDisabled": "desact.",
 };
 
 export default llm;

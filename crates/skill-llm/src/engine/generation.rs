@@ -299,8 +299,8 @@ pub(super) fn run_generation_multimodal(
 /// Text-only generation with MTP speculative decoding.
 ///
 /// Differences vs `run_generation`:
-/// * Prefill emits `logits = true` on every prompt position (required by MTP
-///   so the draft context can extract pre-norm embeddings from each position).
+/// * Prefill enables pre-norm embeddings for MTP while only keeping logits on
+///   the final prompt position used for the first sampled token.
 /// * Builds a per-request `LlamaContextType::Mtp` draft context and
 ///   `MtpSession` from `model + backend`. Both are dropped before this
 ///   function returns — the cost is one set of recurrent-state allocations
@@ -399,18 +399,19 @@ pub(super) fn run_generation_mtp(
         }
     };
 
-    // ── Prefill: decode the whole prompt with logits=true on every position.
-    // MTP requires this so pre-norm embeddings can be extracted by
-    // session.process(prefill_batch). Larger prompts are chunked at n_batch.
+    // ── Prefill: decode the whole prompt in one batch for session.process.
+    // MTP consumes pre-norm embeddings from the batch; logits are only needed
+    // on the final prompt token for the first sampled token.
     let n_batch = target_ctx.n_batch() as usize;
     let prefill_cap = n_prompt.max(n_batch);
     let mut prefill = LlamaBatch::new(prefill_cap, 1);
-    // Single-batch path is required by MTP to keep all positions visible to
-    // `session.process` in one call. If the prompt exceeds n_batch we have
-    // to grow the batch capacity here (the underlying llama_batch_init
-    // allocates per LlamaBatch::new).
+    // Single-batch path keeps all prompt positions visible to
+    // `session.process` in one call. If the prompt exceeds n_batch we grow the
+    // batch capacity here (the underlying llama_batch_init allocates per
+    // LlamaBatch::new).
     for (i, tok) in tokens.iter().copied().enumerate() {
-        if prefill.add(tok, i as i32, &[0], true).is_err() {
+        let logits = mtp_prefill_needs_logits(i, n_prompt);
+        if prefill.add(tok, i as i32, &[0], logits).is_err() {
             token_tx.send(InferToken::Error("prefill batch overflow".into())).ok();
             return;
         }
@@ -462,4 +463,28 @@ pub(super) fn run_generation_mtp(
     // raw pointer into draft_ctx's underlying llama_context_p.
     drop(session);
     drop(draft_ctx);
+}
+
+fn mtp_prefill_needs_logits(position: usize, n_prompt: usize) -> bool {
+    position + 1 == n_prompt
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mtp_prefill_needs_logits;
+
+    #[test]
+    fn mtp_prefill_logits_only_on_final_prompt_token() {
+        let n_prompt = 8;
+        let mask: Vec<bool> = (0..n_prompt)
+            .map(|position| mtp_prefill_needs_logits(position, n_prompt))
+            .collect();
+
+        assert_eq!(mask, vec![false, false, false, false, false, false, false, true]);
+    }
+
+    #[test]
+    fn mtp_prefill_logits_handles_single_token_prompt() {
+        assert!(mtp_prefill_needs_logits(0, 1));
+    }
 }

@@ -8,6 +8,8 @@ description = "Shared state types for skill-daemon — extracted for parallel co
 [features]
 default = ["llm"]
 llm = ["skill-llm/llm"]
+text-embeddings-rlx = ["dep:hf-hub", "dep:rlx", "dep:tokenizers"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate"]
 
 [dependencies]
 anyhow     = { workspace = true }
@@ -15,12 +17,15 @@ thiserror  = { workspace = true }
 base64     = { workspace = true }
 dirs       = "6"
 fastembed  = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
+hf-hub     = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
 hex        = "0.4"
 rand       = "0.10"
+rlx        = { path = "../../../rlx/rlx", optional = true, default-features = false, features = ["cpu", "models"] }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 sha2       = "0.10"
 tokio      = { version = "1", features = ["sync", "rt-multi-thread", "macros", "time"] }
+tokenizers = { version = "0.22", default-features = false, features = ["onig"], optional = true }
 tracing    = "0.1"
 
 skill-constants     = { path = "../skill-constants" }

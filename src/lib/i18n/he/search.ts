@@ -9,6 +9,43 @@ const search: Record<string, string> = {
   "embeddings.model": "מודל הטמעה",
   "embeddings.modelApplied": "מודל הטמעה הוחל",
   "embeddings.modelFailed": "החלת המודל נכשלה",
+  "embeddings.backend": "זמן ריצה להטמעות",
+  "embeddings.backendDesc":
+    "בחר את backend הביצוע להטמעות טקסט. FastEmbed משתמש ב-ORT; ‏RLX מריץ את אותם גרפי הטמעה דרך זמן הריצה המקומי של RLX כאשר הדמון נבנה עם תמיכת RLX.",
+  "embeddings.backendFastembed": "FastEmbed / ORT (ברירת מחדל)",
+  "embeddings.backendFastembedDesc": "ברירת המחדל, תואם לכל מודל ברשימה.",
+  "embeddings.backendRlx": "RLX",
+  "embeddings.backendRlxDesc": "נתיב ניסיוני ומהיר יותר למודלי BERT/Nomic מסוג safetensors.",
+  "embeddings.indexBackend": "אינדקס חיפוש תוויות",
+  "embeddings.indexBackendDesc":
+    "בחר איזה אינדקס וקטורי מקומי מפעיל את החיפוש הסמנטי בתוויות. בנה את שניהם, הרץ benchmark עם שאילתה משלך, ואז בחר את האפשרות המהירה או האיכותית יותר עבור הנתונים שלך.",
+  "embeddings.indexBackend.hnsw": "HNSW",
+  "embeddings.indexBackend.hnswDesc": "ברירת המחדל הנוכחית. Recall חזק, גרף גדול יותר בזיכרון.",
+  "embeddings.indexBackend.turboquant": "אינדקס TurboQuant",
+  "embeddings.indexBackend.turboquantDesc":
+    "אינדקס TurboVec דחוס. שימוש נמוך יותר בזיכרון ובדיסק, טוב לאוספי תוויות גדולים.",
+  "embeddings.indexCurrent": "backend החיפוש הנוכחי: {backend}",
+  "embeddings.indexBackendApplied": "backend אינדקס התוויות הוחל",
+  "embeddings.indexBackendFailed": "שינוי backend אינדקס התוויות נכשל",
+  "embeddings.indexRebuild": "בנה אינדקסים מחדש",
+  "embeddings.indexRebuilding": "בונה מחדש…",
+  "embeddings.indexRebuilt": "אינדקסי התוויות נבנו מחדש",
+  "embeddings.indexRebuildFailed": "בניית אינדקסי התוויות מחדש נכשלה",
+  "embeddings.indexBenchmark": "בדיקת ביצועים",
+  "embeddings.indexBenchmarking": "מריץ benchmark…",
+  "embeddings.indexBenchmarkPlaceholder": "שאילתת benchmark, למשל סשן קידוד ממוקד",
+  "embeddings.indexBenchmarkFailed": "ה-benchmark נכשל",
+  "embeddings.indexBenchmarkClose": "TurboQuant תואם ל-HNSW באופן הדוק",
+  "embeddings.indexBenchmarkDiverged": "TurboQuant שונה מ-HNSW",
+  "embeddings.indexBenchmarkDelta": "דלתא מרחק קוסינוס ממוצע {avg}, מקסימום {max}",
+  "embeddings.indexBenchmarkNoResults": "אין תוצאות",
+  "embeddings.indexUnavailable": "האינדקס אינו זמין. בנה תחילה את האינדקסים מחדש.",
+  "embeddings.rlxDevice": "התקן RLX",
+  "embeddings.rlxMaxSeq": "רצף מרבי",
+  "embeddings.rlxHint":
+    "RLX מוריד tokenizer.json ו-model.safetensors מ-Hugging Face, ואז מבצע pooling ונרמול וקטורים מקומית.",
+  "embeddings.rlxQuantizedUnsupported":
+    "מודלי FastEmbed מכומתים הם ייעודיים ל-ORT. בחר מודל safetensors לא מכומת כדי להשתמש ב-RLX.",
   "embeddings.info":
     "הטמעות נוצרות עבור הטקסט וההקשר של כל תווית. בשימוש הראשון משקלי המודל מורדים פעם אחת ומאוחסנים מקומית. מודלים קטנים (≤384d) מהירים; גדולים יותר מייצרים ייצוגים עשירים יותר.",
   "embeddings.sharedNote":
@@ -292,6 +329,10 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "צילומי מסך ליד התאמות",
 
   "search.maxTokens": "אסימונים",
+
+  "embeddings.indexMemory": "נפח אחסון בדיסק",
+  "embeddings.indexMemoryRow": "{backend}: {total} ({text} טקסט · {context} הקשר · {eeg} EEG)",
+  "embeddings.indexMemoryTotal": "סך הכול: {total}",
 };
 
 export default search;

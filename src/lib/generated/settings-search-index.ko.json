@@ -73,6 +73,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "임베딩 런타임",
+    "desc": "텍스트 임베딩 실행 백엔드를 선택합니다. FastEmbed는 ORT를 사용하고, RLX는 데몬이 RLX 지원으로 빌드된 경우 같은 임베딩 그래프를 로컬 RLX 런타임에서 실행합니다."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.backendFastembed",
+    "label": "FastEmbed / ORT",
+    "desc": "기본값이며 목록의 모든 모델과 호환됩니다."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "임베딩 모델"
   },

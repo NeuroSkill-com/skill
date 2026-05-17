@@ -295,6 +295,23 @@ fn user_settings_from_empty_json() {
 }
 
 #[test]
+fn reembed_config_max_resident_memory_defaults_and_migrates() {
+    // Default value is exposed.
+    let cfg = ReembedConfig::default();
+    assert_eq!(cfg.max_resident_memory_percent, 85);
+
+    // Roundtrip preserves it.
+    let json = serde_json::to_string(&cfg).unwrap();
+    let back: ReembedConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.max_resident_memory_percent, 85);
+
+    // Older settings files without the field deserialize cleanly using the default.
+    let legacy = r#"{ "idle_reembed_enabled": true, "idle_reembed_throttle_ms": 200 }"#;
+    let migrated: ReembedConfig = serde_json::from_str(legacy).unwrap();
+    assert_eq!(migrated.max_resident_memory_percent, 85);
+}
+
+#[test]
 fn umap_user_config_default_roundtrip() {
     let cfg = UmapUserConfig::default();
     let json = serde_json::to_string(&cfg).unwrap();
