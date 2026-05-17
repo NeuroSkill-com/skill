@@ -588,6 +588,15 @@ pub const LABEL_CONTEXT_INDEX_FILE: &str = "label_context_index.hnsw";
 /// HNSW index for EEG embeddings of label epochs.
 pub const LABEL_EEG_INDEX_FILE: &str = "label_eeg_index.hnsw";
 
+/// TurboVec index for text embeddings of label text.
+pub const LABEL_TEXT_TURBOVEC_INDEX_FILE: &str = "label_text_index.tvim";
+
+/// TurboVec index for text embeddings of label context.
+pub const LABEL_CONTEXT_TURBOVEC_INDEX_FILE: &str = "label_context_index.tvim";
+
+/// TurboVec index for EEG embeddings of label epochs.
+pub const LABEL_EEG_TURBOVEC_INDEX_FILE: &str = "label_eeg_index.tvim";
+
 /// HNSW index for code context embeddings (terminal commands, conversations, file interactions).
 /// Separate from the label index to avoid diluting EEG-focused searches.
 pub const CODE_CONTEXT_INDEX_FILE: &str = "code_context_index.hnsw";

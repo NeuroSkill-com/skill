@@ -490,6 +490,12 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "アイドル期間を待機中",
   "search.eegCoverage": "EEGカバレッジ",
   "search.eegCoverageLabel": "{embedded}件/{total}件 ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "延期しました — システムメモリ {pct}% (上限 {limit}%)",
+  "model.maxResidentMemory": "システムメモリ上限",
+  "model.maxResidentMemoryDesc":
+    "システムメモリがこの割合を超えた場合、バックグラウンド埋め込みをスキップします。100% でガードを無効化します。",
+  "model.maxResidentMemoryDisabled": "オフ",
 };
 
 export default llm;

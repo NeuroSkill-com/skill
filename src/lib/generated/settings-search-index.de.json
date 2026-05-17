@@ -73,6 +73,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "Embedding-Laufzeit",
+    "desc": "Wählen Sie das Backend für Text-Embeddings. FastEmbed nutzt ORT; RLX führt dieselben Embedding-Graphen über die lokale RLX-Laufzeit aus, wenn der Daemon mit RLX-Unterstützung gebaut wurde."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.backendFastembed",
+    "label": "FastEmbed / ORT",
+    "desc": "Standard, kompatibel mit jedem aufgeführten Modell."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Einbettungsmodell"
   },

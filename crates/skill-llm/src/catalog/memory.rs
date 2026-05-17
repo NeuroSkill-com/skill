@@ -123,6 +123,7 @@ mod tests {
         let entry = LlmModelEntry {
             repo: "test/repo".into(),
             filename: "model.gguf".into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 4.0,
             description: String::new(),
@@ -151,6 +152,7 @@ mod tests {
         let entry = LlmModelEntry {
             repo: "test/repo".into(),
             filename: "model.gguf".into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 4.0,
             description: String::new(),

@@ -87,6 +87,11 @@ const llm: Record<string, string> = {
   "model.idleReembedProcessing": "Processing {day} ({done}/{total})",
   "model.idleReembedWaiting": "Starts after {remaining}s idle",
   "model.idleReembedIdle": "Waiting for idle period",
+  "model.idleReembedMemoryThrottled": "Deferred — system memory at {pct}% (limit {limit}%)",
+  "model.maxResidentMemory": "Max system memory",
+  "model.maxResidentMemoryDesc":
+    "Skip background embedding when system memory exceeds this share of total. 100% disables the guard.",
+  "model.maxResidentMemoryDisabled": "off",
 
   "search.eegCoverage": "EEG Coverage",
   "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",

@@ -13,6 +13,8 @@ llm-cuda   = ["llm", "llama-cpp-4?/cuda"]
 llm-vulkan = ["llm", "llama-cpp-4?/vulkan"]
 llm-mtmd   = ["llm", "llama-cpp-4?/mtmd"]
 llm-native = ["llm", "llama-cpp-4?/native"]
+llm-rlx    = ["llm", "dep:rlx"]
+llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -33,16 +35,17 @@ either     = "1"
 hf-hub     = "0.5"
 skill-tools  = { path = "../skill-tools", default-features = false }
 skill-skills = { path = "../skill-skills" }
+rlx = { path = "../../../rlx/rlx", optional = true, default-features = false, features = ["cpu", "models", "gguf"] }
 
 [build-dependencies]
 
-llama-cpp-4 = { version = "0.2.57", optional = true, default-features = false, features = ["ggml", "native"] }
+llama-cpp-4 = { version = "0.2.60", optional = true, default-features = false, features = ["ggml", "native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-4 = { version = "0.2.57", optional = true, default-features = false, features = ["ggml", "metal", "native", "mtmd"] }
+llama-cpp-4 = { version = "0.2.60", optional = true, default-features = false, features = ["ggml", "metal", "native", "mtmd"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-4 = { version = "0.2.57", optional = true, default-features = false, features = ["ggml", "vulkan", "native", "mtmd"] }
+llama-cpp-4 = { version = "0.2.60", optional = true, default-features = false, features = ["ggml", "vulkan", "native", "mtmd"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -9,6 +9,43 @@ const search: Record<string, string> = {
   "embeddings.model": "Modelo de incrustación",
   "embeddings.modelApplied": "Modelo de embeddings aplicado",
   "embeddings.modelFailed": "No se pudo aplicar el modelo",
+  "embeddings.backend": "Runtime de embeddings",
+  "embeddings.backendDesc":
+    "Elige el backend de ejecución para embeddings de texto. FastEmbed usa ORT; RLX ejecuta los mismos grafos de embeddings mediante el runtime local de RLX cuando el daemon se compiló con soporte RLX.",
+  "embeddings.backendFastembed": "FastEmbed / ORT (predeterminado)",
+  "embeddings.backendFastembedDesc": "Predeterminado, compatible con todos los modelos de la lista.",
+  "embeddings.backendRlx": "RLX",
+  "embeddings.backendRlxDesc": "Ruta experimental más rápida para modelos BERT/Nomic en safetensors.",
+  "embeddings.indexBackend": "Índice de búsqueda de etiquetas",
+  "embeddings.indexBackendDesc":
+    "Elige qué índice vectorial local impulsa la búsqueda semántica de etiquetas. Crea ambos, compara con tu propia consulta y luego elige la opción más rápida o de mayor calidad para tus datos.",
+  "embeddings.indexBackend.hnsw": "HNSW",
+  "embeddings.indexBackend.hnswDesc": "Valor predeterminado actual. Gran recall, grafo más grande en memoria.",
+  "embeddings.indexBackend.turboquant": "Índice TurboQuant",
+  "embeddings.indexBackend.turboquantDesc":
+    "Índice TurboVec comprimido. Menor uso de memoria y disco, bueno para conjuntos grandes de etiquetas.",
+  "embeddings.indexCurrent": "Backend de búsqueda actual: {backend}",
+  "embeddings.indexBackendApplied": "Backend del índice de etiquetas aplicado",
+  "embeddings.indexBackendFailed": "No se pudo cambiar el backend del índice de etiquetas",
+  "embeddings.indexRebuild": "Reconstruir índices",
+  "embeddings.indexRebuilding": "Reconstruyendo…",
+  "embeddings.indexRebuilt": "Índices de etiquetas reconstruidos",
+  "embeddings.indexRebuildFailed": "No se pudieron reconstruir los índices de etiquetas",
+  "embeddings.indexBenchmark": "Prueba comparativa",
+  "embeddings.indexBenchmarking": "Ejecutando benchmark…",
+  "embeddings.indexBenchmarkPlaceholder": "Consulta de benchmark, p. ej. sesión de programación enfocada",
+  "embeddings.indexBenchmarkFailed": "Benchmark fallido",
+  "embeddings.indexBenchmarkClose": "TurboQuant coincide estrechamente con HNSW",
+  "embeddings.indexBenchmarkDiverged": "TurboQuant difiere de HNSW",
+  "embeddings.indexBenchmarkDelta": "delta de distancia coseno prom. {avg}, máx. {max}",
+  "embeddings.indexBenchmarkNoResults": "Sin resultados",
+  "embeddings.indexUnavailable": "Índice no disponible. Reconstruye los índices primero.",
+  "embeddings.rlxDevice": "Dispositivo RLX",
+  "embeddings.rlxMaxSeq": "Secuencia máxima",
+  "embeddings.rlxHint":
+    "RLX descarga tokenizer.json y model.safetensors de Hugging Face, luego agrupa y normaliza los vectores localmente.",
+  "embeddings.rlxQuantizedUnsupported":
+    "Los modelos cuantizados de FastEmbed son específicos de ORT. Elige un modelo safetensors no cuantizado para usar RLX.",
   "embeddings.info":
     "Las incrustaciones se generan para el texto y el contexto de cada etiqueta. En el primer uso, los pesos del modelo se descargan una vez y se almacenan en caché localmente. Los modelos más pequeños (≤384d) son rápidos; Los modelos más grandes producen representaciones más ricas.",
   "embeddings.sharedNote":
@@ -304,6 +341,10 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "Capturas cerca de coincidencias",
 
   "search.maxTokens": "Fichas",
+
+  "embeddings.indexMemory": "Espacio en disco",
+  "embeddings.indexMemoryRow": "{backend}: {total} ({text} texto · {context} contexto · {eeg} EEG)",
+  "embeddings.indexMemoryTotal": "En total: {total}",
 };
 
 export default search;

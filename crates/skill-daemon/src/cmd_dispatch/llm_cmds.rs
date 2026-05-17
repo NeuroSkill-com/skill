@@ -145,6 +145,7 @@ pub(super) async fn cmd_llm_add_model(state: &AppState, msg: &Value) -> Result<V
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: repo.clone(),
                 filename: filename.clone(),
+                remote_filename: None,
                 quant: infer_quant(&filename),
                 size_gb: size_gb.unwrap_or(0.0),
                 description: "External model".to_string(),

@@ -347,36 +347,26 @@ fn default_log_path() -> anyhow::Result<std::path::PathBuf> {
     Ok(dir.join(format!("{ts}-{pid}.log")))
 }
 
-/// Compress finished logs (whose PID is no longer alive) to `.log.zst`,
-/// then enforce a 100-file retention cap on the combined `.log`/`.log.zst`
-/// set. Skips `current_log` so we never touch the file we're about to write.
+/// Enforce a 100-file retention cap on terminal scratch logs.
+///
+/// Keep this deliberately lightweight: this fallback path can also remain
+/// alive for an entire shell session, so heavy compression belongs in the
+/// daemon finalizer rather than the PTY shim itself.
 fn rotate_logs(dir: Option<&std::path::Path>, current_log: &std::path::Path) {
     let Some(dir) = dir else { return };
 
-    // Phase 1: compress every uncompressed log whose owning PID has exited.
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
-    for entry in entries.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path == current_log {
-            continue;
-        }
-        if path.extension().is_none_or(|e| e != "log") {
-            continue;
-        }
-        if pid_alive_for_log(&path) {
-            continue; // another shim is still appending
-        }
-        let _ = compress_to_zst(&path);
-    }
-
-    // Phase 2: enforce retention. Compressed logs are tiny so we can keep
-    // many more than the old uncompressed cap.
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     let mut all: Vec<(std::path::PathBuf, std::time::SystemTime)> = entries
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.path()
-                .extension()
+            let path = e.path();
+            if path == current_log {
+                return false;
+            }
+            if path.extension().is_some_and(|e| e == "log") && pid_alive_for_log(&path) {
+                return false;
+            }
+            path.extension()
                 .and_then(|s| s.to_str())
                 .is_some_and(|ext| ext == "log" || ext == "zst")
         })
@@ -406,19 +396,4 @@ fn pid_alive_for_log(path: &std::path::Path) -> bool {
     // kill(pid, 0) returns 0 when the signal could be delivered (process
     // exists and we have permission). Errno ESRCH means it's gone.
     unsafe { libc::kill(pid, 0) == 0 }
-}
-
-/// Stream-compress `src` into a sibling `<src>.zst`, then delete `src`.
-/// Compression level 3 (zstd default) is fast on CPU and still yields ~10×
-/// reduction for ANSI-heavy terminal output.
-fn compress_to_zst(src: &std::path::Path) -> std::io::Result<()> {
-    let dst = src.with_extension("log.zst");
-    let input = std::fs::File::open(src)?;
-    let output = std::fs::File::create(&dst)?;
-    let mut encoder = zstd::Encoder::new(output, 3)?;
-    let mut reader = std::io::BufReader::new(input);
-    std::io::copy(&mut reader, &mut encoder)?;
-    encoder.finish()?;
-    std::fs::remove_file(src)?;
-    Ok(())
 }

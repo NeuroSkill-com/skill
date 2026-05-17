@@ -485,6 +485,12 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "유휴 기간 대기 중",
   "search.eegCoverage": "EEG 커버리지",
   "search.eegCoverageLabel": "{embedded}개/{total}개 ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "연기됨 — 시스템 메모리 {pct}% (한도 {limit}%)",
+  "model.maxResidentMemory": "최대 시스템 메모리",
+  "model.maxResidentMemoryDesc":
+    "시스템 메모리가 이 비율을 초과하면 백그라운드 임베딩을 건너뜁니다. 100%로 설정하면 비활성화됩니다.",
+  "model.maxResidentMemoryDisabled": "끔",
 };
 
 export default llm;

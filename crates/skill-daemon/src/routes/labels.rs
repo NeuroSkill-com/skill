@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use skill_constants::LABELS_FILE;
 use skill_daemon_common::ApiError;
 
+use crate::routes::settings_io::{load_user_settings, save_user_settings};
 use crate::state::AppState;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -64,6 +65,11 @@ pub struct SearchByEegRequest {
     pub k: Option<usize>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SetLabelIndexBackendRequest {
+    pub backend: String,
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router<AppState> {
@@ -73,6 +79,11 @@ pub fn router() -> Router<AppState> {
         .route("/labels/search", post(search_labels))
         .route("/labels/search-by-eeg", post(search_labels_by_eeg))
         .route("/labels/index/rebuild", post(rebuild_label_index))
+        .route(
+            "/labels/index/backend",
+            get(get_label_index_backend).post(set_label_index_backend),
+        )
+        .route("/labels/index/benchmark", post(benchmark_label_index))
         .route("/labels/index/stats", get(label_index_stats))
         .route("/labels/embedding-status", get(label_embedding_status))
         .route("/labels/reembed", post(reembed_all_labels))
@@ -585,31 +596,88 @@ async fn rebuild_label_index(State(state): State<AppState>) -> Json<serde_json::
     }
 }
 
+async fn get_label_index_backend(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let backend = state.label_index.preferred_backend();
+    Json(serde_json::json!({
+        "backend": backend.as_str(),
+        "available": ["hnsw", "turboquant"],
+        "aliases": { "turboquant": ["turbovec", "turbo_vec", "tv"] },
+    }))
+}
+
+async fn set_label_index_backend(
+    State(state): State<AppState>,
+    Json(req): Json<SetLabelIndexBackendRequest>,
+) -> Json<serde_json::Value> {
+    let Some(backend) = skill_label_index::LabelIndexBackend::parse(&req.backend) else {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": "backend must be 'hnsw' or 'turboquant'",
+        }));
+    };
+
+    state.label_index.set_preferred_backend(backend);
+    let mut settings = load_user_settings(&state);
+    settings.label_index_backend = backend.as_str().to_string();
+    save_user_settings(&state, &settings);
+
+    Json(serde_json::json!({
+        "ok": true,
+        "backend": backend.as_str(),
+    }))
+}
+
+async fn benchmark_label_index(
+    State(state): State<AppState>,
+    Json(req): Json<SearchLabelsRequest>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let label_index = state.label_index.clone();
+    let embedder = state.text_embedder.clone();
+    let k = req.k.unwrap_or(10);
+    let ef = req.ef.unwrap_or(64);
+    let mode = req.mode.clone().unwrap_or_else(|| "text".into());
+    let query_text = req.query.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let Some(query_vec) = embedder.embed(&query_text) else {
+            return serde_json::json!({ "ok": false, "error": "failed to embed query" });
+        };
+        let benchmarks = match mode.as_str() {
+            "context" => skill_label_index::benchmark_context_vec(&query_vec, k, ef, &skill_dir, &label_index),
+            "eeg" => skill_label_index::benchmark_eeg_vec(&query_vec, k, ef, &skill_dir, &label_index),
+            _ => skill_label_index::benchmark_text_vec(&query_vec, k, ef, &skill_dir, &label_index),
+        };
+        let comparison = skill_label_index::compare_benchmarks(&benchmarks);
+        serde_json::json!({
+            "ok": true,
+            "mode": mode,
+            "preferred_backend": label_index.preferred_backend().as_str(),
+            "benchmarks": benchmarks,
+            "comparison": comparison,
+        })
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({ "ok": false, "error": e.to_string() }));
+
+    Json(result)
+}
+
 /// Stats about the current in-memory label indices.
 async fn label_index_stats(State(state): State<AppState>) -> Json<serde_json::Value> {
     let label_index = state.label_index.clone();
-    let text_len = label_index
-        .text
-        .lock()
-        .ok()
-        .and_then(|g| g.as_ref().map(|i| i.len()))
-        .unwrap_or(0);
-    let context_len = label_index
-        .context
-        .lock()
-        .ok()
-        .and_then(|g| g.as_ref().map(|i| i.len()))
-        .unwrap_or(0);
-    let eeg_len = label_index
-        .eeg
-        .lock()
-        .ok()
-        .and_then(|g| g.as_ref().map(|i| i.len()))
-        .unwrap_or(0);
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let hnsw = label_index.hnsw_counts();
+    let turbovec = label_index.turbovec_counts();
+    let memory = label_index.memory_footprint(&skill_dir);
     Json(serde_json::json!({
-        "text_nodes": text_len,
-        "context_nodes": context_len,
-        "eeg_nodes": eeg_len,
+        "preferred_backend": label_index.preferred_backend().as_str(),
+        "text_nodes": hnsw.text_nodes,
+        "context_nodes": hnsw.context_nodes,
+        "eeg_nodes": hnsw.eeg_nodes,
+        "hnsw": hnsw,
+        "turbovec": turbovec,
+        "memory": memory,
     }))
 }
 

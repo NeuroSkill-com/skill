@@ -488,6 +488,12 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "Warte auf Leerlaufzeit",
   "search.eegCoverage": "EEG-Abdeckung",
   "search.eegCoverageLabel": "{embedded} von {total} ({pct} %)",
+
+  "model.idleReembedMemoryThrottled": "Verschoben — Systemspeicher bei {pct}% (Limit {limit}%)",
+  "model.maxResidentMemory": "Maximaler Systemspeicher",
+  "model.maxResidentMemoryDesc":
+    "Hintergrund-Embedding überspringen, wenn der Systemspeicher diesen Anteil überschreitet. 100% deaktiviert die Begrenzung.",
+  "model.maxResidentMemoryDisabled": "aus",
 };
 
 export default llm;

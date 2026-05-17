@@ -45,6 +45,12 @@ pub struct IdleReembedStatus {
     pub done: u64,
     /// Current day directory being processed (e.g. "20260415").
     pub current_day: String,
+    /// Whether the loop is deferring work because system memory usage exceeds
+    /// `ReembedConfig::max_resident_memory_percent`. UI surfaces this so the
+    /// user knows why a run that "should" be active isn't.
+    pub memory_throttled: bool,
+    /// Last sampled system memory usage percent (used / total). 0 when unread.
+    pub memory_percent: u8,
 }
 
 /// Shared application state threaded through all axum handlers.
@@ -294,13 +300,28 @@ impl AppState {
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
             idle_reembed_cancel: Arc::new(AtomicBool::new(false)),
             idle_reembed_state: Arc::new(Mutex::new(IdleReembedStatus::default())),
-            label_index: Arc::new(LabelIndexState::new()),
+            label_index: {
+                let idx = LabelIndexState::new();
+                if let Some(backend) = skill_label_index::LabelIndexBackend::parse(&settings.label_index_backend) {
+                    idx.set_preferred_backend(backend);
+                }
+                Arc::new(idx)
+            },
             reconnect: Arc::new(Mutex::new(ReconnectState::default())),
             text_embedder: {
                 let te = SharedTextEmbedder::new();
                 if !settings.text_embedding_model.is_empty() {
                     te.set_model_code(&settings.text_embedding_model);
                 }
+                if let Some(backend) =
+                    crate::text_embedder::TextEmbeddingBackend::parse(&settings.text_embedding_backend)
+                {
+                    te.set_backend(backend);
+                }
+                if !settings.text_embedding_rlx_device.is_empty() {
+                    te.set_rlx_device(&settings.text_embedding_rlx_device);
+                }
+                te.set_rlx_max_seq(settings.text_embedding_rlx_max_seq);
                 te
             },
             iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
