@@ -550,8 +550,11 @@ jobs:
 
           # Build both packages in a single cargo invocation so feature
           # unification happens once and shared dependencies compile only once.
+          # NOTE: `|| return $?` is required — `set -e` is inhibited inside a
+          # function called via `if ! cmd`, so a failing cargo build would
+          # silently fall through and run_cmd would still return 0.
           run_cmd() {
-            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings
+            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings || return $?
           }
 
           if ! run_cmd; then
