@@ -73,6 +73,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "嵌入运行时",
+    "desc": "选择文本嵌入的执行后端。FastEmbed 使用 ORT；如果守护进程构建时启用了 RLX，RLX 会通过本地 RLX 运行时执行相同的嵌入图。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.backendFastembed",
+    "label": "FastEmbed / ORT",
+    "desc": "默认选项，兼容列表中的所有模型。"
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "嵌入模型"
   },

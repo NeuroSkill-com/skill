@@ -12,6 +12,10 @@ llm-metal = ["llm", "skill-llm/llm-metal"]
 llm-cuda = ["llm", "skill-llm/llm-cuda"]
 llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
 llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
+llm-rlx = ["llm", "skill-llm/llm-rlx"]
+llm-rlx-metal = ["llm-rlx", "skill-llm/llm-rlx-metal"]
+text-embeddings-rlx = ["skill-daemon-state/text-embeddings-rlx"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-metal"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends; individual flags available below.
 embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "skill-eeg/gpu", "embed-zuna", "embed-zuna-gpu", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]

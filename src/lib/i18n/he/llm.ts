@@ -472,6 +472,11 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "ממתין לתקופת חוסר פעילות",
   "search.eegCoverage": "כיסוי EEG",
   "search.eegCoverageLabel": "{embedded} מתוך {total} ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "נדחה — שימוש בזיכרון המערכת ב-{pct}% (מגבלה {limit}%)",
+  "model.maxResidentMemory": "זיכרון מערכת מרבי",
+  "model.maxResidentMemoryDesc": "דלג על הטמעה ברקע כאשר זיכרון המערכת חורג מאחוז זה. 100% מבטל את ההגנה.",
+  "model.maxResidentMemoryDisabled": "כבוי",
 };
 
 export default llm;

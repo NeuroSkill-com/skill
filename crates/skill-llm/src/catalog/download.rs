@@ -327,7 +327,7 @@ pub fn download_model(entry: &LlmModelEntry, progress: &Arc<Mutex<DownloadProgre
     // Single-file fast path.
     if total_shards <= 1 {
         let size_bytes = (entry.size_gb * 1_073_741_824.0) as u64;
-        return download_file(&entry.repo, &entry.filename, progress, size_bytes);
+        return download_file(&entry.repo, entry.remote_filename(), progress, size_bytes);
     }
 
     // Multi-shard: compute per-shard sizes (estimate evenly when we don't

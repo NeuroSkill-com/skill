@@ -28,7 +28,7 @@ pub use skill_tts::config::default_neutts_backbone_repo;
 pub use skill_tts::NeuttsConfig;
 
 // Re-export LLM config types from skill-llm.
-pub use skill_llm::config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
+pub use skill_llm::config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ToolExecutionMode};
 
 // Screenshot configuration — defined locally to avoid pulling in the heavy
 // skill-screenshots crate (xcap → pipewire on Linux) for settings I/O.
@@ -542,6 +542,22 @@ pub fn default_daily_goal_min() -> u32 {
 pub fn default_embedding_model() -> String {
     "nomic-ai/nomic-embed-text-v1.5".into()
 }
+pub fn default_text_embedding_backend() -> String {
+    "fastembed".into()
+}
+pub fn default_label_index_backend() -> String {
+    "hnsw".into()
+}
+pub fn default_text_embedding_rlx_device() -> String {
+    if cfg!(target_os = "macos") {
+        "metal".into()
+    } else {
+        "cpu".into()
+    }
+}
+pub fn default_text_embedding_rlx_max_seq() -> usize {
+    512
+}
 pub fn default_overlap_secs() -> f32 {
     EMBEDDING_OVERLAP_SECS
 }
@@ -854,6 +870,14 @@ pub struct UserSettings {
     pub goal_notified_date: String,
     #[serde(default = "default_embedding_model")]
     pub text_embedding_model: String,
+    #[serde(default = "default_text_embedding_backend")]
+    pub text_embedding_backend: String,
+    #[serde(default = "default_label_index_backend")]
+    pub label_index_backend: String,
+    #[serde(default = "default_text_embedding_rlx_device")]
+    pub text_embedding_rlx_device: String,
+    #[serde(default = "default_text_embedding_rlx_max_seq")]
+    pub text_embedding_rlx_max_seq: usize,
     #[serde(default)]
     pub hooks: Vec<HookRule>,
     /// WebSocket server bind host.
@@ -1065,6 +1089,10 @@ pub struct ReembedConfig {
     /// Milliseconds to sleep between epochs during background reembed.
     /// Higher values reduce CPU/GPU contention with other daemon tasks.
     pub idle_reembed_throttle_ms: u64,
+    /// Skip starting an idle reembed run when system memory usage (used / total)
+    /// is above this percent. Avoids OOM'ing the user's machine when other apps
+    /// already have heavy RSS. Set to 100 to disable. Re-evaluated each loop tick.
+    pub max_resident_memory_percent: u8,
 }
 
 fn default_daemon_auto_restart() -> bool {
@@ -1091,6 +1119,7 @@ impl Default for ReembedConfig {
             // a discrete GPU; 200ms keeps a typical day's backlog finishing
             // overnight while leaving headroom for foreground work.
             idle_reembed_throttle_ms: 200,
+            max_resident_memory_percent: 85,
         }
     }
 }
@@ -1246,6 +1275,10 @@ impl Default for UserSettings {
             daily_goal_min: default_daily_goal_min(),
             goal_notified_date: String::new(),
             text_embedding_model: default_embedding_model(),
+            text_embedding_backend: default_text_embedding_backend(),
+            label_index_backend: default_label_index_backend(),
+            text_embedding_rlx_device: default_text_embedding_rlx_device(),
+            text_embedding_rlx_max_seq: default_text_embedding_rlx_max_seq(),
             hooks: Vec::new(),
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),

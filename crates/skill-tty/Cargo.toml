@@ -14,7 +14,6 @@ anyhow  = { workspace = true }
 libc    = "0.2"
 dirs    = "6"
 chrono  = { version = "0.4", default-features = false, features = ["clock", "std"] }
-zstd    = "0.13"
 
 [lints]
 workspace = true

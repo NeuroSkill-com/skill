@@ -29,7 +29,7 @@ import { createWriteStream } from "fs";
 import https from "https";
 import http from "http";
 
-const LLAMA_PREBUILT_TAG = "v0.2.57";
+const LLAMA_PREBUILT_TAG = "v0.2.60";
 
 // ── Globals ──────────────────────────────────────────────────────────────────
 

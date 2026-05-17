@@ -23,11 +23,79 @@ interface ModelInfo {
 // ── State ──────────────────────────────────────────────────────────────────
 let models = $state<ModelInfo[]>([]);
 let currentCode = $state("");
+let currentBackend = $state<"fastembed" | "rlx">("fastembed");
+let rlxDevice = $state("metal");
+let rlxMaxSeq = $state(512);
 let staleCount = $state(0);
 let saving = $state(false);
 let reembedding = $state(false);
 let progress = $state<{ done: number; total: number; status?: string } | null>(null);
 let unlistenReembed: (() => void) | null = null;
+
+// ── Label index backend ────────────────────────────────────────────────────
+type LabelIndexBackend = "hnsw" | "turboquant";
+
+interface LabelIndexCounts {
+  text_nodes: number;
+  context_nodes: number;
+  eeg_nodes: number;
+}
+
+interface LabelIndexFootprint {
+  text_bytes: number;
+  context_bytes: number;
+  eeg_bytes: number;
+}
+interface LabelIndexMemory {
+  hnsw: LabelIndexFootprint;
+  turbovec: LabelIndexFootprint;
+  total_bytes: number;
+}
+interface LabelIndexStats {
+  preferred_backend?: LabelIndexBackend;
+  hnsw?: LabelIndexCounts;
+  turbovec?: LabelIndexCounts;
+  memory?: LabelIndexMemory;
+}
+
+function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
+
+interface LabelIndexBenchmarkRow {
+  backend: LabelIndexBackend;
+  available: boolean;
+  elapsed_us: number;
+  results: Array<{ label_id: number; text: string; distance: number }>;
+}
+
+interface LabelIndexBenchmarkComparison {
+  top_match: boolean;
+  overlap_count: number;
+  overlap_ratio: number;
+  avg_distance_delta: number;
+  max_distance_delta: number;
+  close: boolean;
+  min_overlap_ratio: number;
+  max_allowed_distance_delta: number;
+}
+
+let labelIndexBackend = $state<LabelIndexBackend>("hnsw");
+let labelIndexSaving = $state(false);
+let labelIndexRebuilding = $state(false);
+let labelIndexStats = $state<LabelIndexStats | null>(null);
+let benchmarkQuery = $state("");
+let benchmarking = $state(false);
+let benchmarkResults = $state<LabelIndexBenchmarkRow[]>([]);
+let benchmarkComparison = $state<LabelIndexBenchmarkComparison | null>(null);
 
 // ── Reembed config ────────────────────────────────────────────────────────
 interface ReembedConfig {
@@ -80,7 +148,87 @@ async function saveReembedConfig() {
   }
 }
 
+async function loadLabelIndexBackend() {
+  try {
+    const r = await daemonInvoke<{ backend?: string }>("get_label_index_backend");
+    labelIndexBackend = r.backend === "turboquant" ? "turboquant" : "hnsw";
+  } catch (_) {}
+  await loadLabelIndexStats();
+}
+
+async function loadLabelIndexStats() {
+  try {
+    labelIndexStats = await daemonInvoke<LabelIndexStats>("get_label_index_stats");
+  } catch (_) {
+    labelIndexStats = null;
+  }
+}
+
+async function saveLabelIndexBackend() {
+  labelIndexSaving = true;
+  try {
+    const r = await daemonInvoke<{ ok: boolean; backend?: string; error?: string }>("set_label_index_backend", {
+      backend: labelIndexBackend,
+    });
+    if (r.ok) {
+      labelIndexBackend = r.backend === "turboquant" ? "turboquant" : "hnsw";
+      addToast("success", t("embeddings.indexBackendApplied"), t(`embeddings.indexBackend.${labelIndexBackend}`), 2500);
+      await loadLabelIndexStats();
+    } else {
+      addToast("warning", t("embeddings.indexBackendFailed"), r.error ?? "Unknown error", 5000);
+    }
+  } catch (e) {
+    addToast("warning", t("embeddings.indexBackendFailed"), String(e), 5000);
+  } finally {
+    labelIndexSaving = false;
+  }
+}
+
+async function rebuildLabelIndex() {
+  labelIndexRebuilding = true;
+  try {
+    await daemonInvoke("rebuild_label_index");
+    await loadLabelIndexStats();
+    addToast("success", t("embeddings.indexRebuilt"), "", 2500);
+  } catch (e) {
+    addToast("warning", t("embeddings.indexRebuildFailed"), String(e), 5000);
+  } finally {
+    labelIndexRebuilding = false;
+  }
+}
+
+async function runIndexBenchmark() {
+  if (!benchmarkQuery.trim()) return;
+  benchmarking = true;
+  benchmarkResults = [];
+  benchmarkComparison = null;
+  try {
+    const r = await daemonInvoke<{
+      ok: boolean;
+      benchmarks?: LabelIndexBenchmarkRow[];
+      comparison?: LabelIndexBenchmarkComparison | null;
+      error?: string;
+    }>("benchmark_label_index", {
+      query: benchmarkQuery,
+      k: 5,
+      ef: 64,
+      mode: "text",
+    });
+    if (r.ok) {
+      benchmarkResults = r.benchmarks ?? [];
+      benchmarkComparison = r.comparison ?? null;
+    } else {
+      addToast("warning", t("embeddings.indexBenchmarkFailed"), r.error ?? "Unknown error", 5000);
+    }
+  } catch (e) {
+    addToast("warning", t("embeddings.indexBenchmarkFailed"), String(e), 5000);
+  } finally {
+    benchmarking = false;
+  }
+}
+
 const activeModel = $derived(models.find((m) => m.code === currentCode) ?? null);
+const supportsRlx = $derived(!currentCode.endsWith("-Q"));
 
 // Group models by family for the dropdown
 const grouped = $derived.by(() => {
@@ -147,8 +295,16 @@ async function load() {
     models = knownModels;
   }
   try {
-    const r = await daemonInvoke<{ model: string }>("get_embedding_model");
+    const r = await daemonInvoke<{
+      model: string;
+      backend?: string;
+      rlx_device?: string;
+      rlx_max_seq?: number;
+    }>("get_embedding_model");
     currentCode = r.model || models[0]?.code || "";
+    currentBackend = r.backend === "rlx" ? "rlx" : "fastembed";
+    rlxDevice = r.rlx_device || rlxDevice;
+    rlxMaxSeq = r.rlx_max_seq || rlxMaxSeq;
   } catch {
     currentCode = models[0]?.code ?? "";
   }
@@ -164,10 +320,24 @@ async function load() {
 async function applyModel() {
   saving = true;
   try {
-    const r = await daemonInvoke<{ ok: boolean; model?: string; error?: string }>("set_embedding_model", {
+    const backend = supportsRlx ? currentBackend : "fastembed";
+    const r = await daemonInvoke<{
+      ok: boolean;
+      model?: string;
+      backend?: string;
+      rlx_device?: string;
+      rlx_max_seq?: number;
+      error?: string;
+    }>("set_embedding_model", {
       model: currentCode,
+      backend,
+      rlx_device: rlxDevice,
+      rlx_max_seq: rlxMaxSeq,
     });
     if (r.ok) {
+      currentBackend = r.backend === "rlx" ? "rlx" : "fastembed";
+      rlxDevice = r.rlx_device || rlxDevice;
+      rlxMaxSeq = r.rlx_max_seq || rlxMaxSeq;
       addToast("success", t("embeddings.modelApplied"), currentCode, 3000);
       staleCount = 0;
     } else {
@@ -189,7 +359,7 @@ async function reembed() {
 }
 
 onMount(async () => {
-  await Promise.all([load(), loadReembedConfig(), loadWatchdogConfig()]);
+  await Promise.all([load(), loadReembedConfig(), loadWatchdogConfig(), loadLabelIndexBackend()]);
   unlistenReembed = onDaemonEvent("reembed-progress", (ev) => {
     const p = ev.payload as { done?: number; total?: number; status?: string };
     progress = { done: p.done ?? 0, total: p.total ?? 0, status: p.status };
@@ -206,6 +376,19 @@ onDestroy(() => unlistenReembed?.());
 // Dim badge colour
 function dimColor(_dim: number) {
   return "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20";
+}
+
+function fmtMs(us: number) {
+  if (!Number.isFinite(us)) return "—";
+  return `${(us / 1000).toFixed(us < 10_000 ? 2 : 1)} ms`;
+}
+
+function countsFor(backend: "hnsw" | "turbovec") {
+  return labelIndexStats?.[backend] ?? { text_nodes: 0, context_nodes: 0, eeg_nodes: 0 };
+}
+
+function pct(v: number) {
+  return `${Math.round(v * 100)}%`;
 }
 </script>
 
@@ -259,6 +442,228 @@ function dimColor(_dim: number) {
         </div>
       </div>
     {/if}
+  </div>
+
+  <!-- ── Runtime backend ─────────────────────────────────────────────────── -->
+  <div class="rounded-xl border border-border dark:border-white/[0.06]
+              bg-surface-1 px-4 py-3 flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <span class="text-ui-md font-semibold text-foreground">
+        {t("embeddings.backend")}
+      </span>
+      <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
+        {t("embeddings.backendDesc")}
+      </p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <label class="rounded-lg border px-3 py-2 cursor-pointer transition-colors
+                    {currentBackend === 'fastembed' ? 'border-violet-500/40 bg-violet-500/10' : 'border-border dark:border-white/[0.08]'}">
+        <input class="sr-only" type="radio" bind:group={currentBackend} value="fastembed" />
+        <span class="block text-ui-base font-semibold text-foreground">{t("embeddings.backendFastembed")}</span>
+        <span class="block text-ui-sm text-muted-foreground/60">{t("embeddings.backendFastembedDesc")}</span>
+      </label>
+      <label class="rounded-lg border px-3 py-2 cursor-pointer transition-colors
+                    {currentBackend === 'rlx' ? 'border-violet-500/40 bg-violet-500/10' : 'border-border dark:border-white/[0.08]'}
+                    {!supportsRlx ? 'opacity-50 cursor-not-allowed' : ''}">
+        <input class="sr-only" type="radio" bind:group={currentBackend} value="rlx" disabled={!supportsRlx} />
+        <span class="block text-ui-base font-semibold text-foreground">{t("embeddings.backendRlx")}</span>
+        <span class="block text-ui-sm text-muted-foreground/60">{t("embeddings.backendRlxDesc")}</span>
+      </label>
+    </div>
+
+    {#if !supportsRlx}
+      <p class="text-ui-sm text-amber-600 dark:text-amber-400">
+        {t("embeddings.rlxQuantizedUnsupported")}
+      </p>
+    {/if}
+
+    {#if currentBackend === "rlx" && supportsRlx}
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1">
+          <label for="rlx-device" class="text-ui-sm text-muted-foreground/60">
+            {t("embeddings.rlxDevice")}
+          </label>
+          <select id="rlx-device" bind:value={rlxDevice}
+                  class="w-full rounded-md border border-border dark:border-white/[0.08]
+                         bg-surface-1 px-2.5 py-1.5
+                         text-ui-md text-foreground
+                         focus:outline-none focus:ring-1 focus:ring-ring/50">
+            <option value="metal">Metal</option>
+            <option value="cpu">CPU</option>
+            <option value="mlx">MLX</option>
+            <option value="gpu">GPU / wgpu</option>
+            <option value="cuda">CUDA</option>
+            <option value="rocm">ROCm</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label for="rlx-max-seq" class="text-ui-sm text-muted-foreground/60">
+            {t("embeddings.rlxMaxSeq")}
+          </label>
+          <input id="rlx-max-seq" type="number" min="16" max="4096" step="16"
+                 bind:value={rlxMaxSeq}
+                 class="w-full rounded-md border border-border dark:border-white/[0.08]
+                        bg-surface-1 px-2.5 py-1.5
+                        text-ui-md text-foreground tabular-nums
+                        focus:outline-none focus:ring-1 focus:ring-ring/50" />
+        </div>
+      </div>
+      <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
+        {t("embeddings.rlxHint")}
+      </p>
+    {/if}
+  </div>
+
+  <!-- ── Label index backend ─────────────────────────────────────────────── -->
+  <div class="rounded-xl border border-border dark:border-white/[0.06]
+              bg-surface-1 px-4 py-3 flex flex-col gap-3">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex flex-col gap-1">
+        <span class="text-ui-md font-semibold text-foreground">
+          {t("embeddings.indexBackend")}
+        </span>
+        <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
+          {t("embeddings.indexBackendDesc")}
+        </p>
+      </div>
+      <Button size="sm" variant="outline" onclick={rebuildLabelIndex} disabled={labelIndexRebuilding}
+              class="text-ui-base h-7 px-3 shrink-0">
+        {labelIndexRebuilding ? t("embeddings.indexRebuilding") : t("embeddings.indexRebuild")}
+      </Button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <label class="rounded-lg border px-3 py-2 cursor-pointer transition-colors
+                    {labelIndexBackend === 'hnsw' ? 'border-violet-500/40 bg-violet-500/10' : 'border-border dark:border-white/[0.08]'}">
+        <input class="sr-only" type="radio" bind:group={labelIndexBackend} value="hnsw" />
+        <span class="block text-ui-base font-semibold text-foreground">{t("embeddings.indexBackend.hnsw")}</span>
+        <span class="block text-ui-sm text-muted-foreground/60">{t("embeddings.indexBackend.hnswDesc")}</span>
+        <span class="mt-1 block text-ui-xs text-muted-foreground/50 tabular-nums">
+          {countsFor("hnsw").text_nodes} text · {countsFor("hnsw").context_nodes} context
+        </span>
+      </label>
+      <label class="rounded-lg border px-3 py-2 cursor-pointer transition-colors
+                    {labelIndexBackend === 'turboquant' ? 'border-violet-500/40 bg-violet-500/10' : 'border-border dark:border-white/[0.08]'}">
+        <input class="sr-only" type="radio" bind:group={labelIndexBackend} value="turboquant" />
+        <span class="block text-ui-base font-semibold text-foreground">{t("embeddings.indexBackend.turboquant")}</span>
+        <span class="block text-ui-sm text-muted-foreground/60">{t("embeddings.indexBackend.turboquantDesc")}</span>
+        <span class="mt-1 block text-ui-xs text-muted-foreground/50 tabular-nums">
+          {countsFor("turbovec").text_nodes} text · {countsFor("turbovec").context_nodes} context
+        </span>
+      </label>
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+      <span class="text-ui-sm text-muted-foreground/60">
+        {t("embeddings.indexCurrent", { backend: t(`embeddings.indexBackend.${labelIndexBackend}`) })}
+      </span>
+      <Button size="sm" onclick={saveLabelIndexBackend} disabled={labelIndexSaving}
+              class="text-ui-base h-7 px-3 shrink-0">
+        {labelIndexSaving ? t("common.saving") : t("common.apply")}
+      </Button>
+    </div>
+
+    {#if labelIndexStats?.memory}
+      {@const mem = labelIndexStats.memory}
+      <div class="flex flex-col gap-1 rounded-md border border-border/40 dark:border-white/[0.04] bg-surface-1/40 px-3 py-2">
+        <span class="text-ui-xs uppercase tracking-wide text-muted-foreground/50">
+          {t("embeddings.indexMemory")}
+        </span>
+        <span class="text-ui-xs text-muted-foreground/70 tabular-nums font-mono">
+          {t("embeddings.indexMemoryRow", {
+            backend: t("embeddings.indexBackend.hnsw"),
+            total: fmtBytes(mem.hnsw.text_bytes + mem.hnsw.context_bytes + mem.hnsw.eeg_bytes),
+            text: fmtBytes(mem.hnsw.text_bytes),
+            context: fmtBytes(mem.hnsw.context_bytes),
+            eeg: fmtBytes(mem.hnsw.eeg_bytes),
+          })}
+        </span>
+        <span class="text-ui-xs text-muted-foreground/70 tabular-nums font-mono">
+          {t("embeddings.indexMemoryRow", {
+            backend: t("embeddings.indexBackend.turboquant"),
+            total: fmtBytes(mem.turbovec.text_bytes + mem.turbovec.context_bytes + mem.turbovec.eeg_bytes),
+            text: fmtBytes(mem.turbovec.text_bytes),
+            context: fmtBytes(mem.turbovec.context_bytes),
+            eeg: fmtBytes(mem.turbovec.eeg_bytes),
+          })}
+        </span>
+        <span class="text-ui-xs text-muted-foreground/50 tabular-nums">
+          {t("embeddings.indexMemoryTotal", { total: fmtBytes(mem.total_bytes) })}
+        </span>
+      </div>
+    {/if}
+
+    <Separator />
+
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <input
+          aria-label="Benchmark query"
+          placeholder={t("embeddings.indexBenchmarkPlaceholder")}
+          bind:value={benchmarkQuery}
+          onkeydown={(e) => {
+            if (e.key === "Enter") runIndexBenchmark();
+          }}
+          class="min-w-0 flex-1 rounded-md border border-border dark:border-white/[0.08]
+                 bg-surface-1 px-2.5 py-1.5 text-ui-md text-foreground
+                 focus:outline-none focus:ring-1 focus:ring-ring/50" />
+        <Button size="sm" variant="outline" onclick={runIndexBenchmark} disabled={benchmarking || !benchmarkQuery.trim()}
+                class="text-ui-base h-8 px-3 shrink-0">
+          {benchmarking ? t("embeddings.indexBenchmarking") : t("embeddings.indexBenchmark")}
+        </Button>
+      </div>
+
+      {#if benchmarkResults.length > 0}
+        {#if benchmarkComparison}
+          <div class="rounded-lg border px-3 py-2
+                      {benchmarkComparison.close ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-amber-500/25 bg-amber-500/5'}">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-ui-base font-semibold
+                           {benchmarkComparison.close ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+                {benchmarkComparison.close ? t("embeddings.indexBenchmarkClose") : t("embeddings.indexBenchmarkDiverged")}
+              </span>
+              <span class="text-ui-xs text-muted-foreground/60 tabular-nums">
+                {benchmarkComparison.overlap_count}/5 · {pct(benchmarkComparison.overlap_ratio)}
+              </span>
+            </div>
+            <p class="mt-1 text-ui-xs text-muted-foreground/60 tabular-nums">
+              {t("embeddings.indexBenchmarkDelta", {
+                avg: benchmarkComparison.avg_distance_delta.toFixed(4),
+                max: benchmarkComparison.max_distance_delta.toFixed(4),
+              })}
+            </p>
+          </div>
+        {/if}
+
+        <div class="grid grid-cols-2 gap-2">
+          {#each benchmarkResults as row}
+            <div class="rounded-lg border border-border dark:border-white/[0.08] px-3 py-2">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-ui-base font-semibold text-foreground">
+                  {t(`embeddings.indexBackend.${row.backend}`)}
+                </span>
+                <span class="text-ui-xs text-muted-foreground/60 tabular-nums">{fmtMs(row.elapsed_us)}</span>
+              </div>
+              {#if row.available}
+                <p class="mt-1 text-ui-sm text-muted-foreground/60 truncate">
+                  {row.results[0]?.text ?? t("embeddings.indexBenchmarkNoResults")}
+                </p>
+                {#if row.results[0]}
+                  <p class="text-ui-xs text-muted-foreground/50 tabular-nums">
+                    distance {row.results[0].distance.toFixed(3)}
+                  </p>
+                {/if}
+              {:else}
+                <p class="mt-1 text-ui-sm text-amber-600 dark:text-amber-400">
+                  {t("embeddings.indexUnavailable")}
+                </p>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- ── Info callout ────────────────────────────────────────────────────── -->

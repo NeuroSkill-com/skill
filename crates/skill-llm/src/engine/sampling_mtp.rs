@@ -37,9 +37,9 @@ use crate::event::LlmEventEmitter;
 /// Run the MTP speculative-decoding loop.
 ///
 /// Preconditions:
-/// * `target_ctx` already contains the fully-decoded prompt (every position
-///   had `logits = true` during prefill so MTP could extract pre-norm
-///   embeddings).
+/// * `target_ctx` already contains the fully-decoded prompt, and the prefill
+///   batch has been processed by the MTP session so it can consume pre-norm
+///   embeddings.
 /// * `session.process(prefill_batch)` and `session.begin(0, &tokens)` have
 ///   already been called by the caller.
 /// * `first_token` was sampled from the prefill's last logits.

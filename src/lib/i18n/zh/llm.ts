@@ -474,6 +474,11 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "等待空闲时段",
   "search.eegCoverage": "EEG 覆盖率",
   "search.eegCoverageLabel": "{embedded}/{total}（{pct}%）",
+
+  "model.idleReembedMemoryThrottled": "已延后 — 系统内存 {pct}%（上限 {limit}%）",
+  "model.maxResidentMemory": "最大系统内存",
+  "model.maxResidentMemoryDesc": "当系统内存超过该比例时跳过后台嵌入。100% 表示关闭此保护。",
+  "model.maxResidentMemoryDisabled": "关",
 };
 
 export default llm;

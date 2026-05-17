@@ -16,6 +16,7 @@
 //! compression, ANSI strip) lives on `spawn_blocking` so it doesn't stall
 //! the runtime.
 
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -78,7 +79,7 @@ fn finalize_one(state: &AppState, log_path: &Path) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let log_bytes = std::fs::read(log_path)?;
+    let log_len = std::fs::metadata(log_path)?.len();
     let session_start_us = idx.first().map(|e| e.micros).unwrap_or(0);
     let session_end_us = idx.last().map(|e| e.micros).unwrap_or(u64::MAX);
     // `terminal_commands.started_at`/`ended_at` are in seconds; convert to
@@ -114,14 +115,14 @@ fn finalize_one(state: &AppState, log_path: &Path) -> anyhow::Result<()> {
         if end_off <= start_off {
             continue;
         }
-        let end_off = end_off.min(log_bytes.len() as u64);
+        let end_off = end_off.min(log_len);
         let start_off = start_off.min(end_off);
         let raw_size = end_off - start_off;
         let raw_capped = raw_size.min(MAX_RAW_BYTES_PER_COMMAND);
-        let raw_slice = &log_bytes[start_off as usize..(start_off + raw_capped) as usize];
+        let raw_slice = read_log_slice(log_path, start_off, raw_capped)?;
 
         // Compute stripped text from the (possibly truncated) raw slice.
-        let mut stripped = skill_data::ansi::strip_ansi(raw_slice);
+        let mut stripped = skill_data::ansi::strip_ansi(&raw_slice);
         if stripped.len() > MAX_STRIPPED_CHARS_PER_COMMAND {
             // Truncate at a UTF-8 char boundary.
             let mut end = MAX_STRIPPED_CHARS_PER_COMMAND;
@@ -133,7 +134,7 @@ fn finalize_one(state: &AppState, log_path: &Path) -> anyhow::Result<()> {
 
         // Compress the raw slice. Level 3 is the zstd default — fast and good
         // ratio on highly-repetitive ANSI streams.
-        let raw_zstd = match zstd::encode_all(raw_slice, 3) {
+        let raw_zstd = match zstd::encode_all(&raw_slice[..], 3) {
             Ok(v) => Some(v),
             Err(e) => {
                 warn!(error = %e, "zstd encode failed; storing stripped text only");
@@ -155,7 +156,7 @@ fn finalize_one(state: &AppState, log_path: &Path) -> anyhow::Result<()> {
     debug!(
         path = %log_path.display(),
         commands = written,
-        bytes = log_bytes.len(),
+        bytes = log_len,
         "finalized session"
     );
 
@@ -163,6 +164,15 @@ fn finalize_one(state: &AppState, log_path: &Path) -> anyhow::Result<()> {
     let _ = std::fs::remove_file(log_path);
     let _ = std::fs::remove_file(&idx_path);
     Ok(())
+}
+
+fn read_log_slice(path: &Path, start: u64, len: u64) -> anyhow::Result<Vec<u8>> {
+    let mut file = std::fs::File::open(path)?;
+    file.seek(SeekFrom::Start(start))?;
+
+    let mut out = vec![0u8; len as usize];
+    file.read_exact(&mut out)?;
+    Ok(out)
 }
 
 #[derive(Clone, Copy)]

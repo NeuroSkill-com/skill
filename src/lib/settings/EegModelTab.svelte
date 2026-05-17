@@ -61,6 +61,8 @@ interface IdleReembedStatus {
   total: number;
   done: number;
   current_day: string;
+  memory_throttled: boolean;
+  memory_percent: number;
 }
 interface ReembedEstimate {
   total_epochs: number;
@@ -121,6 +123,7 @@ let reembedConfig = $state<{
   idle_reembed_gpu: boolean;
   gpu_precision: string;
   idle_reembed_throttle_ms: number;
+  max_resident_memory_percent: number;
   batch_size: number;
   batch_delay_ms: number;
   auto_labels: boolean;
@@ -132,6 +135,7 @@ let reembedConfig = $state<{
   idle_reembed_gpu: true,
   gpu_precision: "f16",
   idle_reembed_throttle_ms: 10,
+  max_resident_memory_percent: 85,
   batch_size: 10,
   batch_delay_ms: 50,
   auto_labels: false,
@@ -867,6 +871,16 @@ onDestroy(() => {
               </Badge>
             {/if}
           </div>
+        {:else if ir.memory_throttled && reembedConfig.idle_reembed_enabled && reembedEstimate.missing > 0}
+          <div class="flex items-center gap-3 px-4 py-2.5 bg-amber-500/5">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+            <span class="text-ui-sm text-amber-700 dark:text-amber-400">
+              {t("model.idleReembedMemoryThrottled", {
+                pct: String(ir.memory_percent),
+                limit: String(reembedConfig.max_resident_memory_percent),
+              })}
+            </span>
+          </div>
         {:else if reembedConfig.idle_reembed_enabled && ir.delay_secs > 0 && ir.idle_secs < ir.delay_secs && reembedEstimate.missing > 0}
           <div class="flex items-center gap-3 px-4 py-2.5 bg-surface-3">
             <span class="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
@@ -1040,6 +1054,30 @@ onDestroy(() => {
               <option value="1800">30 min</option>
               <option value="3600">1 hour</option>
             </select>
+          </div>
+
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-0.5 min-w-0">
+              <span class="text-ui-md font-medium text-foreground">{t("model.maxResidentMemory")}</span>
+              <span class="text-ui-xs text-muted-foreground/70">{t("model.maxResidentMemoryDesc")}</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <input
+                type="range"
+                aria-label={t("model.maxResidentMemory")}
+                min="50"
+                max="100"
+                step="5"
+                value={reembedConfig.max_resident_memory_percent}
+                oninput={(e) => { reembedConfig.max_resident_memory_percent = Number((e.target as HTMLInputElement).value); }}
+                onchange={saveReembedConfig}
+                class="w-32 accent-blue-500" />
+              <span class="text-ui-sm tabular-nums text-muted-foreground w-12 text-right">
+                {reembedConfig.max_resident_memory_percent >= 100
+                  ? t("model.maxResidentMemoryDisabled")
+                  : `${reembedConfig.max_resident_memory_percent}%`}
+              </span>
+            </div>
           </div>
         {/if}
       </div>

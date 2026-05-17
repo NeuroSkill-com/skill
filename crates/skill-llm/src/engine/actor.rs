@@ -24,7 +24,7 @@ use llama_cpp_4::{
 use super::generation::{run_generation, run_generation_mtp, GpuMemoryGuard};
 use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{InferRequest, InferToken};
-use crate::config::LlmConfig;
+use crate::config::{LlmConfig, LlmInferenceRuntime};
 use crate::event::LlmEventEmitter;
 
 /// Map a human-readable KV-cache type tag from [`LlmConfig`] to a [`GgmlType`].
@@ -546,6 +546,49 @@ pub(super) fn run_actor(
         }
     };
 
+    #[cfg(feature = "llm-rlx")]
+    let mut rlx_runner = if matches!(config.runtime, LlmInferenceRuntime::Rlx) {
+        llm_info!(
+            &app,
+            &log_buf,
+            log_file,
+            "initialising experimental RLX runtime (device={}, max_seq={})",
+            config.rlx_device,
+            config.rlx_max_seq
+        );
+        match super::rlx_backend::RlxTextRunner::load(&model_path, &config) {
+            Ok(runner) => {
+                llm_info!(&app, &log_buf, log_file, "RLX runtime ready");
+                Some(runner)
+            }
+            Err(e) => {
+                llm_error!(&app, &log_buf, log_file, "failed to initialise RLX runtime: {e}");
+                app.emit_event(
+                    "llm:status",
+                    json!({"status":"stopped","error":format!("failed to initialise RLX runtime: {e}")}),
+                );
+                return;
+            }
+        }
+    } else {
+        None
+    };
+
+    #[cfg(not(feature = "llm-rlx"))]
+    if matches!(config.runtime, LlmInferenceRuntime::Rlx) {
+        llm_error!(
+            &app,
+            &log_buf,
+            log_file,
+            "RLX runtime requested but this build does not include the llm-rlx feature"
+        );
+        app.emit_event(
+            "llm:status",
+            json!({"status":"stopped","error":"RLX runtime requested but this build lacks llm-rlx"}),
+        );
+        return;
+    }
+
     // Signal that the model is fully loaded and warmed up.
     ready_flag.store(true, Ordering::Relaxed);
     let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
@@ -560,7 +603,13 @@ pub(super) fn run_actor(
     );
     app.emit_event(
         "llm:status",
-        json!({"status":"running","model":model_file,"supports_vision":vision_loaded,"supports_tools":true}),
+        json!({
+            "status":"running",
+            "model":model_file,
+            "runtime": format!("{:?}", config.runtime),
+            "supports_vision": vision_loaded && !matches!(config.runtime, LlmInferenceRuntime::Rlx),
+            "supports_tools": true
+        }),
     );
 
     // ── event loop ──
@@ -800,6 +849,20 @@ pub(super) fn run_actor(
                 };
                 let Some(prompt) = prompt else { continue };
 
+                #[cfg(feature = "llm-rlx")]
+                if let Some(runner) = rlx_runner.as_mut() {
+                    if !images.is_empty() {
+                        token_tx
+                            .send(InferToken::Error(
+                                "RLX runtime currently supports text-only generation".into(),
+                            ))
+                            .ok();
+                        continue;
+                    }
+                    runner.generate(&model, &prompt, params, token_tx);
+                    continue;
+                }
+
                 #[cfg(feature = "llm-mtmd")]
                 if use_mtmd {
                     if let Some(ref mc) = mtmd_ctx {
@@ -844,6 +907,11 @@ pub(super) fn run_actor(
                     "completion request — max_tokens={}",
                     params.max_tokens
                 );
+                #[cfg(feature = "llm-rlx")]
+                if let Some(runner) = rlx_runner.as_mut() {
+                    runner.generate(&model, &prompt, params, token_tx);
+                    continue;
+                }
                 if mtp_use {
                     run_generation_mtp(
                         &model,

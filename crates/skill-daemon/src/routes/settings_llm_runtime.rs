@@ -657,6 +657,7 @@ pub(crate) async fn llm_add_model_impl(
             let entry = skill_llm::catalog::LlmModelEntry {
                 repo: req.repo.clone(),
                 filename: req.filename.clone(),
+                remote_filename: None,
                 quant: infer_quant(&req.filename),
                 size_gb: req.size_gb.unwrap_or(0.0),
                 description: "External model".to_string(),
@@ -985,6 +986,7 @@ mod tests {
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: "a/b".into(),
                 filename: "model.gguf".into(),
+                remote_filename: None,
                 quant: "Q4".into(),
                 size_gb: 1.0,
                 description: String::new(),
@@ -1037,6 +1039,7 @@ mod tests {
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: "a/b".into(),
                 filename: "model-a.gguf".into(),
+                remote_filename: None,
                 quant: "Q4".into(),
                 size_gb: 1.0,
                 description: String::new(),
@@ -1060,6 +1063,7 @@ mod tests {
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: "a/b".into(),
                 filename: "model-b-mmproj.gguf".into(),
+                remote_filename: None,
                 quant: "F16".into(),
                 size_gb: 0.2,
                 description: String::new(),
