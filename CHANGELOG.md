@@ -5576,6 +5576,16 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - **Update llama-cpp-4 to 0.2.56**: bumped `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.54 to 0.2.56, picking up upstream llama.cpp `64b38b561` (May 2026) which now ships MTP support natively (PR ggml-org/llama.cpp#22673). Breaking changes in the fork: the in-tree MTP patch is gone, so the `mtp` Cargo feature, `LlamaContext::set_mtp`, and `LlamaModelParams::with_override_arch` no longer exist. Dropped `"mtp"` from the metal/vulkan dependency feature lists in `skill-llm/Cargo.toml` and removed the dangling `llm-mtp` workspace feature (no downstream consumer). The new upstream API (`LlamaContextType::Mtp`, `with_ctx_type`, `with_n_rs_seq`, `llama_cpp_4::mtp::MtpSession`) is wired separately in the MTP speculative-decoding feature.
 
+## [0.0.130-rc.27] — 2026-05-17
+
+### Build
+
+- **Fix release retry: cargo failures inside `run_cmd` were silently ignored**: `release-mac.yml`, `release-linux.yml`, and `release-windows.yml` call `run_cmd` via `if ! run_cmd; then`, which inhibits `set -e` inside the function body. A failing `cargo build -p skill-daemon` (e.g. link error against stale prebuilt llama libs) would silently continue to the next `cargo build`, the function would return 0, and the prebuilt→source-build fallback would never fire — leaving the assemble/package step to fail later with a confusing "missing daemon binary" error. Added explicit `|| return $?` after each cargo invocation so failures propagate regardless of bash's `set -e` inhibition rules.
+
+### Dependencies
+
+- **Bump llama-cpp-4 to 0.2.57**: bumped `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.56 to 0.2.57, picking up the Windows MSVC bindgen fix (the `LLAMA_CONTEXT_TYPE_*` constants are `i32` on MSVC but the `LlamaContextType` enum is `#[repr(u32)]`, which broke the Windows release build). Pinned `LLAMA_PREBUILT_TAG` in `scripts/ci.mjs` to `v0.2.57` so the prebuilt llama libs ship the same MTP symbols (`mtp_session_new`, `mtp_session_draft`, etc.) the crate now expects — the previous `0.2.46` pin caused undefined-symbol link failures for `skill-daemon` on macOS and Linux after the 0.2.56 MTP upgrade.
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
