@@ -80,8 +80,20 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT (predeterminado)",
     "desc": "Predeterminado, compatible con todos los modelos de la lista."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "Índice de búsqueda de etiquetas",
+    "desc": "Elige qué índice vectorial local impulsa la búsqueda semántica de etiquetas. Crea ambos, compara con tu propia consulta y luego elige la opción más rápida o de mayor calidad para tus datos."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "Índice TurboQuant",
+    "desc": "Índice TurboVec comprimido. Menor uso de memoria y disco, bueno para conjuntos grandes de etiquetas."
   },
   {
     "tab": "embeddings",

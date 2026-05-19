@@ -22,8 +22,7 @@ const search: Record<string, string> = {
   "embeddings.indexBackend.hnsw": "HNSW",
   "embeddings.indexBackend.hnswDesc": "현재 기본값. 높은 재현율, 메모리 내 그래프가 더 큼.",
   "embeddings.indexBackend.turboquant": "TurboQuant",
-  "embeddings.indexBackend.turboquantDesc":
-    "압축된 TurboVec 인덱스. 메모리와 디스크 사용량이 적어 대량 라벨에 적합.",
+  "embeddings.indexBackend.turboquantDesc": "압축된 TurboVec 인덱스. 메모리와 디스크 사용량이 적어 대량 라벨에 적합.",
   "embeddings.indexCurrent": "현재 검색 백엔드: {backend}",
   "embeddings.indexBackendApplied": "라벨 인덱스 백엔드 적용됨",
   "embeddings.indexBackendFailed": "라벨 인덱스 백엔드 변경 실패",

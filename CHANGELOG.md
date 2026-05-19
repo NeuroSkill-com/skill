@@ -5586,6 +5586,18 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - **Bump llama-cpp-4 to 0.2.57**: bumped `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.56 to 0.2.57, picking up the Windows MSVC bindgen fix (the `LLAMA_CONTEXT_TYPE_*` constants are `i32` on MSVC but the `LlamaContextType` enum is `#[repr(u32)]`, which broke the Windows release build). Pinned `LLAMA_PREBUILT_TAG` in `scripts/ci.mjs` to `v0.2.57` so the prebuilt llama libs ship the same MTP symbols (`mtp_session_new`, `mtp_session_draft`, etc.) the crate now expects — the previous `0.2.46` pin caused undefined-symbol link failures for `skill-daemon` on macOS and Linux after the 0.2.56 MTP upgrade.
 
+## [0.0.130-rc.28] — 2026-05-19
+
+### Features
+
+- **Label index benchmark validation**: add side-by-side HNSW and TurboQuant label search benchmarks with top-result agreement, top-k overlap, and cosine-distance delta checks so users can verify result proximity before switching backends.
+
+- **TurboQuant label index backend**: add TurboQuant as an alternative label search backend alongside HNSW, while keeping HNSW as the default and maintaining both indexes during rebuilds and incremental label inserts.
+
+### UI
+
+- **Configurable label search backend**: add Settings controls for choosing between HNSW and TurboQuant, showing index counts, rebuilding indexes, and persisting the selected backend.
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features

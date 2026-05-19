@@ -85,6 +85,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "Label Search Index",
+    "desc": "Choose which local vector index powers label semantic search. Build both, benchmark with your own query, then pick the faster or higher-quality option for your data."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant",
+    "desc": "Compressed TurboVec index. Lower memory and disk use, good for large label sets."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Embedding Model"
   },
