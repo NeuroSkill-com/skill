@@ -6,6 +6,9 @@
 
 ### Build
 
+- Fix Linux CI link failure for `skill-label-index` tests: link system OpenBLAS when `turboquant-index` is enabled (undefined `cblas_*gemm` symbols).
+- Make `turboquant-index` a compile-time optional feature (HNSW-only builds skip OpenBLAS); enable it from daemon/Tauri. Skip TurboVec index maintenance while the preferred backend is HNSW and no TurboVec files exist on disk.
+
 - Align `skill-headless` to `wry 0.54` / `tao 0.34` so it matches the versions `tauri-runtime-wry 2.10.1` already pulls in. Previously the workspace built two copies of wry/tao (0.54.4 + 0.55.0, 0.34.8 + 0.35.0) because `skill-headless` pinned the newer pair. Single resolved version now, smaller binary, no functional change.
 
 ### Security
