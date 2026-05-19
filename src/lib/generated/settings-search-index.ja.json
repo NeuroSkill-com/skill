@@ -85,6 +85,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "ラベル検索インデックス",
+    "desc": "ラベル意味検索に使うローカルベクトルインデックスを選びます。両方構築し、自分のクエリでベンチマークして、データに合った高速または高品質な方を選んでください。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant",
+    "desc": "圧縮 TurboVec インデックス。メモリとディスク使用量が少なく、大量ラベル向け。"
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "埋め込みモデル"
   },

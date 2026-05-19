@@ -80,8 +80,20 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT (типово)",
     "desc": "Типово, сумісно з усіма моделями у списку."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "Індекс пошуку міток",
+    "desc": "Виберіть, який локальний векторний індекс обслуговує семантичний пошук міток. Побудуйте обидва, порівняйте на власному запиті, а потім виберіть швидший або якісніший варіант для ваших даних."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "Індекс TurboQuant",
+    "desc": "Стиснений індекс TurboVec. Менше використання пам'яті та диска, добре для великих наборів міток."
   },
   {
     "tab": "embeddings",

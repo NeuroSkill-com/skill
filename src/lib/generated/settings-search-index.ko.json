@@ -85,6 +85,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "라벨 검색 인덱스",
+    "desc": "라벨 의미 검색에 사용할 로컬 벡터 인덱스를 선택합니다. 둘 다 구축한 뒤 자신의 쿼리로 벤치마크하고, 데이터에 맞는 더 빠르거나 품질이 높은 옵션을 고르세요."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant",
+    "desc": "압축된 TurboVec 인덱스. 메모리와 디스크 사용량이 적어 대량 라벨에 적합."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "임베딩 모델"
   },
