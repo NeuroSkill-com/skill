@@ -85,6 +85,18 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "标签搜索索引",
+    "desc": "选择为标签语义搜索提供支持的本地向量索引。可先构建两者，用自己的查询做基准测试，再为数据选择更快或更高质量的方案。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant",
+    "desc": "压缩的 TurboVec 索引。内存和磁盘占用更低，适合大量标签。"
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "嵌入模型"
   },

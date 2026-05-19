@@ -80,8 +80,20 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT (ברירת מחדל)",
     "desc": "ברירת המחדל, תואם לכל מודל ברשימה."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "אינדקס חיפוש תוויות",
+    "desc": "בחר איזה אינדקס וקטורי מקומי מפעיל את החיפוש הסמנטי בתוויות. בנה את שניהם, הרץ benchmark עם שאילתה משלך, ואז בחר את האפשרות המהירה או האיכותית יותר עבור הנתונים שלך."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "אינדקס TurboQuant",
+    "desc": "אינדקס TurboVec דחוס. שימוש נמוך יותר בזיכרון ובדיסק, טוב לאוספי תוויות גדולים."
   },
   {
     "tab": "embeddings",

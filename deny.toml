@@ -25,11 +25,6 @@ ignore = [
     { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
     # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
     # Pulled transitively; not directly used by workspace code paths that call IterMut.
-
-    # hickory-proto 0.25.2 — pulled transitively via iroh → hickory-resolver.
-    # Cannot upgrade until iroh ships a version that depends on hickory-proto >=0.25.3.
-    { id = "RUSTSEC-2026-0118", reason = "transitive via iroh/hickory-resolver, not directly upgradeable" },
-    { id = "RUSTSEC-2026-0119", reason = "transitive via iroh/hickory-resolver, not directly upgradeable" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
@@ -214,7 +209,7 @@ skip = [
     { crate = "zip@7.2.0" },
     { crate = "winnow@0.5.40" },
     { crate = "winnow@0.7.15" },
-    { crate = "winnow@1.0.2" },
+    { crate = "winnow@1.0.3" },
     { crate = "windows_aarch64_gnullvm@0.42.2" },
     { crate = "windows_aarch64_gnullvm@0.48.5" },
     { crate = "windows_aarch64_gnullvm@0.52.6" },

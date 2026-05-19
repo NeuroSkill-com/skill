@@ -80,8 +80,20 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT (Standard)",
     "desc": "Standard, kompatibel mit jedem aufgeführten Modell."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "Label-Suchindex",
+    "desc": "Wählen Sie, welcher lokale Vektorindex die semantische Labelsuche antreibt. Erstellen Sie beide, benchmarken Sie mit Ihrer eigenen Abfrage und wählen Sie dann die schnellere oder qualitativ bessere Option für Ihre Daten."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant-Index",
+    "desc": "Komprimierter TurboVec-Index. Geringerer Speicher- und Plattenverbrauch, gut für große Label-Sammlungen."
   },
   {
     "tab": "embeddings",
