@@ -12,7 +12,7 @@ const search: Record<string, string> = {
   "embeddings.backend": "임베딩 런타임",
   "embeddings.backendDesc":
     "텍스트 임베딩 실행 백엔드를 선택합니다. FastEmbed는 ORT를 사용하고, RLX는 데몬이 RLX 지원으로 빌드된 경우 같은 임베딩 그래프를 로컬 RLX 런타임에서 실행합니다.",
-  "embeddings.backendFastembed": "FastEmbed / ORT",
+  "embeddings.backendFastembed": "FastEmbed / ORT (기본값)",
   "embeddings.backendFastembedDesc": "기본값이며 목록의 모든 모델과 호환됩니다.",
   "embeddings.backendRlx": "RLX",
   "embeddings.backendRlxDesc": "safetensors BERT/Nomic 모델용 실험적 고속 경로입니다.",
@@ -21,7 +21,7 @@ const search: Record<string, string> = {
     "라벨 의미 검색에 사용할 로컬 벡터 인덱스를 선택합니다. 둘 다 구축한 뒤 자신의 쿼리로 벤치마크하고, 데이터에 맞는 더 빠르거나 품질이 높은 옵션을 고르세요.",
   "embeddings.indexBackend.hnsw": "HNSW",
   "embeddings.indexBackend.hnswDesc": "현재 기본값. 높은 재현율, 메모리 내 그래프가 더 큼.",
-  "embeddings.indexBackend.turboquant": "TurboQuant",
+  "embeddings.indexBackend.turboquant": "TurboQuant 인덱스",
   "embeddings.indexBackend.turboquantDesc": "압축된 TurboVec 인덱스. 메모리와 디스크 사용량이 적어 대량 라벨에 적합.",
   "embeddings.indexCurrent": "현재 검색 백엔드: {backend}",
   "embeddings.indexBackendApplied": "라벨 인덱스 백엔드 적용됨",

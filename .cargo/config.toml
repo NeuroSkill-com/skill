@@ -3,6 +3,11 @@
 # Moved from src-tauri/.cargo/config.toml to the workspace root so that all
 # workspace members share the same build configuration.
 #
+# RLX (optional): Cargo resolves `rlx` via ../rlx/rlx (workspace.dependencies).
+#   CI — .github/actions/checkout-rlx clones https://github.com/MIT-RLX/rlx.git
+#   Local — `npm run setup:rlx` or direnv (.envrc) symlinks ../rlx -> RLX_ROOT
+#           (default /Users/Shared/rlx; override in gitignored rlx.path).
+#
 # `relative = true` paths are resolved relative to this file's parent
 # directory (the project root).
 
