@@ -80,7 +80,7 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT (기본값)",
     "desc": "기본값이며 목록의 모든 모델과 호환됩니다."
   },
   {
@@ -92,7 +92,7 @@
   {
     "tab": "embeddings",
     "key": "embeddings.indexBackend.turboquant",
-    "label": "TurboQuant",
+    "label": "TurboQuant 인덱스",
     "desc": "압축된 TurboVec 인덱스. 메모리와 디스크 사용량이 적어 대량 라벨에 적합."
   },
   {

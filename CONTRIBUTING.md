@@ -31,7 +31,10 @@ npm run tauri:build
 `npm run setup` auto-detects your platform and installs everything needed
 (protobuf, OpenMP, GNU ar, sccache, etc.).  Pass `--yes` to skip prompts.
 See also `npm run setup:build-cache` and `npm run setup:llama-prebuilt`
-for optional build acceleration.
+for optional build acceleration, and `npm run setup:rlx` for the optional
+[RLX](https://github.com/MIT-RLX/rlx) sibling checkout (required for CI and
+for `llm-rlx` / `text-embeddings-rlx` features). Details:
+[docs/DEVELOPMENT.md#rlx-optional-path-dependency](docs/DEVELOPMENT.md#rlx-optional-path-dependency).
 
 ## Project Structure
 

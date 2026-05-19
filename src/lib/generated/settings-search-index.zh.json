@@ -80,7 +80,7 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT（默认）",
     "desc": "默认选项，兼容列表中的所有模型。"
   },
   {
@@ -92,7 +92,7 @@
   {
     "tab": "embeddings",
     "key": "embeddings.indexBackend.turboquant",
-    "label": "TurboQuant",
+    "label": "TurboQuant 索引",
     "desc": "压缩的 TurboVec 索引。内存和磁盘占用更低，适合大量标签。"
   },
   {

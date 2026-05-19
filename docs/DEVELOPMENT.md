@@ -63,6 +63,57 @@ Environment toggles:
 - `unset LLAMA_PREBUILT_DIR` (force local llama.cpp build)
 - `SKILL_DAEMON_SERVICE_AUTOINSTALL=0` (disable daemon background-service auto-install for local testing)
 
+## RLX (optional path dependency)
+
+Some crates (`skill-llm`, `skill-daemon-state`) can link the [RLX](https://github.com/MIT-RLX/rlx) runtime for experimental `llm-rlx` and `text-embeddings-rlx` features. Cargo resolves it as a **sibling checkout** at `../rlx/rlx` (see `[workspace.dependencies]` in the root `Cargo.toml`).
+
+### Directory layout
+
+```
+parent/
+  skill/          ← this repository
+  rlx/            ← https://github.com/MIT-RLX/rlx.git
+    rlx/          ← the `rlx` crate (Cargo.toml lives here)
+```
+
+### Local setup
+
+Default checkout root is `/Users/Shared/rlx`. The setup script clones or updates that repo and symlinks `../rlx` next to `skill`:
+
+```bash
+npm run setup:rlx
+# or: bash scripts/ensure-rlx.sh
+```
+
+With [direnv](https://direnv.net/) enabled, `.envrc` runs `ensure-rlx.sh` when you enter the repo.
+
+**Override the checkout location** (gitignored):
+
+```bash
+cp rlx.path.example rlx.path
+# edit rlx.path — one line, absolute path to your rlx repo root
+```
+
+Or set `RLX_ROOT` for a single run:
+
+```bash
+RLX_ROOT=~/src/rlx npm run setup:rlx
+```
+
+Optional env vars:
+
+| Variable   | Default                         | Purpose                          |
+|------------|---------------------------------|----------------------------------|
+| `RLX_ROOT` | `/Users/Shared/rlx`             | Local clone root                 |
+| `RLX_URL`  | `https://github.com/MIT-RLX/rlx.git` | Clone URL                    |
+| `RLX_REF`  | `main`                          | Branch to fetch/checkout         |
+
+You do **not** need RLX for a normal dev build unless you enable `llm-rlx` / `text-embeddings-rlx` features. Cargo still needs `../rlx/rlx/Cargo.toml` to exist when those crates are in the workspace graph (CI always fetches RLX for that reason).
+
+### CI
+
+GitHub Actions use [`.github/actions/checkout-rlx`](../.github/actions/checkout-rlx), which runs `scripts/ensure-rlx.sh` with `GITHUB_ACTIONS=true` to clone `MIT-RLX/rlx` into `../rlx` on the runner (no symlink). The same step is wired into `ci.yml`, release workflows, and `pr-build.yml`.
+
 ## Data health check
 
 ```bash

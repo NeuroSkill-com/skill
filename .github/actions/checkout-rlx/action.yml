@@ -1,0 +1,21 @@
+name: Checkout RLX
+description: >-
+  Clone https://github.com/MIT-RLX/rlx next to the skill repo so path
+  dependencies (../../../rlx/rlx) resolve in CI.
+
+inputs:
+  ref:
+    description: Branch, tag, or SHA to checkout
+    required: false
+    default: main
+
+runs:
+  using: composite
+  steps:
+    - name: Clone MIT-RLX/rlx
+      shell: bash
+      env:
+        RLX_REF: ${{ inputs.ref }}
+        RLX_URL: https://github.com/MIT-RLX/rlx.git
+        GITHUB_ACTIONS: "true"
+      run: bash scripts/ensure-rlx.sh

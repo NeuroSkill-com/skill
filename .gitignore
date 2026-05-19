@@ -7,6 +7,7 @@ node_modules
 .env.*
 !.env.example
 !.envrc
+rlx.path
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 

@@ -80,7 +80,7 @@
   {
     "tab": "embeddings",
     "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT",
+    "label": "FastEmbed / ORT（既定）",
     "desc": "既定。一覧のすべてのモデルに対応します。"
   },
   {
@@ -92,7 +92,7 @@
   {
     "tab": "embeddings",
     "key": "embeddings.indexBackend.turboquant",
-    "label": "TurboQuant",
+    "label": "TurboQuant インデックス",
     "desc": "圧縮 TurboVec インデックス。メモリとディスク使用量が少なく、大量ラベル向け。"
   },
   {
