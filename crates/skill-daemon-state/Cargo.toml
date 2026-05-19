@@ -20,7 +20,7 @@ fastembed  = { version = "5.13.0", features = ["ort-download-binaries-native-tls
 hf-hub     = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
 hex        = "0.4"
 rand       = "0.10"
-rlx        = { path = "../../../rlx/rlx", optional = true, default-features = false, features = ["cpu", "models"] }
+rlx        = { workspace = true, optional = true, features = ["cpu", "models"] }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 sha2       = "0.10"

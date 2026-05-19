@@ -112,6 +112,11 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # to unpack a .nsis.zip built with standard Deflate (method 8).
 zip = { version = "7", features = ["deflate"] }
 
+# RLX — optional path dep (features set per crate). Sibling layout:
+#   skill/          (this repo)
+#   rlx/rlx/        (https://github.com/MIT-RLX/rlx — CI + scripts/ensure-rlx.sh)
+rlx = { path = "../rlx/rlx", default-features = false }
+
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #
 # Consistent lint policy across every crate.  Individual crates inherit these

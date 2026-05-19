@@ -38,6 +38,9 @@ jobs:
         with:
           fetch-depth: 0   # full history for git tag --format and changelog generation
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       - name: Resolve version
         id: version_meta

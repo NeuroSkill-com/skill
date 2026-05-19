@@ -81,6 +81,7 @@
     "setup": "bash scripts/setup-dev.sh",
     "setup:build-cache": "bash scripts/setup-build-cache.sh",
     "setup:llama-prebuilt": "bash scripts/download-llama-prebuilt.sh",
+    "setup:rlx": "bash scripts/ensure-rlx.sh",
     "compile:changelog": "node scripts/compile-changelog.js",
     "check:changelog": "node scripts/check-changelog-fragments.js",
     "check:changelog:fix": "node scripts/check-changelog-fragments.js --fix",

@@ -12,7 +12,7 @@ const search: Record<string, string> = {
   "embeddings.backend": "嵌入运行时",
   "embeddings.backendDesc":
     "选择文本嵌入的执行后端。FastEmbed 使用 ORT；如果守护进程构建时启用了 RLX，RLX 会通过本地 RLX 运行时执行相同的嵌入图。",
-  "embeddings.backendFastembed": "FastEmbed / ORT",
+  "embeddings.backendFastembed": "FastEmbed / ORT（默认）",
   "embeddings.backendFastembedDesc": "默认选项，兼容列表中的所有模型。",
   "embeddings.backendRlx": "RLX",
   "embeddings.backendRlxDesc": "面向 safetensors BERT/Nomic 模型的实验性高速路径。",
@@ -21,7 +21,7 @@ const search: Record<string, string> = {
     "选择为标签语义搜索提供支持的本地向量索引。可先构建两者，用自己的查询做基准测试，再为数据选择更快或更高质量的方案。",
   "embeddings.indexBackend.hnsw": "HNSW",
   "embeddings.indexBackend.hnswDesc": "当前默认。召回率高，内存中的图较大。",
-  "embeddings.indexBackend.turboquant": "TurboQuant",
+  "embeddings.indexBackend.turboquant": "TurboQuant 索引",
   "embeddings.indexBackend.turboquantDesc": "压缩的 TurboVec 索引。内存和磁盘占用更低，适合大量标签。",
   "embeddings.indexCurrent": "当前搜索后端：{backend}",
   "embeddings.indexBackendApplied": "已应用标签索引后端",

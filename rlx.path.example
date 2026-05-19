@@ -1,0 +1,3 @@
+# Copy to rlx.path (gitignored) to override the local RLX checkout root.
+# scripts/ensure-rlx.sh symlinks ../rlx -> this directory.
+/Users/Shared/rlx

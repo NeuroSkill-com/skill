@@ -12,7 +12,7 @@ const search: Record<string, string> = {
   "embeddings.backend": "埋め込みランタイム",
   "embeddings.backendDesc":
     "テキスト埋め込みの実行バックエンドを選びます。FastEmbed は ORT を使い、RLX はデーモンが RLX 対応でビルドされている場合に同じ埋め込みグラフをローカル RLX ランタイムで実行します。",
-  "embeddings.backendFastembed": "FastEmbed / ORT",
+  "embeddings.backendFastembed": "FastEmbed / ORT（既定）",
   "embeddings.backendFastembedDesc": "既定。一覧のすべてのモデルに対応します。",
   "embeddings.backendRlx": "RLX",
   "embeddings.backendRlxDesc": "safetensors の BERT/Nomic モデル向けの実験的な高速パス。",
@@ -21,7 +21,7 @@ const search: Record<string, string> = {
     "ラベル意味検索に使うローカルベクトルインデックスを選びます。両方構築し、自分のクエリでベンチマークして、データに合った高速または高品質な方を選んでください。",
   "embeddings.indexBackend.hnsw": "HNSW",
   "embeddings.indexBackend.hnswDesc": "現在の既定。高い再現率、メモリ上のグラフが大きめ。",
-  "embeddings.indexBackend.turboquant": "TurboQuant",
+  "embeddings.indexBackend.turboquant": "TurboQuant インデックス",
   "embeddings.indexBackend.turboquantDesc":
     "圧縮 TurboVec インデックス。メモリとディスク使用量が少なく、大量ラベル向け。",
   "embeddings.indexCurrent": "現在の検索バックエンド: {backend}",
