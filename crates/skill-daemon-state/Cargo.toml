@@ -34,7 +34,7 @@ skill-data          = { path = "../skill-data" }
 skill-devices       = { path = "../skill-devices" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-iroh          = { path = "../skill-iroh" }
-skill-label-index   = { path = "../skill-label-index" }
+skill-label-index   = { path = "../skill-label-index", features = ["turboquant-index"] }
 skill-llm           = { path = "../skill-llm" }
 skill-lsl           = { path = "../skill-lsl" }
 skill-settings      = { path = "../skill-settings" }

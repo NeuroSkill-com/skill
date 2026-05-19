@@ -164,7 +164,7 @@ skill-autostart     = { path = "../crates/skill-autostart" }
 skill-calendar      = { path = "../crates/skill-calendar" }
 skill-location      = { path = "../crates/skill-location" }
 skill-constants     = { path = "../crates/skill-constants" }
-skill-label-index   = { path = "../crates/skill-label-index" }
+skill-label-index   = { path = "../crates/skill-label-index", features = ["turboquant-index"] }
 # skill-screenshots removed — screenshot capture/OCR/embedding runs in skill-daemon only.
 skill-daemon-common = { path = "../crates/skill-daemon-common" }
 skill-skills        = { path = "../crates/skill-skills", features = ["sync"] }
