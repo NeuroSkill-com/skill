@@ -83,7 +83,7 @@ skill-data          = { path = "../skill-data", features = ["parquet"] }
 skill-settings      = { path = "../skill-settings" }
 skill-constants     = { path = "../skill-constants" }
 skill-history       = { path = "../skill-history", features = ["parquet"] }
-skill-label-index   = { path = "../skill-label-index" }
+skill-label-index   = { path = "../skill-label-index", features = ["turboquant-index"] }
 skill-jobs          = { path = "../skill-jobs" }
 skill-commands      = { path = "../skill-commands" }
 skill-health        = { path = "../skill-health" }
