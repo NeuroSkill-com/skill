@@ -5611,6 +5611,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - fixed issues with the metrics, keychain access (3 -> 1 + on demand), windows CI
 - umap e2e
 
+## [0.0.130-rc.30] — 2026-05-19
+
+### Features
+
+- turboquant index
+
 ## [0.0.130-rc.4] — 2026-04-29
 
 ### Features
