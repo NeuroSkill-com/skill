@@ -5598,6 +5598,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - **Configurable label search backend**: add Settings controls for choosing between HNSW and TurboQuant, showing index counts, rebuilding indexes, and persisting the selected backend.
 
+## [0.0.130-rc.29] — 2026-05-19
+
+### Features
+
+- Minor updates and improvements
+
 ## [0.0.130-rc.3] — 2026-04-29
 
 ### Features
