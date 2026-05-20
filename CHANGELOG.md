@@ -5617,6 +5617,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - turboquant index
 
+## [0.0.130-rc.31] — 2026-05-20
+
+### Features
+
+- llama-cpp-rs@0.3.0
+
 ## [0.0.130-rc.4] — 2026-04-29
 
 ### Features
