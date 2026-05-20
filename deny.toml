@@ -251,4 +251,5 @@ allow-git = [
     "https://github.com/eugenehp/cubek.git",
     "https://github.com/eugenehp/btleplug.git",
     "https://github.com/eugenehp/gtk-rs-core.git",
+    "https://github.com/eugenehp/tribev2-rs",
 ]
