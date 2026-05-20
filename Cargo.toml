@@ -80,6 +80,9 @@ glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 # burn-mlx on crates.io (0.1.2) targets burn 0.16; the git main branch supports
 # burn 0.20 which we use.  This patch also covers fast-umap's transitive dep.
 burn-mlx        = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20" }
+# skill-llm uses llama-cpp-4 0.3.0. neutts/tribev2 main are on 0.3.0; crates.io 0.1.1 / 0.0.4 still pin ^0.2.x.
+tribev2         = { git = "https://github.com/eugenehp/tribev2-rs", branch = "main", package = "tribev2" }
+neutts          = { git = "https://github.com/eugenehp/neutts-rs", branch = "main" }
 # emotiv: using crates.io 0.0.12 (no patch needed — restore path dep when developing locally)
 # zuna-rs: using crates.io 0.1.3 (no patch needed — restore path dep when developing locally)
 

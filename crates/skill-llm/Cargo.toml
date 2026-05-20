@@ -39,13 +39,13 @@ rlx = { workspace = true, optional = true, features = ["cpu", "models", "gguf"] 
 
 [build-dependencies]
 
-llama-cpp-4 = { version = "0.2.60", optional = true, default-features = false, features = ["ggml", "native"] }
+llama-cpp-4 = { version = "0.3.0", optional = true, default-features = false, features = ["ggml", "native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-4 = { version = "0.2.60", optional = true, default-features = false, features = ["ggml", "metal", "native", "mtmd"] }
+llama-cpp-4 = { version = "0.3.0", optional = true, default-features = false, features = ["ggml", "metal", "native", "mtmd"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-4 = { version = "0.2.60", optional = true, default-features = false, features = ["ggml", "vulkan", "native", "mtmd"] }
+llama-cpp-4 = { version = "0.3.0", optional = true, default-features = false, features = ["ggml", "vulkan", "native", "mtmd"] }
 
 [dev-dependencies]
 tempfile = "3"
