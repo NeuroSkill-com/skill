@@ -320,7 +320,7 @@ pub struct UmapUserConfig {
     pub n_neighbors: usize,
     /// Milliseconds to sleep between training epochs (0 = max throughput).
     pub cooldown_ms: u64,
-    /// Compute backend: "auto", "mlx", or "gpu".
+    /// Compute backend: "auto", "cpu", "metal", "mlx", "cuda", "gpu", or "rocm".
     /// "auto" selects MLX on macOS when available, GPU otherwise.
     pub backend: String,
     /// Floating-point precision: "f32" or "f16".

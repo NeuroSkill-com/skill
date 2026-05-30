@@ -7,7 +7,18 @@ description = "WebSocket/HTTP command routing, UMAP projection, embedding loader
 
 [features]
 default = ["gpu"]
-gpu = ["rlx-umap/gpu"]
+gpu = [
+    "rlx-umap/gpu",
+    "rlx-umap/cuda",
+    "rlx-umap/metal",
+    "rlx-umap/mlx",
+    "dep:rlx-runtime",
+    "rlx-runtime/cpu",
+    "rlx-runtime/gpu",
+    "rlx-runtime/cuda",
+    "rlx-runtime/metal",
+    "rlx-runtime/mlx",
+]
 cpu = ["rlx-umap/cpu"]
 # Local-only profiling (not for CI / release). Use with the `umap_hotpath`
 # example: `cargo run -p skill-router --release --example umap_hotpath \
@@ -26,10 +37,11 @@ serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 rusqlite = { workspace = true }
 rlx-umap        = { version = "0.2.1", default-features = false, features = ["full"] }
+rlx-runtime     = { version = "0.2.1", default-features = false, features = ["cpu"], optional = true }
 hotpath         = { version = "0.16", optional = true }
 
-[target.'cfg(target_os = "macos")'.dependencies]
-rlx-umap        = { version = "0.2.1", default-features = false, features = ["metal"] }
+[dev-dependencies]
+rlx-runtime     = { version = "0.2.1", default-features = false, features = ["cpu"] }
 
 [lints]
 workspace = true
