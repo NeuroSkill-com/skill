@@ -381,7 +381,7 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 pub fn available_backends() -> Vec<&'static str> {
     #[cfg(feature = "gpu")]
     {
-        return umap_device::available_backends();
+        umap_device::available_backends()
     }
     #[cfg(not(feature = "gpu"))]
     {
@@ -573,7 +573,7 @@ fn select_umap_device(pref: &str) -> (rlx_umap::Device, &'static str) {
     #[cfg(feature = "gpu")]
     {
         let device = umap_device::resolve_umap_device(pref);
-        return (device, umap_device::device_label(device));
+        (device, umap_device::device_label(device))
     }
     #[cfg(not(feature = "gpu"))]
     {
