@@ -5,8 +5,6 @@
 //
 // Run with:
 //   cargo test -p skill-router --features gpu  -- umap_e2e --nocapture
-//   cargo test -p skill-router --features mlx  -- umap_e2e --nocapture
-//   cargo test -p skill-router --features gpu,mlx -- umap_e2e --nocapture
 
 use std::fs;
 use std::path::PathBuf;
@@ -94,7 +92,7 @@ fn seed_synthetic_embeddings(tag: &str, n_a: usize, n_b: usize) -> (PathBuf, u64
 /// Returns `None` when the host has no usable GPU adapter (e.g. headless Linux
 /// CI runners without Vulkan ICDs). Lets the test eprintln-and-skip rather
 /// than fail in environments where the hardware prerequisite is absent.
-#[cfg(any(feature = "gpu", feature = "mlx"))]
+#[cfg(feature = "gpu")]
 fn run_umap_bench(
     skill_dir: &std::path::Path,
     a_start: u64,
@@ -121,7 +119,7 @@ fn run_umap_bench(
 
 /// Small dataset (200 points) — sanity check + fast CI.
 #[test]
-#[cfg(any(feature = "gpu", feature = "mlx"))]
+#[cfg(feature = "gpu")]
 fn umap_e2e_small() {
     let (skill_dir, a_start, a_end, b_start, b_end) = seed_synthetic_embeddings("small", 100, 100);
 
@@ -162,7 +160,7 @@ fn umap_e2e_small() {
 /// Medium dataset (1000 points) — representative of a typical EEG session pair.
 #[test]
 #[ignore = "slow benchmark; run with --include-ignored or via npm run test:mlx-e2e"]
-#[cfg(any(feature = "gpu", feature = "mlx"))]
+#[cfg(feature = "gpu")]
 fn umap_e2e_medium() {
     let (skill_dir, a_start, a_end, b_start, b_end) = seed_synthetic_embeddings("medium", 500, 500);
 
@@ -197,7 +195,7 @@ fn umap_e2e_medium() {
 /// Large dataset (5000 points) — stress test matching real-world cache sizes.
 #[test]
 #[ignore = "slow benchmark; run with --include-ignored or via npm run test:mlx-e2e"]
-#[cfg(any(feature = "gpu", feature = "mlx"))]
+#[cfg(feature = "gpu")]
 fn umap_e2e_large() {
     let (skill_dir, a_start, a_end, b_start, b_end) = seed_synthetic_embeddings("large", 2500, 2500);
 

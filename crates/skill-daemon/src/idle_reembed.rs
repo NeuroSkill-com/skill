@@ -14,9 +14,27 @@ use std::time::{Duration, Instant};
 
 use tracing::{info, warn};
 
-use crate::state::AppState;
+use crate::state::{AppState, IdleReembedStatus};
 
 const NO_PROGRESS_BACKOFF: Duration = Duration::from_secs(60 * 60);
+
+/// RAII guard that clears the `reembed_running` flag and the `active` UI bit
+/// when dropped — even if the closure that owns it panics outside
+/// `catch_unwind`, or the runtime cancels the task. This is what guarantees
+/// the loop can't get permanently stuck thinking a run is in flight.
+struct RunGuard {
+    flag: Arc<AtomicBool>,
+    state: Arc<Mutex<IdleReembedStatus>>,
+}
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::Relaxed);
+        if let Ok(mut st) = self.state.lock() {
+            st.active = false;
+        }
+    }
+}
 
 /// Sample system memory usage and return (used_percent, used_bytes, total_bytes).
 /// Cheap enough to call once per 10s tick.
@@ -70,6 +88,21 @@ fn should_back_off_no_progress(
             active
         })
         .unwrap_or(false)
+}
+
+/// Compute remaining backoff seconds (0 if backoff is not active for `needed`).
+fn backoff_remaining_secs(
+    no_progress_backoff: &Mutex<Option<(i64, Instant)>>,
+    needed: i64,
+    backoff_for: Duration,
+) -> u64 {
+    no_progress_backoff
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().copied())
+        .filter(|(missing, _)| *missing == needed)
+        .map(|(_, started_at)| backoff_for.saturating_sub(started_at.elapsed()).as_secs())
+        .unwrap_or(0)
 }
 
 /// Spawn the background idle-reembed loop.
@@ -157,7 +190,20 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             }
 
             if should_back_off_no_progress(&no_progress_backoff, needed, NO_PROGRESS_BACKOFF) {
+                let remaining = backoff_remaining_secs(&no_progress_backoff, needed, NO_PROGRESS_BACKOFF);
+                if let Ok(mut st) = state.idle_reembed_state.lock() {
+                    st.backoff_secs_remaining = remaining;
+                    st.backoff_reason = format!("no embedding progress; {needed} still missing");
+                    st.active = false;
+                }
                 continue;
+            }
+            // Clear any stale backoff display once it has expired or cleared.
+            if let Ok(mut st) = state.idle_reembed_state.lock() {
+                if st.backoff_secs_remaining != 0 || !st.backoff_reason.is_empty() {
+                    st.backoff_secs_remaining = 0;
+                    st.backoff_reason.clear();
+                }
             }
 
             // Memory backpressure: skip the run if system memory is already
@@ -214,7 +260,17 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             let throttle_ms = cfg.idle_reembed_throttle_ms;
             let batch_size = cfg.batch_size.max(1);
 
+            let state_for_guard = state.idle_reembed_state.clone();
+            let running_for_guard = running_flag.clone();
             let handle = tokio::task::spawn_blocking(move || {
+                // RAII guard: even if the closure panics *outside* catch_unwind
+                // (or the runtime drops the task), the flag and UI active bit
+                // are restored. Watcher failures can no longer orphan us.
+                let _guard = RunGuard {
+                    flag: running_for_guard,
+                    state: state_for_guard,
+                };
+
                 // Wrap the reembed body in catch_unwind so a panic in encoder
                 // load, encode, or label-index rebuild surfaces as a logged
                 // join error rather than a silently orphaned task.
@@ -232,12 +288,6 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                 }));
 
                 let panicked = result.is_err();
-
-                // Always drop the active flag and signal completion, even on panic,
-                // so the UI doesn't get stuck in an "active" state forever.
-                if let Ok(mut st) = state_clone.idle_reembed_state.lock() {
-                    st.active = false;
-                }
                 let status = if panicked { "idle_panic" } else { "idle_done" };
                 let _ = state_clone.events_tx.send(skill_daemon_common::EventEnvelope {
                     r#type: "reembed-progress".into(),
@@ -249,10 +299,13 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                 if panicked {
                     warn!("[idle-reembed] worker panicked — task body unwound, state cleared");
                 }
+                // _guard drops here, clearing reembed_running and active.
             });
 
-            // Watcher: log if the spawn_blocking task itself fails to join
-            // (panic that escaped the catch_unwind, or runtime cancellation).
+            // Watcher: compute backoff after the work task finishes. The
+            // work task's RunGuard owns the flag-clear, so a panic in this
+            // watcher (or a runtime drop) can no longer wedge the loop.
+            let running_for_watcher = reembed_running.clone();
             tokio::spawn(async move {
                 let join_result = handle.await;
                 if let Err(join_err) = &join_result {
@@ -286,7 +339,10 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                         );
                     }
                 }
-                running_flag.store(false, Ordering::Relaxed);
+                // Belt-and-suspenders: if the work task ran to completion the
+                // RunGuard already cleared this. If it was dropped without
+                // running, clear it here so the next tick can start work.
+                running_for_watcher.store(false, Ordering::Relaxed);
             });
         }
     });

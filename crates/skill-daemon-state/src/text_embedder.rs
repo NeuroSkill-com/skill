@@ -33,9 +33,14 @@ impl TextEmbeddingBackend {
 }
 
 enum LoadedTextEmbedder {
+    #[cfg(feature = "text-embeddings-fastembed")]
     FastEmbed(fastembed::TextEmbedding),
     #[cfg(feature = "text-embeddings-rlx")]
-    Rlx(RlxTextEmbedding),
+    Rlx(Box<RlxTextEmbedding>),
+    /// Compiled without any embedding backend — every embed call returns None.
+    /// Keeps the surface compilable so callers don't need to gate their use sites.
+    #[allow(dead_code)]
+    None,
 }
 
 /// Shared, cheaply-cloneable handle to the text embedder.
@@ -212,30 +217,44 @@ fn load_embedder(
     show_progress: bool,
 ) -> Result<LoadedTextEmbedder> {
     match backend {
-        TextEmbeddingBackend::FastEmbed => {
-            let Some(fe_model) = model_code_to_fastembed(code) else {
-                return Err(anyhow!("unknown fastembed model code: {code}"));
-            };
-            let cache_dir = dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".cache")
-                .join("fastembed");
-            let model = fastembed::TextEmbedding::try_new(
-                fastembed::InitOptions::new(fe_model)
-                    .with_cache_dir(cache_dir)
-                    .with_show_download_progress(show_progress),
-            )?;
-            Ok(LoadedTextEmbedder::FastEmbed(model))
-        }
+        TextEmbeddingBackend::FastEmbed => load_fastembed(code, show_progress),
         TextEmbeddingBackend::Rlx => load_rlx_embedder(code, rlx_device, rlx_max_seq),
     }
 }
 
+#[cfg(feature = "text-embeddings-fastembed")]
+fn load_fastembed(code: &str, show_progress: bool) -> Result<LoadedTextEmbedder> {
+    let Some(fe_model) = model_code_to_fastembed(code) else {
+        return Err(anyhow!("unknown fastembed model code: {code}"));
+    };
+    let cache_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".cache")
+        .join("fastembed");
+    let model = fastembed::TextEmbedding::try_new(
+        fastembed::InitOptions::new(fe_model)
+            .with_cache_dir(cache_dir)
+            .with_show_download_progress(show_progress),
+    )?;
+    Ok(LoadedTextEmbedder::FastEmbed(model))
+}
+
+#[cfg(not(feature = "text-embeddings-fastembed"))]
+fn load_fastembed(_code: &str, _show_progress: bool) -> Result<LoadedTextEmbedder> {
+    Err(anyhow!(
+        "FastEmbed backend requested but this build lacks the text-embeddings-fastembed feature"
+    ))
+}
+
 fn embed_with_loaded(model: &mut LoadedTextEmbedder, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
     match model {
+        #[cfg(feature = "text-embeddings-fastembed")]
         LoadedTextEmbedder::FastEmbed(model) => Ok(model.embed(texts, None)?),
         #[cfg(feature = "text-embeddings-rlx")]
         LoadedTextEmbedder::Rlx(model) => model.embed(texts),
+        LoadedTextEmbedder::None => Err(anyhow!(
+            "no text-embedding backend compiled in (enable text-embeddings-fastembed or text-embeddings-rlx)"
+        )),
     }
 }
 
@@ -248,9 +267,9 @@ fn load_rlx_embedder(_code: &str, _device: &str, _max_seq: usize) -> Result<Load
 
 #[cfg(feature = "text-embeddings-rlx")]
 fn load_rlx_embedder(code: &str, device: &str, max_seq: usize) -> Result<LoadedTextEmbedder> {
-    Ok(LoadedTextEmbedder::Rlx(RlxTextEmbedding::from_repo(
+    Ok(LoadedTextEmbedder::Rlx(Box::new(RlxTextEmbedding::from_repo(
         code, device, max_seq,
-    )?))
+    )?)))
 }
 
 #[cfg(feature = "text-embeddings-rlx")]
@@ -266,7 +285,7 @@ struct RlxTextEmbedding {
     compiled: rlx::runtime::CompiledGraph,
     arch: RlxArch,
     hidden_size: usize,
-    pooling: rlx::models::Pooling,
+    pooling: rlx_models::Pooling,
     compiled_bs: (usize, usize),
     config_path: PathBuf,
     weights_path: String,
@@ -369,13 +388,14 @@ impl RlxTextEmbedding {
             .next()
             .ok_or_else(|| anyhow!("RLX embedder returned no output"))?;
         let mut result = Vec::with_capacity(batch);
+        #[allow(clippy::needless_range_loop)]
         for row in 0..batch {
             let mut pooled = match self.pooling {
-                rlx::models::Pooling::Cls => {
+                rlx_models::Pooling::Cls => {
                     let start = row * seq * self.hidden_size;
                     hidden[start..start + self.hidden_size].to_vec()
                 }
-                rlx::models::Pooling::Mean => {
+                rlx_models::Pooling::Mean => {
                     let n = lengths[row].max(1);
                     let mut v = vec![0.0f32; self.hidden_size];
                     for pos in 0..n {
@@ -438,18 +458,18 @@ fn compile_rlx_embedder(
     seq: usize,
     device: rlx::Device,
 ) -> Result<(usize, rlx::runtime::CompiledGraph)> {
-    let mut wm = rlx::models::WeightMap::from_file(weights_path)?;
+    let mut wm = rlx_models::WeightMap::from_file(weights_path)?;
     let (graph, params, hidden_size) = match arch {
         RlxArch::Bert => {
-            let cfg = rlx::models::BertConfig::from_file(config_path)?;
+            let cfg = rlx_models::BertConfig::from_file(config_path)?;
             let hidden_size = cfg.hidden_size;
-            let (graph, params) = rlx::models::build_bert_graph_sized(&cfg, &mut wm, batch, seq)?;
+            let (graph, params) = rlx_models::build_bert_graph_sized(&cfg, &mut wm, batch, seq)?;
             (graph, params, hidden_size)
         }
         RlxArch::NomicBert => {
-            let cfg = rlx::models::NomicBertConfig::from_file(config_path)?;
+            let cfg = rlx_models::NomicBertConfig::from_file(config_path)?;
             let hidden_size = cfg.hidden_size;
-            let (graph, params) = rlx::models::build_nomic_graph_sized(&cfg, &mut wm, batch, seq)?;
+            let (graph, params) = rlx_models::nomic::build_nomic_graph_sized(&cfg, &mut wm, batch, seq)?;
             (graph, params, hidden_size)
         }
     };
@@ -462,12 +482,12 @@ fn compile_rlx_embedder(
 }
 
 #[cfg(feature = "text-embeddings-rlx")]
-fn default_pooling(repo_id: &str) -> rlx::models::Pooling {
+fn default_pooling(repo_id: &str) -> rlx_models::Pooling {
     let lower = repo_id.to_ascii_lowercase();
     if lower.contains("bge") || lower.contains("nomic") {
-        rlx::models::Pooling::Cls
+        rlx_models::Pooling::Cls
     } else {
-        rlx::models::Pooling::Mean
+        rlx_models::Pooling::Mean
     }
 }
 
@@ -497,6 +517,7 @@ fn l2_normalize(v: &mut [f32]) {
 
 /// Map a model code string to the fastembed enum variant.
 /// Returns `None` for unrecognized model codes.
+#[cfg(feature = "text-embeddings-fastembed")]
 pub fn model_code_to_fastembed(code: &str) -> Option<fastembed::EmbeddingModel> {
     Some(match code {
         "nomic-ai/nomic-embed-text-v1" => fastembed::EmbeddingModel::NomicEmbedTextV1,

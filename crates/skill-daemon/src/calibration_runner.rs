@@ -21,7 +21,7 @@ use tokio::sync::oneshot;
 use tracing::info;
 
 use crate::routes::labels;
-use crate::routes::settings_io::{load_user_settings, save_user_settings};
+use crate::routes::settings_io::{load_user_settings, patch_user_settings_sync};
 use crate::state::AppState;
 use skill_daemon_state::CalibrationPhaseSnapshot;
 use skill_settings::CalibrationProfile;
@@ -282,11 +282,13 @@ async fn run_session(state: AppState, profile: CalibrationProfile, mut cancel_rx
         info!("[calibration] session complete: {} loops", profile.loop_count);
 
         // Update last_calibration_utc in settings
-        let mut settings = load_user_settings(&state);
-        if let Some(p) = settings.calibration_profiles.iter_mut().find(|p| p.id == profile.id) {
-            p.last_calibration_utc = Some(unix_secs());
-        }
-        save_user_settings(&state, &settings);
+        let profile_id = profile.id.clone();
+        let completed_at = unix_secs();
+        patch_user_settings_sync(&state, move |s| {
+            if let Some(p) = s.calibration_profiles.iter_mut().find(|p| p.id == profile_id) {
+                p.last_calibration_utc = Some(completed_at);
+            }
+        });
 
         let snap = CalibrationPhaseSnapshot {
             kind: "done".into(),

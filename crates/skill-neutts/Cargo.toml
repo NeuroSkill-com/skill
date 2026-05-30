@@ -1,0 +1,36 @@
+[package]
+name = "skill-neutts"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[lib]
+name = "neutts"
+crate-type = ["rlib"]
+
+[features]
+default = []
+espeak  = ["dep:espeak-ng"]
+metal   = ["rlx-neutts/metal"]
+mlx     = ["rlx-neutts/mlx"]
+cuda    = ["rlx-neutts/cuda"]
+rocm    = ["rlx-neutts/rocm"]
+gpu     = ["rlx-neutts/gpu"]
+
+[dependencies]
+anyhow      = { workspace = true }
+rlx-neutts  = { version = "0.2.0", default-features = false, features = ["codec", "llama"] }
+hound       = "3"
+sha2        = "0.10"
+dirs        = "6"
+zip         = { workspace = true }
+safetensors = "0.5"
+once_cell   = "1"
+fancy-regex = "0.14"
+espeak-ng   = { version = "0.1.2", features = ["bundled-data"], optional = true }
+
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+hf-hub = { version = "0.5", default-features = false, features = ["ureq"] }
+
+[lints]
+workspace = true

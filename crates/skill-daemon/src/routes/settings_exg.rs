@@ -155,7 +155,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
             config.model_backend.as_str()
         );
     }
-    let encoder = encoder.unwrap();
+    let mut encoder = encoder.unwrap();
 
     let _ = events_tx.send(skill_daemon_common::EventEnvelope {
         r#type: "reembed-progress".into(),
@@ -170,7 +170,8 @@ pub(crate) fn run_batch_reembed_with_cancel(
     let mut total_failed = 0u64;
     // Track channel counts that produced consecutive encode failures so we can
     // skip further attempts with the same channel count (e.g. 32-ch generic
-    // channels that cause GPU autotune hangs).
+    // channels that cause GPU autotune hangs). Reset per-day so a transient
+    // failure on day A doesn't permanently block day B in the same run.
     let mut skip_ch_counts: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut consecutive_failures_by_ch: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
     const CONSECUTIVE_FAIL_LIMIT: u32 = 5;
@@ -232,6 +233,13 @@ pub(crate) fn run_batch_reembed_with_cancel(
 
     // 3. Process each day directory.
     for day_dir in &day_dirs {
+        // Reset per-channel failure tracking at each day boundary. A run of
+        // 5 corrupt/missing epochs on day A used to permanently disable that
+        // channel count for the remainder of the run — including healthy
+        // days B, C, D. Scope the skip to the day where it triggered.
+        skip_ch_counts.clear();
+        consecutive_failures_by_ch.clear();
+
         let db_path = day_dir.join(skill_constants::SQLITE_FILE);
         if !db_path.exists() {
             continue;
@@ -259,6 +267,23 @@ pub(crate) fn run_batch_reembed_with_cancel(
             "CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp)",
             [],
         );
+
+        // Pre-existing embedding byte-length (if any). Used to validate that
+        // the loaded encoder still produces the same dim as what's already in
+        // this DB — a model swap would otherwise silently write mixed-dim
+        // BLOBs and ruin cosine search.
+        let existing_blob_len: Option<usize> = conn
+            .query_row(
+                "SELECT length(eeg_embedding) FROM embeddings \
+                   WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
+                   LIMIT 1",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .ok()
+            .map(|n| n as usize);
+        // Set on first successful encode and used to reject mismatched writes.
+        let mut day_dim_mismatch_logged = false;
 
         // Get timestamps of epochs that need embeddings.
         let mut stmt = conn.prepare(
@@ -351,11 +376,44 @@ pub(crate) fn run_batch_reembed_with_cancel(
                     }
 
                     let t0 = std::time::Instant::now();
-                    let embedding = encode_raw_samples(&encoder, &samples, &seg_ch_names, sample_rate);
+                    let embedding = encode_raw_samples(&mut encoder, &samples, &seg_ch_names, sample_rate);
                     let ms = t0.elapsed().as_millis();
 
                     if let Some(emb) = embedding {
                         let blob: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+                        // Dim-mismatch guard: if this DB already contains
+                        // embeddings of a different byte length, the loaded
+                        // model is not the one that produced them. Refuse to
+                        // write so we don't corrupt cosine search. The user
+                        // can switch back to the matching model or wipe the
+                        // day's embeddings to re-embed cleanly.
+                        if let Some(expected) = existing_blob_len {
+                            if blob.len() != expected {
+                                if !day_dim_mismatch_logged {
+                                    tracing::error!(
+                                        "[reembed] dim mismatch in {day_name}: encoder produced {} bytes \
+                                         but existing embeddings are {} bytes — refusing to write mixed-dim BLOBs",
+                                        blob.len(),
+                                        expected,
+                                    );
+                                    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                                        r#type: "reembed-progress".into(),
+                                        ts_unix_ms: now_unix_ms(),
+                                        correlation_id: None,
+                                        payload: serde_json::json!({
+                                            "status": "dim_mismatch",
+                                            "date": day_name,
+                                            "encoder_bytes": blob.len(),
+                                            "existing_bytes": expected,
+                                        }),
+                                    });
+                                    day_dim_mismatch_logged = true;
+                                }
+                                total_failed += 1;
+                                total_done += 1;
+                                continue;
+                            }
+                        }
                         let _ = conn.execute(
                             "UPDATE embeddings SET eeg_embedding = ?1 WHERE id = ?2",
                             rusqlite::params![blob, row_id],
@@ -375,11 +433,26 @@ pub(crate) fn run_batch_reembed_with_cancel(
                         total_failed += 1;
                         let count = consecutive_failures_by_ch.entry(n_ch).or_insert(0);
                         *count += 1;
-                        if *count >= CONSECUTIVE_FAIL_LIMIT {
+                        if *count >= CONSECUTIVE_FAIL_LIMIT && !skip_ch_counts.contains(&n_ch) {
                             tracing::warn!(
-                                "[reembed] skipping all {n_ch}-channel epochs after {CONSECUTIVE_FAIL_LIMIT} consecutive failures"
+                                "[reembed] skipping all {n_ch}-channel epochs in day {} after {CONSECUTIVE_FAIL_LIMIT} consecutive failures",
+                                day_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
                             );
                             skip_ch_counts.insert(n_ch);
+                            // Surface to UI so users know why some epochs are
+                            // being skipped (previously silent — looked like
+                            // success but embeddings stayed empty).
+                            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                                r#type: "reembed-progress".into(),
+                                ts_unix_ms: now_unix_ms(),
+                                correlation_id: None,
+                                payload: serde_json::json!({
+                                    "status": "channel_skipped",
+                                    "channels": n_ch,
+                                    "date": day_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+                                    "consecutive_failures": *count,
+                                }),
+                            });
                         }
                     }
 
@@ -412,13 +485,31 @@ pub(crate) fn run_batch_reembed_with_cancel(
         }
 
         if !remaining_epochs.is_empty() {
-            if total_failed == 0 {
-                let (row_id, ts_ms) = remaining_epochs[0];
-                let ts_secs = skill_data::util::epoch_ts_to_unix(ts_ms) as f64;
-                tracing::warn!(
-                    "[reembed] first empty extract at ts={ts_secs:.1}s (row_id={row_id}, epoch_samples={epoch_samples})",
-                );
-            }
+            // These epochs have no matching CSV segment (timestamp falls
+            // outside every loaded segment, or a 5s window straddles a
+            // segment boundary and neither side has enough samples).
+            // Previously these stayed NULL in the DB so the next idle-reembed
+            // tick re-tried them, failed again, then took a 1h backoff —
+            // looking from the outside like reembed had stopped working.
+            // Log + emit so users (and we) can see *why*.
+            let day_name = day_dir.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+            let sample_ids: Vec<i64> = remaining_epochs.iter().take(5).map(|(id, _)| *id).collect();
+            tracing::warn!(
+                "[reembed] {day_name}: {} epoch(s) have no matching CSV segment (sample row ids: {sample_ids:?}, epoch_samples={epoch_samples})",
+                remaining_epochs.len(),
+            );
+            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                r#type: "reembed-progress".into(),
+                ts_unix_ms: now_unix_ms(),
+                correlation_id: None,
+                payload: serde_json::json!({
+                    "status": "unrecoverable",
+                    "date": day_name,
+                    "count": remaining_epochs.len(),
+                    "sample_row_ids": sample_ids,
+                    "reason": "no_csv_segment_for_timestamp",
+                }),
+            });
             total_failed += remaining_epochs.len() as u64;
             total_done += remaining_epochs.len() as u64;
         }
@@ -447,29 +538,52 @@ pub(crate) fn run_batch_reembed_with_cancel(
     Ok(())
 }
 
-/// Find exg_*.csv files (raw EEG, not metrics/ppg/imu).
+/// Find exg_*.{csv,parquet} files (raw EEG, not metrics/ppg/imu/fnirs).
+///
+/// Returns both CSV and Parquet recordings. If a recording was written in
+/// `storage_format = "both"`, both files appear here — `load_day_csv_data`
+/// dedupes by (start_ts, channel layout) so duplicates don't produce
+/// duplicate segments. If only parquet exists (the user picked
+/// `storage_format = "parquet"`), it is read via `skill_data::session_parquet`.
 fn find_eeg_csvs(day_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let mut csvs: Vec<_> = std::fs::read_dir(day_dir)
+    let mut files: Vec<_> = std::fs::read_dir(day_dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|e| {
             let p = e.path();
             let name = p.file_name()?.to_str()?;
-            if name.starts_with("exg_")
-                && name.ends_with(".csv")
+            let is_eeg = name.starts_with("exg_")
+                && (name.ends_with(".csv") || name.ends_with(".parquet"))
                 && !name.contains("metrics")
                 && !name.contains("ppg")
                 && !name.contains("imu")
-            {
+                && !name.contains("fnirs");
+            if is_eeg {
                 Some(p)
             } else {
                 None
             }
         })
         .collect();
-    csvs.sort();
-    csvs
+    files.sort();
+    // If both .csv and .parquet exist for the same session timestamp, prefer
+    // CSV (the legacy default) and drop the parquet sibling so we don't
+    // double-load identical samples.
+    let csv_stems: std::collections::HashSet<String> = files
+        .iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("csv"))
+        .filter_map(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
+        .collect();
+    files.retain(|p| {
+        if p.extension().and_then(|e| e.to_str()) == Some("parquet") {
+            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            !csv_stems.contains(stem)
+        } else {
+            true
+        }
+    });
+    files
 }
 
 /// Read channel names and sample rate from JSON sidecar or CSV header.
@@ -505,6 +619,11 @@ fn read_session_meta(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf
     }
     // Fallback: read CSV header to get channel names.
     for csv in csv_files {
+        if csv.extension().and_then(|e| e.to_str()) == Some("parquet") {
+            // Parquet fallback handled below — the loaded data carries its
+            // own schema, so we only need to return *some* sample rate.
+            continue;
+        }
         if let Ok(file) = std::fs::File::open(csv) {
             use std::io::BufRead;
             let mut reader = std::io::BufReader::new(file);
@@ -517,6 +636,24 @@ fn read_session_meta(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf
                         return (ch, 256.0); // Assume 256 Hz default.
                     }
                 }
+            }
+        }
+    }
+    // Last-ditch fallback for parquet-only sessions with no JSON sidecar:
+    // read channel names from the first parquet file's schema. Sample rate
+    // defaults to 256 Hz (Muse standard) — load_day_csv_data computes the
+    // actual segment length from row counts, so a 256 Hz default just means
+    // the epoch-window math uses 256 samples/s. If the recording was at a
+    // different rate the epochs will silently be wrong width, but that
+    // matches existing CSV behavior. A real fix is to embed sample_rate in
+    // the parquet metadata when writing.
+    for path in csv_files {
+        if path.extension().and_then(|e| e.to_str()) != Some("parquet") {
+            continue;
+        }
+        if let Ok(ch) = skill_data::session_parquet::read_eeg_parquet_channels(path) {
+            if !ch.is_empty() {
+                return (ch, 256.0);
             }
         }
     }
@@ -547,6 +684,44 @@ fn load_day_csv_data(_day_dir: &std::path::Path, csv_files: &[std::path::PathBuf
         if day_row_count >= MAX_DAY_ROWS {
             break;
         }
+
+        // Parquet branch — read via skill-data helper. Channel names come
+        // from the parquet schema; the first timestamp comes from row 0.
+        // Without this branch a `storage_format = "parquet"` user would have
+        // every day skipped and every epoch left un-embedded.
+        if csv_path.extension().and_then(|e| e.to_str()) == Some("parquet") {
+            match skill_data::session_parquet::read_eeg_parquet(csv_path) {
+                Ok((mut ts, seg_channel_names, channels)) => {
+                    if channels.is_empty() || channels[0].is_empty() {
+                        continue;
+                    }
+                    // Mirror the CSV branch's relative-timestamp fixup.
+                    if ts < 1_000_000_000.0 {
+                        if let Some(start) = csv_path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .and_then(|s| s.strip_prefix("exg_"))
+                            .and_then(|s| s.parse::<f64>().ok())
+                        {
+                            ts = start;
+                        }
+                    }
+                    let rows = channels[0].len();
+                    if day_row_count.saturating_add(rows) > MAX_DAY_ROWS {
+                        // Soft cap — keep whatever we already have and stop
+                        // scanning further parquet files for this day.
+                        break;
+                    }
+                    day_row_count += rows;
+                    segments.push((ts, seg_channel_names, channels));
+                }
+                Err(e) => {
+                    tracing::warn!("[reembed] parquet read failed for {}: {e:#}", csv_path.display());
+                }
+            }
+            continue;
+        }
+
         let Ok(file) = std::fs::File::open(csv_path) else {
             continue;
         };
@@ -666,7 +841,7 @@ fn extract_epoch_samples(data: &RawDayData, epoch_ts_secs: f64, epoch_samples: u
 /// panic on an unusual channel count) does not abort the whole batch-reembed
 /// task. Idle reembed runs in `spawn_blocking` and a panic there is invisible.
 fn encode_raw_samples(
-    encoder: &crate::embed::PublicEncoder,
+    encoder: &mut crate::embed::PublicEncoder,
     samples: &[Vec<f32>],
     channel_names: &[String],
     sample_rate: f64,
@@ -1141,6 +1316,40 @@ mod tests {
     fn find_eeg_csvs_empty_dir() {
         let td = tempfile::tempdir().unwrap();
         assert!(find_eeg_csvs(td.path()).is_empty());
+    }
+
+    #[test]
+    fn find_eeg_csvs_includes_parquet() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        std::fs::write(d.join("exg_100.parquet"), "").unwrap();
+        std::fs::write(d.join("exg_100_metrics.parquet"), "").unwrap();
+        std::fs::write(d.join("exg_100_ppg.parquet"), "").unwrap();
+        std::fs::write(d.join("exg_100_imu.parquet"), "").unwrap();
+        std::fs::write(d.join("exg_100_fnirs.parquet"), "").unwrap();
+        std::fs::write(d.join("exg_200.parquet"), "").unwrap();
+
+        let files = find_eeg_csvs(d);
+        let names: Vec<&str> = files.iter().filter_map(|p| p.file_name()?.to_str()).collect();
+        assert_eq!(names, vec!["exg_100.parquet", "exg_200.parquet"]);
+    }
+
+    #[test]
+    fn find_eeg_csvs_dedupes_csv_and_parquet_siblings() {
+        let td = tempfile::tempdir().unwrap();
+        let d = td.path();
+        // storage_format = "both" produces both files for the same session.
+        std::fs::write(d.join("exg_100.csv"), "").unwrap();
+        std::fs::write(d.join("exg_100.parquet"), "").unwrap();
+        // Parquet-only session.
+        std::fs::write(d.join("exg_200.parquet"), "").unwrap();
+        // CSV-only session.
+        std::fs::write(d.join("exg_300.csv"), "").unwrap();
+
+        let files = find_eeg_csvs(d);
+        let names: Vec<&str> = files.iter().filter_map(|p| p.file_name()?.to_str()).collect();
+        // CSV preferred when both exist; parquet kept when CSV absent.
+        assert_eq!(names, vec!["exg_100.csv", "exg_200.parquet", "exg_300.csv"]);
     }
 
     // ── read_session_meta ─────────────────────────────────────────────────

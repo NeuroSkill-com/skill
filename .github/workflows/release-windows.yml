@@ -464,10 +464,10 @@ jobs:
             exit 1
           }
 
-      # ── Standalone LLVM 19 for bindgen + lld-link ─────────────────────────────
+      # ── Standalone LLVM 19 for bindgen + lld-link ────��────────────────────────
       # VS2022's bundled clang-cl can't handle __builtin_ia32_* intrinsics in
-      # mmintrin.h, causing bindgen (llama-cpp-sys-4) to fail.  Standalone
-      # LLVM 19 fixes this and also provides lld-link for faster linking.
+      # mmintrin.h, causing bindgen to fail.  Standalone LLVM 19 fixes this
+      # and also provides lld-link for faster linking.
       #
       # Cache the full install so subsequent runs skip the ~500 MB download.
       - name: Cache LLVM 19
@@ -520,8 +520,6 @@ jobs:
       # --features custom-protocol: required — without it Tauri compiles in
       #   dev mode and loads UI from localhost:1420 instead of the embedded
       #   SvelteKit build output.
-      # --features llm-vulkan: enables Vulkan GPU offloading for LLM inference
-      #   (covers NVIDIA, AMD, Intel Arc without vendor-specific SDKs).
       - name: Compile (Rust)
         shell: bash
         env:
@@ -561,15 +559,7 @@ jobs:
           }
 
           if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::Windows release compile failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              find src-tauri/target -name "*llama_cpp_sys*" -exec rm -rf {} + 2>/dev/null || true
-              find src-tauri/target -name "*llama-cpp-sys*" -exec rm -rf {} + 2>/dev/null || true
-              run_cmd
-            else
-              exit 1
-            fi
+            exit 1
           fi
 
           sccache --show-stats || true

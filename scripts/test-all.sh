@@ -190,10 +190,10 @@ for suite in "${SUITES[@]}"; do
       ;;
     mlx-e2e)
       if [[ "$(uname -s)" == "Darwin" ]]; then
-        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 --include-ignored || { $STOP_ON_FAIL && break; }
-        run_suite "FFT MLX E2E" cargo test -p skill-eeg --features mlx -- fft_e2e --nocapture || { $STOP_ON_FAIL && break; }
+        run_suite "UMAP GPU E2E" cargo test -p skill-router --features gpu -- umap_e2e --nocapture --test-threads=1 --include-ignored || { $STOP_ON_FAIL && break; }
+        run_suite "FFT Metal E2E" cargo test -p skill-eeg --features rlx-fft-metal -- --nocapture || { $STOP_ON_FAIL && break; }
       else
-        skip_suite "MLX E2E" "requires macOS with Apple Silicon"
+        skip_suite "GPU/Metal E2E" "requires macOS with Apple Silicon"
       fi
       ;;
     widgets)

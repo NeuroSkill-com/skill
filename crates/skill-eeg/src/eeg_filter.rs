@@ -4,7 +4,7 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-//! GPU-accelerated EEG signal filtering using the `gpu-fft` crate (wgpu backend).
+//! EEG signal filtering — GPU-accelerated via RLX (Metal/CUDA/wgpu) or CPU rustfft.
 //!
 //! ## Algorithm: Overlap-Save
 //!
@@ -60,10 +60,10 @@
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(not(any(feature = "gpu", feature = "mlx")))]
+#[cfg(not(feature = "rlx-fft"))]
 use crate::cpu_fft::{fft_batch, ifft_batch, psd as one_sided_psd};
-#[cfg(any(feature = "gpu", feature = "mlx"))]
-use gpu_fft::{fft_batch, ifft_batch, psd::psd as one_sided_psd};
+#[cfg(feature = "rlx-fft")]
+use crate::rlx_fft::{fft_batch, ifft_batch, psd as one_sided_psd};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
@@ -263,15 +263,17 @@ impl FilterConfig {
 ///
 /// ### Usage
 ///
-/// ```rust,ignore
+/// ```no_run
+/// use skill_eeg::eeg_filter::{EegFilter, FilterConfig};
 /// let mut filter = EegFilter::new(FilterConfig::default());
-///
+/// # let electrode: usize = 0;
+/// # let raw_samples: Vec<f64> = vec![0.0; 256];
 /// // Called once per incoming Muse EEG packet:
 /// if filter.push(electrode, &raw_samples) {
 ///     // Filtered output is ready for all channels.
-///     for ch in 0..EEG_CHANNELS {
+///     for ch in 0..4 {
 ///         let filtered: Vec<f64> = filter.drain(ch);
-///         // … forward to frontend …
+///         let _ = filtered; // … forward to frontend …
 ///     }
 /// }
 /// ```
@@ -452,7 +454,7 @@ impl EegFilter {
         // sampled HERE, before the frequency mask zeroes any bins, so the
         // spectrogram reflects the true unfiltered spectrum.
         //
-        // `one_sided_psd` (= gpu_fft::psd::psd) returns (r²+i²)/n for each bin.
+        // `one_sided_psd` returns (r²+i²)/n for each bin.
         // We take only the first SPEC_N_FREQ = 51 bins (0 Hz … 50 Hz at 1 Hz/bin).
         {
             let n_spec = SPEC_N_FREQ.min(n / 2 + 1);

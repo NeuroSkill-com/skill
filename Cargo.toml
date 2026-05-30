@@ -43,6 +43,7 @@ members = [
     "crates/skill-skills",
     "crates/skill-tools",
     "crates/skill-tray",
+    "crates/skill-neutts",
     "crates/skill-tts",
     "crates/skill-tty",
     "crates/skill-vision",
@@ -54,12 +55,6 @@ members = [
     "crates/skill-daemon",
 ]
 
-# ── Patch: Apple-Silicon Metal fix for cubek-matmul ───────────────────────────
-#
-# cubek-matmul 0.1.1 panics on Apple Silicon when the SimpleCyclicCmma tile
-# (40 KB) exceeds Metal's 32 KB shared-memory limit.  The patched fork extends
-# the 'auto' fallback chain:  SimpleCyclicCmma → SimpleUnit → Naive.
-#
 # btleplug: improved macOS BLE scanning behaviour.
 # NOTE: upstream branch has a typo ("imrpoved" → "improved"); tracked for rename.
 #
@@ -67,7 +62,6 @@ members = [
 # from member Cargo.toml files.
 
 [patch.crates-io]
-cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
@@ -77,14 +71,11 @@ gobject-sys     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 gio             = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 gio-sys         = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
-# burn-mlx on crates.io (0.1.2) targets burn 0.16; the git main branch supports
-# burn 0.20 which we use.  This patch also covers fast-umap's transitive dep.
-burn-mlx        = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20" }
-# skill-llm uses llama-cpp-4 0.3.0. neutts/tribev2 main are on 0.3.0; crates.io 0.1.1 / 0.0.4 still pin ^0.2.x.
-tribev2         = { git = "https://github.com/eugenehp/tribev2-rs", branch = "main", package = "tribev2" }
-neutts          = { git = "https://github.com/eugenehp/neutts-rs", branch = "main" }
+# tribev2: using crates.io 0.1.0 (no patch needed — restore path dep when developing locally)
+# neutts: now provided by crates/skill-neutts (workspace subcrate wrapping rlx-neutts 0.2.0)
+# No patch needed — local path dep removed to eliminate the links="llama" conflict.
 # emotiv: using crates.io 0.0.12 (no patch needed — restore path dep when developing locally)
-# zuna-rs: using crates.io 0.1.3 (no patch needed — restore path dep when developing locally)
+# zuna-rs: using crates.io 0.2.0 (no patch needed — restore path dep when developing locally)
 
 
 
@@ -115,10 +106,14 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # to unpack a .nsis.zip built with standard Deflate (method 8).
 zip = { version = "7", features = ["deflate"] }
 
-# RLX — optional path dep (features set per crate). Sibling layout:
-#   skill/          (this repo)
-#   rlx/rlx/        (https://github.com/MIT-RLX/rlx — CI + scripts/ensure-rlx.sh)
-rlx = { path = "../rlx/rlx", default-features = false }
+# RLX — published on crates.io (features set per crate).
+#   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR
+#   rlx-models — https://github.com/MIT-RLX/rlx-models — model loaders / runners
+# For local development against sibling checkouts, swap these back to path deps:
+#   rlx        = { path = "../rlx/rlx", default-features = false }
+#   rlx-models = { path = "../rlx-models/crates/rlx-models", default-features = false }
+rlx        = { version = "0.2.2", default-features = false }
+rlx-models = { version = "0.2.0", default-features = false }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #
@@ -190,17 +185,24 @@ debug = 0
 # codegen-units = 1 + fat LTO, but compiles significantly faster.
 # ── Test profile ──────────────────────────────────────────────────────────────
 #
-# llama-cpp-sys-4 wraps the llama.cpp C++ library.  Without optimisations,
-# CPU inference runs at a fraction of native speed, making the LLM E2E test
-# painfully slow (~1-2 tok/s instead of 20+ tok/s).  Optimising just this
-# -sys crate (and its transitive C++ build) has no measurable impact on
-# incremental test compile times since it is already built by cmake.
-[profile.test.package.llama-cpp-sys-4]
-opt-level = 3
-
-[profile.test.package.llama-cpp-4]
-opt-level = 3
-
 [profile.release]
 lto           = "thin"
 codegen-units = 8
+
+# ── Size-optimised release profile (opt-in) ────────────────────────────────
+# Builds a noticeably smaller binary than `release` at the cost of much
+# longer link time. Used by the release-min CI builds and the size-comparison
+# matrix. Use with `cargo build --profile release-min ...`.
+#
+# Wins (measured on skill-daemon llm-rlx-metal):
+#   * lto = "fat"          — cross-crate dead-code elimination (~5-10%)
+#   * codegen-units = 1    — wider monomorphisation merging (~2-5%)
+#   * strip = "symbols"    — drops local + debuginfo + symtab (~3-8%)
+# Combined: typically 10-20% smaller than `release`.
+#
+# Not the default because the link step grows from ~3 min to ~10+ min on M4.
+[profile.release-min]
+inherits      = "release"
+lto           = "fat"
+codegen-units = 1
+strip         = "symbols"

@@ -4,7 +4,7 @@
 //!
 //! Everything here is **Tauri-free**: cosine distance, fuzzy text matching,
 //! UTC timestamp formatting, HuggingFace weight resolution and download,
-//! cubecl GPU-cache setup, epoch metrics derivation, and panic helpers.
+//! epoch metrics derivation, and panic helpers.
 
 use std::path::{Path, PathBuf};
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
@@ -16,11 +16,7 @@ use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_model_config::EegModelStatus;
 
-#[cfg(any(
-    feature = "neurorvq-ndarray",
-    feature = "neurorvq-metal",
-    feature = "neurorvq-vulkan"
-))]
+#[cfg(feature = "neurorvq-ndarray")]
 pub mod neurorvq;
 
 // ── Cosine distance ───────────────────────────────────────────────────────────
@@ -149,7 +145,6 @@ pub fn validate_safetensors(path: &Path) -> bool {
         }
     }
     let expected = 8 + header_len + max_offset;
-    // Burn's safetensors loader requires exact size match.
     // Allow a small tolerance (< 16 bytes) for alignment padding,
     // but reject files with significant extra data — they indicate
     // a corrupt or incomplete download.
@@ -657,44 +652,6 @@ pub fn download_hf_weights_files(
         weights_path.display()
     );
     Some((weights_path, config_path))
-}
-
-// ── cubecl cache warm-up ──────────────────────────────────────────────────────
-
-/// Pre-create the cubecl GPU-kernel cache directory and configure the
-/// `GlobalConfig` so cubecl never tries to write to an inaccessible path.
-///
-/// Must be called **before** the first `WgpuDevice` access.
-///
-/// Note: This function is only available when the `cubecl` feature is enabled.
-#[cfg(feature = "cubecl")]
-pub fn configure_cubecl_cache(skill_dir: &Path) {
-    use cubecl_runtime::config::{cache::CacheConfig, GlobalConfig};
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    static CUBECL_CONFIGURED: AtomicBool = AtomicBool::new(false);
-
-    let cache_dir = skill_dir.join("cubecl_cache");
-    match std::fs::create_dir_all(&cache_dir) {
-        Ok(_) => eprintln!("[embedder] cubecl cache dir: {}", cache_dir.display()),
-        Err(e) => eprintln!("[embedder] warn: cubecl cache mkdir {}: {e}", cache_dir.display()),
-    }
-
-    if CUBECL_CONFIGURED
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_ok()
-    {
-        let mut cfg = GlobalConfig::default();
-        cfg.autotune.cache = CacheConfig::File(cache_dir);
-        GlobalConfig::set(cfg);
-    }
-}
-
-/// No-op stub for when the `cubecl` feature is disabled.
-#[cfg(not(feature = "cubecl"))]
-pub fn configure_cubecl_cache(_skill_dir: &Path) {
-    // CubeCL functionality is disabled in this build.
-    // This is used in CI/coverage builds where GPU drivers are unavailable.
 }
 
 // ── GPU panic flag ────────────────────────────────────────────────────────────

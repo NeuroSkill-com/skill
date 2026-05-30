@@ -8,7 +8,7 @@ use std::time::Duration;
 use chrono::{Datelike, Timelike};
 use tracing::info;
 
-use crate::routes::settings_io::load_user_settings;
+use crate::routes::settings_io::{load_user_settings, patch_user_settings_sync};
 use crate::state::AppState;
 
 /// Spawn all daemon background tasks.
@@ -104,9 +104,10 @@ fn spawn_auto_connect(state: AppState) {
                 skill_daemon_state::util::persist_paired_devices(&state);
 
                 // Set as preferred.
-                let mut settings = load_user_settings(&state);
-                settings.preferred_id = Some(found.id.clone());
-                crate::routes::settings_io::save_user_settings(&state, &settings);
+                let preferred_id = found.id.clone();
+                patch_user_settings_sync(&state, move |s| {
+                    s.preferred_id = Some(preferred_id);
+                });
 
                 info!("[auto-connect] device {} set as preferred", found.id);
 

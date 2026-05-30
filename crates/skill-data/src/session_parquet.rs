@@ -658,6 +658,83 @@ impl Drop for ParquetState {
     }
 }
 
+/// Read just the channel names from an EEG parquet schema (cheap — does not
+/// scan row data). Returns the column names after the leading `timestamp_s`.
+pub fn read_eeg_parquet_channels(path: &Path) -> anyhow::Result<Vec<String>> {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).context("parquet builder")?;
+    let schema = builder.schema();
+    if schema.fields().len() < 2 {
+        anyhow::bail!("parquet schema has <2 columns");
+    }
+    Ok(schema.fields().iter().skip(1).map(|f| f.name().clone()).collect())
+}
+
+/// Read a recorded EEG parquet file written by `ParquetState`.
+///
+/// Returns `(first_timestamp_secs, channel_names, samples_per_channel)`.
+/// Channel order matches `channel_names`. Rows with a null timestamp are
+/// skipped. Nulls in channel columns become `0.0` (matching how CSV blanks
+/// would be handled by `extract_epoch_samples`'s row-skip path).
+///
+/// Used by batch/idle reembed so users on `storage_format = "parquet"` get
+/// coverage equivalent to CSV — without this, parquet-only days would be
+/// silently skipped (no CSV → `find_eeg_csvs` empty → epochs stay un-embedded
+/// forever, looking from the outside like reembed was broken).
+pub fn read_eeg_parquet(path: &Path) -> anyhow::Result<(f64, Vec<String>, Vec<Vec<f32>>)> {
+    use arrow_array::Array;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).context("parquet builder")?;
+    let schema = builder.schema().clone();
+
+    if schema.fields().len() < 2 {
+        anyhow::bail!("parquet schema has <2 columns (need timestamp + ≥1 channel)");
+    }
+    // Column 0 is timestamp_s; the rest are channel columns.
+    let channel_names: Vec<String> = schema.fields().iter().skip(1).map(|f| f.name().clone()).collect();
+    let n_ch = channel_names.len();
+
+    let reader = builder.build().context("parquet reader")?;
+    let mut first_ts: Option<f64> = None;
+    let mut channels: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
+
+    for batch in reader {
+        let batch = batch.context("parquet batch")?;
+        let ts_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<arrow_array::Float64Array>()
+            .ok_or_else(|| anyhow::anyhow!("timestamp_s column is not Float64"))?;
+        let mut ch_cols: Vec<&arrow_array::Float64Array> = Vec::with_capacity(n_ch);
+        for k in 0..n_ch {
+            let col = batch
+                .column(k + 1)
+                .as_any()
+                .downcast_ref::<arrow_array::Float64Array>()
+                .ok_or_else(|| anyhow::anyhow!("channel column {} is not Float64", k + 1))?;
+            ch_cols.push(col);
+        }
+        for i in 0..ts_col.len() {
+            if ts_col.is_null(i) {
+                continue;
+            }
+            if first_ts.is_none() {
+                first_ts = Some(ts_col.value(i));
+            }
+            for (k, col) in ch_cols.iter().enumerate() {
+                let v = if col.is_null(i) { 0.0 } else { col.value(i) as f32 };
+                channels[k].push(v);
+            }
+        }
+    }
+
+    let first = first_ts.ok_or_else(|| anyhow::anyhow!("parquet file has no rows"))?;
+    Ok((first, channel_names, channels))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

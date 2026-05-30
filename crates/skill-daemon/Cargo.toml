@@ -5,37 +5,66 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm", "embed-exg", "mw75-rfcomm"]
+default = ["llm", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx"]
+# `llm` gates the daemon-side glue (routes, init call, settings handlers).
+# Every backend flavor below enables it so the engine is actually wired up;
+# without this, skill-llm::init would never be called and the linker would
+# drop the entire engine module as unreachable.
 llm = ["skill-llm/llm"]
 mw75-rfcomm = ["mw75/rfcomm", "skill-devices/mw75-rfcomm"]
-llm-metal = ["llm", "skill-llm/llm-metal"]
-llm-cuda = ["llm", "skill-llm/llm-cuda"]
-llm-vulkan = ["llm", "skill-llm/llm-vulkan"]
-llm-mtmd = ["llm", "skill-llm/llm-mtmd"]
-llm-rlx = ["llm", "skill-llm/llm-rlx"]
-llm-rlx-metal = ["llm-rlx", "skill-llm/llm-rlx-metal"]
-text-embeddings-rlx = ["skill-daemon-state/text-embeddings-rlx"]
-text-embeddings-rlx-metal = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-metal"]
+llm-rlx       = ["llm", "skill-llm/llm-rlx"]
+llm-rlx-cpu   = ["llm", "skill-llm/llm-rlx-cpu"]
+llm-rlx-metal = ["llm", "skill-llm/llm-rlx-metal"]
+llm-rlx-mlx   = ["llm", "skill-llm/llm-rlx-mlx"]
+llm-rlx-cuda  = ["llm", "skill-llm/llm-rlx-cuda"]
+llm-rlx-rocm  = ["llm", "skill-llm/llm-rlx-rocm"]
+llm-rlx-wgpu  = ["llm", "skill-llm/llm-rlx-wgpu"]
+text-embeddings-fastembed = ["dep:fastembed", "skill-daemon-state/text-embeddings-fastembed", "skill-screenshots/text-embeddings-fastembed"]
+text-embeddings-rlx = ["skill-daemon-state/text-embeddings-rlx", "skill-screenshots/text-embeddings-rlx"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-metal", "skill-screenshots/text-embeddings-rlx-metal"]
+text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-cuda", "skill-screenshots/text-embeddings-rlx-cuda"]
+text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-rocm", "skill-screenshots/text-embeddings-rlx-rocm"]
+text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-wgpu", "skill-screenshots/text-embeddings-rlx-wgpu"]
 # EEG embedding encoders
-# embed-exg enables all encoder backends; individual flags available below.
-embed-exg  = ["dep:skill-exg", "skill-exg/cubecl", "skill-router/gpu", "skill-eeg/gpu", "embed-zuna", "embed-zuna-gpu", "embed-zuna-gpu-f16", "embed-luna", "embed-reve", "embed-osf", "embed-sleepfm", "embed-sleeplm", "embed-steegformer", "embed-tribev2", "embed-neurorvq"]
-embed-exg-mlx = ["embed-exg", "skill-router/mlx", "skill-eeg/mlx", "embed-zuna-mlx"]
-cpu-only = ["dep:skill-exg", "skill-router/cpu"]
-embed-zuna = ["dep:zuna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
-# GPU-accelerated ZUNA encoder (Metal on macOS, Vulkan on Linux)
-embed-zuna-gpu = ["embed-zuna", "zuna-rs/wgpu", "burn/wgpu"]
-# GPU f16 half-precision — faster than f32 on Apple Silicon and modern GPUs
-embed-zuna-gpu-f16 = ["embed-zuna", "zuna-rs/wgpu-f16", "burn/wgpu", "dep:half", "dep:wgpu", "dep:pollster"]
-# MLX-accelerated ZUNA encoder (Apple Silicon native)
-embed-zuna-mlx = ["embed-zuna", "zuna-rs/mlx", "dep:burn-mlx"]
-embed-luna = ["dep:luna-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
-embed-reve = ["dep:reve-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
-embed-osf  = ["dep:osf-rs", "dep:burn", "dep:burn-ndarray", "dep:ndarray"]
-embed-sleepfm = ["dep:sleepfm", "dep:burn", "dep:burn-ndarray"]
-embed-sleeplm = ["dep:sleeplm", "dep:burn", "dep:burn-ndarray"]
-embed-steegformer = ["dep:steegformer", "dep:burn", "dep:burn-ndarray"]
-embed-tribev2 = ["dep:tribev2", "dep:burn", "dep:burn-ndarray"]
-embed-neurorvq = ["skill-exg/neurorvq-ndarray"]
+# embed-exg enables all encoder backends (ZUNA, LUNA, TRIBEv2, NeuroRVQ).
+# All use the RLX runtime. Device is chosen at runtime by resolve_exg_device():
+#   macOS default: Metal → CPU   Linux/Windows default: CUDA → wgpu → CPU
+# Compile-in backend tiers via embed-exg-{metal,mlx,gpu,cuda,rocm} below.
+# reve/osf/sleepfm/sleeplm/steegformer pending RLX migration — see comments below.
+embed-exg        = ["dep:skill-exg", "embed-zuna", "embed-luna", "embed-tribev2", "embed-neurorvq",
+                    "skill-eeg/rlx-fft"]
+# Backend tiers — each enables the matching RLX backend in every active encoder AND the FFT path.
+# macOS: Metal is also auto-enabled via [target.'cfg(macos)'.dependencies] so
+# the daemon always picks up Metal on Apple Silicon without extra flags.
+embed-exg-metal  = ["embed-exg", "rlx/metal",
+                    "zuna-rs/rlx-metal", "luna-rs/rlx-metal", "tribev2/rlx-metal",
+                    "skill-exg/neurorvq-metal", "skill-eeg/rlx-fft-metal"]
+embed-exg-mlx    = ["embed-exg", "rlx/mlx",
+                    "zuna-rs/rlx-mlx", "luna-rs/rlx-mlx", "tribev2/rlx-mlx",
+                    "skill-exg/neurorvq-mlx"]
+embed-exg-gpu    = ["embed-exg", "skill-router/gpu", "rlx/gpu",
+                    "zuna-rs/rlx-gpu", "luna-rs/rlx-gpu", "tribev2/rlx-gpu",
+                    "skill-exg/neurorvq-gpu", "skill-eeg/rlx-fft-gpu"]
+embed-exg-cuda   = ["embed-exg", "rlx/cuda",
+                    "zuna-rs/rlx-cuda", "luna-rs/rlx-cuda", "tribev2/rlx-cuda",
+                    "skill-exg/neurorvq-cuda", "skill-eeg/rlx-fft-cuda"]
+embed-exg-rocm   = ["embed-exg", "rlx/rocm",
+                    "zuna-rs/rlx-rocm", "luna-rs/rlx-rocm", "tribev2/rlx-rocm",
+                    "skill-exg/neurorvq-rocm", "skill-eeg/rlx-fft-rocm"]
+cpu-only         = ["dep:skill-exg", "skill-router/cpu"]
+embed-zuna       = ["dep:zuna-rs", "dep:rlx", "dep:ndarray"]
+embed-luna       = ["dep:luna-rs", "dep:rlx"]
+embed-tribev2    = ["dep:tribev2", "dep:rlx"]
+embed-neurorvq   = ["skill-exg/neurorvq-ndarray"]
+# reve/osf/sleepfm/sleeplm/steegformer: pending RLX migration.
+# When new rlx-cpu versions are published, restore as:
+#   embed-reve        = ["dep:reve-rs"]
+#   embed-exg-metal  += "reve-rs/rlx-metal", etc.
+# embed-reve = [...]
+# embed-osf  = [...]
+# embed-sleepfm = [...]
+# embed-sleeplm = [...]
+# embed-steegformer = [...]
 
 [[bin]]
 name = "skill-daemon"
@@ -58,7 +87,8 @@ regex = "1"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
-fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
+ndarray   = { version = "0.17", optional = true }
+fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"] }
@@ -103,21 +133,10 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-zuna-rs             = { version = "0.1.4", default-features = false, features = ["ndarray"], optional = true }
-burn-mlx            = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20", optional = true }
-luna-rs             = { version = "0.0.3", default-features = false, features = ["ndarray"], optional = true }
-reve-rs             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
-osf-rs              = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
-sleepfm             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
-sleeplm             = { version = "0.0.1", default-features = false, features = ["ndarray"], optional = true }
-steegformer         = { version = "0.1.0", default-features = false, features = ["ndarray"], optional = true }
-tribev2             = { version = "0.0.4", default-features = false, features = ["ndarray"], optional = true }
-burn                = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
-half                = { version = "2", optional = true }
-wgpu                = { version = "26", optional = true }
-pollster            = { version = "0.4", optional = true }
-burn-ndarray        = { version = "0.20.1", default-features = false, features = ["std", "simd", "multi-threads"], optional = true }
-ndarray             = { version = "0.17", optional = true }
+rlx                 = { version = "0.2", default-features = false, optional = true }
+zuna-rs             = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
+luna-rs             = { version = "0.1.0", default-features = false, features = ["rlx-cpu"], optional = true }
+tribev2             = { version = "0.1.0", default-features = false, features = ["rlx-cpu"], optional = true }
 skill-location      = { path = "../skill-location" }
 skill-llm           = { path = "../skill-llm" }
 skill-tts            = { path = "../skill-tts" }
@@ -136,15 +155,16 @@ mw75                 = { version = "0.0.6" }
 rlsl                 = { version = "0.0.4" }
 tokio-tungstenite    = "0.28"
 
-# macOS: use Apple Accelerate for BLAS (AMX coprocessor on M-series)
+# macOS: enable Metal backend for ZUNA/LUNA/TRIBEv2 GPU paths (embed-*-gpu).
 [target.'cfg(target_os = "macos")'.dependencies]
-burn-ndarray        = { version = "0.20.1", default-features = false, features = ["blas-accelerate"], optional = true }
+zuna-rs             = { version = "0.2.0", default-features = false, features = ["rlx-metal"], optional = true }
+luna-rs             = { version = "0.1.0", default-features = false, features = ["rlx-metal"], optional = true }
+tribev2             = { version = "0.1.0", default-features = false, features = ["rlx-metal"], optional = true }
+rlx                 = { version = "0.2", default-features = false, features = ["metal"], optional = true }
+skill-exg           = { path = "../skill-exg", features = ["neurorvq-metal"], optional = true }
+skill-eeg           = { path = "../skill-eeg", features = ["rlx-fft-metal"] }
 objc2               = "0.6"
 objc2-app-kit       = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSPasteboard"] }
-
-# Linux: use system OpenBLAS when available
-[target.'cfg(target_os = "linux")'.dependencies]
-burn-ndarray        = { version = "0.20.1", default-features = false, features = ["blas-openblas-system"], optional = true }
 
 [lints]
 workspace = true

@@ -189,7 +189,7 @@ async fn mtp_e2e_spec_decode_loop() {
     if smoke_fail {
         eprintln!(
             "[5] ❌ MTP smoke validation failed — the GGUF was flagged catalog \
-             `mtp:true` but llama-cpp-4 could not build a Mtp context. \
+             `mtp:true` but the runtime could not build a Mtp context. \
              Either the GGUF is stale or mis-flagged."
         );
         eprintln!("--- log dump ---\n{logs}\n----------------");

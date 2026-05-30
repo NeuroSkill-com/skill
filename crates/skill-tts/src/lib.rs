@@ -23,9 +23,12 @@ pub mod log;
 #[allow(unused_macros)]
 macro_rules! tts_log {
     ($tag:expr, $($arg:tt)*) => {
-        if $crate::log::log_enabled() {
-            $crate::log::write_log($tag, &format!($($arg)*));
-        }
+        ::skill_constants::subsystem_log!(
+            $crate::log::log_enabled,
+            $crate::log::write_log,
+            $tag,
+            $($arg)*
+        )
     };
 }
 

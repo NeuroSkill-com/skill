@@ -108,6 +108,10 @@ impl Pipeline {
         // DSP pipeline: filter → bands → quality → artifacts.
         let filter_config = {
             let settings = skill_settings::load_settings(skill_dir);
+            // Propagate the EXG device preference to the RLX FFT kernels so the
+            // filter and band-analyzer use Metal on macOS, CUDA → wgpu → CPU elsewhere.
+            #[cfg(feature = "embed-exg")]
+            skill_eeg::rlx_fft::init_device(crate::embed::resolve_exg_device(&settings.exg_inference_device));
             let mut cfg = settings.filter_config;
             cfg.sample_rate = sample_rate as f32;
             cfg

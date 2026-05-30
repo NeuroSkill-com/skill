@@ -42,14 +42,12 @@
 //! P_band = Σ_k factor × psd_raw[k] / Σ wᵢ²
 //! ```
 //!
-//! where `psd_raw[k] = (r[k]² + i[k]²) / n` is the output of
-//! `gpu_fft::psd::psd`.
+//! where `psd_raw[k] = (r[k]² + i[k]²) / n`.
 //!
 //! ## Batch GPU execution
 //!
-//! All 4 channels are submitted together as a `4 × 512` matrix in one
-//! `fft_batch` call — the GPU kernel covers all channels in a single 2-D
-//! workgroup dispatch with no per-channel overhead.
+//! All channels are submitted together as a `batch × n` matrix in one
+//! `fft_batch` call — the GPU kernel covers all channels in a single dispatch.
 //!
 //! ## Bands
 //!
@@ -66,10 +64,10 @@ use std::collections::VecDeque;
 use std::f32::consts::PI;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(not(feature = "gpu"))]
+#[cfg(not(feature = "rlx-fft"))]
 use crate::cpu_fft::{fft_batch, psd};
-#[cfg(feature = "gpu")]
-use gpu_fft::{fft_batch, psd::psd};
+#[cfg(feature = "rlx-fft")]
+use crate::rlx_fft::{fft_batch, psd};
 use serde::{Deserialize, Serialize};
 
 use crate::band_metrics::*;
@@ -504,7 +502,7 @@ impl BandAnalyzer {
         // One-sided PSD (Heinzel et al. 2002 normalisation):
         //   S[k] = factor × |X[k]|² / (fs × Σwᵢ²)   [µV²/Hz]
         //
-        // With psd_raw[k] = |X[k]|² / n (from gpu_fft::psd::psd):
+        // With psd_raw[k] = |X[k]|² / n (output of `psd()`):
         //   S[k] = factor × n × psd_raw[k] / (fs × Σwᵢ²)
         //
         // Band power (µV²):

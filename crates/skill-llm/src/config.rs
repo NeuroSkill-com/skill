@@ -14,8 +14,9 @@ pub use skill_tools::types::{LlmToolConfig, ToolExecutionMode};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmInferenceRuntime {
-    #[default]
+    /// Legacy value kept for serde compat with existing config files; treated as Rlx.
     LlamaCpp,
+    #[default]
     Rlx,
 }
 
@@ -31,8 +32,8 @@ pub struct LlmConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_path: Option<std::path::PathBuf>,
 
-    /// Inference runtime. Defaults to llama.cpp; `rlx` is experimental and
-    /// requires building with the `llm-rlx` or `llm-rlx-metal` feature.
+    /// Inference runtime. Always RLX in practice; `llama_cpp` is accepted in
+    /// existing config files but treated identically.
     #[serde(default)]
     pub runtime: LlmInferenceRuntime,
 
@@ -81,7 +82,7 @@ pub struct LlmConfig {
     #[serde(default = "default_autoload_mmproj")]
     pub autoload_mmproj: bool,
 
-    /// Enable verbose llama.cpp / clip_model_loader logging to stderr.
+    /// Enable verbose inference / clip_model_loader logging to stderr.
     #[serde(default)]
     pub verbose: bool,
 
@@ -141,7 +142,7 @@ pub struct LlmConfig {
     #[serde(default, skip_serializing)]
     pub max_context_length: u32,
 
-    // ── TurboQuant KV-cache settings (llama-cpp-4 ≥ 0.2.20) ──────────────────
+    // ── TurboQuant KV-cache settings ─────────────────────────────────────────
     /// Storage type for the **K** (key) KV-cache tensors.
     ///
     /// Options: `"f16"` (default, highest quality), `"q8_0"` (saves ~47% VRAM,
@@ -158,13 +159,12 @@ pub struct LlmConfig {
     #[serde(default = "default_cache_type_v")]
     pub cache_type_v: String,
 
-    /// Disable the TurboQuant attention rotation (llama.cpp PR #21038).
+    /// Disable the TurboQuant attention rotation.
     ///
-    /// When `false` (the default), llama.cpp applies a Hadamard rotation to
-    /// Q/K/V tensors before writing them to the KV cache.  This significantly
-    /// improves the quality of quantized KV caches at near-zero overhead.
-    /// Set to `true` only if you experience compatibility issues with a
-    /// particular model.
+    /// When `false` (the default), a Hadamard rotation is applied to Q/K/V
+    /// tensors before writing to the KV cache, significantly improving the
+    /// quality of quantized KV caches at near-zero overhead.  Set to `true`
+    /// only if you experience compatibility issues with a particular model.
     #[serde(default)]
     pub attn_rot_disabled: bool,
 
@@ -247,7 +247,7 @@ impl Default for LlmConfig {
         Self {
             enabled: false,
             model_path: None,
-            runtime: LlmInferenceRuntime::LlamaCpp,
+            runtime: LlmInferenceRuntime::Rlx,
             n_gpu_layers: u32::MAX,
             ctx_size: None,
             parallel: default_llm_parallel(),

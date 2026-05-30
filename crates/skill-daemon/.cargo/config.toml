@@ -1,6 +1,5 @@
-# Force static linking for llama-cpp-4 and its dependencies
-# This ensures the skill-daemon binary is self-contained and doesn't
-# depend on external .dylib files, which fixes the @rpath issues on macOS
+# macOS linker flags: search_paths_first ensures system frameworks are found
+# before any local paths; dead_strip removes unused symbols to reduce binary size.
 
 [target.'cfg(target_os = "macos")']
 rustflags = [
@@ -8,17 +7,6 @@ rustflags = [
     "-C", "link-arg=-Wl,-dead_strip",
 ]
 
-# For llama-cpp-4 specifically, we want static linking
-# This is controlled by the llama-cpp-4 build script, but we can
-# encourage static linking through these flags
-[profile.release]
-panic = "abort"  # Reduce binary size
-lto = true       # Enable link-time optimization
-codegen-units = 1
-
-# When building for macOS, prefer static linking for llama-cpp
-# Note: We cannot use -static on macOS as it conflicts with system frameworks
-# Instead, we rely on the llama-cpp-4 'native' feature for static linking
 [target.aarch64-apple-darwin]
 rustflags = [
     "-C", "link-arg=-Wl,-search_paths_first",

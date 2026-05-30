@@ -7,14 +7,19 @@ description = "EEG signal processing for NeuroSkill — extracted workspace crat
 
 [features]
 default = []
-gpu = ["dep:gpu-fft", "gpu-fft/wgpu"]
-mlx = ["gpu", "gpu-fft/mlx"]
+# GPU-accelerated FFT via RLX — Metal on macOS, CUDA/wgpu/CPU elsewhere.
+# rlx-fft enables the rlx CPU baseline; the tier suffixes add GPU backends.
+rlx-fft       = ["dep:rlx", "rlx/cpu"]
+rlx-fft-metal = ["rlx-fft", "rlx/metal"]
+rlx-fft-cuda  = ["rlx-fft", "rlx/cuda"]
+rlx-fft-gpu   = ["rlx-fft", "rlx/gpu"]
+rlx-fft-rocm  = ["rlx-fft", "rlx/rocm"]
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
-gpu-fft    = { version = "1.2.0", default-features = false, optional = true }
+rlx        = { workspace = true, optional = true }
 rustfft    = "6"
 
 [dev-dependencies]

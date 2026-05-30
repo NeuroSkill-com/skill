@@ -371,43 +371,9 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 
 // ── UMAP compute ──────────────────────────────────────────────────────────────
 
-/// GPU (wgpu/CubeCL) backend — f32.
-#[cfg(feature = "gpu")]
-type GpuF32 = burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>>;
-
-/// GPU (wgpu/CubeCL) backend — f16.
-#[cfg(feature = "gpu")]
-type GpuF16 = burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, half::f16, i32, u32>>;
-
-/// MLX (Apple Silicon) backend — f32 only (fast-umap only implements traits for Mlx<f32>).
-#[cfg(feature = "mlx")]
-type MlxBackend = burn::backend::Autodiff<burn_mlx::Mlx>;
-
-/// Resolve the effective backend string based on user preference and compiled features.
-#[cfg(any(feature = "gpu", feature = "mlx"))]
-fn resolve_backend(pref: &str) -> &'static str {
-    match pref {
-        "mlx" if cfg!(feature = "mlx") => "mlx",
-        "gpu" if cfg!(feature = "gpu") => "gpu",
-        _ => {
-            // "auto": prefer MLX on macOS when available
-            if cfg!(all(target_os = "macos", feature = "mlx")) {
-                "mlx"
-            } else if cfg!(feature = "gpu") {
-                "gpu"
-            } else {
-                "mlx" // only MLX compiled
-            }
-        }
-    }
-}
-
 /// Returns the list of backends available in this build.
 pub fn available_backends() -> Vec<&'static str> {
     let mut v = Vec::new();
-    if cfg!(feature = "mlx") {
-        v.push("mlx");
-    }
     if cfg!(feature = "gpu") {
         v.push("gpu");
     }
@@ -415,82 +381,17 @@ pub fn available_backends() -> Vec<&'static str> {
 }
 
 /// Returns the list of precisions available for a given backend.
-pub fn available_precisions(backend: &str) -> Vec<&'static str> {
-    match backend {
-        "gpu" if cfg!(feature = "gpu") => vec!["f32", "f16"],
-        "mlx" if cfg!(feature = "mlx") => vec!["f32"],
-        _ => {
-            // "auto" — report precisions for the resolved backend
-            let resolved = if cfg!(all(target_os = "macos", feature = "mlx")) {
-                "mlx"
-            } else {
-                "gpu"
-            };
-            match resolved {
-                "gpu" => vec!["f32", "f16"],
-                _ => vec!["f32"],
-            }
-        }
-    }
-}
-
-/// Helper: run `Umap::<B>` fit inside catch_unwind.
-macro_rules! fit_umap {
-    ($B:ty, $config:expr, $data:expr, $labels:expr, $on_progress:expr) => {{
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let umap = fast_umap::Umap::<$B>::new($config);
-            let (_exit_tx, exit_rx) = crossbeam_channel::unbounded::<()>();
-            let fitted = if let Some(cb) = $on_progress {
-                umap.fit_with_progress($data, Some($labels), exit_rx, cb)
-            } else {
-                umap.fit_with_signal($data, Some($labels), exit_rx)
-            };
-            fitted.into_embedding()
-        }))
-    }};
-}
-
-type FitResult = Result<Vec<Vec<f64>>, Box<dyn std::any::Any + Send>>;
-
-#[cfg(feature = "gpu")]
-#[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn fit_umap_gpu(
-    config: fast_umap::UmapConfig,
-    data: Vec<Vec<f64>>,
-    labels: Vec<String>,
-    on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
-    precision: &str,
-) -> FitResult {
-    if precision == "f16" {
-        fit_umap!(GpuF16, config, data, labels, on_progress)
-    } else {
-        fit_umap!(GpuF32, config, data, labels, on_progress)
-    }
-}
-
-#[cfg(feature = "mlx")]
-#[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn fit_umap_mlx(
-    config: fast_umap::UmapConfig,
-    data: Vec<Vec<f64>>,
-    labels: Vec<String>,
-    on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
-    _precision: &str,
-) -> FitResult {
-    // MLX only supports f32 (fast-umap trait bounds)
-    fit_umap!(MlxBackend, config, data, labels, on_progress)
+pub fn available_precisions(_backend: &str) -> Vec<&'static str> {
+    vec!["f32"]
 }
 
 /// Inner UMAP compute — shared by both WS and Tauri IPC paths.
 ///
-/// Uses `fast-umap` (parametric, GPU/MLX-accelerated) instead of `umap-rs` for
-/// significantly faster projection on large embedding sets.
+/// Uses `rlx-umap` (parametric UMAP on RLX) for GPU-accelerated projection.
 ///
 /// Results are cached to `~/.skill/umap_cache/umap_{a}_{b}_{c}_{d}.json` so
 /// that repeated queries for the same session pair return instantly.
-///
-/// Available when the `gpu` or `mlx` feature is enabled.
-#[cfg(any(feature = "gpu", feature = "mlx"))]
+#[cfg(feature = "gpu")]
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn umap_compute_inner(
     skill_dir: &Path,
@@ -498,7 +399,7 @@ pub fn umap_compute_inner(
     a_end: u64,
     b_start: u64,
     b_end: u64,
-    on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
+    on_progress: Option<Box<dyn Fn(rlx_umap::EpochProgress) + Send>>,
 ) -> anyhow::Result<serde_json::Value> {
     // ── Check cache first ────────────────────────────────────────────────
     let cache_path = umap_cache_path(skill_dir, a_start, a_end, b_start, b_end);
@@ -511,10 +412,8 @@ pub fn umap_compute_inner(
     let mut embs_b = load_embeddings_range(skill_dir, b_start, b_end);
     let all_labels = load_labels_range(skill_dir, a_start.min(b_start), a_end.max(b_end));
 
-    // Count total epochs (including those with empty embedding BLOBs)
     let total_a = embs_a.len();
     let total_b = embs_b.len();
-    // Filter to only epochs that have actual embedding vectors
     embs_a.retain(|e| !e.1.is_empty());
     embs_b.retain(|e| !e.1.is_empty());
     let n_a = embs_a.len();
@@ -557,12 +456,10 @@ pub fn umap_compute_inner(
         }));
     }
 
-    // ── Load user-configurable UMAP parameters ─────────────────────────────
     let ucfg = skill_settings::load_umap_config(skill_dir);
 
     let n_use = n;
 
-    // Build Vec<Vec<f64>> input expected by fast-umap.
     let mut data: Vec<Vec<f64>> = Vec::with_capacity(n_use);
     let mut timestamps: Vec<u64> = Vec::with_capacity(n_use);
     let mut labels: Vec<u8> = Vec::with_capacity(n_use);
@@ -575,74 +472,53 @@ pub fn umap_compute_inner(
     let k = ucfg.n_neighbors.clamp(2, 50).min(n_use - 1).min(n_use / 2).max(2);
     let n_epochs = ucfg.n_epochs.clamp(50, 2000);
 
-    let config = fast_umap::UmapConfig {
+    let config = rlx_umap::UmapConfig {
         n_components: 3,
-        graph: fast_umap::GraphParams {
+        graph: rlx_umap::config::GraphParams {
             n_neighbors: k,
             ..Default::default()
         },
-        optimization: fast_umap::OptimizationParams {
+        optimization: rlx_umap::config::OptimizationParams {
             n_epochs,
             verbose: false,
             repulsion_strength: ucfg.repulsion_strength.clamp(0.1, 10.0),
             neg_sample_rate: ucfg.neg_sample_rate.clamp(1, 30),
             timeout: Some(ucfg.timeout_secs.clamp(10, 600)),
             cooldown_ms: ucfg.cooldown_ms.clamp(0, 10_000),
-            figures_dir: Some(skill_dir.join("tmp/figures")),
             ..Default::default()
         },
         ..Default::default()
     };
 
-    let fit_labels: Vec<String> = (0..n_use)
-        .map(|i| {
-            let session_tag = if labels[i] == 0 { "A" } else { "B" };
-            if let Some(lbl) = find_label_for_epoch(&all_labels, timestamps[i]) {
-                format!("{session_tag}:{lbl}")
-            } else {
-                session_tag.to_string()
-            }
-        })
-        .collect();
+    let backend = if cfg!(target_os = "macos") { "metal" } else { "gpu" };
+    eprintln!("[umap] backend: {backend} (user pref: {:?})", ucfg.backend);
 
-    // ── Backend dispatch ─────────────────────────────────────────────────
-    let effective = resolve_backend(&ucfg.backend);
-    let precision = match ucfg.precision.as_str() {
-        "f16" => "f16",
-        _ => "f32",
-    };
-    eprintln!(
-        "[umap] backend: {effective}/{precision} (user pref: {:?}/{:?})",
-        ucfg.backend, ucfg.precision
-    );
-
-    #[cfg(all(feature = "mlx", feature = "gpu"))]
-    let fit_result = if effective == "mlx" {
-        fit_umap_mlx(config, data, fit_labels, on_progress, precision)
+    let device = if cfg!(target_os = "macos") {
+        rlx_umap::Device::Metal
     } else {
-        fit_umap_gpu(config, data, fit_labels, on_progress, precision)
+        rlx_umap::Device::Gpu
     };
 
-    #[cfg(all(feature = "mlx", not(feature = "gpu")))]
-    let fit_result = fit_umap_mlx(config, data, fit_labels, on_progress, precision);
-
-    #[cfg(all(feature = "gpu", not(feature = "mlx")))]
-    let fit_result = fit_umap_gpu(config, data, fit_labels, on_progress, precision);
-
-    let embedding = match fit_result {
-        Ok(emb) => emb,
-        Err(e) => {
-            let msg = if let Some(s) = e.downcast_ref::<String>() {
-                s.clone()
-            } else if let Some(s) = e.downcast_ref::<&str>() {
-                s.to_string()
-            } else {
-                "unknown panic".to_string()
-            };
-            eprintln!("[umap] UMAP fit panicked: {msg}");
-            anyhow::bail!("UMAP projection failed: {msg}")
+    let fitted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let umap = rlx_umap::Umap::with_device(config, device);
+        if let Some(cb) = on_progress {
+            umap.fit_with_progress(data, move |p| cb(p))
+        } else {
+            umap.fit(data)
         }
-    };
+    }))
+    .map_err(|e| {
+        let msg = if let Some(s) = e.downcast_ref::<String>() {
+            s.clone()
+        } else if let Some(s) = e.downcast_ref::<&str>() {
+            s.to_string()
+        } else {
+            "unknown panic".to_string()
+        };
+        anyhow::anyhow!("UMAP projection failed: {msg}")
+    })?;
+
+    let embedding = fitted.embedding;
 
     let points: Vec<serde_json::Value> = (0..n_use)
         .map(|i| {
@@ -663,7 +539,7 @@ pub fn umap_compute_inner(
         .collect();
 
     let elapsed_ms = umap_start.elapsed().as_millis() as u64;
-    eprintln!("[umap] projection done in {elapsed_ms} ms ({n_use} embeddings, backend: {effective}/{precision})");
+    eprintln!("[umap] projection done in {elapsed_ms} ms ({n_use} embeddings, backend: {backend})");
 
     let analysis = analyze_umap_points(&embedding, &labels, &timestamps, n_a);
 
@@ -674,25 +550,23 @@ pub fn umap_compute_inner(
         "dim":        dim,
         "elapsed_ms": elapsed_ms,
         "analysis":   analysis,
-        "backend":    effective,
-        "precision":  precision,
+        "backend":    backend,
     });
 
-    // ── Persist to cache ─────────────────────────────────────────────────
     umap_cache_store(&cache_path, &result);
 
     Ok(result)
 }
 
-// CPU-only UMAP stub (for CI coverage without GPU/MLX)
-#[cfg(not(any(feature = "gpu", feature = "mlx")))]
+// CPU-only stub (for CI coverage without GPU)
+#[cfg(not(feature = "gpu"))]
 pub fn umap_compute_inner(
     _skill_dir: &Path,
     _a_start: u64,
     _a_end: u64,
     _b_start: u64,
     _b_end: u64,
-    _on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
+    _on_progress: Option<Box<dyn Fn(rlx_umap::EpochProgress) + Send>>,
 ) -> anyhow::Result<serde_json::Value> {
     Ok(serde_json::json!({
         "points": [],

@@ -18,7 +18,11 @@ totp-rs = { version = "5.7", features = ["gen_secret", "otpauth", "qr"] }
 ureq = { version = "3", features = ["native-tls", "json"] }
 base64 = "0.22"
 qrcodegen = "1.8"
-image = "0.25"
+# Default features pull `avif` → `ravif` → `rav1e` (AV1 encoder, ~5 MB).
+# We only need PNG to render QR codes for TOTP pairing — opt out of the
+# full codec set. Other workspace consumers already do this; we were the
+# lone outlier forcing AVIF into every binary via Cargo feature unification.
+image = { version = "0.25", default-features = false, features = ["png"] }
 zstd = "0.13"
 
 [dev-dependencies]

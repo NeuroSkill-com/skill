@@ -172,7 +172,7 @@ jobs:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Cache cmake-based -sys crate builds (llama-cpp-sys, etc.)
+          # Cache cmake-based -sys crate builds (espeak-ng-sys, etc.)
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         shell: bash
@@ -482,7 +482,7 @@ jobs:
 
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
       # Required for the espeak-ng static library build (lib.exe) and for
-      # the Vulkan SDK CMake integration used by the llm-vulkan feature.
+      # the Vulkan SDK CMake integration used by wgpu/rlx-gpu features.
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -648,7 +648,7 @@ jobs:
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
       # mmintrin.h references __builtin_ia32_* GCC-style intrinsics that
-      # clang-cl doesn't implement, causing bindgen (llama-cpp-sys-4) to panic
+      # clang-cl doesn't implement, causing bindgen to panic
       # with ~20 "use of undeclared identifier '__builtin_ia32_…'" errors.
       #
       # Fix: standalone LLVM 19 (non-MSVC-compat) implements all those builtins
@@ -800,7 +800,7 @@ jobs:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Cache cmake-based -sys crate builds (llama-cpp-sys, etc.)
+          # Cache cmake-based -sys crate builds (espeak-ng-sys, etc.)
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
@@ -1001,7 +1001,7 @@ jobs:
             --exclude iroh-example-client \
             --exclude skill \
             --no-default-features \
-            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
+            --features llm-rlx-cpu,skill-router/cpu,skill-daemon/cpu-only \
             --lcov \
             --output-path lcov.info
 
@@ -1011,7 +1011,7 @@ jobs:
             --exclude iroh-example-client \
             --exclude skill \
             --no-default-features \
-            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
+            --features llm-rlx-cpu,skill-router/cpu,skill-daemon/cpu-only \
             --summary-only \
             --fail-under-lines ${COVERAGE_MIN_LINES}
 

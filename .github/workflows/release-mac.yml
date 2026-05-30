@@ -173,66 +173,17 @@ jobs:
           set -euo pipefail
           npm run build
           npm run -s verify:tauri:frontend
-          # Build both skill and skill-daemon in a single cargo invocation so
-          # feature unification produces one consistent llama-cpp-sys-4 build
-          # (with mtmd + metal + q1).  Two separate invocations can cause cargo
-          # to reuse a cached llama-cpp-sys-4 static lib that lacks mtmd symbols.
           # NOTE: `|| return $?` after each cargo invocation is required.
           # `set -e` is inhibited inside a function called via `if ! cmd` /
           # captured exit code, so without explicit `|| return` a failing
           # cargo build would silently continue and run_cmd would still return 0.
           run_cmd() {
-            # Build daemon first — its default features (llm + embed-exg) compile
-            # llama-cpp-sys-4 with mtmd+metal+q1 via skill-llm's target-specific deps.
-            # Building skill second reuses the cached native libs.
             cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --timings || return $?
             cargo build -p skill-tty --release --locked --target aarch64-apple-darwin --timings || return $?
             cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol --timings || return $?
-
-            # Fix @rpath for skill-daemon immediately after build
-            # llama-cpp-4 builds .dylib files by default; we need to embed them
-            # in the .app bundle and update the binary's search paths
-            DAEMON_BIN="src-tauri/target/aarch64-apple-darwin/release/skill-daemon"
-            if [ ! -f "$DAEMON_BIN" ]; then
-              echo "::error::Daemon binary missing after successful cargo build: $DAEMON_BIN"
-              return 1
-            fi
-            echo "Fixing @rpath for skill-daemon…"
-
-            # Create Frameworks directory if it doesn't exist
-            mkdir -p "src-tauri/target/aarch64-apple-darwin/release/Frameworks"
-
-            # Copy any .dylib files that the daemon depends on
-            for LIB in libggml-base.0.dylib libllama.1.dylib; do
-              if [ -f "src-tauri/target/aarch64-apple-darwin/release/$LIB" ]; then
-                cp "src-tauri/target/aarch64-apple-darwin/release/$LIB" \
-                   "src-tauri/target/aarch64-apple-darwin/release/Frameworks/" || return $?
-                install_name_tool -change @rpath/$LIB @executable_path/../Frameworks/$LIB "$DAEMON_BIN" || return $?
-              fi
-            done
           }
           if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::macOS release compile failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              # Clean stale llama-cpp-sys artifacts so cargo rebuilds from source
-              find src-tauri/target -name "*llama_cpp_sys*" -exec rm -rf {} + 2>/dev/null || true
-              find src-tauri/target -name "*llama-cpp-sys*" -exec rm -rf {} + 2>/dev/null || true
-              # Also clean skill-daemon artifacts — the failed link leaves
-              # partial state that cargo considers "fresh", so without this
-              # the retry skips rebuilding the daemon entirely.
-              find src-tauri/target -name "*skill_daemon*" -exec rm -rf {} + 2>/dev/null || true
-              find src-tauri/target -name "*skill-daemon*" -not -path "*/skill-daemon-*" -exec rm -rf {} + 2>/dev/null || true
-              run_cmd
-              DAEMON_BIN="src-tauri/target/aarch64-apple-darwin/release/skill-daemon"
-              if [ ! -f "$DAEMON_BIN" ]; then
-                echo "::error::Daemon binary not found after source-build retry: $DAEMON_BIN"
-                exit 1
-              fi
-              echo "::notice::Source build succeeded after prebuilt llama failure"
-            else
-              exit 1
-            fi
+            exit 1
           fi
 
       # ── Assemble + sign .app bundle ─────────────────────────────────────

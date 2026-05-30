@@ -58,6 +58,7 @@ interface LlmConfig {
   enabled: boolean;
   autostart: boolean;
   model_path: string | null;
+  runtime: "llama_cpp" | "rlx";
   n_gpu_layers: number;
   ctx_size: number | null;
   n_batch: number | null;
@@ -100,6 +101,7 @@ let config = $state<LlmConfig>({
   enabled: false,
   autostart: false,
   model_path: null,
+  runtime: "llama_cpp",
   n_gpu_layers: 4294967295,
   ctx_size: null,
   n_batch: null,
@@ -452,6 +454,7 @@ onDestroy(() => {
   onSetNUbatch={async (val) => { config = { ...config, n_ubatch: val }; await saveConfig(); }}
   onToggleFlashAttention={async () => { config = { ...config, flash_attention: !config.flash_attention }; await saveConfig(); }}
   onToggleOffloadKqv={async () => { config = { ...config, offload_kqv: !config.offload_kqv }; await saveConfig(); }}
+  onSetRuntime={async (val) => { config = { ...config, runtime: val }; await saveConfig(); }}
 />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
