@@ -248,6 +248,18 @@ jobs:
             echo "::notice::No integration-testable crates affected"
           fi
 
+          if echo "$CRATE_FLAGS" | grep -qw "\-p skill-router"; then
+            echo "test_router=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "test_router=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          ROUTERLESS_FLAGS="$(echo "$CRATE_FLAGS" | sed 's/-p skill-router//g' | xargs || true)"
+          echo "routerless_flags=$ROUTERLESS_FLAGS" >> "$GITHUB_OUTPUT"
+
+          ROUTERLESS_INT="$(echo "$INT_FLAGS" | sed 's/-p skill-router//g' | xargs || true)"
+          echo "routerless_int_flags=$ROUTERLESS_INT" >> "$GITHUB_OUTPUT"
+
       - name: cargo test (affected crates — unit)
         id: rust_unit_tests
         if: steps.changed.outputs.skip != 'true'
@@ -260,15 +272,28 @@ jobs:
           set -euo pipefail
           start_ts="$(date +%s)"
           run_cmd() {
+            local flags="$1"
+            [[ -z "$flags" ]] && return 0
             cargo test --locked --target x86_64-unknown-linux-gnu \
-              ${{ steps.changed.outputs.crate_flags }} \
+              $flags \
               --lib
           }
-          if ! run_cmd; then
+          run_router_cmd() {
+            cargo test --locked --target x86_64-unknown-linux-gnu \
+              --no-default-features -p skill-router --features cpu \
+              --lib
+          }
+          run_all() {
+            run_cmd "${{ steps.changed.outputs.routerless_flags }}"
+            if [[ "${{ steps.changed.outputs.test_router }}" == "true" ]]; then
+              run_router_cmd
+            fi
+          }
+          if ! run_all; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
               echo "::warning::unit tests failed with prebuilt llama; retrying with source build"
               unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
+              run_all
             else
               exit 1
             fi
@@ -288,15 +313,28 @@ jobs:
           set -euo pipefail
           start_ts="$(date +%s)"
           run_cmd() {
+            local flags="$1"
+            [[ -z "$flags" ]] && return 0
             cargo test --locked --target x86_64-unknown-linux-gnu \
-              ${{ steps.changed.outputs.int_flags }} \
+              $flags \
               --test '*'
           }
-          if ! run_cmd; then
+          run_router_cmd() {
+            cargo test --locked --target x86_64-unknown-linux-gnu \
+              --no-default-features -p skill-router --features cpu \
+              --test '*'
+          }
+          run_all() {
+            run_cmd "${{ steps.changed.outputs.routerless_int_flags }}"
+            if [[ "${{ steps.changed.outputs.test_router }}" == "true" ]]; then
+              run_router_cmd
+            fi
+          }
+          if ! run_all; then
             if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
               echo "::warning::integration tests failed with prebuilt llama; retrying with source build"
               unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
+              run_all
             else
               exit 1
             fi

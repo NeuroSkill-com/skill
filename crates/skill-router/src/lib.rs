@@ -15,6 +15,12 @@ use serde::Serialize;
 
 use skill_constants::{LABELS_FILE, SQLITE_FILE};
 
+#[cfg(feature = "gpu")]
+mod umap_device;
+
+#[cfg(feature = "gpu")]
+pub use umap_device::{device_label, resolve_umap_device};
+
 // ── Rounding helpers ──────────────────────────────────────────────────────────
 
 /// Round `f32` to 1 decimal place.
@@ -373,11 +379,14 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 
 /// Returns the list of backends available in this build.
 pub fn available_backends() -> Vec<&'static str> {
-    let mut v = Vec::new();
-    if cfg!(feature = "gpu") {
-        v.push("gpu");
+    #[cfg(feature = "gpu")]
+    {
+        return umap_device::available_backends();
     }
-    v
+    #[cfg(not(feature = "gpu"))]
+    {
+        vec!["cpu"]
+    }
 }
 
 /// Returns the list of precisions available for a given backend.
@@ -387,11 +396,12 @@ pub fn available_precisions(_backend: &str) -> Vec<&'static str> {
 
 /// Inner UMAP compute — shared by both WS and Tauri IPC paths.
 ///
-/// Uses `rlx-umap` (parametric UMAP on RLX) for GPU-accelerated projection.
+/// Uses `rlx-umap` (parametric UMAP on RLX). With the `gpu` feature, selects
+/// the best available accelerator (CUDA → wgpu on Linux/Windows; Metal → MLX
+/// → wgpu on macOS) and falls back to CPU. CI / `cpu`-only builds always use CPU.
 ///
 /// Results are cached to `~/.skill/umap_cache/umap_{a}_{b}_{c}_{d}.json` so
 /// that repeated queries for the same session pair return instantly.
-#[cfg(feature = "gpu")]
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn umap_compute_inner(
     skill_dir: &Path,
@@ -490,17 +500,18 @@ pub fn umap_compute_inner(
         ..Default::default()
     };
 
-    let backend = if cfg!(target_os = "macos") { "metal" } else { "gpu" };
+    let device = select_umap_device(&ucfg.backend);
+    let backend = device.1;
     eprintln!("[umap] backend: {backend} (user pref: {:?})", ucfg.backend);
 
-    let device = if cfg!(target_os = "macos") {
-        rlx_umap::Device::Metal
-    } else {
-        rlx_umap::Device::Gpu
-    };
+    rlx_umap::register();
 
     let fitted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let umap = rlx_umap::Umap::with_device(config, device);
+        let umap = if device.0 == rlx_umap::Device::Cpu {
+            rlx_umap::Umap::new(config)
+        } else {
+            rlx_umap::Umap::with_device(config, device.0)
+        };
         if let Some(cb) = on_progress {
             umap.fit_with_progress(data, move |p| cb(p))
         } else {
@@ -558,31 +569,17 @@ pub fn umap_compute_inner(
     Ok(result)
 }
 
-// CPU-only stub (for CI coverage without GPU)
-#[cfg(not(feature = "gpu"))]
-pub fn umap_compute_inner(
-    _skill_dir: &Path,
-    _a_start: u64,
-    _a_end: u64,
-    _b_start: u64,
-    _b_end: u64,
-    _on_progress: Option<Box<dyn Fn(rlx_umap::EpochProgress) + Send>>,
-) -> anyhow::Result<serde_json::Value> {
-    Ok(serde_json::json!({
-        "points": [],
-        "n_a": 0,
-        "n_b": 0,
-        "dim": 0,
-        "elapsed_ms": 0,
-        "backend": "none",
-        "analysis": {
-            "density_a": 0.0,
-            "density_b": 0.0,
-            "mixing_score": 0.0,
-            "cluster_count": 0,
-            "avg_distance": 0.0
-        }
-    }))
+fn select_umap_device(pref: &str) -> (rlx_umap::Device, &'static str) {
+    #[cfg(feature = "gpu")]
+    {
+        let device = umap_device::resolve_umap_device(pref);
+        return (device, umap_device::device_label(device));
+    }
+    #[cfg(not(feature = "gpu"))]
+    {
+        let _ = pref;
+        (rlx_umap::Device::Cpu, "cpu")
+    }
 }
 
 // ── Supported commands ────────────────────────────────────────────────────────

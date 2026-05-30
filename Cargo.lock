@@ -10681,6 +10681,7 @@ dependencies = [
  "rlx-gguf",
  "rlx-ir",
  "rlx-metal",
+ "rlx-mlx",
  "rlx-runtime",
  "safetensors 0.7.0",
  "serde",
@@ -12260,6 +12261,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "hotpath",
+ "rlx-runtime",
  "rlx-umap",
  "rusqlite",
  "serde",
