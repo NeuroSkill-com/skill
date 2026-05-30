@@ -2517,7 +2517,7 @@ mod tests {
         // Subscribe to broadcast before triggering.
         let mut rx = st.events_tx.subscribe();
 
-        // Trigger reembed (empty skill_dir = fast, emits loading_encoder → done).
+        // Trigger reembed (empty skill_dir = fast, scans first, emits done immediately).
         let Json(v) = trigger_reembed(State(st.clone())).await;
         assert_eq!(v["ok"], true);
 

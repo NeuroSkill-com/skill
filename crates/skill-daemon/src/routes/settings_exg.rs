@@ -138,25 +138,6 @@ pub(crate) fn run_batch_reembed_with_cancel(
 ) -> anyhow::Result<()> {
     tracing::info!("[reembed] starting batch reembed");
 
-    // Emit immediate feedback so the UI progress bar shows activity.
-    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
-        r#type: "reembed-progress".into(),
-        ts_unix_ms: now_unix_ms(),
-        correlation_id: None,
-        payload: serde_json::json!({ "status": "loading_encoder", "total": 0, "done": 0 }),
-    });
-
-    // 1. Load the encoder (tries GPU first, falls back to CPU).
-    let config = load_model_config(skill_dir);
-    let encoder = crate::embed::load_encoder_public(&config, skill_dir);
-    if encoder.is_none() {
-        anyhow::bail!(
-            "encoder failed to load for backend '{}' — check model weights",
-            config.model_backend.as_str()
-        );
-    }
-    let mut encoder = encoder.unwrap();
-
     let _ = events_tx.send(skill_daemon_common::EventEnvelope {
         r#type: "reembed-progress".into(),
         ts_unix_ms: now_unix_ms(),
@@ -164,7 +145,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
         payload: serde_json::json!({ "status": "scanning", "total": 0, "done": 0 }),
     });
 
-    // 2. Scan all day directories for sessions with missing embeddings.
+    // 1. Scan first — skip the expensive encoder load if there is nothing to do.
     let mut total_needed = 0u64;
     let mut total_done = 0u64;
     let mut total_failed = 0u64;
@@ -190,7 +171,6 @@ pub(crate) fn run_batch_reembed_with_cancel(
     day_dirs.sort();
     day_dirs.reverse(); // Most recent days first — users care about recent data.
 
-    // First pass: count total needed.
     for day_dir in &day_dirs {
         let db_path = day_dir.join(skill_constants::SQLITE_FILE);
         if !db_path.exists() {
@@ -214,12 +194,6 @@ pub(crate) fn run_batch_reembed_with_cancel(
         "[reembed] {total_needed} epochs need embeddings across {} days",
         day_dirs.len()
     );
-    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
-        r#type: "reembed-progress".into(),
-        ts_unix_ms: now_unix_ms(),
-        correlation_id: None,
-        payload: serde_json::json!({ "status": "started", "total": total_needed, "done": 0 }),
-    });
 
     if total_needed == 0 {
         let _ = events_tx.send(skill_daemon_common::EventEnvelope {
@@ -230,6 +204,31 @@ pub(crate) fn run_batch_reembed_with_cancel(
         });
         return Ok(());
     }
+
+    // 2. Load the encoder only when there is actual work to do.
+    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "reembed-progress".into(),
+        ts_unix_ms: now_unix_ms(),
+        correlation_id: None,
+        payload: serde_json::json!({ "status": "loading_encoder", "total": total_needed, "done": 0 }),
+    });
+
+    let config = load_model_config(skill_dir);
+    let encoder = crate::embed::load_encoder_public(&config, skill_dir);
+    if encoder.is_none() {
+        anyhow::bail!(
+            "encoder failed to load for backend '{}' — check model weights",
+            config.model_backend.as_str()
+        );
+    }
+    let mut encoder = encoder.unwrap();
+
+    let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+        r#type: "reembed-progress".into(),
+        ts_unix_ms: now_unix_ms(),
+        correlation_id: None,
+        payload: serde_json::json!({ "status": "started", "total": total_needed, "done": 0 }),
+    });
 
     // 3. Process each day directory.
     for day_dir in &day_dirs {
