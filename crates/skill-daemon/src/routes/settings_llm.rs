@@ -6,14 +6,12 @@ use axum::{extract::State, Json};
 use crate::{
     routes::{
         settings::StringValueRequest,
-        settings_io::{load_user_settings, save_user_settings},
+        settings_io::{load_user_settings, modify_settings_blocking},
     },
     state::AppState,
 };
 
-pub(crate) async fn get_llm_config(State(state): State<AppState>) -> Json<skill_settings::LlmConfig> {
-    Json(load_user_settings(&state).llm)
-}
+crate::settings_struct_get!(skill_settings::LlmConfig, get_llm_config => llm);
 
 pub(crate) async fn set_llm_config(
     State(state): State<AppState>,
@@ -25,9 +23,13 @@ pub(crate) async fn set_llm_config(
     #[cfg(feature = "llm")]
     let prev_ctx_size = state.llm_config.lock().map(|g| g.ctx_size).ok();
 
-    let mut settings = load_user_settings(&state);
-    settings.llm = config.clone();
-    save_user_settings(&state, &settings);
+    let location_enabled = load_user_settings(&state).location_enabled;
+    let config = config.clone();
+    let disk_llm = config.clone();
+    modify_settings_blocking(&state, move |s| {
+        s.llm = disk_llm;
+    })
+    .await;
 
     #[cfg(feature = "llm")]
     {
@@ -44,7 +46,7 @@ pub(crate) async fn set_llm_config(
                     let prev_port = server.allowed_tools.lock().map(|t| t.skill_api_port).unwrap_or(18445);
                     let mut new_tools = config.tools.clone();
                     new_tools.skill_api_port = prev_port;
-                    if !settings.location_enabled {
+                    if !location_enabled {
                         new_tools.location = false;
                     }
                     if let Ok(mut tools) = server.allowed_tools.lock() {
@@ -69,35 +71,37 @@ pub(crate) async fn set_llm_config(
     Json(serde_json::json!({"ok": true}))
 }
 
-pub(crate) async fn get_inference_device(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).inference_device}))
-}
+crate::settings_get_value!(get_inference_device => inference_device);
 
 pub(crate) async fn set_inference_device(
     State(state): State<AppState>,
     Json(req): Json<StringValueRequest>,
 ) -> Json<serde_json::Value> {
     let is_cpu = req.value == "cpu";
-    let mut settings = load_user_settings(&state);
-    settings.inference_device = if is_cpu { "cpu".into() } else { "gpu".into() };
-    if is_cpu {
-        let cur_layers = settings.llm.n_gpu_layers;
-        if cur_layers != 0 {
-            settings.llm_gpu_layers_saved = cur_layers;
+    let out = modify_settings_blocking(&state, move |s| {
+        s.inference_device = if is_cpu { "cpu".into() } else { "gpu".into() };
+        if is_cpu {
+            let cur_layers = s.llm.n_gpu_layers;
+            if cur_layers != 0 {
+                s.llm_gpu_layers_saved = cur_layers;
+            }
+            s.llm.n_gpu_layers = 0;
+        } else {
+            s.llm.n_gpu_layers = s.llm_gpu_layers_saved;
         }
-        settings.llm.n_gpu_layers = 0;
-    } else {
-        settings.llm.n_gpu_layers = settings.llm_gpu_layers_saved;
-    }
-    let out = settings.inference_device.clone();
+        s.inference_device.clone()
+    })
+    .await;
 
     // Sync to in-memory llm_config so the next server start picks it up.
     #[cfg(feature = "llm")]
     if let Ok(mut cfg) = state.llm_config.lock() {
-        cfg.n_gpu_layers = settings.llm.n_gpu_layers;
+        cfg.n_gpu_layers = if is_cpu {
+            0
+        } else {
+            load_user_settings(&state).llm_gpu_layers_saved
+        };
     }
-
-    save_user_settings(&state, &settings);
 
     // If the LLM server is already running, restart it so the device
     // change takes effect immediately.
@@ -118,24 +122,24 @@ pub(crate) async fn set_inference_device(
     Json(serde_json::json!({"ok": true, "value": out}))
 }
 
-pub(crate) async fn get_exg_inference_device(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).exg_inference_device}))
-}
+crate::settings_get_value!(get_exg_inference_device => exg_inference_device);
 
 pub(crate) async fn set_exg_inference_device(
     State(state): State<AppState>,
     Json(req): Json<StringValueRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.exg_inference_device = match req.value.as_str() {
+    let out: String = match req.value.as_str() {
         "mlx" => "mlx".into(),
         "gpu" => "gpu".into(),
         "cpu" => "cpu".into(),
         _ => "auto".into(),
     };
-    let out = settings.exg_inference_device.clone();
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": out}))
+    let out_clone = out.clone();
+    modify_settings_blocking(&state, move |s| {
+        s.exg_inference_device = out;
+    })
+    .await;
+    Json(serde_json::json!({"ok": true, "value": out_clone}))
 }
 
 pub(crate) async fn get_hf_endpoint(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -152,12 +156,15 @@ pub(crate) async fn set_hf_endpoint(
     State(state): State<AppState>,
     Json(req): Json<StringValueRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.hf_endpoint = if req.value.trim().is_empty() {
+    let endpoint = if req.value.trim().is_empty() {
         skill_settings::default_hf_endpoint()
     } else {
         req.value.trim().to_string()
     };
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": settings.hf_endpoint}))
+    let endpoint_out = endpoint.clone();
+    modify_settings_blocking(&state, move |s| {
+        s.hf_endpoint = endpoint;
+    })
+    .await;
+    Json(serde_json::json!({"ok": true, "value": endpoint_out}))
 }

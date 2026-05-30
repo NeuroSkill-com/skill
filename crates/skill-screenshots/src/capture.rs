@@ -181,6 +181,7 @@ fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
 /// Each provider's `build()` returns a registration request; if ORT was not
 /// compiled with that EP's feature flag the registration silently fails and
 /// the next provider in the list is tried, ultimately falling through to CPU.
+#[cfg(feature = "text-embeddings-fastembed")]
 fn build_execution_providers(use_gpu: bool) -> Vec<ort::execution_providers::ExecutionProviderDispatch> {
     if use_gpu {
         #[cfg(target_os = "macos")]
@@ -212,11 +213,13 @@ fn build_execution_providers(use_gpu: bool) -> Vec<ort::execution_providers::Exe
 }
 
 /// Try to create a fastembed `ImageEmbedding` instance.  Public alias for Tauri commands.
+#[cfg(feature = "text-embeddings-fastembed")]
 pub fn load_fastembed_image_pub(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
     load_fastembed_image(config, skill_dir)
 }
 
 /// Try to create a fastembed `ImageEmbedding` instance.
+#[cfg(feature = "text-embeddings-fastembed")]
 fn load_fastembed_image(config: &ScreenshotConfig, _skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
     if config.embed_backend != "fastembed" {
         return None;
@@ -244,11 +247,13 @@ fn load_fastembed_image(config: &ScreenshotConfig, _skill_dir: &Path) -> Option<
 }
 
 /// Embed a single image (PNG bytes) using fastembed.  Public alias for Tauri commands.
+#[cfg(feature = "text-embeddings-fastembed")]
 pub fn fastembed_embed_pub(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) -> Option<Vec<f32>> {
     fastembed_embed(encoder, png_bytes)
 }
 
 /// Embed a single image (PNG bytes) using fastembed.
+#[cfg(feature = "text-embeddings-fastembed")]
 fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) -> Option<Vec<f32>> {
     match encoder.embed_bytes(&[png_bytes], None) {
         Ok(mut vecs) if !vecs.is_empty() => Some(vecs.remove(0)),
@@ -262,6 +267,7 @@ fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) ->
 
 /// Embed a pre-decoded `DynamicImage` directly using fastembed — avoids the
 /// CPU-intensive PNG encode→decode round-trip that `embed_bytes` performs.
+#[cfg(feature = "text-embeddings-fastembed")]
 #[allow(dead_code)]
 fn fastembed_embed_image(encoder: &mut fastembed::ImageEmbedding, img: DynamicImage) -> Option<Vec<f32>> {
     match encoder.embed_images(vec![img]) {
@@ -320,8 +326,11 @@ fn download_ocr_model(url: &str, dest: &Path) -> bool {
     }
 }
 
-/// Load the ocrs OCR engine.  Downloads model files on first use.
-fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
+use rlx_models::ocr as rlx_ocr;
+
+/// Load the OCR engine via `rlx-ocr` (rlx-models' drop-in replacement
+/// for the legacy `ocrs` crate). Downloads model files on first use.
+fn load_ocr_engine(skill_dir: &Path) -> Option<rlx_ocr::OcrEngine> {
     let ocr_dir = skill_dir.join("ocr_models");
     let det_path = ocr_dir.join(OCR_DETECTION_MODEL_FILE);
     let rec_path = ocr_dir.join(OCR_RECOGNITION_MODEL_FILE);
@@ -333,50 +342,41 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
         return None;
     }
 
-    let det_model = rten::Model::load_file(&det_path).ok()?;
-    let rec_model = rten::Model::load_file(&rec_path).ok()?;
-
-    ocrs::OcrEngine::new(ocrs::OcrEngineParams {
-        detection_model: Some(det_model),
-        recognition_model: Some(rec_model),
+    rlx_ocr::OcrEngine::new(rlx_ocr::OcrEngineParams {
+        detection_model: Some(det_path.clone()),
+        recognition_model: Some(rec_path.clone()),
         ..Default::default()
     })
     .ok()
 }
 
-/// Run OCR on an already-resized PNG image.  Returns the extracted text.
+/// Run OCR on an already-resized PNG image. Returns the extracted text.
 ///
-/// On macOS: uses `skill-vision` crate (compiled ObjC, Vision framework,
-/// GPU / Neural Engine) — typically <50 ms.
-///
-/// On other platforms (or if Apple Vision fails): uses `ocrs` (rten, CPU).
-fn run_ocr(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
-    // Try Apple Vision first on macOS (GPU/ANE, <50ms)
+/// On macOS: tries `skill-vision` (Apple Vision, GPU / Neural Engine, <50 ms).
+/// Falls back to `rlx-ocr` everywhere else.
+fn run_ocr(engine: &rlx_ocr::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
         if let Some(text) = skill_vision::recognize_text_from_png(png_bytes) {
             return Some(text);
         }
-        // Fall through to ocrs if Vision framework fails
     }
 
     run_ocr_rten(engine, png_bytes)
 }
 
-/// OCR via the `ocrs` crate (rten CPU inference).  Used on Linux/Windows
+/// OCR via `rlx-ocr` (rten-inference backend, CPU). Used on Linux/Windows
 /// and as a fallback on macOS if Vision framework is unavailable.
-fn run_ocr_rten(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
+fn run_ocr_rten(engine: &rlx_ocr::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     let img = image::load_from_memory(png_bytes).ok()?.into_rgb8();
     run_ocr_rten_rgb(engine, &img)
 }
 
 /// OCR from an already-decoded `DynamicImage` — avoids the encode→decode
 /// round-trip when the caller already has pixel data.
-fn run_ocr_from_image(engine: &ocrs::OcrEngine, img: &DynamicImage) -> Option<String> {
-    // Try Apple Vision first on macOS (GPU/ANE, <50ms)
+fn run_ocr_from_image(engine: &rlx_ocr::OcrEngine, img: &DynamicImage) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        // Apple Vision needs encoded bytes — JPEG is ~10× faster than PNG
         if let Some(jpg) = encode_jpeg(img, 85) {
             if let Some(text) = skill_vision::recognize_text_from_png(&jpg) {
                 return Some(text);
@@ -389,9 +389,9 @@ fn run_ocr_from_image(engine: &ocrs::OcrEngine, img: &DynamicImage) -> Option<St
 }
 
 /// Core OCR on an already-decoded RGB8 image buffer.
-fn run_ocr_rten_rgb(engine: &ocrs::OcrEngine, img: &image::RgbImage) -> Option<String> {
+fn run_ocr_rten_rgb(engine: &rlx_ocr::OcrEngine, img: &image::RgbImage) -> Option<String> {
     let (w, h) = img.dimensions();
-    let source = ocrs::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
+    let source = rlx_ocr::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
     let input = engine.prepare_input(source).ok()?;
     let text = engine.get_text(&input).ok()?;
     let text = text.trim().to_string();

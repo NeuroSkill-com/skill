@@ -7,6 +7,7 @@ import { ToggleRow } from "$lib/components/ui/toggle-row";
 import { t } from "$lib/i18n/index.svelte";
 
 interface LlmConfigView {
+  runtime: "llama_cpp" | "rlx";
   n_gpu_layers: number;
   ctx_size: number | null;
   n_batch: number | null;
@@ -47,6 +48,7 @@ interface Props {
   onSetNUbatch: (val: number | null) => void | Promise<void>;
   onToggleFlashAttention: () => void | Promise<void>;
   onToggleOffloadKqv: () => void | Promise<void>;
+  onSetRuntime: (val: "llama_cpp" | "rlx") => void | Promise<void>;
 }
 
 let {
@@ -71,6 +73,7 @@ let {
   onSetNUbatch,
   onToggleFlashAttention,
   onToggleOffloadKqv,
+  onSetRuntime,
 }: Props = $props();
 
 const KV_TYPES = [
@@ -119,6 +122,31 @@ const curlSnippet = $derived(
   {#if showAdvanced}
     <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
       <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+        <!-- Inference runtime selector (PLAN.md M8 / skill integration). -->
+        <div class="flex flex-col gap-2 px-4 py-3.5">
+          <div class="flex items-baseline justify-between">
+            <span class="text-ui-lg font-semibold text-foreground">Inference runtime</span>
+            <span class="text-ui-base text-muted-foreground tabular-nums">
+              {config.runtime === "rlx" ? "RLX (experimental)" : "llama.cpp"}
+            </span>
+          </div>
+          <p class="text-ui-base text-muted-foreground -mt-1">
+            llama.cpp is the production backend. RLX is the in-tree
+            inference engine — supports the full LLM catalog plus
+            MiniMax / LFM / Nemotron-H families that llama.cpp doesn't.
+          </p>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            {#each [["llama_cpp", "llama.cpp"], ["rlx", "RLX"]] as [val, label]}
+              <button onclick={() => onSetRuntime(val as "llama_cpp" | "rlx")}
+                class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
+                       {config.runtime === val
+                         ? 'bg-foreground text-background border-foreground'
+                         : 'bg-background text-foreground border-border hover:bg-surface-2'}">
+                {label}
+              </button>
+            {/each}
+          </div>
+        </div>
         <div class="flex flex-col gap-2 px-4 py-3.5">
           <div class="flex items-baseline justify-between">
             <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.gpuLayers")}</span>

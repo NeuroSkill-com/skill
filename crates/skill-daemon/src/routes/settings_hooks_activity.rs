@@ -9,9 +9,12 @@ use skill_data::activity_store::{
 };
 
 use crate::{
-    routes::settings::{
-        ActivityBucketsRequest, ActivityFilesRequest, ActivityRecentRequest, CoEditRequest, DaySummaryRequest,
-        EditChunksRequest, HookDistanceRequest, HookKeywordsRequest, HookLogRequest,
+    routes::{
+        settings::{
+            ActivityBucketsRequest, ActivityFilesRequest, ActivityRecentRequest, CoEditRequest, DaySummaryRequest,
+            EditChunksRequest, HookDistanceRequest, HookKeywordsRequest, HookLogRequest,
+        },
+        settings_io::patch_user_settings_sync,
     },
     state::AppState,
 };
@@ -27,15 +30,10 @@ pub(crate) async fn set_hooks_impl(
     if let Ok(mut g) = state.hooks.lock() {
         *g = hooks.clone();
     }
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.hooks = hooks;
-    let path = skill_settings::settings_path(&skill_dir);
-    let ok = serde_json::to_string_pretty(&settings)
-        .ok()
-        .and_then(|json| std::fs::write(path, json).ok())
-        .is_some();
-    Json(serde_json::json!({"ok": ok}))
+    patch_user_settings_sync(&state, move |s| {
+        s.hooks = hooks;
+    });
+    Json(serde_json::json!({"ok": true}))
 }
 
 pub(crate) async fn get_hook_statuses_impl(State(state): State<AppState>) -> Json<serde_json::Value> {

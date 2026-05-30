@@ -13,6 +13,7 @@ pub use skill_settings::ScreenshotConfig;
 ///
 /// This lives here (not in `skill-settings`) because it depends on the
 /// `fastembed` crate which is only available in `skill-screenshots`.
+#[cfg(feature = "text-embeddings-fastembed")]
 pub fn fastembed_model_enum(config: &ScreenshotConfig) -> Option<fastembed::ImageEmbeddingModel> {
     match config.fastembed_model.as_str() {
         "clip-vit-b-32" => Some(fastembed::ImageEmbeddingModel::ClipVitB32),

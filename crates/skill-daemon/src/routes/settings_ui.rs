@@ -5,21 +5,16 @@ use axum::{extract::State, Json};
 use serde::Deserialize;
 
 use crate::{
-    routes::settings_io::{load_user_settings, save_user_settings},
+    routes::settings_io::{load_user_settings, modify_settings_blocking, patch_settings},
     state::AppState,
 };
 
-use super::settings::{BoolValueRequest, StringValueRequest};
+use super::settings::{BoolValueRequest, StringValueRequest, U64ValueRequest};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct WsConfigRequest {
     pub(crate) host: String,
     pub(crate) port: u16,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct U64ValueRequest {
-    pub(crate) value: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,55 +46,22 @@ pub(crate) async fn set_iroh_logs(
     state
         .iroh_logs_enabled
         .store(req.value, std::sync::atomic::Ordering::Relaxed);
-    let mut settings = load_user_settings(&state);
-    settings.iroh_logs = req.value;
-    save_user_settings(&state, &settings);
+    patch_settings(&state, move |s| {
+        s.iroh_logs = req.value;
+    })
+    .await;
     Json(serde_json::json!({"ok": true}))
 }
 
 // --- TTS / Sleep / WS ---
 
-pub(crate) async fn get_neutts_config(State(state): State<AppState>) -> Json<skill_settings::NeuttsConfig> {
-    Json(load_user_settings(&state).neutts)
-}
-
-pub(crate) async fn set_neutts_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::NeuttsConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.neutts = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-pub(crate) async fn get_tts_preload(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"value": load_user_settings(&state).tts_preload}))
-}
-
-pub(crate) async fn set_tts_preload(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.tts_preload = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-pub(crate) async fn get_sleep_config(State(state): State<AppState>) -> Json<skill_settings::SleepConfig> {
-    Json(load_user_settings(&state).sleep)
-}
-
-pub(crate) async fn set_sleep_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::SleepConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.sleep = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
+crate::settings_struct!(
+    skill_settings::NeuttsConfig,
+    get_neutts_config,
+    set_neutts_config => neutts
+);
+crate::settings_bool!(get_tts_preload, set_tts_preload => tts_preload);
+crate::settings_struct!(skill_settings::SleepConfig, get_sleep_config, set_sleep_config => sleep);
 
 pub(crate) async fn get_ws_config(State(state): State<AppState>) -> Json<serde_json::Value> {
     let settings = load_user_settings(&state);
@@ -121,19 +83,17 @@ pub(crate) async fn set_ws_config(
             serde_json::json!({"ok": false, "error": format!("port {} is reserved; use 1024–65535", req.port)}),
         );
     }
-    let mut settings = load_user_settings(&state);
-    settings.ws_host = host;
-    settings.ws_port = req.port;
-    save_user_settings(&state, &settings);
+    patch_settings(&state, move |s| {
+        s.ws_host = host;
+        s.ws_port = req.port;
+    })
+    .await;
     Json(serde_json::json!({"ok": true, "port": req.port}))
 }
 
 // --- Location / Token ---
 
-pub(crate) async fn get_location_enabled(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.location_enabled}))
-}
+crate::settings_get_value!(get_location_enabled => location_enabled);
 
 pub(crate) async fn set_location_enabled(
     State(state): State<AppState>,
@@ -141,9 +101,10 @@ pub(crate) async fn set_location_enabled(
 ) -> Json<serde_json::Value> {
     use serde_json::json;
     if !req.value {
-        let mut settings = load_user_settings(&state);
-        settings.location_enabled = false;
-        save_user_settings(&state, &settings);
+        patch_settings(&state, move |s| {
+            s.location_enabled = false;
+        })
+        .await;
         return Json(json!({"enabled": false}));
     }
 
@@ -205,9 +166,10 @@ pub(crate) async fn set_location_enabled(
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
     if enabled_result {
-        let mut settings = load_user_settings(&state);
-        settings.location_enabled = true;
-        save_user_settings(&state, &settings);
+        patch_settings(&state, move |s| {
+            s.location_enabled = true;
+        })
+        .await;
     }
 
     Json(result)
@@ -351,20 +313,11 @@ pub(crate) async fn get_dnd_focus_modes() -> Json<Vec<skill_data::dnd::FocusMode
     Json(skill_data::dnd::list_focus_modes())
 }
 
-pub(crate) async fn get_dnd_config(State(state): State<AppState>) -> Json<skill_settings::DoNotDisturbConfig> {
-    let settings = load_user_settings(&state);
-    Json(settings.do_not_disturb)
-}
-
-pub(crate) async fn set_dnd_config(
-    State(state): State<AppState>,
-    Json(config): Json<skill_settings::DoNotDisturbConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.do_not_disturb = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
+crate::settings_struct!(
+    skill_settings::DoNotDisturbConfig,
+    get_dnd_config,
+    set_dnd_config => do_not_disturb
+);
 
 pub(crate) async fn get_dnd_active() -> Json<serde_json::Value> {
     Json(serde_json::json!({"value": skill_data::dnd::query_os_active().unwrap_or(false)}))
@@ -420,98 +373,36 @@ pub(crate) async fn open_full_disk_access() -> Json<serde_json::Value> {
 
 // --- UI appearance ---
 
-pub(crate) async fn get_accent_color(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.accent_color}))
-}
+crate::settings_string!(get_accent_color, set_accent_color => accent_color);
 
-pub(crate) async fn set_accent_color(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.accent_color = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-pub(crate) async fn get_daily_goal(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.daily_goal_min}))
-}
+crate::settings_get_value!(get_daily_goal => daily_goal_min);
 
 pub(crate) async fn set_daily_goal(
     State(state): State<AppState>,
     Json(req): Json<U64ValueRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
     let clamped = (req.value as u32).min(480);
-    settings.daily_goal_min = clamped;
-    save_user_settings(&state, &settings);
+    modify_settings_blocking(&state, move |s| {
+        s.daily_goal_min = clamped;
+    })
+    .await;
     Json(serde_json::json!({"ok": true, "value": clamped}))
 }
 
-pub(crate) async fn get_goal_notified_date(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.goal_notified_date}))
-}
+crate::settings_string!(get_goal_notified_date, set_goal_notified_date => goal_notified_date);
 
-pub(crate) async fn set_goal_notified_date(
-    State(state): State<AppState>,
-    Json(req): Json<StringValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.goal_notified_date = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true}))
-}
-
-pub(crate) async fn get_main_window_auto_fit(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.main_window_auto_fit}))
-}
-
-pub(crate) async fn set_main_window_auto_fit(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.main_window_auto_fit = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
+crate::settings_bool!(get_main_window_auto_fit, set_main_window_auto_fit => main_window_auto_fit);
 
 // --- Skills ---
 
-pub(crate) async fn get_skills_refresh_interval(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.llm.tools.skills_refresh_interval_secs}))
-}
-
-pub(crate) async fn set_skills_refresh_interval(
-    State(state): State<AppState>,
-    Json(req): Json<U64ValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.tools.skills_refresh_interval_secs = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
-
-pub(crate) async fn get_skills_sync_on_launch(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.llm.tools.skills_sync_on_launch}))
-}
-
-pub(crate) async fn set_skills_sync_on_launch(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.tools.skills_sync_on_launch = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"ok": true, "value": req.value}))
-}
+crate::settings_nested_u64!(
+    get_skills_refresh_interval,
+    set_skills_refresh_interval => llm.tools.skills_refresh_interval_secs
+);
+crate::settings_nested_bool!(
+    get_skills_sync_on_launch,
+    set_skills_sync_on_launch => llm.tools.skills_sync_on_launch
+);
 
 pub(crate) async fn get_skills_last_sync(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -586,18 +477,17 @@ pub(crate) async fn get_skills_license(State(state): State<AppState>) -> Json<se
     Json(serde_json::json!({"value": std::fs::read_to_string(&license_path).ok()}))
 }
 
-pub(crate) async fn get_disabled_skills(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.llm.tools.disabled_skills}))
-}
+crate::settings_nested_get_value!(get_disabled_skills => llm.tools.disabled_skills);
 
 pub(crate) async fn set_disabled_skills(
     State(state): State<AppState>,
     Json(req): Json<StringListRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.tools.disabled_skills = req.values.clone();
-    save_user_settings(&state, &settings);
+    let values = req.values.clone();
+    modify_settings_blocking(&state, move |s| {
+        s.llm.tools.disabled_skills = values;
+    })
+    .await;
     Json(serde_json::json!({"ok": true, "value": req.values}))
 }
 

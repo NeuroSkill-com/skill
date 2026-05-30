@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use skill_constants::LABELS_FILE;
 use skill_daemon_common::ApiError;
 
-use crate::routes::settings_io::{load_user_settings, save_user_settings};
+use crate::routes::settings_io::patch_user_settings_sync;
 use crate::state::AppState;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -617,9 +617,10 @@ async fn set_label_index_backend(
     };
 
     state.label_index.set_preferred_backend(backend);
-    let mut settings = load_user_settings(&state);
-    settings.label_index_backend = backend.as_str().to_string();
-    save_user_settings(&state, &settings);
+    let backend_name = backend.as_str().to_string();
+    patch_user_settings_sync(&state, move |s| {
+        s.label_index_backend = backend_name;
+    });
 
     Json(serde_json::json!({
         "ok": true,

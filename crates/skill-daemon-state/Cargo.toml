@@ -6,21 +6,32 @@ license = "GPL-3.0-only"
 description = "Shared state types for skill-daemon — extracted for parallel compilation"
 
 [features]
+# Text-embeddings backend selection. `fastembed` (ONNX via ort+rten,
+# ~30 MB binary) ships on by default for backwards compatibility; `rlx`
+# is the pure-Rust alternative (RlxBertModel / RlxNomicModel from
+# rlx-embed) — drop-in for the same set of BGE / Nomic / E5 models.
+# To build without fastembed entirely:
+#   --no-default-features --features llm,text-embeddings-rlx
 default = ["llm"]
 llm = ["skill-llm/llm"]
-text-embeddings-rlx = ["dep:hf-hub", "dep:rlx", "dep:tokenizers"]
-text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate"]
+text-embeddings-fastembed = ["dep:fastembed"]
+text-embeddings-rlx = ["dep:hf-hub", "dep:rlx", "dep:rlx-models", "dep:tokenizers"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal"]
+text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "rlx?/cuda", "rlx-models?/cuda"]
+text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "rlx?/rocm", "rlx-models?/rocm"]
+text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "rlx?/gpu", "rlx-models?/gpu"]
 
 [dependencies]
 anyhow     = { workspace = true }
 thiserror  = { workspace = true }
 base64     = { workspace = true }
 dirs       = "6"
-fastembed  = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
+fastembed  = { version = "5.13.0", features = ["ort-download-binaries-native-tls"], optional = true }
 hf-hub     = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
 hex        = "0.4"
 rand       = "0.10"
-rlx        = { workspace = true, optional = true, features = ["cpu", "models"] }
+rlx        = { workspace = true, optional = true, features = ["cpu"] }
+rlx-models = { workspace = true, optional = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 sha2       = "0.10"

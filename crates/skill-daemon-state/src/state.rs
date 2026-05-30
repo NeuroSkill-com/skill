@@ -51,6 +51,12 @@ pub struct IdleReembedStatus {
     pub memory_throttled: bool,
     /// Last sampled system memory usage percent (used / total). 0 when unread.
     pub memory_percent: u8,
+    /// Seconds remaining on the "no-progress" backoff. 0 when no backoff is
+    /// active. UI surfaces this so the user knows why the loop appears idle
+    /// even though epochs still need embedding.
+    pub backoff_secs_remaining: u64,
+    /// Human-readable reason for the current backoff (empty when none).
+    pub backoff_reason: String,
 }
 
 /// Shared application state threaded through all axum handlers.

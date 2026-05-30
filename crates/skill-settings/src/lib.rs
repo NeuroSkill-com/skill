@@ -1018,10 +1018,9 @@ pub struct UserSettings {
     #[serde(default = "default_llm_gpu_layers_saved")]
     pub llm_gpu_layers_saved: u32,
 
-    /// Inference backend for EXG embeddings: `"auto"`, `"mlx"`, `"gpu"`, or `"cpu"`.
+    /// Inference backend for EXG embeddings: `"auto"`, `"gpu"`, or `"cpu"`.
     ///
-    /// `"auto"` selects MLX on macOS when available, GPU (wgpu) otherwise.
-    /// `"mlx"` uses Apple Silicon native acceleration via burn-mlx.
+    /// `"auto"` selects GPU (wgpu) when available, CPU otherwise.
     /// `"gpu"` uses the wgpu backend (Metal on macOS, Vulkan on Linux).
     /// `"cpu"` uses burn's NdArray backend (no GPU required, slower).
     #[serde(default = "default_exg_inference_device")]

@@ -15,6 +15,9 @@
 //! use skill_constants::prelude::*;
 //! ```
 
+#[macro_use]
+pub mod log_macros;
+
 // ── Poison-recovering Mutex helper ────────────────────────────────────────────
 
 /// Extension trait for `std::sync::Mutex` that recovers from poison.

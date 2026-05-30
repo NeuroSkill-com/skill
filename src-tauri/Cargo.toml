@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.130-rc.31"
+version = "0.0.131-rc.1"
 description = "A Tauri App"
 authors = ["NeuroSkill authors"]
 edition = "2021"
@@ -121,7 +121,7 @@ kittentts = { version = "0.4.1", features = ["espeak"], optional = true }
 #           sentence on Apple Silicon — effectively broken from a UX standpoint.
 #           Declared here for non-macOS; the macOS entry is in
 #           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
-neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -200,7 +200,7 @@ dispatch2        = "0.3.1"
 # `metal` passes llama-cpp-2/metal which enables the Metal compute backend.
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
-neutts = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

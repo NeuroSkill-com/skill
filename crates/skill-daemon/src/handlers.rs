@@ -738,9 +738,10 @@ pub(crate) async fn set_preferred_device(
     Json(req): Json<SetPreferredDeviceRequest>,
 ) -> Json<Vec<DiscoveredDeviceResponse>> {
     // Persist preferred_id to settings (synchronous so the response reflects it).
-    let mut settings = crate::routes::settings_io::load_user_settings(&state);
-    settings.preferred_id = if req.id.is_empty() { None } else { Some(req.id.clone()) };
-    crate::routes::settings_io::save_user_settings(&state, &settings);
+    let preferred_id = if req.id.is_empty() { None } else { Some(req.id.clone()) };
+    crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
+        s.preferred_id = preferred_id;
+    });
 
     // Also update in-memory devices for consistency.
     if let Ok(mut guard) = state.devices.lock() {
@@ -985,9 +986,10 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
             persist_paired_devices(&state);
 
             // Set as preferred.
-            let mut settings = crate::routes::settings_io::load_user_settings(&state);
-            settings.preferred_id = Some(dev.id.clone());
-            crate::routes::settings_io::save_user_settings(&state, &settings);
+            let preferred_id = dev.id.clone();
+            crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
+                s.preferred_id = Some(preferred_id);
+            });
 
             state.broadcast("devices-updated", serde_json::json!({ "auto_paired": dev.id }));
 
@@ -1114,20 +1116,13 @@ pub(crate) async fn control_start_session(
     // would attempt a BLE scan even though the user plugged in a USB dongle.
     if let Some(ref t) = target {
         if let Some(port) = t.strip_prefix("usb:") {
-            let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-            let mut settings = skill_settings::load_settings(&skill_dir);
-            settings.openbci.serial_port = port.to_string();
-            // A usb: target always means a serial board (Cyton or CytonDaisy).
-            // Preserve the user's choice if it is already a serial board;
-            // otherwise reset to Cyton so we never attempt a BLE / WiFi /
-            // UDP connection when a dongle is plugged in.
-            if !settings.openbci.board.is_serial() {
-                settings.openbci.board = skill_settings::OpenBciBoard::Cyton;
-            }
-            let path = skill_settings::settings_path(&skill_dir);
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let _ = std::fs::write(path, json);
-            }
+            let port = port.to_string();
+            crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
+                s.openbci.serial_port = port;
+                if !s.openbci.board.is_serial() {
+                    s.openbci.board = skill_settings::OpenBciBoard::Cyton;
+                }
+            });
         }
         if target_requires_pairing(t) && !is_paired_target(&state, t) {
             if let Ok(mut status) = state.status.lock() {

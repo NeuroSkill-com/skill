@@ -154,6 +154,7 @@ fn catalog_entry_to_llm_model(
         moe_intermediate_size: None,
         vocab_size: None,
         shared_expert_intermediate_size: None,
+        architecture: None,
     }
 }
 

@@ -24,12 +24,14 @@ pub mod log;
 /// ```
 ///
 /// Short-circuits (no `format!` allocation) when logging is disabled.
-#[allow(unused_macros)]
 macro_rules! llm_log {
     ($tag:expr, $($arg:tt)*) => {
-        if $crate::log::log_enabled() {
-            $crate::log::write_log($tag, &format!($($arg)*));
-        }
+        ::skill_constants::subsystem_log!(
+            $crate::log::log_enabled,
+            $crate::log::write_log,
+            $tag,
+            $($arg)*
+        );
     };
 }
 

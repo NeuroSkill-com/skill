@@ -18,10 +18,14 @@ image           = { version = "0.25", default-features = false, features = ["png
 gif             = "0.14"
 fast-hnsw          = "1.0.1"
 crossbeam-channel  = "0.5"
-ocrs            = "0.12.1"
-rten            = "0.24.0"
 chrono          = { version = "0.4", default-features = false, features = ["clock", "std"] }
 ureq            = { version = "3", features = ["native-tls"] }
+hf-hub          = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
+rlx             = { workspace = true, optional = true, features = ["cpu"] }
+# `rlx-models` provides the `ocr` submodule (rlx-ocr drop-in replacement
+# for the legacy `ocrs` crate). Always-on so OCR can use the rlx runtime
+# stack without an extra feature flag.
+rlx-models      = { workspace = true }
 
 [[bin]]
 name = "image_encode_bench"
@@ -31,24 +35,37 @@ path = "src/bin/image_encode_bench.rs"
 version = "=2.0.0-rc.11"
 default-features = false
 features = ["coreml"]
+optional = true
 
 [target.'cfg(not(target_os = "macos"))'.dependencies.ort]
 version = "=2.0.0-rc.11"
 default-features = false
 features = ["download-binaries", "tls-native"]
+optional = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 skill-vision = { path = "../skill-vision" }
-fastembed = { version = "5.11.0", features = ["metal"] }
+fastembed = { version = "5.11.0", features = ["metal"], optional = true }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 
 [features]
-default = ["capture"]
+# Backend selection mirrors skill-daemon-state:
+#   * text-embeddings-fastembed — fastembed + ort+rten (ONNX runtime), ~30 MB extra
+#   * text-embeddings-rlx       — RlxVisionModel from rlx-embed (NomicEmbedVisionV15)
+# When neither is on the capture pipeline still works (no embeddings emitted).
+# OCR (ocrs+rten) stays compiled in — rten is its own runtime, not ONNX.
+default = ["capture", "text-embeddings-rlx"]
 capture = ["xcap"]
+text-embeddings-fastembed = ["dep:fastembed", "dep:ort"]
+text-embeddings-rlx = ["dep:rlx", "dep:hf-hub"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models/metal"]
+text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "rlx?/cuda", "rlx-models/cuda"]
+text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "rlx?/rocm", "rlx-models/rocm"]
+text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "rlx?/gpu", "rlx-models/gpu"]
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-fastembed = { version = "5.11.0", features = ["ort-download-binaries-native-tls"] }
+fastembed = { version = "5.11.0", features = ["ort-download-binaries-native-tls"], optional = true }
 xcap = { version = "0.9", default-features = false, optional = true }
 
 [lints]

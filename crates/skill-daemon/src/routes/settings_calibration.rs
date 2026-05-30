@@ -22,10 +22,7 @@ pub(crate) async fn list_profiles(State(state): State<AppState>) -> Json<Vec<Cal
     Json(settings.calibration_profiles)
 }
 
-pub(crate) async fn get_active_profile_id(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.active_calibration_id}))
-}
+crate::settings_get_value!(get_active_profile_id => active_calibration_id);
 
 #[derive(Deserialize)]
 pub(crate) struct SetActiveRequest {

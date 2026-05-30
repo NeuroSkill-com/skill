@@ -20,7 +20,7 @@ use skill_eeg::eeg_model_config::{EegModelStatus, ExgModelConfig};
 use crate::{
     routes::{
         settings_device, settings_exg, settings_hooks_activity,
-        settings_io::{load_user_settings, save_user_settings},
+        settings_io::{load_user_settings, patch_settings, patch_user_settings_sync},
         settings_llm::{
             get_exg_inference_device, get_hf_endpoint, get_inference_device, get_llm_config, set_exg_inference_device,
             set_hf_endpoint, set_inference_device, set_llm_config,
@@ -143,6 +143,11 @@ pub(crate) struct BoolValueRequest {
 #[derive(Debug, Deserialize)]
 pub(crate) struct StringValueRequest {
     pub(crate) value: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct U64ValueRequest {
+    pub(crate) value: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -602,19 +607,11 @@ pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, Stri
     settings_exg::probe_weights_for_config(config)
 }
 
-async fn get_reembed_config(state: State<AppState>) -> Json<skill_settings::ReembedConfig> {
-    Json(load_user_settings(&state).reembed)
-}
-
-async fn set_reembed_config(
-    state: State<AppState>,
-    Json(config): Json<skill_settings::ReembedConfig>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.reembed = config;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({ "ok": true }))
-}
+crate::settings_struct!(
+    skill_settings::ReembedConfig,
+    get_reembed_config,
+    set_reembed_config => reembed
+);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct DaemonWatchdogConfig {
@@ -634,10 +631,13 @@ async fn set_daemon_watchdog(
     state: State<AppState>,
     Json(config): Json<DaemonWatchdogConfig>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.daemon_auto_restart = config.enabled;
-    settings.daemon_restart_timeout_secs = config.timeout_secs;
-    save_user_settings(&state, &settings);
+    let enabled = config.enabled;
+    let timeout_secs = config.timeout_secs;
+    patch_settings(&state, move |s| {
+        s.daemon_auto_restart = enabled;
+        s.daemon_restart_timeout_secs = timeout_secs;
+    })
+    .await;
     Json(serde_json::json!({ "ok": true }))
 }
 
@@ -806,12 +806,16 @@ async fn set_text_embedding_model(
         }
         let ok = embedder.reload();
         if ok {
-            let mut settings = load_user_settings(&state_clone);
-            settings.text_embedding_model = code.clone();
-            settings.text_embedding_backend = embedder.backend().as_str().to_string();
-            settings.text_embedding_rlx_device = embedder.rlx_device();
-            settings.text_embedding_rlx_max_seq = embedder.rlx_max_seq();
-            save_user_settings(&state_clone, &settings);
+            let backend = embedder.backend().as_str().to_string();
+            let rlx_device = embedder.rlx_device();
+            let rlx_max_seq = embedder.rlx_max_seq();
+            let model = code.clone();
+            patch_user_settings_sync(&state_clone, move |s| {
+                s.text_embedding_model = model;
+                s.text_embedding_backend = backend;
+                s.text_embedding_rlx_device = rlx_device;
+                s.text_embedding_rlx_max_seq = rlx_max_seq;
+            });
         }
         (ok, code)
     })
@@ -1571,104 +1575,33 @@ async fn set_file_patterns(
     State(state): State<AppState>,
     Json(patterns): Json<Vec<skill_settings::FilePatternRule>>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.file_patterns = patterns;
-    save_user_settings(&state, &settings);
+    patch_settings(&state, move |s| {
+        s.file_patterns = patterns;
+    })
+    .await;
     Json(serde_json::json!({"ok": true}))
 }
 
-async fn get_file_activity_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "value": state
-            .track_file_activity
-            .load(std::sync::atomic::Ordering::Relaxed)
-    }))
-}
-
-async fn set_file_activity_tracking(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.track_file_activity = req.value;
-    save_user_settings(&state, &settings);
-    state
-        .track_file_activity
-        .store(req.value, std::sync::atomic::Ordering::Relaxed);
-    Json(serde_json::json!({"value": req.value}))
-}
-
-async fn get_clipboard_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.track_clipboard}))
-}
-
-async fn set_clipboard_tracking(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.track_clipboard = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"value": req.value}))
-}
-
-async fn get_calendar_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let settings = load_user_settings(&state);
-    Json(serde_json::json!({"value": settings.track_calendar}))
-}
-
-async fn set_calendar_tracking(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.track_calendar = req.value;
-    save_user_settings(&state, &settings);
-    Json(serde_json::json!({"value": req.value}))
-}
-
-async fn get_active_window_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "value": state
-            .track_active_window
-            .load(std::sync::atomic::Ordering::Relaxed)
-    }))
-}
-
-async fn set_active_window_tracking(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.track_active_window = req.value;
-    save_user_settings(&state, &settings);
-    state
-        .track_active_window
-        .store(req.value, std::sync::atomic::Ordering::Relaxed);
-    Json(serde_json::json!({"value": req.value}))
-}
-
-async fn get_input_activity_tracking(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "value": state
-            .track_input_activity
-            .load(std::sync::atomic::Ordering::Relaxed)
-    }))
-}
-
-async fn set_input_activity_tracking(
-    State(state): State<AppState>,
-    Json(req): Json<BoolValueRequest>,
-) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.track_input_activity = req.value;
-    save_user_settings(&state, &settings);
-    state
-        .track_input_activity
-        .store(req.value, std::sync::atomic::Ordering::Relaxed);
-    Json(serde_json::json!({"value": req.value}))
-}
+crate::settings_bool_atomic!(
+    get_file_activity_tracking,
+    set_file_activity_tracking,
+    field: track_file_activity,
+    atomic: track_file_activity
+);
+crate::settings_bool_set_value!(get_clipboard_tracking, set_clipboard_tracking => track_clipboard);
+crate::settings_bool_set_value!(get_calendar_tracking, set_calendar_tracking => track_calendar);
+crate::settings_bool_atomic!(
+    get_active_window_tracking,
+    set_active_window_tracking,
+    field: track_active_window,
+    atomic: track_active_window
+);
+crate::settings_bool_atomic!(
+    get_input_activity_tracking,
+    set_input_activity_tracking,
+    field: track_input_activity,
+    atomic: track_input_activity
+);
 
 async fn get_current_active_window(State(state): State<AppState>) -> Json<Option<ActiveWindowInfo>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -2518,6 +2451,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "text-embeddings-fastembed")]
     async fn set_text_embedding_model_valid_persists() {
         let (td, st) = mk_state();
         // Set to bge-small

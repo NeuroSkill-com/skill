@@ -14,6 +14,8 @@ pub mod context;
 #[allow(dead_code)]
 pub(crate) mod gif_encode;
 pub(crate) mod platform;
+#[cfg(feature = "text-embeddings-rlx")]
+pub mod rlx_image;
 pub mod user_screenshot;
 
 // Re-export so existing `skill_screenshots::ScreenshotConfig` paths keep working.

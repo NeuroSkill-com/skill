@@ -9,11 +9,10 @@
 //
 // Optional extras:
 //   --features='gpu,hotpath,hotpath-alloc'   # also tracks allocations
-//   --features='mlx,hotpath'                  # MLX backend (Apple)
 //
 // Adjust N_A / N_B below for larger/smaller workloads.
 
-#[cfg(all(feature = "hotpath", any(feature = "gpu", feature = "mlx")))]
+#[cfg(all(feature = "hotpath", feature = "gpu"))]
 mod runner {
     use std::fs;
     use std::path::PathBuf;
@@ -113,15 +112,15 @@ mod runner {
     }
 }
 
-#[cfg(all(feature = "hotpath", any(feature = "gpu", feature = "mlx")))]
+#[cfg(all(feature = "hotpath", feature = "gpu"))]
 fn main() {
     runner::run();
 }
 
-#[cfg(not(all(feature = "hotpath", any(feature = "gpu", feature = "mlx"))))]
+#[cfg(not(all(feature = "hotpath", feature = "gpu")))]
 fn main() {
     eprintln!(
-        "umap_hotpath requires --features='hotpath' plus one of 'gpu'/'mlx'.\n\
+        "umap_hotpath requires --features='hotpath,gpu'.\n\
          e.g. cargo run -p skill-router --release --example umap_hotpath \\\n\
                   --features='gpu,hotpath'"
     );

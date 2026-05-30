@@ -30,7 +30,7 @@ updates:
         patterns:
           - "*"
     ignore:
-      # wgpu cannot be upgraded independently: burn-wgpu, gpu-fft, zuna-rs,
-      # and luna-rs all require wgpu 26.x. Upgrade the whole Burn/GPU stack together.
+      # wgpu cannot be upgraded independently: zuna-rs and luna-rs require wgpu 26.x.
+      # Upgrade wgpu together with the encoder crates.
       - dependency-name: "wgpu"
         versions: [">=27"]

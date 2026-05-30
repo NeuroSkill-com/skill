@@ -591,19 +591,11 @@ pub(super) async fn cmd_hooks_set(state: &AppState, msg: &Value) -> Result<Value
     if let Ok(mut g) = state.hooks.lock() {
         *g = hooks.clone();
     }
-    let skill_dir = skill_dir(state);
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.hooks = hooks;
-    let path = skill_settings::settings_path(&skill_dir);
-    match serde_json::to_string_pretty(&settings) {
-        Ok(json) => {
-            if let Err(e) = std::fs::write(&path, json) {
-                return Err(format!("failed to save hooks: {e}"));
-            }
-        }
-        Err(e) => return Err(format!("failed to serialize settings: {e}")),
-    }
-    Ok(json!({ "hooks": settings.hooks }))
+    crate::routes::settings_io::patch_user_settings_sync(state, move |s| {
+        s.hooks = hooks;
+    });
+    let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
+    Ok(json!({ "hooks": hooks }))
 }
 
 pub(super) async fn cmd_hooks_suggest(state: &AppState, msg: &Value) -> Result<Value, String> {

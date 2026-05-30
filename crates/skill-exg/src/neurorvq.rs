@@ -13,31 +13,9 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 
 pub use neurorvq_rs::{
-    ConfigOverrides, FMEncoderResult, ForwardResult, InputBatch, Modality, NeuroRVQConfig, ReconstructionResult,
+    ConfigOverrides, FMEncoderResult, ForwardResult, Modality, NeuroRVQConfig, ReconstructionResult, RlxInputBatch,
     TokenResult,
 };
-
-#[cfg(feature = "neurorvq-ndarray")]
-type B = burn_ndarray::NdArray;
-
-#[cfg(feature = "neurorvq-ndarray")]
-fn default_device() -> burn_ndarray::NdArrayDevice {
-    burn_ndarray::NdArrayDevice::Cpu
-}
-
-#[cfg(all(
-    any(feature = "neurorvq-metal", feature = "neurorvq-vulkan"),
-    not(feature = "neurorvq-ndarray")
-))]
-type B = burn_wgpu::Wgpu;
-
-#[cfg(all(
-    any(feature = "neurorvq-metal", feature = "neurorvq-vulkan"),
-    not(feature = "neurorvq-ndarray")
-))]
-fn default_device() -> burn_wgpu::WgpuDevice {
-    burn_wgpu::WgpuDevice::DefaultDevice
-}
 
 /// Default HuggingFace repo with pre-converted safetensors weights.
 pub const HF_REPO: &str = "eugenehp/NeuroRVQ";
@@ -77,19 +55,23 @@ fn resolve_hf_file(repo: &str, filename: &str) -> Result<PathBuf> {
 }
 
 pub struct NeuroRVQ {
-    inner: neurorvq_rs::NeuroRVQEncoder<B>,
+    inner: neurorvq_rs::NeuroRVQEncoder,
 }
 
 impl NeuroRVQ {
-    pub fn from_files(config_path: &Path, weights_path: &Path, modality: Modality) -> Result<Self> {
-        let dev = default_device();
+    pub fn from_files(
+        config_path: &Path,
+        weights_path: &Path,
+        modality: Modality,
+        device: rlx::Device,
+    ) -> Result<Self> {
         let (inner, ms) =
-            neurorvq_rs::NeuroRVQEncoder::<B>::load_with_modality(config_path, weights_path, modality, dev)?;
+            neurorvq_rs::NeuroRVQEncoder::load_with_modality(config_path, weights_path, modality, device)?;
         log::info!("NeuroRVQ-{modality} loaded in {ms:.0} ms");
         Ok(Self { inner })
     }
 
-    pub fn from_hf(repo: &str, modality: Modality) -> Result<Self> {
+    pub fn from_hf(repo: &str, modality: Modality, device: rlx::Device) -> Result<Self> {
         let weights_file = tokenizer_weights_file(modality);
         let cfg_file = config_file(modality);
 
@@ -106,64 +88,42 @@ impl NeuroRVQ {
             weights_path.display(),
         );
 
-        Self::from_files(&config_path, &weights_path, modality)
+        Self::from_files(&config_path, &weights_path, modality, device)
     }
 
-    pub fn from_default_hf(modality: Modality) -> Result<Self> {
-        Self::from_hf(HF_REPO, modality)
+    pub fn from_default_hf(modality: Modality, device: rlx::Device) -> Result<Self> {
+        Self::from_hf(HF_REPO, modality, device)
     }
 
-    pub fn from_hf_with_overrides(repo: &str, modality: Modality, overrides: &ConfigOverrides) -> Result<Self> {
+    pub fn from_hf_with_overrides(
+        repo: &str,
+        modality: Modality,
+        overrides: &ConfigOverrides,
+        device: rlx::Device,
+    ) -> Result<Self> {
         let weights_file = tokenizer_weights_file(modality);
         let cfg_file = config_file(modality);
 
         let config_path = resolve_hf_file(repo, cfg_file)?;
         let weights_path = resolve_hf_file(repo, weights_file)?;
 
-        let dev = default_device();
         let (inner, ms) =
-            neurorvq_rs::NeuroRVQEncoder::<B>::load_full(&config_path, &weights_path, modality, Some(overrides), dev)?;
+            neurorvq_rs::NeuroRVQEncoder::load_full(&config_path, &weights_path, modality, Some(overrides), device)?;
         log::info!("NeuroRVQ-{modality} loaded in {ms:.0} ms (with overrides)");
         Ok(Self { inner })
     }
 
-    pub fn tokenize(&self, signal: &[f32], channel_names: &[&str]) -> Result<TokenResult> {
-        let modality = self.inner.modality;
-        let config = &self.inner.config;
-        let n_channels = channel_names.len();
-        let n_samples = signal.len() / n_channels;
-        let n_time = neurorvq_rs::compute_n_time(config.n_patches, n_channels);
-
-        anyhow::ensure!(
-            n_samples == n_time * config.patch_size,
-            "Signal length mismatch: got {} samples per channel, expected {} (n_time={} × patch_size={})",
-            n_samples,
-            n_time * config.patch_size,
-            n_time,
-            config.patch_size,
-        );
-
-        let dev = self.inner.device();
-        let batch = neurorvq_rs::build_batch_with_modality(
-            signal.to_vec(),
-            channel_names,
-            n_time,
-            config.n_patches,
-            n_channels,
-            n_samples,
-            modality,
-            dev,
-        );
-
+    pub fn tokenize(&mut self, signal: &[f32], channel_names: &[&str]) -> Result<TokenResult> {
+        let batch = self.build_batch(signal, channel_names)?;
         self.inner.tokenize(&batch)
     }
 
-    pub fn reconstruct(&self, signal: &[f32], channel_names: &[&str]) -> Result<ReconstructionResult> {
+    pub fn reconstruct(&mut self, signal: &[f32], channel_names: &[&str]) -> Result<ReconstructionResult> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.reconstruct(&batch)
     }
 
-    pub fn forward(&self, signal: &[f32], channel_names: &[&str]) -> Result<ForwardResult> {
+    pub fn forward(&mut self, signal: &[f32], channel_names: &[&str]) -> Result<ForwardResult> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.forward(&batch)
     }
@@ -176,7 +136,7 @@ impl NeuroRVQ {
         &self.inner.config
     }
 
-    fn build_batch(&self, signal: &[f32], channel_names: &[&str]) -> Result<InputBatch<B>> {
+    fn build_batch(&self, signal: &[f32], channel_names: &[&str]) -> Result<RlxInputBatch> {
         let config = &self.inner.config;
         let n_channels = channel_names.len();
         let n_samples = signal.len() / n_channels;
@@ -189,8 +149,7 @@ impl NeuroRVQ {
             n_time * config.patch_size,
         );
 
-        let dev = self.inner.device();
-        Ok(neurorvq_rs::build_batch_with_modality(
+        Ok(neurorvq_rs::build_batch(
             signal.to_vec(),
             channel_names,
             n_time,
@@ -198,24 +157,27 @@ impl NeuroRVQ {
             n_channels,
             n_samples,
             self.inner.modality,
-            dev,
         ))
     }
 }
 
 pub struct NeuroRVQFM {
-    inner: neurorvq_rs::NeuroRVQFoundationModel<B>,
+    inner: neurorvq_rs::NeuroRVQFoundationModel,
 }
 
 impl NeuroRVQFM {
-    pub fn from_files(config_path: &Path, weights_path: &Path, modality: Modality) -> Result<Self> {
-        let dev = default_device();
-        let (inner, ms) = neurorvq_rs::NeuroRVQFoundationModel::<B>::load(config_path, weights_path, modality, dev)?;
+    pub fn from_files(
+        config_path: &Path,
+        weights_path: &Path,
+        modality: Modality,
+        device: rlx::Device,
+    ) -> Result<Self> {
+        let (inner, ms) = neurorvq_rs::NeuroRVQFoundationModel::load(config_path, weights_path, modality, device)?;
         log::info!("NeuroRVQ-FM-{modality} loaded in {ms:.0} ms");
         Ok(Self { inner })
     }
 
-    pub fn from_hf(repo: &str, modality: Modality) -> Result<Self> {
+    pub fn from_hf(repo: &str, modality: Modality, device: rlx::Device) -> Result<Self> {
         let weights_file =
             fm_weights_file(modality).with_context(|| format!("No foundation model available for {modality}"))?;
         let cfg_file = config_file(modality);
@@ -223,24 +185,42 @@ impl NeuroRVQFM {
         let config_path = resolve_hf_file(repo, cfg_file)?;
         let weights_path = resolve_hf_file(repo, weights_file)?;
 
-        Self::from_files(&config_path, &weights_path, modality)
+        Self::from_files(&config_path, &weights_path, modality, device)
     }
 
-    pub fn from_default_hf(modality: Modality) -> Result<Self> {
-        Self::from_hf(HF_REPO, modality)
+    pub fn from_default_hf(modality: Modality, device: rlx::Device) -> Result<Self> {
+        Self::from_hf(HF_REPO, modality, device)
     }
 
-    pub fn encode(&self, signal: &[f32], channel_names: &[&str]) -> Result<FMEncoderResult> {
+    pub fn encode(&mut self, signal: &[f32], channel_names: &[&str]) -> Result<FMEncoderResult> {
         let batch = self.build_batch(signal, channel_names)?;
         self.inner.encode(&batch)
     }
 
-    pub fn encode_pooled(&self, signal: &[f32], channel_names: &[&str]) -> Result<Vec<f32>> {
-        let batch = self.build_batch(signal, channel_names)?;
-        self.inner.encode_pooled(&batch)
+    /// Mean-pool branch features across the sequence dimension and concatenate.
+    /// Output shape: `[4 * embed_dim]` — mirrors the old Burn `encode_pooled`.
+    pub fn encode_pooled(&mut self, signal: &[f32], channel_names: &[&str]) -> Result<Vec<f32>> {
+        let result = self.encode(signal, channel_names)?;
+        let seq_len = result.shape.get(1).copied().unwrap_or(1);
+        let embed_dim = result.shape.get(2).copied().unwrap_or(1);
+        let mut pooled = Vec::with_capacity(4 * embed_dim);
+        for branch in &result.branch_features {
+            let mut mean = vec![0f32; embed_dim];
+            for s in 0..seq_len {
+                for e in 0..embed_dim {
+                    mean[e] += branch[s * embed_dim + e];
+                }
+            }
+            let inv = 1.0 / seq_len as f32;
+            for v in &mut mean {
+                *v *= inv;
+            }
+            pooled.extend_from_slice(&mean);
+        }
+        Ok(pooled)
     }
 
-    fn build_batch(&self, signal: &[f32], channel_names: &[&str]) -> Result<InputBatch<B>> {
+    fn build_batch(&self, signal: &[f32], channel_names: &[&str]) -> Result<RlxInputBatch> {
         let config = &self.inner.config;
         let n_channels = channel_names.len();
         let n_samples = signal.len() / n_channels;
@@ -253,8 +233,7 @@ impl NeuroRVQFM {
             n_time * config.patch_size,
         );
 
-        let dev = self.inner.device();
-        Ok(neurorvq_rs::build_batch_with_modality(
+        Ok(neurorvq_rs::build_batch(
             signal.to_vec(),
             channel_names,
             n_time,
@@ -262,7 +241,6 @@ impl NeuroRVQFM {
             n_channels,
             n_samples,
             self.inner.modality,
-            dev,
         ))
     }
 }
