@@ -100,6 +100,8 @@
     "test:daemon-packaging:mac": "bash scripts/test-daemon-packaging.sh --os macos",
     "test:daemon-packaging:linux": "bash scripts/test-daemon-packaging.sh --os linux",
     "test:daemon-packaging:win": "powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1",
+    "clean": "npm run -s clean:deps && npm run -s clean:rust",
+    "clean:deps": "node scripts/clean.js",
     "clean:rust": "node scripts/clean-rust.js",
     "lint": "npx biome check src/ scripts/",
     "lint:fix": "npx biome check --write src/ scripts/",
