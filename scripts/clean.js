@@ -3,10 +3,10 @@
 // node_modules from all sub-packages. Reports disk space reclaimed.
 // Rust target/ is handled separately by clean:rust.
 
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -40,7 +40,9 @@ function dirSize(dir) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) total += dirSize(p);
     else {
-      try { total += fs.statSync(p).size; } catch {}
+      try {
+        total += fs.statSync(p).size;
+      } catch {}
     }
   }
   return total;
