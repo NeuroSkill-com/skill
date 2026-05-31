@@ -114,6 +114,7 @@ zip = { version = "7", features = ["deflate"] }
 #   rlx-models = { path = "../rlx-models/crates/rlx-models", default-features = false }
 rlx        = { version = "0.2.2", default-features = false }
 rlx-models = { version = "0.2.0", default-features = false }
+rlx-minicpm5 = { version = "0.2.1", default-features = false }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #

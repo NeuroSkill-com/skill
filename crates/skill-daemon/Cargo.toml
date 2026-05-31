@@ -36,10 +36,10 @@ embed-exg        = ["dep:skill-exg", "embed-zuna", "embed-luna", "embed-tribev2"
 # Backend tiers — each enables the matching RLX backend in every active encoder AND the FFT path.
 # macOS: Metal is also auto-enabled via [target.'cfg(macos)'.dependencies] so
 # the daemon always picks up Metal on Apple Silicon without extra flags.
-embed-exg-metal  = ["embed-exg", "rlx/metal",
+embed-exg-metal  = ["embed-exg", "skill-router/gpu-apple", "rlx/metal",
                     "zuna-rs/rlx-metal", "luna-rs/rlx-metal", "tribev2/rlx-metal",
                     "skill-exg/neurorvq-metal", "skill-eeg/rlx-fft-metal"]
-embed-exg-mlx    = ["embed-exg", "rlx/mlx",
+embed-exg-mlx    = ["embed-exg", "skill-router/gpu-apple", "rlx/mlx",
                     "zuna-rs/rlx-mlx", "luna-rs/rlx-mlx", "tribev2/rlx-mlx",
                     "skill-exg/neurorvq-mlx"]
 embed-exg-gpu    = ["embed-exg", "skill-router/gpu", "rlx/gpu",

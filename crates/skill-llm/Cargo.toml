@@ -21,13 +21,13 @@ default    = []
 llm                = []
 # Base rlx feature pulls cpu dispatch so the runtime always has at least
 # one usable target. GPU-flavor features add their backend on top.
-llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "dep:image", "rlx?/cpu"]
+llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "dep:rlx-minicpm5", "dep:image", "rlx?/cpu"]
 llm-rlx-cpu   = ["llm-rlx"]
-llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal"]
-llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx"]
-llm-rlx-cuda  = ["llm-rlx", "rlx?/cuda", "rlx-models?/cuda"]
-llm-rlx-rocm  = ["llm-rlx", "rlx?/rocm", "rlx-models?/rocm"]
-llm-rlx-wgpu  = ["llm-rlx", "rlx?/gpu", "rlx-models?/gpu"]
+llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal", "rlx-minicpm5?/metal"]
+llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx", "rlx-minicpm5?/mlx"]
+llm-rlx-cuda  = ["llm-rlx", "rlx?/cuda", "rlx-models?/cuda", "rlx-minicpm5?/cuda"]
+llm-rlx-rocm  = ["llm-rlx", "rlx?/rocm", "rlx-models?/rocm", "rlx-minicpm5?/rocm"]
+llm-rlx-wgpu  = ["llm-rlx", "rlx?/gpu", "rlx-models?/gpu", "rlx-minicpm5?/gpu"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -50,6 +50,7 @@ skill-tools  = { path = "../skill-tools", default-features = false }
 skill-skills = { path = "../skill-skills" }
 rlx        = { workspace = true, optional = true, features = ["cpu", "gguf"] }
 rlx-models = { workspace = true, optional = true }
+rlx-minicpm5 = { workspace = true, optional = true, features = ["tokenizer"] }
 image      = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"], optional = true }
 
 [build-dependencies]

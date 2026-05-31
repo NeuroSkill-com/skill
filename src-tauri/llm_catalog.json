@@ -380,6 +380,19 @@
       "params_b": 1.2,
       "max_context_length": 131072
     },
+    "minicpm5-1b": {
+      "name": "MiniCPM5 1B",
+      "description": "OpenBMB's compact 1B edge model (Llama-shaped). Strong chat quality for its size with 128K context. Ideal for low-VRAM devices and fast local inference via RLX.",
+      "repo": "openbmb/MiniCPM5-1B-GGUF",
+      "tags": [
+        "chat",
+        "small",
+        "edge"
+      ],
+      "is_mmproj": false,
+      "params_b": 1,
+      "max_context_length": 131072
+    },
     "minimax-m25": {
       "name": "MiniMax M2.5",
       "description": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
@@ -3749,6 +3762,28 @@
       "size_gb": 2.8,
       "description": "Recommended — only available quant",
       "recommended": true
+    },
+    {
+      "family": "minicpm5-1b",
+      "filename": "MiniCPM5-1B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 0.85,
+      "description": "Recommended — best quality/size balance for 1B edge chat",
+      "recommended": true
+    },
+    {
+      "family": "minicpm5-1b",
+      "filename": "MiniCPM5-1B-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 1.3,
+      "description": "Higher fidelity 8-bit quant"
+    },
+    {
+      "family": "minicpm5-1b",
+      "filename": "MiniCPM5-1B-F16.gguf",
+      "quant": "F16",
+      "size_gb": 2.1,
+      "description": "Full FP16 weights — highest quality, needs ~4 GB VRAM"
     },
     {
       "family": "qwen36-27b",

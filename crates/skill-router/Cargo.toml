@@ -10,12 +10,16 @@ default = ["gpu"]
 gpu = [
     "rlx-umap/gpu",
     "rlx-umap/cuda",
-    "rlx-umap/metal",
-    "rlx-umap/mlx",
     "dep:rlx-runtime",
     "rlx-runtime/cpu",
     "rlx-runtime/gpu",
     "rlx-runtime/cuda",
+]
+# macOS-only RLX backends (Metal + MLX). Implies `gpu`.
+gpu-apple = [
+    "gpu",
+    "rlx-umap/metal",
+    "rlx-umap/mlx",
     "rlx-runtime/metal",
     "rlx-runtime/mlx",
 ]
