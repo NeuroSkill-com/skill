@@ -116,12 +116,6 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      # ── ONNX Runtime (official binaries) ───────────────────────────────────
-      # Avoid ort-sys download flakiness from cdn.pyke.io in CI by installing
-      # the official Microsoft release and pointing ORT_LIB_LOCATION at it.
-      - name: Setup ONNX Runtime (Linux x64)
-        uses: ./.github/actions/setup-onnxruntime-linux
-
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
 
@@ -581,11 +575,6 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      # ── ONNX Runtime (official binaries) ───────────────────────────────────
-      # Avoid ort-sys download flakiness from cdn.pyke.io in CI.
-      - name: Setup ONNX Runtime (Windows x64)
-        uses: ./.github/actions/setup-onnxruntime-windows
-
       # ── Build cache (sccache) ───────────────────────────────────────────────
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
@@ -811,9 +800,6 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      - name: Setup ONNX Runtime (Linux x64)
-        uses: ./.github/actions/setup-onnxruntime-linux
-
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
 
@@ -828,7 +814,7 @@ jobs:
             libpipewire-0.3-dev mold clang
             protobuf-compiler libopenblas-dev
             vulkan-sdk
-          version: llm-e2e-v5
+          version: llm-e2e-v6
 
       - name: Cache HuggingFace model
         uses: actions/cache@v5

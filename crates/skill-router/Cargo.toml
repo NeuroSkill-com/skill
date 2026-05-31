@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "WebSocket/HTTP command routing, UMAP projection, embedding loaders, EEG metric rounding — extracted workspace crate"
+build = "build.rs"
 
 [features]
 default = ["gpu"]

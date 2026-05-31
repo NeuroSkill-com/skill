@@ -6,6 +6,7 @@
 
 ### Build
 
+- Fix Linux CI `cargo test` OpenBLAS loader errors: shared `build/linux_openblas.rs` emits link-search + rpath for system BLAS; drop ONNX Runtime setup from CI (RLX path only).
 - Fix Linux CI link failure for `skill-label-index` tests: link system OpenBLAS when `turboquant-index` is enabled (undefined `cblas_*gemm` symbols).
 - Make `turboquant-index` a compile-time optional feature (HNSW-only builds skip OpenBLAS); enable it from daemon/Tauri. Skip TurboVec index maintenance while the preferred backend is HNSW and no TurboVec files exist on disk.
 
