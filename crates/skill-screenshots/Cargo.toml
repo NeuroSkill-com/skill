@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "Screenshot capture + vision embedding for NeuroSkill"
+build = "build.rs"
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
