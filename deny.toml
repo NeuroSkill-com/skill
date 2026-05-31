@@ -33,8 +33,9 @@ ignore = [
 [licenses]
 # Third-party crates in this workspace include several with missing/legacy
 # license metadata. Keep SPDX allow-list enforcement, but avoid noisy
-# warnings for unmatched allow entries.
+# warnings for unmatched allow entries and feature-gated optional deps.
 unused-allowed-license = "allow"
+unused-license-exception = "allow"
 allow = [
     "MIT",
     "Apache-2.0",
@@ -138,6 +139,7 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "rlx-llama32" },
     { allow = ["GPL-3.0-only"], crate = "rlx-macros" },
     { allow = ["GPL-3.0-only"], crate = "rlx-metal" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-minicpm5" },
     { allow = ["GPL-3.0-only"], crate = "rlx-mistral" },
     { allow = ["GPL-3.0-only"], crate = "rlx-mlx" },
     { allow = ["GPL-3.0-only"], crate = "rlx-mlx-sys" },

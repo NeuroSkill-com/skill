@@ -14,8 +14,11 @@
 //!   * Health               — supported.
 //!
 //! Chat templating uses `rlx_models::run::auto_chat_template`, which loads
-//! the Jinja chat template directly from the GGUF metadata.
+//! the Jinja chat template directly from the GGUF metadata. MiniCPM5 ships
+//! an agent/tooling template that relies on Python-only Jinja helpers, so
+//! that family uses a simplified ChatML template instead.
 
+use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -78,18 +81,8 @@ pub(super) fn run_actor(
     // No fixed n_ctx in RLX — report config-requested value (or 0).
     n_ctx_flag.store(config.ctx_size.unwrap_or(0) as usize, Ordering::Relaxed);
 
-    let chat_template = match rlx_models::run::auto_chat_template(&model_path) {
-        Ok(t) => Some(t),
-        Err(e) => {
-            llm_warn!(
-                &app,
-                &log_buf,
-                log_file,
-                "no chat template available ({e}) — falling back to simple role-tagged concat"
-            );
-            None
-        }
-    };
+    let family = runner.family();
+    let chat_template = resolve_chat_template(&model_path, family, &app, &log_buf, log_file);
 
     ready_flag.store(true, Ordering::Relaxed);
     let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
@@ -99,7 +92,7 @@ pub(super) fn run_actor(
         log_file,
         "[rlx-only actor] ready — model={} family={}",
         model_file,
-        runner.family()
+        family
     );
     app.emit_event(
         "llm:status",
@@ -194,6 +187,80 @@ pub(super) fn run_actor(
     app.emit_event("llm:status", json!({"status":"stopped"}));
 }
 
+/// MiniCPM5 GGUF metadata embeds a tool-agent Jinja template that calls
+/// Python string methods (`startswith`, …) unsupported by minijinja. Use a
+/// ChatML subset that matches plain chat + generation without tools.
+fn minicpm5_chat_template(model_path: &Path) -> anyhow::Result<rlx_models::run::ChatTemplate> {
+    use rlx_models::run::ChatTemplate;
+    let im_end = format!("<|{}|>", "im_end");
+    let source = format!(
+        "{{{{ bos_token }}}}{{%- for m in messages -%}}\
+        {{%- if m.role == 'system' -%}}\
+        <|im_start|>system\n{{{{ m.content }}}}{im_end}\n\
+        {{%- elif m.role == 'user' or (m.role == 'system' and not loop.first) -%}}\
+        <|im_start|>{{{{ m.role }}}}\n{{{{ m.content }}}}{im_end}\n\
+        {{%- elif m.role == 'assistant' -%}}\
+        <|im_start|>assistant\n{{{{ m.content }}}}{im_end}\n\
+        {{%- endif -%}}\
+        {{%- endfor -%}}\
+        {{%- if add_generation_prompt -%}}\
+        <|im_start|>assistant\n\
+        {{%- endif -%}}",
+        im_end = im_end,
+    );
+    let mut tpl = ChatTemplate::from_source(source)?;
+    if let Ok(gguf) = ChatTemplate::from_gguf(model_path) {
+        tpl = tpl.with_tokens(
+            gguf.bos_token().map(str::to_string),
+            gguf.eos_token().map(str::to_string),
+        );
+    }
+    Ok(tpl)
+}
+
+fn resolve_chat_template(
+    model_path: &Path,
+    family: &str,
+    app: &Arc<dyn LlmEventEmitter>,
+    log_buf: &LlmLogBuffer,
+    log_file: Option<&LlmLogFile>,
+) -> Option<rlx_models::run::ChatTemplate> {
+    if family == "minicpm5" {
+        match minicpm5_chat_template(model_path) {
+            Ok(t) => {
+                llm_info!(
+                    app,
+                    log_buf,
+                    log_file,
+                    "MiniCPM5: using simplified ChatML template (GGUF agent template skipped)"
+                );
+                return Some(t);
+            }
+            Err(e) => {
+                llm_warn!(
+                    app,
+                    log_buf,
+                    log_file,
+                    "MiniCPM5 chat template setup failed ({e}) — trying GGUF metadata"
+                );
+            }
+        }
+    }
+
+    match rlx_models::run::auto_chat_template(model_path) {
+        Ok(t) => Some(t),
+        Err(e) => {
+            llm_warn!(
+                app,
+                log_buf,
+                log_file,
+                "no chat template available ({e}) — falling back to simple role-tagged concat"
+            );
+            None
+        }
+    }
+}
+
 /// Render a list of `{"role","content"}` chat messages via the resolved
 /// chat template. Falls back to a simple `"<role>: <content>\n"` concat
 /// when no template was loaded.
@@ -229,13 +296,17 @@ fn render_chat(
         })
         .collect();
     if let Some(tpl) = template {
-        tpl.render(&msgs, true)
+        tpl.render(&msgs, true).or_else(|_| simple_render_chat(&msgs))
     } else {
-        let mut out = String::new();
-        for m in &msgs {
-            out.push_str(&format!("{}: {}\n", m.role, m.content));
-        }
-        out.push_str("assistant: ");
-        Ok(out)
+        simple_render_chat(&msgs)
     }
+}
+
+fn simple_render_chat(msgs: &[rlx_models::run::ChatMessage]) -> anyhow::Result<String> {
+    let mut out = String::new();
+    for m in msgs {
+        out.push_str(&format!("{}: {}\n", m.role, m.content));
+    }
+    out.push_str("assistant: ");
+    Ok(out)
 }

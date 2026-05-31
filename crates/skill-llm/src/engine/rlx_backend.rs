@@ -7,8 +7,8 @@
 //! a `Box<dyn LmRunner>`. Covers Qwen3 / Qwen3.5 / Qwen3.6 (incl. MTP
 //! speculative-decode auto-dispatch), Gemma 1-4, Llama32-shaped
 //! families (Phi/Mistral/Granite/Cohere/Bonsai/GPT-OSS/OmniCoder),
-//! plus the in-tree SSM families (MiniMax / LFM2.5 / Nemotron-H
-//! hybrid) via their per-family builders below.
+//! MiniCPM5 (via `rlx-minicpm5`), plus the in-tree SSM families
+//! (MiniMax / LFM2.5 / Nemotron-H hybrid) via their per-family builders below.
 //!
 //! Uses [`rlx_models::run::auto_tokenize`] and [`auto_detokenize`]
 //! for prompt encoding / streaming decode — no native C++ dependency.
@@ -21,6 +21,80 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::protocol::{GenParams, InferToken};
 use crate::config::LlmConfig;
+
+/// Thin [`LmRunner`] adapter over [`rlx_minicpm5::MiniCpm5Runner`].
+struct MiniCpm5LmRunner(rlx_minicpm5::MiniCpm5Runner);
+
+impl LmRunner for MiniCpm5LmRunner {
+    fn family(&self) -> &'static str {
+        "minicpm5"
+    }
+
+    fn vocab_size(&self) -> usize {
+        self.0.llama_config().vocab_size
+    }
+
+    fn predict_logits(&mut self, prompt_ids: &[u32]) -> Result<Vec<f32>> {
+        self.0.predict_logits(prompt_ids)
+    }
+
+    fn generate(
+        &mut self,
+        prompt_ids: &[u32],
+        n_new: usize,
+        on_token: &mut dyn FnMut(u32) -> bool,
+    ) -> Result<Vec<u32>> {
+        self.0.generate(prompt_ids, n_new, |tok| {
+            let _ = on_token(tok);
+        })
+    }
+}
+
+fn looks_like_minicpm5(path: &std::path::Path) -> bool {
+    let lossy = path.to_string_lossy().to_ascii_lowercase();
+    if lossy.contains("minicpm5") || lossy.contains("minicpm-5") {
+        return true;
+    }
+    let Ok(cfg) = rlx_minicpm5::config::llama_config_from_hf(path) else {
+        return false;
+    };
+    let preset = rlx_minicpm5::config::minicpm5_1b_preset();
+    cfg.hidden_size == preset.hidden_size
+        && cfg.num_hidden_layers == preset.num_hidden_layers
+        && cfg.vocab_size == preset.vocab_size
+}
+
+fn try_minicpm5_runner(path: &std::path::Path) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_minicpm5(path) {
+        return None;
+    }
+    Some(
+        rlx_minicpm5::MiniCpm5Runner::builder()
+            .weights(path)
+            .build()
+            .map(|runner| Box::new(MiniCpm5LmRunner(runner)) as Box<dyn LmRunner>),
+    )
+}
+
+fn resolve_minicpm5_tokenizer(weights: &std::path::Path) -> Option<PathBuf> {
+    if let Ok(raw) = std::env::var("MINICPM5_TOKENIZER") {
+        let p = PathBuf::from(raw);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Some(parent) = weights.parent() {
+        let sibling = parent.join("tokenizer.json");
+        if sibling.is_file() {
+            return Some(sibling);
+        }
+    }
+    use hf_hub::{Cache, Repo};
+    let cache = Cache::from_env();
+    cache
+        .repo(Repo::model("openbmb/MiniCPM5-1B".to_string()))
+        .get("tokenizer.json")
+}
 
 pub(super) struct RlxTextRunner {
     runner: Box<dyn LmRunner>,
@@ -41,6 +115,17 @@ impl RlxTextRunner {
         mmproj: Option<&std::path::Path>,
         _config: &LlmConfig,
     ) -> Result<Self> {
+        if let Some(result) = try_minicpm5_runner(model_path) {
+            let runner = result?;
+            let family = runner.family();
+            return Ok(Self {
+                runner,
+                family,
+                weights_path: model_path.to_path_buf(),
+                explicit_tokenizer: resolve_minicpm5_tokenizer(model_path),
+            });
+        }
+
         let runner = auto_runner_with_mmproj(model_path, mmproj).map_err(|e| anyhow!("RLX auto_runner: {e}"))?;
         let family = runner.family();
         Ok(Self {

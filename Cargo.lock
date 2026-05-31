@@ -10281,6 +10281,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-minicpm5"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "956260330c748ec0883211ac9724a364959de39d32d08b49d4f9cc418c111202"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-llama-base",
+ "rlx-llama32",
+ "rlx-runtime",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rlx-mistral"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12179,6 +12194,7 @@ dependencies = [
  "image",
  "log",
  "rlx",
+ "rlx-minicpm5",
  "rlx-models",
  "rusqlite",
  "serde",

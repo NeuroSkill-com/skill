@@ -153,7 +153,10 @@ jobs:
           set -euo pipefail
           run_cmd() {
             cargo clippy --locked --target x86_64-unknown-linux-gnu \
-              --workspace --exclude skill \
+              --workspace --exclude skill --exclude skill-router \
+              -- -D warnings
+            cargo clippy --locked --target x86_64-unknown-linux-gnu \
+              --no-default-features -p skill-router --features cpu \
               -- -D warnings
           }
           if ! run_cmd; then
