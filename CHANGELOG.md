@@ -5664,3 +5664,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 ### Features
 
 - Minor updates and improvements
+
+## [0.0.131-rc.3] — 2026-06-01
+
+### Features
+
+- fix release ci
