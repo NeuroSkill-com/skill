@@ -4,10 +4,10 @@
 //! Fixes missing linker directives when using prebuilt llama-cpp-sys static
 //! archives on Linux.  The upstream build.rs prebuilt code path omits:
 //!   - `cargo:rustc-link-lib=vulkan` (Vulkan symbols from ggml-vulkan.cpp)
-//!   - OpenBLAS search path + rpath (see `build/linux_openblas.rs`)
+//!   - OpenBLAS search path + rpath (see `build-support/linux_openblas.rs`)
 
 mod linux_openblas {
-    include!("../../build/linux_openblas.rs");
+    include!("../../build-support/linux_openblas.rs");
 }
 
 fn main() {

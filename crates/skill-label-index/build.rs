@@ -2,7 +2,7 @@
 //! Link system OpenBLAS on Linux when building with `turboquant-index`.
 
 mod linux_openblas {
-    include!("../../build/linux_openblas.rs");
+    include!("../../build-support/linux_openblas.rs");
 }
 
 fn main() {

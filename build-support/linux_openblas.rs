@@ -5,6 +5,9 @@
 // subdirs (e.g. `openblas-pthread/`) that are not on the default loader path.
 // We emit link-search + rpath so `cargo test` and release binaries resolve it
 // without `LD_LIBRARY_PATH`.
+//
+// Lives under `build-support/` (not `build/`) so SvelteKit's `npm run build`
+// output to `build/` cannot clobber this file before release CI compiles Rust.
 
 // Emit `cargo:rustc-link-*` directives when `enabled` and target OS is Linux.
 pub fn link_system_openblas(enabled: bool) {
