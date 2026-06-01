@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "TTS engine for NeuroSkill — extracted workspace crate"
+build = "build.rs"
 
 [features]
 default     = []
@@ -19,12 +20,17 @@ tokio      = { version = "1", features = ["sync"] }
 hf-hub     = "0.5"
 dirs       = "6"
 
-kittentts  = { version = "0.4.1", features = ["espeak"], optional = true }
 rodio      = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
 sha2       = { version = "0.10", optional = true }
 hound      = { version = "3", optional = true }
 
 neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }
+
+# KittenTTS pulls in `ort` (ONNX Runtime). We keep it off Windows so the
+# installer doesn't have to ship onnxruntime.dll. Cargo treats `dep:kittentts`
+# in the `tts-kitten` feature as a no-op on targets where the dep is absent.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+kittentts  = { version = "0.4.1", features = ["espeak"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }

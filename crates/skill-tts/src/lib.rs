@@ -32,20 +32,20 @@ macro_rules! tts_log {
     };
 }
 
-#[cfg(feature = "tts-kitten")]
+#[cfg(tts_kitten_active)]
 pub mod kitten;
 
 #[cfg(feature = "tts-neutts")]
 pub mod neutts;
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 use anyhow::Context;
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 use std::num::NonZero;
 use std::path::PathBuf;
-#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(all(tts_kitten_active, feature = "tts-neutts"))]
 use std::sync::atomic::AtomicBool;
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 use std::sync::atomic::Ordering;
 use std::sync::OnceLock;
 
@@ -102,7 +102,7 @@ pub fn set_logging(enable: bool) {
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 pub use skill_constants::TTS_TAIL_SILENCE_SECS as TAIL_SILENCE_SECS;
 
 // ─── Progress event ───────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ pub struct TtsProgressEvent {
 
 pub use skill_constants::TTS_PROGRESS_EVENT;
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 impl TtsProgressEvent {
     pub fn step(step: u32, total: u32, label: String) -> Self {
         Self {
@@ -164,12 +164,12 @@ impl TtsProgressEvent {
 pub fn init_espeak_bundled_data_path(_resource_dir: &std::path::Path) {}
 
 /// No-op — espeak-ng data is now bundled in the Rust crate.
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 pub fn init_espeak_data_path() {}
 
 // ─── Shared audio output ──────────────────────────────────────────────────────
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 pub fn play_f32_audio(stream: &rodio::MixerDeviceSink, mut samples: Vec<f32>, sample_rate: u32) {
     use rodio::buffer::SamplesBuffer;
 
@@ -187,25 +187,25 @@ pub fn play_f32_audio(stream: &rodio::MixerDeviceSink, mut samples: Vec<f32>, sa
 
 // ─── Back-end routing ─────────────────────────────────────────────────────────
 
-#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(all(tts_kitten_active, feature = "tts-neutts"))]
 pub static NEUTTS_ENABLED: AtomicBool = AtomicBool::new(false);
 
-#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(all(tts_kitten_active, feature = "tts-neutts"))]
 pub fn use_neutts() -> bool {
     NEUTTS_ENABLED.load(Ordering::Relaxed)
 }
 
-#[cfg(all(feature = "tts-neutts", not(feature = "tts-kitten")))]
+#[cfg(all(feature = "tts-neutts", not(tts_kitten_active)))]
 pub fn use_neutts() -> bool {
     true
 }
 
-#[cfg(all(feature = "tts-kitten", not(feature = "tts-neutts")))]
+#[cfg(all(tts_kitten_active, not(feature = "tts-neutts")))]
 pub fn use_neutts() -> bool {
     false
 }
 
-#[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+#[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
 pub fn use_neutts() -> bool {
     false
 }
@@ -214,7 +214,7 @@ pub fn use_neutts() -> bool {
 
 /// Synchronously drop all TTS backends before process exit.
 pub fn tts_shutdown() {
-    #[cfg(feature = "tts-kitten")]
+    #[cfg(tts_kitten_active)]
     {
         let timeout = std::time::Duration::from_secs(8);
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
@@ -257,7 +257,7 @@ pub struct NeuttsVoiceInfo {
 /// Speak `text` aloud using the active TTS backend.
 pub async fn tts_speak(text: String, voice: Option<String>) {
     let voice_str = voice.unwrap_or_default();
-    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    #[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
     {
         let _ = (&text, &voice_str);
     }
@@ -279,7 +279,7 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
             let _ = rx.await;
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             let resolved_voice = if voice_str.is_empty() || voice_str == "default" {
                 kitten::get_voice()
@@ -306,7 +306,7 @@ pub fn tts_list_voices() -> Vec<String> {
             .map(std::string::ToString::to_string)
             .collect();
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         return kitten::AVAILABLE_VOICES
             .get()
             .cloned()
@@ -364,7 +364,7 @@ pub fn tts_get_voice() -> String {
             return preset;
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         return kitten::get_voice();
     }
     #[allow(unreachable_code)]
@@ -374,7 +374,7 @@ pub fn tts_get_voice() -> String {
 /// Set the active voice name.
 #[allow(clippy::needless_pass_by_value)] // consumed by neutts::set_voice_preset when feature is enabled
 pub fn tts_set_voice(voice: String) {
-    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    #[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
     let _ = &voice;
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
@@ -384,7 +384,7 @@ pub fn tts_set_voice(voice: String) {
             }
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             let voices = kitten::AVAILABLE_VOICES
                 .get()
@@ -441,7 +441,7 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
             return result;
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             if kitten::LOADED.load(Ordering::Relaxed) {
                 emit(TtsProgressEvent::ready(4));
@@ -487,7 +487,7 @@ pub async fn tts_unload() -> anyhow::Result<()> {
             return Ok(());
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             let (tx, rx) = tokio::sync::oneshot::channel();
             kitten::get_tx()
