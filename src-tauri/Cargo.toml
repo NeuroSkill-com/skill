@@ -100,11 +100,11 @@ csv = "1"
 # TTS — lightweight ONNX-based speech synthesis (English only for calibration)
 # Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
 #
-# espeak feature: active on all platforms (macOS, Linux, Windows).
-# On Windows, build-espeak-static.ps1 (PowerShell) builds libespeak-ng
-# statically using CMake + MSVC, exactly as build-espeak-static.sh does on
-# macOS/Linux.  See WINDOWS.md for setup instructions.
-kittentts = { version = "0.4.1", features = ["espeak"], optional = true }
+# espeak feature: active on macOS and Linux. Windows skips KittenTTS entirely
+# so we don't have to ship onnxruntime.dll alongside the installer — the
+# tts-kitten feature becomes a no-op on Windows because the optional dep is
+# only declared for non-Windows targets (see [target.cfg(...)] block below).
+# When NeuTTS or another TTS backend lands for Windows, hook it in there.
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
 # 0.1.0: backbone is llama-cpp-4.  This means neutts
@@ -201,6 +201,13 @@ dispatch2        = "0.3.1"
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
 neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
+
+# KittenTTS lives behind a non-Windows target gate so Windows builds never pull
+# `ort` / onnxruntime. The `tts-kitten` feature stays in `default` for the cross-
+# platform UX; on Windows it activates the `dep:kittentts` reference into a
+# missing dep, which Cargo treats as a no-op (target-conditional optional dep).
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+kittentts = { version = "0.4.1", features = ["espeak"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

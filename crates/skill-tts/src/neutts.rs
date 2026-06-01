@@ -126,7 +126,7 @@ pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
 
     // When KittenTTS is also compiled, the `enabled` flag is the runtime switch
     // stored in `crate::NEUTTS_ENABLED`.  Update it from here.
-    #[cfg(feature = "tts-kitten")]
+    #[cfg(tts_kitten_active)]
     crate::NEUTTS_ENABLED.store(cfg.enabled, Ordering::Relaxed);
 
     if cfg.enabled && was_ready {
