@@ -41,12 +41,12 @@ skill-settings  = { path = "../skill-settings" }
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 rusqlite = { workspace = true }
-rlx-umap        = { version = "0.2.1", default-features = false, features = ["full"] }
-rlx-runtime     = { version = "0.2.1", default-features = false, features = ["cpu"], optional = true }
+rlx-umap        = { version = "0.2.4", default-features = false, features = ["full"] }
+rlx-runtime     = { version = "0.2.4", default-features = false, features = ["cpu"], optional = true }
 hotpath         = { version = "0.16", optional = true }
 
 [dev-dependencies]
-rlx-runtime     = { version = "0.2.1", default-features = false, features = ["cpu"] }
+rlx-runtime     = { version = "0.2.4", default-features = false, features = ["cpu"] }
 
 [lints]
 workspace = true

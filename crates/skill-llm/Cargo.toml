@@ -21,13 +21,13 @@ default    = []
 llm                = []
 # Base rlx feature pulls cpu dispatch so the runtime always has at least
 # one usable target. GPU-flavor features add their backend on top.
-llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "dep:rlx-minicpm5", "dep:image", "rlx?/cpu"]
+llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "dep:rlx-minicpm5", "dep:rlx-minimax", "dep:rlx-nemotron", "dep:rlx-gemma", "dep:image", "rlx?/cpu"]
 llm-rlx-cpu   = ["llm-rlx"]
-llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal", "rlx-minicpm5?/metal"]
-llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx", "rlx-minicpm5?/mlx"]
-llm-rlx-cuda  = ["llm-rlx", "rlx?/cuda", "rlx-models?/cuda", "rlx-minicpm5?/cuda"]
-llm-rlx-rocm  = ["llm-rlx", "rlx?/rocm", "rlx-models?/rocm", "rlx-minicpm5?/rocm"]
-llm-rlx-wgpu  = ["llm-rlx", "rlx?/gpu", "rlx-models?/gpu", "rlx-minicpm5?/gpu"]
+llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal", "rlx-minicpm5?/metal", "rlx-minimax?/metal", "rlx-nemotron?/metal", "rlx-gemma?/metal"]
+llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx", "rlx-minicpm5?/mlx", "rlx-minimax?/mlx", "rlx-nemotron?/mlx", "rlx-gemma?/mlx"]
+llm-rlx-cuda  = ["llm-rlx", "rlx?/cuda", "rlx-models?/cuda", "rlx-minicpm5?/cuda", "rlx-minimax?/cuda", "rlx-nemotron?/cuda", "rlx-gemma?/cuda"]
+llm-rlx-rocm  = ["llm-rlx", "rlx?/rocm", "rlx-models?/rocm", "rlx-minicpm5?/rocm", "rlx-minimax?/rocm", "rlx-nemotron?/rocm", "rlx-gemma?/rocm"]
+llm-rlx-wgpu  = ["llm-rlx", "rlx?/gpu", "rlx-models?/gpu", "rlx-minicpm5?/gpu", "rlx-minimax?/gpu", "rlx-nemotron?/gpu", "rlx-gemma?/gpu"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -51,6 +51,9 @@ skill-skills = { path = "../skill-skills" }
 rlx        = { workspace = true, optional = true, features = ["cpu", "gguf"] }
 rlx-models = { workspace = true, optional = true }
 rlx-minicpm5 = { workspace = true, optional = true, features = ["tokenizer"] }
+rlx-minimax  = { workspace = true, optional = true }
+rlx-nemotron = { workspace = true, optional = true }
+rlx-gemma    = { workspace = true, optional = true, features = ["tokenizer"] }
 image      = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"], optional = true }
 
 [build-dependencies]

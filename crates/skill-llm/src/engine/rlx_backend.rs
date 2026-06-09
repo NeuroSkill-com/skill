@@ -2,25 +2,48 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! RLX text-generation backend — fully independent of llama-cpp.
 //!
-//! Routes through [`rlx_models::run::auto_runner`] which auto-detects
-//! the model family from GGUF metadata / safetensors config and returns
-//! a `Box<dyn LmRunner>`. Covers Qwen3 / Qwen3.5 / Qwen3.6 (incl. MTP
-//! speculative-decode auto-dispatch), Gemma 1-4, Llama32-shaped
-//! families (Phi/Mistral/Granite/Cohere/Bonsai/GPT-OSS/OmniCoder),
-//! MiniCPM5 (via `rlx-minicpm5`), plus the in-tree SSM families
-//! (MiniMax / LFM2.5 / Nemotron-H hybrid) via their per-family builders below.
+//! Routes through [`rlx_models::run::auto_runner_with_mmproj`] for the
+//! families it knows (Qwen3 / Qwen3.5 / Qwen3.6 incl. MTP, Llama32-shaped
+//! stacks, LFM2.5). Catalog families that need an explicit builder before
+//! the generic auto path — Gemma 3/4, MiniCPM5, MiniMax M2.x, Nemotron-H
+//! — are wired below via per-family runners.
 //!
 //! Uses [`rlx_models::run::auto_tokenize`] and [`auto_detokenize`]
 //! for prompt encoding / streaming decode — no native C++ dependency.
 
 use anyhow::{anyhow, Result};
+use rlx::gguf::{GgufFile, MetaValue};
 use rlx_models::run::{auto_detokenize, auto_runner_with_mmproj, auto_tokenize};
 use rlx_models::LmRunner;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::protocol::{GenParams, InferToken};
 use crate::config::LlmConfig;
+
+fn peek_gguf_arch(path: &Path) -> Option<String> {
+    let raw = GgufFile::from_path(path).ok()?;
+    raw.metadata
+        .get("general.architecture")
+        .and_then(MetaValue::as_str)
+        .map(str::to_string)
+}
+
+fn filename_hint(path: &Path, needle: &str) -> bool {
+    path.to_string_lossy().to_ascii_lowercase().contains(needle)
+}
+
+fn argmax_u32(logits: &[f32]) -> u32 {
+    let mut best = 0usize;
+    let mut best_v = f32::NEG_INFINITY;
+    for (i, &v) in logits.iter().enumerate() {
+        if v > best_v {
+            best_v = v;
+            best = i;
+        }
+    }
+    best as u32
+}
 
 /// Thin [`LmRunner`] adapter over [`rlx_minicpm5::MiniCpm5Runner`].
 struct MiniCpm5LmRunner(rlx_minicpm5::MiniCpm5Runner);
@@ -50,9 +73,130 @@ impl LmRunner for MiniCpm5LmRunner {
     }
 }
 
-fn looks_like_minicpm5(path: &std::path::Path) -> bool {
-    let lossy = path.to_string_lossy().to_ascii_lowercase();
-    if lossy.contains("minicpm5") || lossy.contains("minicpm-5") {
+/// Thin [`LmRunner`] adapter over [`rlx_minimax::MiniMaxRunner`].
+struct MiniMaxLmRunner(rlx_minimax::MiniMaxRunner);
+
+impl LmRunner for MiniMaxLmRunner {
+    fn family(&self) -> &'static str {
+        "minimax"
+    }
+
+    fn vocab_size(&self) -> usize {
+        self.0.config().vocab_size
+    }
+
+    fn predict_logits(&mut self, prompt_ids: &[u32]) -> Result<Vec<f32>> {
+        if prompt_ids.is_empty() {
+            return Err(anyhow!("MiniMaxLmRunner::predict_logits: empty prompt"));
+        }
+        self.0.reset_state();
+        let mut last = Vec::new();
+        for &t in prompt_ids {
+            last = self.0.step(t);
+        }
+        Ok(last)
+    }
+
+    fn generate(
+        &mut self,
+        prompt_ids: &[u32],
+        n_new: usize,
+        on_token: &mut dyn FnMut(u32) -> bool,
+    ) -> Result<Vec<u32>> {
+        self.0.reset_state();
+        let mut last = Vec::new();
+        for &t in prompt_ids {
+            last = self.0.step(t);
+        }
+        let mut out = Vec::with_capacity(n_new);
+        for _ in 0..n_new {
+            let next = argmax_u32(&last);
+            out.push(next);
+            if !on_token(next) {
+                break;
+            }
+            last = self.0.step(next);
+        }
+        Ok(out)
+    }
+}
+
+/// Thin [`LmRunner`] adapter over [`rlx_nemotron::NemotronHybridRunner`].
+struct NemotronHybridLmRunner(rlx_nemotron::NemotronHybridRunner);
+
+impl LmRunner for NemotronHybridLmRunner {
+    fn family(&self) -> &'static str {
+        "nemotron_h"
+    }
+
+    fn vocab_size(&self) -> usize {
+        self.0.config().vocab_size
+    }
+
+    fn predict_logits(&mut self, prompt_ids: &[u32]) -> Result<Vec<f32>> {
+        if prompt_ids.is_empty() {
+            return Err(anyhow!("NemotronHybridLmRunner::predict_logits: empty prompt"));
+        }
+        self.0.reset_state();
+        let mut last = Vec::new();
+        for &t in prompt_ids {
+            last = self.0.step(t);
+        }
+        Ok(last)
+    }
+
+    fn generate(
+        &mut self,
+        prompt_ids: &[u32],
+        n_new: usize,
+        on_token: &mut dyn FnMut(u32) -> bool,
+    ) -> Result<Vec<u32>> {
+        self.0.reset_state();
+        let mut last = Vec::new();
+        for &t in prompt_ids {
+            last = self.0.step(t);
+        }
+        let mut out = Vec::with_capacity(n_new);
+        for _ in 0..n_new {
+            let next = argmax_u32(&last);
+            out.push(next);
+            if !on_token(next) {
+                break;
+            }
+            last = self.0.step(next);
+        }
+        Ok(out)
+    }
+}
+
+/// Dense `nemotron` arch — delegates to the inner [`Llama32Runner`].
+struct NemotronLmRunner(rlx_nemotron::NemotronRunner);
+
+impl LmRunner for NemotronLmRunner {
+    fn family(&self) -> &'static str {
+        "nemotron"
+    }
+
+    fn vocab_size(&self) -> usize {
+        self.0.config().vocab_size
+    }
+
+    fn predict_logits(&mut self, prompt_ids: &[u32]) -> Result<Vec<f32>> {
+        LmRunner::predict_logits(self.0.inner_mut(), prompt_ids)
+    }
+
+    fn generate(
+        &mut self,
+        prompt_ids: &[u32],
+        n_new: usize,
+        on_token: &mut dyn FnMut(u32) -> bool,
+    ) -> Result<Vec<u32>> {
+        LmRunner::generate(self.0.inner_mut(), prompt_ids, n_new, on_token)
+    }
+}
+
+fn looks_like_minicpm5(path: &Path) -> bool {
+    if filename_hint(path, "minicpm5") || filename_hint(path, "minicpm-5") {
         return true;
     }
     let Ok(cfg) = rlx_minicpm5::config::llama_config_from_hf(path) else {
@@ -64,7 +208,46 @@ fn looks_like_minicpm5(path: &std::path::Path) -> bool {
         && cfg.vocab_size == preset.vocab_size
 }
 
-fn try_minicpm5_runner(path: &std::path::Path) -> Option<Result<Box<dyn LmRunner>>> {
+fn looks_like_minimax(path: &Path) -> bool {
+    if filename_hint(path, "minimax") {
+        return true;
+    }
+    matches!(
+        peek_gguf_arch(path).as_deref(),
+        Some("minimax" | "minimax-m2" | "minimax_m2")
+    )
+}
+
+fn looks_like_nemotron(path: &Path) -> bool {
+    if filename_hint(path, "nemotron") {
+        return true;
+    }
+    matches!(
+        peek_gguf_arch(path).as_deref(),
+        Some("nemotron" | "nemotron_h" | "nemotron_h_moe" | "nemotron-h")
+    )
+}
+
+fn looks_like_gemma(path: &Path) -> bool {
+    if filename_hint(path, "gemma") {
+        return true;
+    }
+    matches!(
+        peek_gguf_arch(path).as_deref(),
+        Some(
+            "gemma"
+                | "gemma2"
+                | "gemma3"
+                | "gemma3n"
+                | "gemma4"
+                | "gemma4moe"
+                | "gemma4_unified"
+                | "gemma4_unified_text"
+        )
+    )
+}
+
+fn try_minicpm5_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
     if !looks_like_minicpm5(path) {
         return None;
     }
@@ -76,7 +259,84 @@ fn try_minicpm5_runner(path: &std::path::Path) -> Option<Result<Box<dyn LmRunner
     )
 }
 
-fn resolve_minicpm5_tokenizer(weights: &std::path::Path) -> Option<PathBuf> {
+fn try_minimax_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_minimax(path) {
+        return None;
+    }
+    Some(
+        rlx_minimax::MiniMaxRunner::builder()
+            .weights(path)
+            .build()
+            .map(|runner| Box::new(MiniMaxLmRunner(runner)) as Box<dyn LmRunner>),
+    )
+}
+
+fn try_nemotron_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_nemotron(path) {
+        return None;
+    }
+    let arch = peek_gguf_arch(path);
+    if matches!(arch.as_deref(), Some("nemotron_h" | "nemotron_h_moe" | "nemotron-h")) {
+        return Some(
+            rlx_nemotron::NemotronHybridRunner::builder()
+                .weights(path)
+                .build()
+                .map(|runner| Box::new(NemotronHybridLmRunner(runner)) as Box<dyn LmRunner>),
+        );
+    }
+    if arch.as_deref() == Some("nemotron") {
+        return Some(
+            rlx_nemotron::NemotronRunner::builder()
+                .weights(path)
+                .build()
+                .map(|runner| Box::new(NemotronLmRunner(runner)) as Box<dyn LmRunner>),
+        );
+    }
+    // Filename hinted nemotron but arch unknown — try hybrid first, then dense.
+    Some(
+        rlx_nemotron::NemotronHybridRunner::builder()
+            .weights(path)
+            .build()
+            .map(|runner| Box::new(NemotronHybridLmRunner(runner)) as Box<dyn LmRunner>)
+            .or_else(|_| {
+                rlx_nemotron::NemotronRunner::builder()
+                    .weights(path)
+                    .build()
+                    .map(|runner| Box::new(NemotronLmRunner(runner)) as Box<dyn LmRunner>)
+            }),
+    )
+}
+
+fn try_gemma_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_gemma(path) {
+        return None;
+    }
+    Some(
+        rlx_gemma::GemmaRunner::builder()
+            .weights(path)
+            .build()
+            .map(|runner| Box::new(runner) as Box<dyn LmRunner>),
+    )
+}
+
+fn try_catalog_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
+    try_gemma_runner(path)
+        .or_else(|| try_minicpm5_runner(path))
+        .or_else(|| try_minimax_runner(path))
+        .or_else(|| try_nemotron_runner(path))
+}
+
+fn resolve_gemma_tokenizer(weights: &Path) -> Option<PathBuf> {
+    if let Ok(raw) = std::env::var("GEMMA_TOKENIZER") {
+        let p = PathBuf::from(raw);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    rlx_gemma::resolve_tokenizer_path(weights, None)
+}
+
+fn resolve_minicpm5_tokenizer(weights: &Path) -> Option<PathBuf> {
     if let Ok(raw) = std::env::var("MINICPM5_TOKENIZER") {
         let p = PathBuf::from(raw);
         if p.is_file() {
@@ -104,25 +364,26 @@ pub(super) struct RlxTextRunner {
 }
 
 impl RlxTextRunner {
-    pub(super) fn load(model_path: &std::path::Path, _config: &LlmConfig) -> Result<Self> {
+    pub(super) fn load(model_path: &Path, _config: &LlmConfig) -> Result<Self> {
         Self::load_with_mmproj(model_path, None, _config)
     }
 
     /// Like [`load`] but attaches an mmproj vision encoder (e.g. for
     /// Qwen3.5-VL). When `mmproj` is `None` the runner is text-only.
-    pub(super) fn load_with_mmproj(
-        model_path: &std::path::Path,
-        mmproj: Option<&std::path::Path>,
-        _config: &LlmConfig,
-    ) -> Result<Self> {
-        if let Some(result) = try_minicpm5_runner(model_path) {
+    pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, _config: &LlmConfig) -> Result<Self> {
+        if let Some(result) = try_catalog_runner(model_path) {
             let runner = result?;
             let family = runner.family();
+            let explicit_tokenizer = match family {
+                "gemma" => resolve_gemma_tokenizer(model_path),
+                "minicpm5" => resolve_minicpm5_tokenizer(model_path),
+                _ => None,
+            };
             return Ok(Self {
                 runner,
                 family,
                 weights_path: model_path.to_path_buf(),
-                explicit_tokenizer: resolve_minicpm5_tokenizer(model_path),
+                explicit_tokenizer,
             });
         }
 

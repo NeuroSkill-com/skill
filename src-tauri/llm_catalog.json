@@ -12,6 +12,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 4,
       "max_context_length": 131072
     },
@@ -25,6 +26,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 9,
       "max_context_length": 131072
     },
@@ -38,6 +40,7 @@
         "medium"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 7.6,
       "max_context_length": 131072
     },
@@ -51,6 +54,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 27,
       "max_context_length": 131072
     },
@@ -64,60 +68,7 @@
         "large"
       ],
       "is_mmproj": false,
-      "params_b": 27,
-      "max_context_length": 131072
-    },
-    "qwen36-27b": {
-      "name": "Qwen3.6 27B",
-      "description": "Alibaba's Qwen3.6 dense 27-billion-parameter model with vision support. Strong reasoning and multimodal capabilities; needs ≥ 16 GB VRAM for Q4.",
-      "repo": "unsloth/Qwen3.6-27B-GGUF",
-      "tags": [
-        "chat",
-        "reasoning",
-        "vision",
-        "large"
-      ],
-      "is_mmproj": false,
-      "params_b": 27,
-      "max_context_length": 131072
-    },
-    "qwen36-35b-a3b": {
-      "name": "Qwen3.6 35B-A3B",
-      "description": "Alibaba's Qwen3.6 MoE model (35B total / ~3B active). High quality with low active compute; fits comfortably in 16 GB VRAM at Q4.",
-      "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
-      "tags": [
-        "chat",
-        "reasoning",
-        "moe",
-        "large"
-      ],
-      "is_mmproj": false,
-      "params_b": 35,
-      "max_context_length": 131072
-    },
-    "glm-51": {
-      "name": "GLM 5.1",
-      "description": "Zhipu AI's GLM 5.1 chat model in GGUF format. Strong bilingual (Chinese/English) reasoning capabilities.",
-      "repo": "bartowski/zai-org_GLM-5.1-GGUF",
-      "tags": [
-        "chat",
-        "reasoning",
-        "large"
-      ],
-      "is_mmproj": false,
-      "params_b": 9,
-      "max_context_length": 131072
-    },
-    "minimax-m27": {
-      "name": "MiniMax M2.7",
-      "description": "MiniMax's M2.7 chat model in GGUF format. Strong multilingual reasoning from MiniMaxAI.",
-      "repo": "bartowski/MiniMaxAI_MiniMax-M2.7-GGUF",
-      "tags": [
-        "chat",
-        "reasoning",
-        "large"
-      ],
-      "is_mmproj": false,
+      "mtp": false,
       "params_b": 27,
       "max_context_length": 131072
     },
@@ -131,6 +82,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 20,
       "max_context_length": 131072
     },
@@ -144,6 +96,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 14,
       "max_context_length": 65536
     },
@@ -158,6 +111,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 32.8,
       "max_context_length": 131072
     },
@@ -170,6 +124,7 @@
         "medium"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 14,
       "max_context_length": 128000
     },
@@ -182,6 +137,7 @@
         "medium"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 14,
       "max_context_length": 128000
     },
@@ -194,6 +150,7 @@
         "tiny"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 0.27,
       "max_context_length": 32768
     },
@@ -207,6 +164,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 31,
       "max_context_length": 131072
     },
@@ -221,6 +179,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 26,
       "max_context_length": 131072
     },
@@ -234,6 +193,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 4,
       "max_context_length": 131072
     },
@@ -247,6 +207,7 @@
         "tiny"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 2,
       "max_context_length": 131072
     },
@@ -259,6 +220,7 @@
         "medium"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 14.7,
       "max_context_length": 32768
     },
@@ -272,6 +234,7 @@
         "medium"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 9,
       "max_context_length": 32768
     },
@@ -285,6 +248,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 4,
       "max_context_length": 131072
     },
@@ -298,6 +262,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 9,
       "max_context_length": 131072
     },
@@ -311,6 +276,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 27,
       "max_context_length": 131072
     },
@@ -324,6 +290,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 35,
       "max_context_length": 131072
     },
@@ -338,6 +305,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 30,
       "max_context_length": 131072
     },
@@ -352,6 +320,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 1.6,
       "max_context_length": 131072
     },
@@ -364,6 +333,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 1.2,
       "max_context_length": 131072
     },
@@ -377,20 +347,8 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 1.2,
-      "max_context_length": 131072
-    },
-    "minicpm5-1b": {
-      "name": "MiniCPM5 1B",
-      "description": "OpenBMB's compact 1B edge model (Llama-shaped). Strong chat quality for its size with 128K context. Ideal for low-VRAM devices and fast local inference via RLX.",
-      "repo": "openbmb/MiniCPM5-1B-GGUF",
-      "tags": [
-        "chat",
-        "small",
-        "edge"
-      ],
-      "is_mmproj": false,
-      "params_b": 1,
       "max_context_length": 131072
     },
     "minimax-m25": {
@@ -404,6 +362,7 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 456,
       "max_context_length": 131072
     },
@@ -417,6 +376,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 8.19,
       "max_context_length": 65536
     },
@@ -430,6 +390,7 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 4.02,
       "max_context_length": 32768
     },
@@ -443,6 +404,7 @@
         "tiny"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 1.72,
       "max_context_length": 32768
     },
@@ -456,7 +418,52 @@
         "small"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 4,
+      "max_context_length": 131072
+    },
+    "minicpm5-1b": {
+      "name": "MiniCPM5 1B",
+      "description": "OpenBMB's compact 1B edge model (Llama-shaped). Strong chat quality for its size with 128K context. Ideal for low-VRAM devices and fast local inference via RLX.",
+      "repo": "openbmb/MiniCPM5-1B-GGUF",
+      "tags": [
+        "chat",
+        "small",
+        "edge"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 1,
+      "max_context_length": 131072
+    },
+    "qwen36-27b": {
+      "name": "Qwen3.6 27B",
+      "description": "Alibaba's Qwen3.6 dense 27-billion-parameter model with vision support. Strong reasoning and multimodal capabilities; needs ≥ 16 GB VRAM for Q4.",
+      "repo": "unsloth/Qwen3.6-27B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "vision",
+        "large"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 27,
+      "max_context_length": 131072
+    },
+    "qwen36-35b-a3b": {
+      "name": "Qwen3.6 35B-A3B",
+      "description": "Alibaba's Qwen3.6 MoE model (35B total / ~3B active). High quality with low active compute; fits comfortably in 16 GB VRAM at Q4.",
+      "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 35,
       "max_context_length": 131072
     },
     "mistral-medium-3.5-128b": {
@@ -469,21 +476,8 @@
         "large"
       ],
       "is_mmproj": false,
+      "mtp": false,
       "params_b": 128,
-      "max_context_length": 131072
-    },
-    "nemotron-3-nano-omni-30b": {
-      "name": "NVIDIA Nemotron-3 Nano Omni 30B",
-      "description": "NVIDIA's multimodal MoE model (30B, 3B active) with video, audio, image, and text understanding. Supports reasoning, tool calling, OCR, and GUI automation.",
-      "repo": "unsloth/NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-GGUF",
-      "tags": [
-        "chat",
-        "reasoning",
-        "multimodal",
-        "moe"
-      ],
-      "is_mmproj": true,
-      "params_b": 30,
       "max_context_length": 131072
     },
     "qwen36-27b-mtp": {
@@ -1457,6 +1451,54 @@
       "quant": "F16",
       "size_gb": 50.11,
       "description": "Full FP16 precision; ≥ 64 GB VRAM",
+      "advanced": true
+    },
+    {
+      "family": "qwen35-27b-claude-opus-distilled",
+      "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-F32.gguf",
+      "quant": "F32",
+      "size_gb": 9.98,
+      "description": "F32 quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen35-27b-claude-opus-distilled",
+      "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-IQ3_S.gguf",
+      "quant": "IQ3_S",
+      "size_gb": 9.98,
+      "description": "IQ3_S quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen35-27b-claude-opus-distilled",
+      "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Q5_0.gguf",
+      "quant": "Q5_0",
+      "size_gb": 9.98,
+      "description": "Q5_0 quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen35-27b-claude-opus-distilled",
+      "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Q5_1.gguf",
+      "quant": "Q5_1",
+      "size_gb": 9.98,
+      "description": "Q5_1 quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen35-27b-claude-opus-distilled",
+      "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-TQ1_0.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 9.98,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen35-27b-claude-opus-distilled",
+      "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-TQ2_0.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 9.98,
+      "description": "UNKNOWN quant",
       "advanced": true
     },
     {
@@ -2694,6 +2736,171 @@
       "advanced": true
     },
     {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-IQ2_XXS.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 17.8,
+      "description": "IQ2_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 17.8,
+      "description": "IQ2_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 17.8,
+      "description": "IQ3_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 17.8,
+      "description": "Q3_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 17.8,
+      "description": "Q3_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 17.8,
+      "description": "Q3_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 17.8,
+      "description": "IQ4_XS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 17.8,
+      "description": "IQ4_NL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 17.8,
+      "description": "Q4_1 quant"
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 17.8,
+      "description": "Q4_K_S quant"
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 17.8,
+      "description": "Q5_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 17.8,
+      "description": "Q5_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 17.8,
+      "description": "Q2_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 17.8,
+      "description": "Q4_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 17.8,
+      "description": "Q5_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 17.8,
+      "description": "Q6_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "gemma-4-31B-it-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 17.8,
+      "description": "Q8_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "mtp-gemma-4-31B-it.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 17.8,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 17.8,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 17.8,
+      "description": "Vision projector — FP16"
+    },
+    {
+      "family": "gemma4-31b",
+      "filename": "mmproj-F32.gguf",
+      "quant": "F32",
+      "size_gb": 17.8,
+      "description": "Vision projector — FP32",
+      "advanced": true
+    },
+    {
       "family": "gemma4-26b-a4b",
       "filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
       "quant": "Q4_K_M",
@@ -2715,6 +2922,172 @@
       "quant": "Q8_0",
       "size_gb": 25.8,
       "description": "Effectively lossless; very large",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-IQ2_XXS.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 15.2,
+      "description": "IQ2_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 15.2,
+      "description": "IQ2_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 15.2,
+      "description": "IQ3_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 15.2,
+      "description": "Q3_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 15.2,
+      "description": "Q3_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 15.2,
+      "description": "IQ4_XS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 15.2,
+      "description": "IQ4_NL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 15.2,
+      "description": "Q4_K_S quant"
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 15.2,
+      "description": "Q5_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 15.2,
+      "description": "Q5_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-MXFP4_MOE.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 15.2,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-IQ3_S.gguf",
+      "quant": "IQ3_S",
+      "size_gb": 15.2,
+      "description": "IQ3_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 15.2,
+      "description": "Q2_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 15.2,
+      "description": "Q4_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 15.2,
+      "description": "Q5_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 15.2,
+      "description": "Q6_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "gemma-4-26B-A4B-it-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 15.2,
+      "description": "Q8_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "mtp-gemma-4-26B-A4B-it.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 15.2,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 15.2,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 15.2,
+      "description": "Vision projector — FP16"
+    },
+    {
+      "family": "gemma4-26b-a4b",
+      "filename": "mmproj-F32.gguf",
+      "quant": "F32",
+      "size_gb": 15.2,
+      "description": "Vision projector — FP32",
       "advanced": true
     },
     {
@@ -2749,6 +3122,171 @@
       "advanced": true
     },
     {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 2.9,
+      "description": "IQ2_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 2.9,
+      "description": "IQ3_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 2.9,
+      "description": "Q3_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 2.9,
+      "description": "Q3_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 2.9,
+      "description": "Q3_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 2.9,
+      "description": "IQ4_XS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 2.9,
+      "description": "IQ4_NL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 2.9,
+      "description": "Q4_1 quant"
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 2.9,
+      "description": "Q4_K_S quant"
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 2.9,
+      "description": "Q5_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 2.9,
+      "description": "Q5_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 2.9,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 2.9,
+      "description": "Q2_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 2.9,
+      "description": "Q4_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 2.9,
+      "description": "Q5_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 2.9,
+      "description": "Q6_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "gemma-4-E4B-it-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 2.9,
+      "description": "Q8_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "mtp-gemma-4-E4B-it.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 2.9,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 2.9,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 2.9,
+      "description": "Vision projector — FP16"
+    },
+    {
+      "family": "gemma4-e4b",
+      "filename": "mmproj-F32.gguf",
+      "quant": "F32",
+      "size_gb": 2.9,
+      "description": "Vision projector — FP32",
+      "advanced": true
+    },
+    {
       "family": "gemma4-e2b",
       "filename": "gemma-4-E2B-it-Q4_0.gguf",
       "quant": "Q4_0",
@@ -2777,6 +3315,171 @@
       "quant": "Q8_0",
       "size_gb": 3.2,
       "description": "Effectively lossless",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 1.7,
+      "description": "IQ2_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 1.7,
+      "description": "IQ3_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 1.7,
+      "description": "Q3_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 1.7,
+      "description": "Q3_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 1.7,
+      "description": "Q3_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 1.7,
+      "description": "IQ4_XS quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 1.7,
+      "description": "IQ4_NL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 1.7,
+      "description": "Q4_1 quant"
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 1.7,
+      "description": "Q4_K_S quant"
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 1.7,
+      "description": "Q5_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 1.7,
+      "description": "Q5_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 1.7,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 1.7,
+      "description": "Q2_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 1.7,
+      "description": "Q4_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 1.7,
+      "description": "Q5_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 1.7,
+      "description": "Q6_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "gemma-4-E2B-it-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 1.7,
+      "description": "Q8_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "mtp-gemma-4-E2B-it.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 1.7,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 1.7,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 1.7,
+      "description": "Vision projector — FP16"
+    },
+    {
+      "family": "gemma4-e2b",
+      "filename": "mmproj-F32.gguf",
+      "quant": "F32",
+      "size_gb": 1.7,
+      "description": "Vision projector — FP32",
       "advanced": true
     },
     {
@@ -3740,6 +4443,14 @@
       "recommended": true
     },
     {
+      "family": "bonsai-8b",
+      "filename": "Bonsai-8B-Q1_0.gguf",
+      "quant": "Q1_0",
+      "size_gb": 1.08,
+      "description": "Q1_0 quant",
+      "advanced": true
+    },
+    {
       "family": "bonsai-4b",
       "filename": "Bonsai-4B.gguf",
       "quant": "Q1_0_G128",
@@ -3748,12 +4459,28 @@
       "recommended": true
     },
     {
+      "family": "bonsai-4b",
+      "filename": "Bonsai-4B-Q1_0.gguf",
+      "quant": "Q1_0",
+      "size_gb": 0.53,
+      "description": "Q1_0 quant",
+      "advanced": true
+    },
+    {
       "family": "bonsai-1.7b",
       "filename": "Bonsai-1.7B.gguf",
       "quant": "Q1_0_G128",
       "size_gb": 0.24,
       "description": "1-bit quantization — 13.9× smaller than FP16, runs on any device",
       "recommended": true
+    },
+    {
+      "family": "bonsai-1.7b",
+      "filename": "Bonsai-1.7B-Q1_0.gguf",
+      "quant": "Q1_0",
+      "size_gb": 0.24,
+      "description": "Q1_0 quant",
+      "advanced": true
     },
     {
       "family": "nemotron-3-nano-4b",
@@ -4153,6 +4880,37 @@
       "advanced": true
     },
     {
+      "family": "qwen36-35b-a3b",
+      "filename": "Qwen3.6-35B-A3B-UD-IQ4_NL_XL.gguf",
+      "quant": "IQ4_NL_XL",
+      "size_gb": 9.36,
+      "description": "IQ4_NL_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 9.36,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "mmproj-F16.gguf",
+      "quant": "F16",
+      "size_gb": 9.36,
+      "description": "Vision projector — FP16"
+    },
+    {
+      "family": "qwen36-35b-a3b",
+      "filename": "mmproj-F32.gguf",
+      "quant": "F32",
+      "size_gb": 9.36,
+      "description": "Vision projector — FP32",
+      "advanced": true
+    },
+    {
       "family": "mistral-medium-3.5-128b",
       "filename": "mistralai_Mistral-Medium-3.5-128B-Q2_K.gguf",
       "quant": "Q2_K",
@@ -4280,334 +5038,273 @@
       ]
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ2_M.gguf",
-      "quant": "IQ2_M",
-      "size_gb": 18.5,
-      "description": "Ultra-low quality imatrix; smallest useful option",
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ1_S.gguf",
+      "quant": "IQ1_S",
+      "size_gb": 49.86,
+      "description": "IQ1_S quant",
       "advanced": true
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q2_K_XL.gguf",
-      "quant": "Q2_K_XL",
-      "size_gb": 18.5,
-      "description": "Ultra-low quality; Q8_0 embed/output weights",
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ1_M.gguf",
+      "quant": "IQ1_M",
+      "size_gb": 49.86,
+      "description": "IQ1_M quant",
       "advanced": true
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ3_S.gguf",
-      "quant": "IQ3_S",
-      "size_gb": 18.82,
-      "description": "Low quality imatrix",
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ2_XXS.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 49.86,
+      "description": "IQ2_XXS quant",
       "advanced": true
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ3_XXS.gguf",
-      "quant": "IQ3_XXS",
-      "size_gb": 19.46,
-      "description": "Low quality imatrix",
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ2_XS.gguf",
+      "quant": "IQ2_XS",
+      "size_gb": 49.86,
+      "description": "IQ2_XS quant",
       "advanced": true
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_XS.gguf",
-      "quant": "IQ4_XS",
-      "size_gb": 19.54,
-      "description": "Decent quality; smaller than Q4_K_S",
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mistralai_Mistral-Medium-3.5-128B-IQ2_S.gguf",
+      "quant": "IQ2_S",
+      "size_gb": 49.86,
+      "description": "IQ2_S quant",
       "advanced": true
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_NL.gguf",
-      "quant": "IQ4_NL",
-      "size_gb": 19.54,
-      "description": "Decent quality; good for ARM CPU inference",
-      "advanced": true
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-MXFP4_MOE.gguf",
-      "quant": "MXFP4_MOE",
-      "size_gb": 21.73,
-      "description": "MX FP4 MoE quant -- fast on supported hardware"
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q4_K_S.gguf",
-      "quant": "Q4_K_S",
-      "size_gb": 23.05,
-      "description": "Good quality with space savings"
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q4_K_M.gguf",
-      "quant": "Q4_K_M",
-      "size_gb": 23.89,
-      "description": "Recommended -- best quality/size tradeoff",
-      "recommended": true
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q5_K_S.gguf",
-      "quant": "Q5_K_S",
-      "size_gb": 24.8,
-      "description": "High quality",
-      "advanced": true
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q5_K_M.gguf",
-      "quant": "Q5_K_M",
-      "size_gb": 29,
-      "description": "High quality; >= 32 GB VRAM",
-      "advanced": true
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-Q6_K.gguf",
-      "quant": "Q6_K",
-      "size_gb": 33.59,
-      "description": "Very high quality, near perfect",
-      "advanced": true
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-Q8_0.gguf",
-      "quant": "Q8_0",
-      "size_gb": 33.59,
-      "description": "Effectively lossless; very large",
-      "advanced": true
-    },
-    {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "mmproj-BF16.gguf",
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mmproj-mistralai_Mistral-Medium-3.5-128B-bf16.gguf",
       "quant": "BF16",
-      "size_gb": 1.59,
-      "description": "Nemotron-3 Nano Omni vision/audio projector -- BF16 (recommended)",
+      "size_gb": 49.86,
+      "description": "Vision projector — BF16 (recommended)",
       "recommended": true
     },
     {
-      "family": "nemotron-3-nano-omni-30b",
-      "filename": "mmproj-F16.gguf",
-      "quant": "F16",
-      "size_gb": 1.59,
-      "description": "Nemotron-3 Nano Omni vision/audio projector -- FP16"
+      "family": "mistral-medium-3.5-128b",
+      "filename": "mmproj-mistralai_Mistral-Medium-3.5-128B-f32.gguf",
+      "quant": "F32",
+      "size_gb": 49.86,
+      "description": "Vision projector — FP32",
+      "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-IQ2_XXS-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-IQ2_XXS.gguf",
       "quant": "IQ2_XXS",
       "size_gb": 8.75,
       "description": "Ultra-small 2-bit with MTP",
+      "remote_filename": "Qwen3.6-27B-UD-IQ2_XXS.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-IQ2_M-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-IQ2_M.gguf",
       "quant": "IQ2_M",
       "size_gb": 9.74,
       "description": "2-bit with MTP; fits 12 GB VRAM",
+      "remote_filename": "Qwen3.6-27B-UD-IQ2_M.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-IQ3_XXS-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-IQ3_XXS.gguf",
       "quant": "IQ3_XXS",
       "size_gb": 11.18,
       "description": "Compact 3-bit with MTP",
+      "remote_filename": "Qwen3.6-27B-UD-IQ3_XXS.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q3_K_S-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q3_K_S.gguf",
       "quant": "Q3_K_S",
       "size_gb": 11.51,
       "description": "Small 3-bit with MTP; fits 16 GB VRAM",
+      "remote_filename": "Qwen3.6-27B-Q3_K_S.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q3_K_M-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q3_K_M.gguf",
       "quant": "Q3_K_M",
       "size_gb": 12.65,
       "description": "Medium 3-bit with MTP",
+      "remote_filename": "Qwen3.6-27B-Q3_K_M.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-Q2_K_XL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-Q2_K_XL.gguf",
       "quant": "Q2_K_XL",
       "size_gb": 13.47,
       "description": "2-bit with important layers at higher precision and MTP",
+      "remote_filename": "Qwen3.6-27B-UD-Q2_K_XL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-Q3_K_XL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-Q3_K_XL.gguf",
       "quant": "Q3_K_XL",
       "size_gb": 13.48,
       "description": "3-bit with important layers at higher precision and MTP",
+      "remote_filename": "Qwen3.6-27B-UD-Q3_K_XL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-IQ4_XS-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-IQ4_XS.gguf",
       "quant": "IQ4_XS",
       "size_gb": 14.47,
       "description": "Compact 4-bit with MTP",
+      "remote_filename": "Qwen3.6-27B-IQ4_XS.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q4_0-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 14.71,
       "description": "4-bit with MTP; fits 16 GB VRAM",
+      "remote_filename": "Qwen3.6-27B-Q4_0.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q4_K_S-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q4_K_S.gguf",
       "quant": "Q4_K_S",
       "size_gb": 14.76,
-      "description": "4-bit k-quant small with MTP"
+      "description": "4-bit k-quant small with MTP",
+      "remote_filename": "Qwen3.6-27B-Q4_K_S.gguf"
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-IQ4_NL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-IQ4_NL.gguf",
       "quant": "IQ4_NL",
       "size_gb": 14.97,
       "description": "4-bit non-linear with MTP; good quality/size balance",
+      "remote_filename": "Qwen3.6-27B-IQ4_NL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q4_K_M-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 15.83,
       "description": "Best quality/size balance with MTP; needs 16 GB VRAM or 24 GB RAM",
+      "remote_filename": "Qwen3.6-27B-Q4_K_M.gguf",
       "recommended": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q4_1-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q4_1.gguf",
       "quant": "Q4_1",
       "size_gb": 16.07,
       "description": "4-bit variant with MTP; slightly higher quality than Q4_0",
+      "remote_filename": "Qwen3.6-27B-Q4_1.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-Q4_K_XL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-Q4_K_XL.gguf",
       "quant": "Q4_K_XL",
       "size_gb": 16.4,
       "description": "4-bit with important layers at higher precision and MTP",
+      "remote_filename": "Qwen3.6-27B-UD-Q4_K_XL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q5_K_S-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q5_K_S.gguf",
       "quant": "Q5_K_S",
       "size_gb": 17.66,
       "description": "5-bit with MTP; needs 24 GB VRAM",
+      "remote_filename": "Qwen3.6-27B-Q5_K_S.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q5_K_M-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q5_K_M.gguf",
       "quant": "Q5_K_M",
       "size_gb": 18.33,
       "description": "Higher quality 5-bit with MTP; needs 24 GB VRAM",
+      "remote_filename": "Qwen3.6-27B-Q5_K_M.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-Q5_K_XL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-Q5_K_XL.gguf",
       "quant": "Q5_K_XL",
       "size_gb": 18.66,
       "description": "5-bit with important layers at higher precision and MTP",
+      "remote_filename": "Qwen3.6-27B-UD-Q5_K_XL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q6_K-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q6_K.gguf",
       "quant": "Q6_K",
       "size_gb": 20.99,
       "description": "6-bit with MTP; high quality, needs 32 GB RAM",
+      "remote_filename": "Qwen3.6-27B-Q6_K.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-Q6_K_XL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-Q6_K_XL.gguf",
       "quant": "Q6_K_XL",
       "size_gb": 23.88,
       "description": "6-bit with important layers at higher precision and MTP",
+      "remote_filename": "Qwen3.6-27B-UD-Q6_K_XL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-Q8_0-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-Q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 27.05,
       "description": "Near-lossless 8-bit with MTP; needs 48 GB RAM",
+      "remote_filename": "Qwen3.6-27B-Q8_0.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "Qwen3.6-27B-UD-Q8_K_XL-mtp.gguf",
-      "remote_filename": "Qwen3.6-27B-UD-Q8_K_XL.gguf",
       "quant": "Q8_K_XL",
       "size_gb": 32.89,
       "description": "8-bit with important layers at higher precision and MTP",
+      "remote_filename": "Qwen3.6-27B-UD-Q8_K_XL.gguf",
       "advanced": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "mmproj-Qwen3.6-27B-BF16-mtp.gguf",
-      "remote_filename": "mmproj-BF16.gguf",
       "quant": "BF16",
       "size_gb": 0.87,
       "description": "Qwen3.6-27B MTP vision projector -- BF16 (recommended)",
+      "remote_filename": "mmproj-BF16.gguf",
       "recommended": true
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "mmproj-Qwen3.6-27B-F16-mtp.gguf",
-      "remote_filename": "mmproj-F16.gguf",
       "quant": "F16",
       "size_gb": 0.86,
-      "description": "Qwen3.6-27B MTP vision projector -- FP16"
+      "description": "Qwen3.6-27B MTP vision projector -- FP16",
+      "remote_filename": "mmproj-F16.gguf"
     },
     {
       "family": "qwen36-27b-mtp",
       "filename": "mmproj-Qwen3.6-27B-F32-mtp.gguf",
-      "remote_filename": "mmproj-F32.gguf",
       "quant": "F32",
       "size_gb": 1.72,
       "description": "Qwen3.6-27B MTP vision projector -- FP32",
+      "remote_filename": "mmproj-F32.gguf",
       "advanced": true
     }
   ]

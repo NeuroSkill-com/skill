@@ -12,7 +12,9 @@ const writeMode = args.has("--write");
 const checkMode = args.has("--check") || !writeMode;
 const verbose = args.has("--verbose");
 
-function log(..._msg) {}
+function log(...msg) {
+  if (verbose) console.log(...msg);
+}
 
 function normalizeQuant(value) {
   return value ? value.toUpperCase() : "UNKNOWN";
@@ -123,6 +125,95 @@ async function loadCatalog() {
   return JSON.parse(raw);
 }
 
+/** Inflate normalized `{ families, models }` or legacy `{ entries }` to flat entries. */
+function inflateCatalog(catalog) {
+  if (Array.isArray(catalog.entries)) {
+    return {
+      active_model: catalog.active_model ?? "",
+      active_mmproj: catalog.active_mmproj ?? "",
+      entries: catalog.entries,
+    };
+  }
+
+  const entries = [];
+  for (const m of catalog.models ?? []) {
+    const fam = catalog.families?.[m.family];
+    if (!fam) continue;
+    entries.push({
+      repo: m.repo ?? fam.repo,
+      filename: m.filename,
+      remote_filename: m.remote_filename ?? null,
+      quant: m.quant,
+      size_gb: m.size_gb,
+      description: m.description,
+      family_id: m.family,
+      family_name: fam.name,
+      family_desc: fam.description,
+      tags: fam.tags ?? [],
+      is_mmproj: fam.is_mmproj ?? false,
+      mtp: fam.mtp ?? false,
+      recommended: m.recommended ?? false,
+      advanced: m.advanced ?? false,
+      params_b: fam.params_b ?? 0,
+      max_context_length: fam.max_context_length ?? 0,
+      shard_files: m.shard_files ?? [],
+    });
+  }
+
+  return {
+    active_model: catalog.active_model ?? "",
+    active_mmproj: catalog.active_mmproj ?? "",
+    entries,
+  };
+}
+
+/** Deflate flat entries back to the normalized on-disk format. */
+function deflateCatalog(flat) {
+  const families = {};
+  const models = [];
+
+  for (const e of flat.entries) {
+    if (!families[e.family_id]) {
+      families[e.family_id] = {
+        name: e.family_name,
+        description: e.family_desc,
+        repo: e.repo,
+        tags: e.tags ?? [],
+        is_mmproj: e.is_mmproj ?? false,
+        mtp: e.mtp ?? false,
+        params_b: e.params_b ?? 0,
+        max_context_length: e.max_context_length ?? 0,
+      };
+    }
+
+    const fam = families[e.family_id];
+    const model = {
+      family: e.family_id,
+      filename: e.filename,
+      quant: e.quant,
+      size_gb: e.size_gb,
+      description: e.description,
+    };
+    if (e.remote_filename) model.remote_filename = e.remote_filename;
+    if (e.repo !== fam.repo) model.repo = e.repo;
+    if (e.recommended) model.recommended = true;
+    if (e.advanced) model.advanced = true;
+    if (e.shard_files?.length) model.shard_files = e.shard_files;
+    models.push(model);
+  }
+
+  return {
+    active_model: flat.active_model ?? "",
+    active_mmproj: flat.active_mmproj ?? "",
+    families,
+    models,
+  };
+}
+
+function remoteKey(entry) {
+  return entry.remote_filename ?? entry.filename;
+}
+
 function createAddedEntry(filename, siblingMap, template) {
   const isMmproj = /mmproj/i.test(filename);
   const quant = inferQuant(filename, isMmproj);
@@ -166,8 +257,13 @@ function pruneMmprojOnlyFamilies(entries) {
 }
 
 async function syncCatalog() {
-  const catalog = await loadCatalog();
-  const originalEntries = catalog.entries;
+  const onDisk = await loadCatalog();
+  const catalog = inflateCatalog(onDisk);
+  const originalEntries = catalog.entries ?? [];
+
+  if (originalEntries.length === 0) {
+    throw new Error("llm_catalog.json has no model entries (expected families/models or entries)");
+  }
 
   const repos = uniqueRepoOrder(originalEntries);
   const repoEntryMap = new Map();
@@ -213,9 +309,13 @@ async function syncCatalog() {
     );
 
     const existingFilenames = new Set(existing.map((entry) => entry.filename));
+    const existingRemoteKeys = new Set(existing.map((entry) => remoteKey(entry)));
 
     for (const entry of existing) {
-      if (!remoteGguf.has(entry.filename)) {
+      const key = remoteKey(entry);
+      // Keep sharded / subdir entries — HF root-only listing won't include them.
+      if (entry.shard_files?.length || key.includes("/")) continue;
+      if (!remoteGguf.has(key)) {
         removedKeys.add(`${entry.repo}::${entry.filename}`);
       }
     }
@@ -224,7 +324,7 @@ async function syncCatalog() {
 
     const newEntries = [];
     for (const filename of remoteGguf) {
-      if (existingFilenames.has(filename)) continue;
+      if (existingFilenames.has(filename) || existingRemoteKeys.has(filename)) continue;
       newEntries.push(createAddedEntry(filename, siblingMap, templateModel));
     }
 
@@ -263,8 +363,13 @@ async function syncCatalog() {
   const prunedEntries = pruneMmprojOnlyFamilies(mergedEntries);
   stats.removed += mergedEntries.length - prunedEntries.length;
 
-  const nextCatalog = { ...catalog, entries: prunedEntries };
-  const changed = JSON.stringify(nextCatalog) !== JSON.stringify(catalog);
+  const nextFlat = {
+    active_model: catalog.active_model,
+    active_mmproj: catalog.active_mmproj,
+    entries: prunedEntries,
+  };
+  const nextCatalog = deflateCatalog(nextFlat);
+  const changed = JSON.stringify(nextCatalog) !== JSON.stringify(onDisk);
 
   return { changed, nextCatalog, stats };
 }
@@ -296,6 +401,7 @@ async function main() {
   log("catalog updated");
 }
 
-main().catch((_error) => {
+main().catch((error) => {
+  console.error(`sync-llm-catalog: ${error?.stack ?? error}`);
   process.exit(1);
 });
