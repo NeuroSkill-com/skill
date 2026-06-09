@@ -204,7 +204,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -215,7 +215,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -786,6 +786,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "beef"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1107,6 +1113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63044e1ae8e69f3b5a92c736ca6269b8d12fa7efe39bf34ddb06d102cf0e2cab"
 dependencies = [
  "memchr",
+ "regex-automata",
  "serde",
 ]
 
@@ -1624,7 +1631,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -1922,7 +1929,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -2372,7 +2379,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc2776f0c61eca1ca32528f85548abd1a4be8fb53d1b21c013e4f18da1e7090"
 dependencies = [
  "data-encoding",
- "syn 2.0.117",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2586,7 +2593,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2629,7 +2636,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -3048,7 +3055,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3361,6 +3368,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
+name = "fixedbitset"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
+
+[[package]]
 name = "flatbuffers"
 version = "25.12.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3491,6 +3504,12 @@ checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "fuchsia-cprng"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 
 [[package]]
 name = "futures"
@@ -3993,8 +4012,8 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.2.1",
- "windows-result 0.4.1",
+ "windows-link 0.1.3",
+ "windows-result 0.3.4",
 ]
 
 [[package]]
@@ -4244,6 +4263,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.18",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -4433,6 +4453,8 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.2.0",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -4934,7 +4956,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -5300,6 +5322,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "io-kit-sys"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5557,7 +5588,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5875,6 +5906,54 @@ name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
+
+[[package]]
+name = "kitoken"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4663da0884a672d8705d339aad6367006e88df910bee436afdfbc898b2c7847"
+dependencies = [
+ "base64 0.22.1",
+ "bstr",
+ "derive_more",
+ "fancy-regex 0.18.0",
+ "hashbrown 0.17.1",
+ "log",
+ "memchr",
+ "multiversion",
+ "once_cell",
+ "orx-priority-queue",
+ "postcard",
+ "regex-automata",
+ "regex-syntax",
+ "sentencepiece-model",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "kitten_tts_mini_rlx"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a58ff9bac20684e2fd267d67568a48fb9a1973de79d26dc848461f935a6dbec5"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "half",
+ "rlx-compile",
+ "rlx-cpu",
+ "rlx-ir",
+ "rlx-metal",
+ "rlx-mlx",
+ "rlx-onnx-import",
+ "rlx-opt",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "kittentts"
@@ -6214,6 +6293,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "616ec5685824bcc94416c6d4a7a446eea774a31efd7062c8480ba6fd06d7a6e5"
 
 [[package]]
+name = "logos"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7251356ef8cb7aec833ddf598c6cb24d17b689d20b993f9d11a3d764e34e6458"
+dependencies = [
+ "logos-derive",
+]
+
+[[package]]
+name = "logos-codegen"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59f80069600c0d66734f5ff52cc42f2dabd6b29d205f333d61fd7832e9e9963f"
+dependencies = [
+ "beef",
+ "fnv",
+ "lazy_static",
+ "proc-macro2",
+ "quote",
+ "regex-syntax",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "logos-derive"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24fb722b06a9dc12adb0963ed585f19fc61dc5413e6a9be9422ef92c091e731d"
+dependencies = [
+ "logos-codegen",
+]
+
+[[package]]
 name = "loom"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6444,7 +6556,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a06de3016e9fae57a36fd14dba131fccf49f74b40b7fbdb472f96e361ec71a08"
 dependencies = [
  "autocfg",
+ "num_cpus",
+ "once_cell",
  "rawpointer",
+ "thread-tree",
 ]
 
 [[package]]
@@ -6546,6 +6661,28 @@ name = "micromap"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a86d3146ed3995b5913c414f6664344b9617457320782e64f0bb44afd49d74"
+
+[[package]]
+name = "miette"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f98efec8807c63c752b5bd61f862c165c115b0a35685bdcfd9238c7aeb592b7"
+dependencies = [
+ "cfg-if",
+ "miette-derive",
+ "unicode-width 0.1.14",
+]
+
+[[package]]
+name = "miette-derive"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db5b29714e950dbb20d5e6f74f9dcec4edbcc1067bb7f8ed198c097b8c1a818b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
 
 [[package]]
 name = "mime"
@@ -6674,7 +6811,35 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "multimap"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
+
+[[package]]
+name = "multiversion"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7edb7f0ff51249dfda9ab96b5823695e15a052dc15074c9dbf3d118afaf2c201"
+dependencies = [
+ "multiversion-macros",
+ "target-features",
+]
+
+[[package]]
+name = "multiversion-macros"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b093064383341eb3271f42e381cb8f10a01459478446953953c75d24bd339fc0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+ "target-features",
 ]
 
 [[package]]
@@ -6921,6 +7086,8 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
 dependencies = [
+ "cblas-sys",
+ "libc",
  "matrixmultiply",
  "num-complex",
  "num-integer",
@@ -6928,6 +7095,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "rawpointer",
+ "rayon",
 ]
 
 [[package]]
@@ -7388,7 +7556,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8074,6 +8242,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "onnx"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8973d1dd0205734e9a3400fa1e59b0d013f4d71531595f71fcf76ab0ff1d35d"
+dependencies = [
+ "protobuf",
+ "protoc-rust",
+]
+
+[[package]]
 name = "oorandom"
 version = "11.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8208,15 +8386,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ordered-float"
-version = "5.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8250,6 +8419,12 @@ dependencies = [
  "pkg-config",
  "ureq 3.3.0",
 ]
+
+[[package]]
+name = "orx-priority-queue"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89722d987db848624cf8fca21245d59cf6382b01b4ca79ae70261cea5747495"
 
 [[package]]
 name = "osakit"
@@ -8470,6 +8645,16 @@ checksum = "89815c69d36021a140146f26659a81d6c2afa33d216d736dd4be5381a7362220"
 dependencies = [
  "pest",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "petgraph"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
+dependencies = [
+ "fixedbitset 0.5.7",
+ "indexmap 2.14.0",
 ]
 
 [[package]]
@@ -9040,6 +9225,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-build"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
+dependencies = [
+ "heck 0.5.0",
+ "itertools 0.14.0",
+ "log",
+ "multimap",
+ "once_cell",
+ "petgraph",
+ "prettyplease",
+ "prost",
+ "prost-types",
+ "regex",
+ "syn 2.0.117",
+ "tempfile",
+]
+
+[[package]]
 name = "prost-derive"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9050,6 +9255,81 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "prost-reflect"
+version = "0.14.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5edd582b62f5cde844716e66d92565d7faf7ab1445c8cebce6e00fba83ddb2"
+dependencies = [
+ "logos",
+ "miette",
+ "once_cell",
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
+dependencies = [
+ "prost",
+]
+
+[[package]]
+name = "protobuf"
+version = "1.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e14ccd6b79ec748412d4f2dfde1a80fa363a67def4062969f8aed3d790a30f28"
+
+[[package]]
+name = "protoc"
+version = "1.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36db2c00e4519f5c2066c6e01bb73f176de120e4d31e1209dea8583c927faa3d"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "protoc-rust"
+version = "1.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2349054a25cab820bf488beac2b00fd42474db3ed7bad434b421894129d9672a"
+dependencies = [
+ "protobuf",
+ "protoc",
+ "tempdir",
+]
+
+[[package]]
+name = "protox"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f352af331bf637b8ecc720f7c87bf903d2571fa2e14a66e9b2558846864b54a"
+dependencies = [
+ "bytes",
+ "miette",
+ "prost",
+ "prost-reflect",
+ "prost-types",
+ "protox-parse",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "protox-parse"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3a462d115462c080ae000c29a47f0b3985737e5d3a995fcdbcaa5c782068dde"
+dependencies = [
+ "logos",
+ "miette",
+ "prost-types",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -9233,6 +9513,19 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rand"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
+dependencies = [
+ "fuchsia-cprng",
+ "libc",
+ "rand_core 0.3.1",
+ "rdrand",
+ "winapi",
+]
+
+[[package]]
+name = "rand"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
@@ -9282,6 +9575,21 @@ dependencies = [
  "ppv-lite86",
  "rand_core 0.9.5",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"
+dependencies = [
+ "rand_core 0.4.2",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c33a3c44ca05fa6f1807d8e6743f3824e8509beca625669633be0acbdf509dc"
 
 [[package]]
 name = "rand_core"
@@ -9344,6 +9652,12 @@ checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core 0.9.5",
 ]
+
+[[package]]
+name = "range-alloc"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
 
 [[package]]
 name = "ratatui"
@@ -9545,6 +9859,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdrand"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "678054eb77286b51581ba43620cc911abf02758c91f93f479767aed0f90458b2"
+dependencies = [
+ "rand_core 0.3.1",
+]
+
+[[package]]
 name = "realfft"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9655,6 +9978,15 @@ name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+
+[[package]]
+name = "remove_dir_all"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "renderdoc-sys"
@@ -9892,9 +10224,7 @@ dependencies = [
 
 [[package]]
 name = "rlx"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74735fe46fc516ed9e4e6d13384bf738dfd0e73e9285ef6c88b6f7d3e7014477"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "rlx-driver",
@@ -9907,19 +10237,18 @@ dependencies = [
 
 [[package]]
 name = "rlx-autodiff"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2465e7cee3752f4f8a17f23ab6787e3c365397f8976c0af4ad7f8b74f67372f8"
+version = "0.2.4"
 dependencies = [
+ "half",
  "rlx-fusion",
  "rlx-ir",
 ]
 
 [[package]]
 name = "rlx-bert"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59c458158e8ab4d64db10acfa4fd4f7526c5b2aa830f3963f7755063db723d0"
+checksum = "bfe8c3ad1475c760e996696615aad2cf77b87663a128d8450443cb68def16cbf"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -9933,9 +10262,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-bonsai"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "815c6d46553f587359aa89bcd375a36df54b2c12ea51cb05d4944ac946a18f30"
+checksum = "944e35abedd949960f399a39544f0a812bf097556c8d4c0d4c4e091676b33132"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9946,24 +10275,44 @@ dependencies = [
 
 [[package]]
 name = "rlx-cli"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdc0b568c60e2a4b9344aa3446728db4ae6c56745b4c997d6e0c50f9a0ff18c4"
+checksum = "e59a551e7f3648b8073b67a996e31c85b55472a04f2c8add545cda00fd803e69"
 dependencies = [
  "anyhow",
- "minijinja",
+ "clap",
  "phf 0.11.3",
  "rlx-gguf",
  "rlx-models-core",
  "rlx-runtime",
+ "rlx-text",
+ "serde_json",
+]
+
+[[package]]
+name = "rlx-clinicalbert"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd4d22e720a487d5bfa4f9da2e2d1133f520a1102f6b0d124bb846b8a0b46030"
+dependencies = [
+ "anyhow",
+ "rlx-bert",
+ "rlx-cpu",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-opt",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "rlx-cohere"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d2d53dc04a5915645661f3e31fbaeec8a9cd3ec6797669d3928d44f3ad4a2ec"
+checksum = "999791caec84478b5af3eb515369e025e64234a080afc55bc2f5965497a58206"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9973,9 +10322,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-compile"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b76eed5a97f3b9a51bca36472601d6883f6bdee80b604b9a6c92d3bc612af76"
+version = "0.2.4"
 dependencies = [
  "rlx-autodiff",
  "rlx-fusion",
@@ -9984,9 +10331,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-cpu"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dc9f88bd727b9df635f2aad996d01b0ef74a7a7080b124f4bf3ce1e3e24fa4b"
+version = "0.2.4"
 dependencies = [
  "half",
  "rayon",
@@ -9997,9 +10342,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-cuda"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b1a4a7e9b8a3c747b5e5ebf5cd27f6acad043cfead07170a37f3140deb61e08"
+version = "0.2.4"
 dependencies = [
  "bytemuck",
  "cudarc",
@@ -10007,19 +10350,21 @@ dependencies = [
  "rlx-gpu-kernels",
  "rlx-ir",
  "rlx-opt",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "rlx-diamond"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d785de6103b2bc23ea309439ef050b4dcccd3ac19ac3350c3031b29ff294a2de"
+checksum = "e8ae6500ad3a0b61e2ab2f0181fdbae2cf5831f705488b1a2555fb1eabdc15b3"
 
 [[package]]
 name = "rlx-dinov2"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fed1b54010ceabbfef6564aac108525fbfcbd69709124b2db8497694cf9093ae"
+checksum = "a3559e1ede3b495ca14be47a7ca63f7d8f75bf490d034ae4e82dfb512b8d6db1"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10036,9 +10381,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-driver"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea3285e7a038b8f9a6f4ea67e2f65afc05b7fe54cd416e1ab9162b1e870aa359"
+version = "0.2.4"
 dependencies = [
  "half",
  "rlx-ir",
@@ -10046,9 +10389,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-embed"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f72cc62ed7e45bf43c443b0a525e7f4ccd8fe507c8fb82559bd147fdbd8cd32"
+checksum = "df3b6224277480cff0f283c012af5deaf83ce28e531e2e0ee1648ec14bfdfc88"
 dependencies = [
  "anyhow",
  "rlx-bert",
@@ -10068,10 +10411,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-flow"
-version = "0.2.1"
+name = "rlx-fft"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07bab81e2f758a6471e603d705dd54df8b5d6900005b17f73752dde7a150ed70"
+checksum = "dc5ad8ff531685417eacb5d04b0c27a7e8a411010bca428b235ec51b9f3cee37"
+dependencies = [
+ "anyhow",
+ "rand 0.8.6",
+ "rlx-autodiff",
+ "rlx-cli",
+ "rlx-compile",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-opt",
+ "rlx-runtime",
+ "rustfft",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rlx-flow"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "rlx-ir",
@@ -10081,9 +10444,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-flux2"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df5a4198031649730fa92101f83ffd9c9c493837369960f6f82a9596819ea04b"
+checksum = "e1ec3a4688749a9a81ec221cc799fc801136ff7fa0c824908bcc0d861b3abcd0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10108,20 +10471,19 @@ dependencies = [
 
 [[package]]
 name = "rlx-fusion"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98cf87eb33e0d6807cb2b15914df2092162d4f57b520b0033f1a00bd6bc5b075"
+version = "0.2.4"
 dependencies = [
  "rlx-ir",
 ]
 
 [[package]]
 name = "rlx-gemma"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0567eb60bff8f90df01d0ff1594ac3d737930625da75cdd0e9e7e01b4954d999"
+checksum = "532a195dfa802faf96b2a8b9a82bf50c92b9f2f11d9c18b861be53d6f5cf5cb5"
 dependencies = [
  "anyhow",
+ "image",
  "rlx-cli",
  "rlx-flow",
  "rlx-gguf",
@@ -10134,13 +10496,12 @@ dependencies = [
  "safetensors 0.7.0",
  "serde",
  "serde_json",
+ "tokenizers",
 ]
 
 [[package]]
 name = "rlx-gguf"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb4b0502c86e388c8339eea739c5df67fa237f9210a25ae43be94c32cd1e0925"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10149,15 +10510,13 @@ dependencies = [
 
 [[package]]
 name = "rlx-gpu-kernels"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e134cfa3989d376ac81cb4acae6bcafdf05b121901f3a50f188364f34fffce33"
+version = "0.2.4"
 
 [[package]]
 name = "rlx-granite"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f62c4d3cbb35fbd04bcd7a685a433e5f082cc5c7d5cb47ef588b352957101bbe"
+checksum = "a08eefc2e160f662c011c639f060cc5a284fdda4f3bdab1028789bdb526e72dd"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10167,9 +10526,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-ir"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6ff34b306562963225271d4de7f344419adef20c43b1192affe9f13710b946d"
+version = "0.2.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -10177,10 +10534,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-lfm"
-version = "0.2.0"
+name = "rlx-kittentts"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aa4978c7c0650455686f9563dfc5022ecb56c31a6baca68ee52ea92e1b0dfec"
+checksum = "fe483ad9d5f05d38534ee8b26067712aa94e66ef2222546658f4c639bee478aa"
+dependencies = [
+ "anyhow",
+ "hound",
+ "kitten_tts_mini_rlx",
+ "once_cell",
+ "ort",
+ "regex",
+ "rlx",
+ "rlx-cli",
+ "rlx-runtime",
+ "serde",
+ "serde_json",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "rlx-lfm"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a6aad76eaa71e199822daf75011c244a1a4cc1197206813ea1b0510e17159af"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10198,9 +10575,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-llada2"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eef5a25fedc599361f277706c3c723a28cf96bab7876ce457cf0872c30c070e"
+checksum = "3c02cb571e6e7f0bca472d5b8f10d2a5f4bc6bbbce350ffe2d82cdf945549a82"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10219,9 +10596,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-llama-base"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00166d26aa24661f251c58af66ee21ef5cf0330c534ea23d57ae6c39f4b61bde"
+checksum = "401b9626c563cc34d9e59e5b98f7987ce0de7c15fe8281e8eb4d06890d76eca9"
 dependencies = [
  "anyhow",
  "rlx-gguf",
@@ -10230,9 +10607,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-llama32"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dbe767b323fa9ba3f9d498ae79ef3e4798c080c195f4b9a7695a6e24d35691c"
+checksum = "05239ade9046088038fd4c3239ff308891e3f5513f778a830a4db131d06db69f"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10251,10 +10628,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-macros"
-version = "0.2.1"
+name = "rlx-locateanything"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2fc8f176c99bfb2c253eed338028cbbaf3a3418990ced46e806603821ab0cfb"
+checksum = "7791d2f8cb7d87d80191bdd67712967cf420f9b9cc8af03cc26542e42679424f"
+dependencies = [
+ "anyhow",
+ "hf-hub 0.5.0",
+ "image",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-qwen3",
+ "rlx-runtime",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
+name = "rlx-macros"
+version = "0.2.4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10263,9 +10658,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-metal"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df95e73ecd89b324fa04e6b74dc6a06c3a2a719b92e39d002653cfc5bffa0a4d"
+version = "0.2.4"
 dependencies = [
  "bytemuck",
  "core-graphics-types 0.1.3",
@@ -10282,9 +10675,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-minicpm5"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "956260330c748ec0883211ac9724a364959de39d32d08b49d4f9cc418c111202"
+checksum = "2b290ef8c1874ff4255f52f1c05bff4d1e0cd3ff7245a970fdb22e4e2418efce"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10296,10 +10689,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-mistral"
-version = "0.2.0"
+name = "rlx-minimax"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5daf8420c20f707e4337a5436e20c2d9eb5b45cf4ff2506148ea3975be103ab"
+checksum = "fc16e98550f582b50bf1a9aeb6010b8d8071d7ea293777142d142602359af5e9"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-cpu",
+ "rlx-flow",
+ "rlx-gguf",
+ "rlx-ir",
+ "rlx-llama-base",
+ "rlx-models-core",
+ "rlx-runtime",
+ "rlx-ssm",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rlx-mistral"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3abe2dc910a95f8eb7fa7337cfa0380450f93e8595f50594a3b19be1e6448d0c"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10309,9 +10722,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mlx"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d24015dbfa57da492afe090ad3540ca160d87244d0e590b21126da24196f6e7e"
+version = "0.2.4"
 dependencies = [
  "half",
  "rlx-cpu",
@@ -10325,9 +10736,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mlx-sys"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b7bafb83bee9520a023ac863f29912be60766fdca1106334ada94254c9728ea"
+version = "0.2.4"
 dependencies = [
  "cc",
  "cmake",
@@ -10335,16 +10744,18 @@ dependencies = [
 
 [[package]]
 name = "rlx-models"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c2a1401d8d92db8691d098b4d57954619dd64dd1222b2b27e77a0abc7a69be2"
+checksum = "5f70755384f09a83370cae6c278e7df00fc76e16e5928a5c025f3370b535078e"
 dependencies = [
  "anyhow",
  "bytemuck",
  "half",
+ "hound",
  "rlx-bert",
  "rlx-bonsai",
  "rlx-cli",
+ "rlx-clinicalbert",
  "rlx-cohere",
  "rlx-cpu",
  "rlx-diamond",
@@ -10356,11 +10767,14 @@ dependencies = [
  "rlx-gguf",
  "rlx-granite",
  "rlx-ir",
+ "rlx-kittentts",
  "rlx-lfm",
  "rlx-llada2",
  "rlx-llama-base",
  "rlx-llama32",
+ "rlx-locateanything",
  "rlx-metal",
+ "rlx-minicpm5",
  "rlx-mistral",
  "rlx-mlx",
  "rlx-models-core",
@@ -10371,6 +10785,7 @@ dependencies = [
  "rlx-opt",
  "rlx-phi",
  "rlx-qwen3",
+ "rlx-qwen3-tts",
  "rlx-qwen35",
  "rlx-runtime",
  "rlx-sam",
@@ -10378,8 +10793,11 @@ dependencies = [
  "rlx-sam2",
  "rlx-sam3",
  "rlx-tensor",
+ "rlx-vad",
  "rlx-vision",
  "rlx-vjepa2",
+ "rlx-voxtral",
+ "rlx-voxtral-tts",
  "rlx-wav2vec2-bert",
  "rlx-whisper",
  "safetensors 0.7.0",
@@ -10389,13 +10807,15 @@ dependencies = [
 
 [[package]]
 name = "rlx-models-core"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f4d37ea19a9a02403c2af3924db2696dbd755b69316a89561dc288920d3935a"
+checksum = "8ee8000e0e8ee06239eb0f461dc720bafba0032cda7ce9f7287eae8db49a8ce2"
 dependencies = [
  "anyhow",
  "bytemuck",
  "half",
+ "memmap2",
+ "rayon",
  "rlx-flow",
  "rlx-gguf",
  "rlx-ir",
@@ -10407,10 +10827,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-neutts"
-version = "0.2.0"
+name = "rlx-nemotron"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab96a7d377ffcb8d41f5ea229138d0a47b32dbbcf0187c9af7ace463b97d2d38"
+checksum = "9b9dc71bcf00bd69aa07863bfe32bdb4b176d46726cb9797d88bf929ffa88e2d"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-cpu",
+ "rlx-flow",
+ "rlx-gguf",
+ "rlx-ir",
+ "rlx-llama-base",
+ "rlx-llama32",
+ "rlx-models-core",
+ "rlx-runtime",
+ "rlx-ssm",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rlx-neutts"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61a935ea64d17c6d18ed8001cc90b262a9632def49e2c2b5d9398ae1e6a7e712"
 dependencies = [
  "anyhow",
  "encoding_rs",
@@ -10421,6 +10862,7 @@ dependencies = [
  "regex",
  "rlx-llama-base",
  "rlx-llama32",
+ "rlx-models-core",
  "rlx-qwen3",
  "rlx-qwen35",
  "rlx-runtime",
@@ -10431,9 +10873,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-nomic"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "532b16e97ce944e0d134f3b44d4c920b00790a553625e83cb36e2fa782a4a000"
+checksum = "f8d94d347668c187234f7756f3d915e026d49ee3acd44073f44287a275b5645a"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -10447,9 +10889,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-ocr"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3feca0e3235eb01fc19152fec48a88550e011d4a024d6da78b56f0fa9b6e1fae"
+checksum = "d34f7f18020c4b828f40bd7f15dc8136eb5822c707599054ff5ab947b7ac934e"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10469,9 +10911,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-omnicoder"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8759cc29948e1fea1a778c6ad7ec42f6c7f17a585cb82250d023ef6e72683436"
+checksum = "88cc82de20894c23e5579a79dfdcf5886b411060305a11700ad74dabce7e786c"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10480,10 +10922,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-onnx-import"
+version = "0.2.4"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "half",
+ "onnx",
+ "protobuf",
+ "rlx-ir",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rlx-opt"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81c2848114adfa927cf032c8e6fb0cd33436461f9b5cbcb1152c757c21d33a88"
+version = "0.2.4"
 dependencies = [
  "rlx-autodiff",
  "rlx-compile",
@@ -10493,9 +10948,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-phi"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4839db1bba742ed9c6ace74b76bc1619526fccbb077694cc9b6b97c01f5ade74"
+checksum = "24dd88ace27e2a579aeabf01614e4051beddf7c83155e2408de33cbe451be71c"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10505,9 +10960,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-qwen3"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fec3995d00d990f1b4117255c9cd31e6f1db1f25228a12f630854a9a55bb05b4"
+checksum = "c70ec6e7a213f992381f6597bd0a7a34a24bf7b3a741e954806e6eb2137f17b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10523,10 +10978,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-qwen35"
-version = "0.2.0"
+name = "rlx-qwen3-tts"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dec4712df9239afcf579fd14f38a6b767fcaa1cb0d773325dac248da1a33ec04"
+checksum = "616f2e5ed3aac3b53a606bd070b47699df73bb74c63a883a0f0a0e371ec37a1f"
+dependencies = [
+ "anyhow",
+ "memmap2",
+ "ndarray 0.16.1",
+ "rand 0.8.6",
+ "rayon",
+ "rlx-cli",
+ "rlx-cpu",
+ "rlx-fft",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-qwen3",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
+name = "rlx-qwen35"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2440779fc9d7c54721fa0c63c61a11d9ee2969a3b0248b92f7c04d02215eb116"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10547,24 +11027,24 @@ dependencies = [
 
 [[package]]
 name = "rlx-rocm"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68700709a25d4ba8d1adfa771d09e43b28877281b65adef42d1334fab01ff49"
+version = "0.2.4"
 dependencies = [
  "libloading 0.8.9",
  "rlx-cpu",
  "rlx-gpu-kernels",
  "rlx-ir",
  "rlx-opt",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "rlx-runtime"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26842ff87ae6f10cf06e6efee844aebececfbf0776152a31d31d44aa45437fbd"
+version = "0.2.4"
 dependencies = [
+ "anyhow",
  "half",
+ "inventory",
  "rlx-cpu",
  "rlx-cuda",
  "rlx-driver",
@@ -10581,9 +11061,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16f6284d7e794dc8a30b8fabf84c15b77eeaa2e3198050cb60141985457365b5"
+checksum = "f185d10d39b2434fd87f5f43ce25f734305fab80c490353f3fa994b7daa52692"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10601,9 +11081,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam-ir"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17c71ea2d4747492b6604406c072b7abfe122358a28457daa27e679951902af9"
+checksum = "63024bf36773f5b09faa0310a834fe1e2809e6bac1d2a7d5f8cca4d4ee29bf77"
 dependencies = [
  "anyhow",
  "rlx-cpu",
@@ -10616,9 +11096,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam2"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b69140aa99c251bb3759913b18c3f6fcd432257d68631338cde2463761901a9"
+checksum = "d1050d1c78c5287d4e0efc370ef567eaab40c5c257c5a4cd0aa6d606bac24638"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10637,9 +11117,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam3"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec8ad3ad65496c35b0df3c2198f0ffc857527c5ad607821e45468869f7a5f408"
+checksum = "68702950c0de704234f1fd651211b3cdbe7530cdc937c5acfe52cd10cc1db3bd"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10659,9 +11139,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-ssm"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85bccf0c685cbf132e0a9effeee98b762965fa0982563c462751384560b3af88"
+checksum = "fe0fbbb19f8dbce59addf21f2a3d882a0f370758bad44ce4c5f6422d8e5c6b72"
 dependencies = [
  "anyhow",
  "rlx-cpu",
@@ -10671,19 +11151,30 @@ dependencies = [
 
 [[package]]
 name = "rlx-tensor"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a94629d248b94c35cf66c031a6321f0a68ab3878b466601647c2239794bf9f1"
+checksum = "1e8dcec015454552e2d6d8d2330507a190aa05e7aab21d7255cb8cdbd2d766a1"
 dependencies = [
  "anyhow",
  "rlx-cpu",
 ]
 
 [[package]]
+name = "rlx-text"
+version = "0.2.4"
+dependencies = [
+ "anyhow",
+ "minijinja",
+ "rlx-gguf",
+ "rlx-runtime",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-umap"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "133b99954c850c909d7d96a987e6ea73cfc591d81624bdcab05facfab5ac6f8e"
+version = "0.2.4"
 dependencies = [
  "crossbeam-channel",
  "ctrlc",
@@ -10704,10 +11195,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-vision"
-version = "0.2.0"
+name = "rlx-vad"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65c894f3d783ed1b759d5603a390d2bdf0bc13a60be37cbee57eb9c812f9383b"
+checksum = "3b70a51022eb0ab60f283f67bfd57e8a8581195de477fb77e3ad1f8ce8a72ddc"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-cpu",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-runtime",
+]
+
+[[package]]
+name = "rlx-vision"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c0d221ef2feabc5af061adeddae44dbd72cc38932cddf1ed2c393a6ea454db9"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -10721,9 +11227,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-vjepa2"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19cd5d506f3e4ff6781339e562231f233e96f5b7343340678f16a609d3ae716"
+checksum = "8664c3b85ae302149f0a834830d007dc70117f906481090d2f7a1df0d6bc33a3"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10740,10 +11246,58 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlx-wav2vec2-bert"
-version = "0.2.0"
+name = "rlx-voxtral"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "328b52fbdc4ede281d696e51521acffdb989142379dc3903c67d33d7529dff47"
+checksum = "87a7a82090db055661fb9c142bff21051af8edf7d0a2ddea5c90a30b32e57410"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-llama32",
+ "rlx-models-core",
+ "rlx-opt",
+ "rlx-runtime",
+ "rlx-whisper",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
+name = "rlx-voxtral-tts"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3c89986e232228ab1a4c3202460914ad5bc085c26c0fcf629b5f87d92a1ff3a"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "half",
+ "hound",
+ "kitoken",
+ "memmap2",
+ "ndarray 0.16.1",
+ "rand 0.8.6",
+ "rand_distr 0.4.3",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-llama32",
+ "rlx-models-core",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "rlx-wav2vec2-bert"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9925fd19d7a72dff80e19c6fce949537ee38639e9957059db21af8b4d64cf6d"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10759,9 +11313,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-wgpu"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d3523c5c26fcb4fa08e1d45bda84d2ae55a735b1dd311e93522eddf671c5e45"
+version = "0.2.4"
 dependencies = [
  "bytemuck",
  "half",
@@ -10777,9 +11329,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-whisper"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87d60f4379dbfe85c5d5839021ef9997001b82ad28ddc01ebc17a752381b57c0"
+checksum = "075afc5b981794eecaea16921be5e84cf60bfdf444bd0fdf5904a20522e79931"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11006,7 +11558,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11073,7 +11625,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11300,7 +11852,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11337,6 +11889,18 @@ name = "send_wrapper"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
+
+[[package]]
+name = "sentencepiece-model"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40b87bf750a8322c3236d7aa63c1f4a6862187d00d2d8b038e1dfe263bfe43ec"
+dependencies = [
+ "miette",
+ "prost",
+ "prost-build",
+ "protox",
+]
 
 [[package]]
 name = "seq-macro"
@@ -12194,8 +12758,11 @@ dependencies = [
  "image",
  "log",
  "rlx",
+ "rlx-gemma",
  "rlx-minicpm5",
+ "rlx-minimax",
  "rlx-models",
+ "rlx-nemotron",
  "rusqlite",
  "serde",
  "serde_json",
@@ -12453,7 +13020,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -12597,7 +13164,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -13033,6 +13600,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "target-features"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1bbb9f3c5c463a01705937a24fdabc5047929ac764b2d5b9cf681c1f5041ed5"
+
+[[package]]
 name = "target-lexicon"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13401,6 +13974,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tempdir"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8"
+dependencies = [
+ "rand 0.4.6",
+ "remove_dir_all",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13410,7 +13993,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -13476,7 +14059,7 @@ dependencies = [
  "fancy-regex 0.11.0",
  "filedescriptor",
  "finl_unicode",
- "fixedbitset",
+ "fixedbitset 0.4.2",
  "hex",
  "lazy_static",
  "libc",
@@ -13544,6 +14127,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "thread-tree"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffbd370cb847953a25954d9f63e14824a36113f8c72eecf6eccef5dc4b45d630"
+dependencies = [
+ "crossbeam-channel",
 ]
 
 [[package]]
@@ -14137,7 +14729,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -14353,7 +14945,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -14464,6 +15056,15 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-normalization-alignments"
@@ -15345,6 +15946,7 @@ dependencies = [
  "android_system_properties",
  "arrayvec",
  "ash",
+ "bit-set 0.9.1",
  "bitflags 2.11.1",
  "block2 0.6.2",
  "bytemuck",
@@ -15362,11 +15964,13 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-metal",
  "objc2-quartz-core",
- "ordered-float 5.3.0",
+ "once_cell",
+ "ordered-float 4.6.0",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
  "profiling",
+ "range-alloc",
  "raw-window-handle",
  "raw-window-metal",
  "renderdoc-sys",
@@ -15375,6 +15979,7 @@ dependencies = [
  "wgpu-naga-bridge",
  "wgpu-types",
  "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -15448,7 +16053,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -16137,8 +16742,8 @@ dependencies = [
  "log",
  "serde",
  "thiserror 2.0.18",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
