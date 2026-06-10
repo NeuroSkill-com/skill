@@ -10448,9 +10448,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-driver"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3cc6372ca5f1716932b3fbb69333cb94f0feb9c8d4f5a2585aab1e761dff8cf"
+checksum = "f9f431f27e622b31e7503a9b08974af07809d75c50affcede2182fcb8d4ce8e8"
 dependencies = [
  "half",
  "rlx-ir",
@@ -10542,9 +10542,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-fusion"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f44b4e5f149bd264d1ace115913054227064baac4b3e3b1494b8526472b57c50"
+checksum = "96f891882f925f19ef4cd080109139949bd56314b3467c04bb6e47c74aa68942"
 dependencies = [
  "rlx-ir",
 ]
@@ -10821,9 +10821,9 @@ dependencies = [
 
 [[package]]
 name = "rlx-mlx-sys"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "419344d7685dbbdd1a4eabf07c118690e06e2abe0e37f9ab064e792b82039c51"
+checksum = "cc1f20816f784800a48db835fcf2299daa099905311acec1c4a46cf648e3ccce"
 dependencies = [
  "cc",
  "cmake",
@@ -12422,7 +12422,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skill"
-version = "0.0.131-rc.4"
+version = "0.0.131-rc.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
