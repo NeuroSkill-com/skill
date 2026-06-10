@@ -17,7 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::constants::{
-    HNSW_EF_CONSTRUCTION, HNSW_M, LUNA_DEFAULT_VARIANT, LUNA_HF_REPO, MODEL_CONFIG_FILE, ZUNA_DATA_NORM, ZUNA_HF_REPO,
+    EEGDINO_DEFAULT_VARIANT, EEGDINO_HF_REPO, EEGDINO_VARIANTS, HNSW_EF_CONSTRUCTION, HNSW_M, LUNA_DEFAULT_VARIANT,
+    LUNA_HF_REPO, MODEL_CONFIG_FILE, ZUNA_DATA_NORM, ZUNA_HF_REPO,
 };
 
 // ── EXG embedding model backend ──────────────────────────────────────────────
@@ -55,6 +56,8 @@ pub enum ExgModelBackend {
     Tribev2,
     /// NeuroRVQ tokenizer — residual vector quantization for EEG/ECG/EMG.
     Neurorvq,
+    /// EEG-DINO — hierarchical self-distillation EEG foundation model (RLX).
+    Eegdino,
     /// ST-EEGFormer — ViT-based EEG foundation model (NeurIPS 2025 winner, ICLR 2026).
     Steegformer,
 }
@@ -82,6 +85,7 @@ impl ExgModelBackend {
             "opentslm" => Self::Opentslm,
             "tribev2" => Self::Tribev2,
             "neurorvq" => Self::Neurorvq,
+            "eegdino" => Self::Eegdino,
             "steegformer" => Self::Steegformer,
             _ => Self::Zuna,
         }
@@ -104,6 +108,7 @@ impl ExgModelBackend {
             Self::Opentslm => "opentslm",
             Self::Tribev2 => "tribev2",
             Self::Neurorvq => "neurorvq",
+            Self::Eegdino => "eegdino",
             Self::Steegformer => "steegformer",
         }
     }
@@ -166,6 +171,14 @@ pub struct ExgModelConfig {
     /// HuggingFace repository for LUNA weights.
     #[serde(default = "default_luna_hf_repo")]
     pub luna_hf_repo: String,
+
+    /// EEG-DINO model size variant: `"small"`, `"medium"`, or `"large"`.
+    #[serde(default = "default_eegdino_variant")]
+    pub eegdino_variant: String,
+
+    /// HuggingFace repository for EEG-DINO weights.
+    #[serde(default = "default_eegdino_hf_repo")]
+    pub eegdino_hf_repo: String,
 }
 
 fn default_hf_repo() -> String {
@@ -186,6 +199,12 @@ fn default_luna_variant() -> String {
 fn default_luna_hf_repo() -> String {
     LUNA_HF_REPO.to_string()
 }
+fn default_eegdino_variant() -> String {
+    EEGDINO_DEFAULT_VARIANT.to_string()
+}
+fn default_eegdino_hf_repo() -> String {
+    EEGDINO_HF_REPO.to_string()
+}
 
 /// Legacy alias — old configs may have the old struct name.
 pub type EegModelConfig = ExgModelConfig;
@@ -200,6 +219,8 @@ impl Default for ExgModelConfig {
             model_backend: ExgModelBackend::default(),
             luna_variant: default_luna_variant(),
             luna_hf_repo: default_luna_hf_repo(),
+            eegdino_variant: default_eegdino_variant(),
+            eegdino_hf_repo: default_eegdino_hf_repo(),
         }
     }
 }
@@ -214,6 +235,15 @@ impl ExgModelConfig {
             .find(|(v, _)| *v == self.luna_variant.as_str())
             .map(|(_, f)| *f)
             .unwrap_or(crate::constants::LUNA_VARIANTS[0].1)
+    }
+
+    /// Return the EEG-DINO safetensors filename for the current variant.
+    pub fn eegdino_weights_file(&self) -> &'static str {
+        EEGDINO_VARIANTS
+            .iter()
+            .find(|(v, _)| *v == self.eegdino_variant.as_str())
+            .map(|(_, f)| *f)
+            .unwrap_or(EEGDINO_VARIANTS[0].1)
     }
 }
 
@@ -460,6 +490,7 @@ mod tests {
             model_backend: ExgModelBackend::Luna,
             luna_variant: "large".into(),
             luna_hf_repo: "PulpBio/LUNA".into(),
+            ..Default::default()
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let parsed: EegModelConfig = serde_json::from_str(&json).unwrap();
@@ -540,6 +571,7 @@ mod tests {
             model_backend: ExgModelBackend::Luna,
             luna_variant: "huge".into(),
             luna_hf_repo: "PulpBio/LUNA".into(),
+            ..Default::default()
         };
         save_model_config(&dir, &cfg);
         let loaded = load_model_config(&dir);
@@ -587,6 +619,7 @@ mod tests {
         ExgModelBackend::Opentslm,
         ExgModelBackend::Tribev2,
         ExgModelBackend::Neurorvq,
+        ExgModelBackend::Eegdino,
         ExgModelBackend::Steegformer,
     ];
 

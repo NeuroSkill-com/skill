@@ -19,6 +19,9 @@ use skill_eeg::eeg_model_config::EegModelStatus;
 #[cfg(feature = "neurorvq-ndarray")]
 pub mod neurorvq;
 
+#[cfg(feature = "eegdino-rlx")]
+pub mod eegdino;
+
 // ── Cosine distance ───────────────────────────────────────────────────────────
 
 /// Cosine distance between two `f32` vectors (0 = identical, 2 = opposite).
@@ -328,26 +331,30 @@ pub fn download_hf_weights_files(
     };
     let repo = api.model(hf_repo.to_string());
 
-    {
-        let mut st = status.lock_or_recover();
-        st.download_status_msg = Some(format!("Downloading {config_file}…"));
-    }
-    let config_path = match repo.get(config_file) {
-        Ok(p) => {
-            eprintln!("[embedder] ✓ {config_file} → {}", p.display());
-            p
-        }
-        Err(e) => {
-            eprintln!("[embedder] failed to download {config_file}: {e}");
+    let config_path = if config_file.is_empty() {
+        PathBuf::new()
+    } else {
+        {
             let mut st = status.lock_or_recover();
-            st.downloading_weights = false;
-            st.download_progress = 0.0;
-            st.download_status_msg = Some(format!("Download failed ({config_file}): {e}"));
-            return None;
+            st.download_status_msg = Some(format!("Downloading {config_file}…"));
+        }
+        match repo.get(config_file) {
+            Ok(p) => {
+                eprintln!("[embedder] ✓ {config_file} → {}", p.display());
+                p
+            }
+            Err(e) => {
+                eprintln!("[embedder] failed to download {config_file}: {e}");
+                let mut st = status.lock_or_recover();
+                st.downloading_weights = false;
+                st.download_progress = 0.0;
+                st.download_status_msg = Some(format!("Download failed ({config_file}): {e}"));
+                return None;
+            }
         }
     };
 
-    if cancel.load(Ordering::Relaxed) {
+    if !config_file.is_empty() && cancel.load(Ordering::Relaxed) {
         eprintln!("[embedder] download cancelled by user after config.json");
         let mut st = status.lock_or_recover();
         st.downloading_weights = false;

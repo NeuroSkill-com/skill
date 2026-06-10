@@ -49,6 +49,8 @@ pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, Stri
     let backend = config.model_backend.as_str();
     let family_id = if backend == "luna" {
         format!("luna-{}", config.luna_variant)
+    } else if backend == "eegdino" {
+        format!("eegdino-{}", config.eegdino_variant)
     } else {
         let families = catalog.get("families")?.as_object()?;
         families
@@ -993,6 +995,8 @@ fn resolve_download_target(catalog: &serde_json::Value, config: &ExgModelConfig)
 
     let family_id = if backend == "luna" {
         format!("luna-{}", config.luna_variant)
+    } else if backend == "eegdino" {
+        format!("eegdino-{}", config.eegdino_variant)
     } else {
         let families = catalog.get("families").and_then(|f| f.as_object());
         if let Some(fams) = families {
@@ -1011,8 +1015,17 @@ fn resolve_download_target(catalog: &serde_json::Value, config: &ExgModelConfig)
             .get("weights_file")
             .and_then(|v| v.as_str())
             .unwrap_or("model-00001-of-00001.safetensors");
-        let cf = fam.get("config_file").and_then(|v| v.as_str()).unwrap_or("config.json");
+        let cf = fam
+            .get("config_file")
+            .and_then(|v| if v.is_null() { None } else { v.as_str() })
+            .unwrap_or("config.json");
         (repo.to_string(), wf.to_string(), cf.to_string())
+    } else if backend == "eegdino" {
+        (
+            config.eegdino_hf_repo.clone(),
+            config.eegdino_weights_file().to_string(),
+            String::new(),
+        )
     } else if backend == "luna" {
         (
             config.luna_hf_repo.clone(),
@@ -1043,6 +1056,9 @@ fn family_id_to_backend(id: &str) -> &str {
     }
     if id.starts_with("steegformer-") {
         return "steegformer";
+    }
+    if id.starts_with("eegdino-") {
+        return "eegdino";
     }
     id
 }
@@ -1190,6 +1206,19 @@ pub(crate) async fn get_exg_catalog_impl(State(state): State<AppState>) -> Json<
                     "LUNA".to_string()
                 }
             }
+            skill_eeg::eeg_model_config::ExgModelBackend::Eegdino => {
+                if let Some(fam) = v
+                    .get("families")
+                    .and_then(|f| f.get(format!("eegdino-{}", config.eegdino_variant)))
+                {
+                    fam.get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("EEG-DINO")
+                        .to_string()
+                } else {
+                    "EEG-DINO".to_string()
+                }
+            }
             _ => {
                 let backend_str = config.model_backend.as_str();
                 if let Some(families) = v.get("families").and_then(|f| f.as_object()) {
@@ -1253,6 +1282,7 @@ mod tests {
         assert_eq!(family_id_to_backend("reve-base"), "reve");
         assert_eq!(family_id_to_backend("osf-base"), "osf");
         assert_eq!(family_id_to_backend("steegformer-x"), "steegformer");
+        assert_eq!(family_id_to_backend("eegdino-small"), "eegdino");
     }
 
     // ── Helpers for reembed tests ─────────────────────────────────────────

@@ -31,31 +31,32 @@ text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "skill-daemon-state/text-emb
 #   macOS default: Metal → CPU   Linux/Windows default: CUDA → wgpu → CPU
 # Compile-in backend tiers via embed-exg-{metal,mlx,gpu,cuda,rocm} below.
 # reve/osf/sleepfm/sleeplm/steegformer pending RLX migration — see comments below.
-embed-exg        = ["dep:skill-exg", "embed-zuna", "embed-luna", "embed-tribev2", "embed-neurorvq",
+embed-exg        = ["dep:skill-exg", "embed-zuna", "embed-luna", "embed-tribev2", "embed-neurorvq", "embed-eegdino",
                     "skill-eeg/rlx-fft"]
 # Backend tiers — each enables the matching RLX backend in every active encoder AND the FFT path.
 # macOS: Metal is also auto-enabled via [target.'cfg(macos)'.dependencies] so
 # the daemon always picks up Metal on Apple Silicon without extra flags.
 embed-exg-metal  = ["embed-exg", "skill-router/gpu-apple", "rlx/metal",
                     "zuna-rs/rlx-metal", "luna-rs/rlx-metal", "tribev2/rlx-metal",
-                    "skill-exg/neurorvq-metal", "skill-eeg/rlx-fft-metal"]
+                    "skill-exg/neurorvq-metal", "skill-exg/eegdino-metal", "skill-eeg/rlx-fft-metal"]
 embed-exg-mlx    = ["embed-exg", "skill-router/gpu-apple", "rlx/mlx",
                     "zuna-rs/rlx-mlx", "luna-rs/rlx-mlx", "tribev2/rlx-mlx",
-                    "skill-exg/neurorvq-mlx"]
+                    "skill-exg/neurorvq-mlx", "skill-exg/eegdino-mlx"]
 embed-exg-gpu    = ["embed-exg", "skill-router/gpu", "rlx/gpu",
                     "zuna-rs/rlx-gpu", "luna-rs/rlx-gpu", "tribev2/rlx-gpu",
-                    "skill-exg/neurorvq-gpu", "skill-eeg/rlx-fft-gpu"]
+                    "skill-exg/neurorvq-gpu", "skill-exg/eegdino-gpu", "skill-eeg/rlx-fft-gpu"]
 embed-exg-cuda   = ["embed-exg", "rlx/cuda",
                     "zuna-rs/rlx-cuda", "luna-rs/rlx-cuda", "tribev2/rlx-cuda",
-                    "skill-exg/neurorvq-cuda", "skill-eeg/rlx-fft-cuda"]
+                    "skill-exg/neurorvq-cuda", "skill-exg/eegdino-cuda", "skill-eeg/rlx-fft-cuda"]
 embed-exg-rocm   = ["embed-exg", "rlx/rocm",
                     "zuna-rs/rlx-rocm", "luna-rs/rlx-rocm", "tribev2/rlx-rocm",
-                    "skill-exg/neurorvq-rocm", "skill-eeg/rlx-fft-rocm"]
+                    "skill-exg/neurorvq-rocm", "skill-exg/eegdino-rocm", "skill-eeg/rlx-fft-rocm"]
 cpu-only         = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna       = ["dep:zuna-rs", "dep:rlx", "dep:ndarray"]
 embed-luna       = ["dep:luna-rs", "dep:rlx"]
 embed-tribev2    = ["dep:tribev2", "dep:rlx"]
 embed-neurorvq   = ["skill-exg/neurorvq-ndarray"]
+embed-eegdino    = ["skill-exg/eegdino-rlx"]
 # reve/osf/sleepfm/sleeplm/steegformer: pending RLX migration.
 # When new rlx-cpu versions are published, restore as:
 #   embed-reve        = ["dep:reve-rs"]
@@ -133,7 +134,7 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-rlx                 = { version = "0.2", default-features = false, optional = true }
+rlx                 = { version = "0.2.5", default-features = false, optional = true }
 zuna-rs             = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
 luna-rs             = { version = "0.1.0", default-features = false, features = ["rlx-cpu"], optional = true }
 tribev2             = { version = "0.1.0", default-features = false, features = ["rlx-cpu"], optional = true }
@@ -160,8 +161,8 @@ tokio-tungstenite    = "0.28"
 zuna-rs             = { version = "0.2.0", default-features = false, features = ["rlx-metal"], optional = true }
 luna-rs             = { version = "0.1.0", default-features = false, features = ["rlx-metal"], optional = true }
 tribev2             = { version = "0.1.0", default-features = false, features = ["rlx-metal"], optional = true }
-rlx                 = { version = "0.2", default-features = false, features = ["metal"], optional = true }
-skill-exg           = { path = "../skill-exg", features = ["neurorvq-metal"], optional = true }
+rlx                 = { version = "0.2.5", default-features = false, features = ["metal"], optional = true }
+skill-exg           = { path = "../skill-exg", features = ["neurorvq-metal", "eegdino-metal"], optional = true }
 skill-eeg           = { path = "../skill-eeg", features = ["rlx-fft-metal"] }
 objc2               = "0.6"
 objc2-app-kit       = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSPasteboard"] }

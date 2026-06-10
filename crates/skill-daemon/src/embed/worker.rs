@@ -11,6 +11,8 @@ use std::sync::mpsc;
 
 use skill_daemon_common::EventEnvelope;
 use skill_eeg::eeg_model_config::{ExgModelBackend, ExgModelConfig};
+#[cfg(feature = "embed-eegdino")]
+use skill_exg::eegdino::EegDino;
 #[cfg(feature = "embed-neurorvq")]
 use skill_exg::neurorvq::{Modality as NeuroModality, NeuroRVQFM};
 use skill_settings::HookRule;
@@ -525,6 +527,8 @@ pub(crate) enum Encoder {
     Tribev2(Box<Tribev2State>),
     #[cfg(feature = "embed-neurorvq")]
     NeuroRVQ(Box<NeuroRVQState>),
+    #[cfg(feature = "embed-eegdino")]
+    EegDino(Box<EegDinoState>),
     None,
 }
 
@@ -543,6 +547,11 @@ pub(crate) struct ZunaState {
 #[cfg(feature = "embed-neurorvq")]
 pub(crate) struct NeuroRVQState {
     model: NeuroRVQFM,
+}
+
+#[cfg(feature = "embed-eegdino")]
+pub(crate) struct EegDinoState {
+    model: EegDino,
 }
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
@@ -568,6 +577,26 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         #[cfg(not(feature = "embed-neurorvq"))]
         ExgModelBackend::Neurorvq => {
             warn!("NeuroRVQ backend selected but support is not compiled (enable feature: embed-neurorvq)");
+            None
+        }
+        #[cfg(feature = "embed-eegdino")]
+        ExgModelBackend::Eegdino => {
+            info!(variant = %config.eegdino_variant, "loading EEG-DINO encoder");
+            let device = super::resolve_exg_device(&device_pref);
+            match EegDino::from_hf(&config.eegdino_hf_repo, &config.eegdino_variant, device) {
+                Ok(model) => {
+                    info!(dim = model.embed_dim(), "EEG-DINO encoder loaded");
+                    Some(Encoder::EegDino(Box::new(EegDinoState { model })))
+                }
+                Err(e) => {
+                    warn!(%e, "EEG-DINO load failed — metrics-only");
+                    None
+                }
+            }
+        }
+        #[cfg(not(feature = "embed-eegdino"))]
+        ExgModelBackend::Eegdino => {
+            warn!("EEG-DINO backend selected but support is not compiled (enable feature: embed-eegdino)");
             None
         }
         #[cfg(feature = "embed-zuna")]
@@ -692,6 +721,8 @@ fn encode_epoch(encoder: &mut Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
         Encoder::Tribev2(state) => encode_tribev2(state, msg),
         #[cfg(feature = "embed-neurorvq")]
         Encoder::NeuroRVQ(state) => encode_neurorvq(state, msg),
+        #[cfg(feature = "embed-eegdino")]
+        Encoder::EegDino(state) => encode_eegdino(state, msg),
         #[allow(unreachable_patterns)]
         _ => None,
     }
@@ -783,6 +814,17 @@ fn encode_luna(enc: &mut luna_rs::LunaEncoder, msg: &EpochMsg) -> Option<Vec<f32
 fn encode_tribev2(_state: &mut Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>> {
     // TRIBEv2 takes multimodal fMRI features (text/audio/video), not EEG epochs.
     None
+}
+
+#[cfg(feature = "embed-eegdino")]
+fn encode_eegdino(state: &mut EegDinoState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let samples: Vec<Vec<f32>> = msg.samples.iter().take(n_ch).cloned().collect();
+    state.model.encode_pooled(&samples, &ch_names).ok()
 }
 
 #[cfg(feature = "embed-neurorvq")]

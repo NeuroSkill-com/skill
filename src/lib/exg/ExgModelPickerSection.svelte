@@ -48,6 +48,8 @@ interface ExgModelConfig {
   model_backend: string;
   luna_variant: string;
   luna_hf_repo: string;
+  eegdino_variant: string;
+  eegdino_hf_repo: string;
 }
 interface EegModelStatus {
   encoder_loaded: boolean;
@@ -82,6 +84,7 @@ const selectedModel = $derived(catalog?.models.find((m) => m.family === selected
 function familyToBackend(id: string): string {
   if (id === "zuna") return "zuna";
   if (id.startsWith("luna-")) return "luna";
+  if (id.startsWith("eegdino-")) return "eegdino";
   if (id === "reve-base" || id === "reve-large") return "reve";
   if (id === "cbramod") return "cbramod";
   if (id === "eegpt") return "eegpt";
@@ -103,6 +106,10 @@ const activeFamilyId = $derived.by(() => {
   if (backend === "luna") {
     const variant = modelConfig.luna_variant;
     return `luna-${variant}`;
+  }
+  if (backend === "eegdino") {
+    const variant = modelConfig.eegdino_variant;
+    return `eegdino-${variant}`;
   }
   if (backend === "zuna") return "zuna";
   // For other backends find matching family by backend name
@@ -162,6 +169,13 @@ async function selectModel() {
       luna_variant: variant,
       luna_hf_repo: selectedFamily.repo,
     });
+  } else if (backend === "eegdino") {
+    const variant = id.replace("eegdino-", "");
+    await onSaveConfig({
+      model_backend: "eegdino",
+      eegdino_variant: variant,
+      eegdino_hf_repo: selectedFamily.repo,
+    });
   } else {
     await onSaveConfig({
       model_backend: backend,
@@ -181,6 +195,13 @@ async function pickLocalWeights() {
       model_backend: "luna",
       luna_variant: variant,
       luna_hf_repo: `local:${file}`,
+    });
+  } else if (backend === "eegdino") {
+    const variant = selectedFamilyId.replace("eegdino-", "");
+    await onSaveConfig({
+      model_backend: "eegdino",
+      eegdino_variant: variant,
+      eegdino_hf_repo: `local:${file}`,
     });
   } else {
     await onSaveConfig({

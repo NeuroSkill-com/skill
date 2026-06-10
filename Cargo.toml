@@ -62,31 +62,6 @@ members = [
 # from member Cargo.toml files.
 
 [patch.crates-io]
-# rlx-runtime 0.2.4 on crates.io is missing `use rlx_opt::pass::Pass as _` in CUDA/ROCm
-# compile paths. Patch the RLX workspace from the sibling checkout (scripts/ensure-rlx.sh)
-# so path deps stay consistent and avoid duplicate native links (mlx, etc.).
-rlx = { path = "../rlx/rlx", default-features = false }
-rlx-autodiff = { path = "../rlx/rlx-autodiff" }
-rlx-compile = { path = "../rlx/rlx-compile" }
-rlx-cpu = { path = "../rlx/rlx-cpu" }
-rlx-cuda = { path = "../rlx/rlx-cuda" }
-rlx-driver = { path = "../rlx/rlx-driver" }
-rlx-flow = { path = "../rlx/rlx-flow" }
-rlx-fusion = { path = "../rlx/rlx-fusion" }
-rlx-gguf = { path = "../rlx/rlx-gguf" }
-rlx-gpu-kernels = { path = "../rlx/rlx-gpu-kernels" }
-rlx-ir = { path = "../rlx/rlx-ir" }
-rlx-macros = { path = "../rlx/rlx-macros" }
-rlx-metal = { path = "../rlx/rlx-metal" }
-rlx-mlx = { path = "../rlx/rlx-mlx" }
-rlx-mlx-sys = { path = "../rlx/rlx-mlx-sys" }
-rlx-onnx-import = { path = "../rlx/rlx-onnx-import" }
-rlx-opt = { path = "../rlx/rlx-opt" }
-rlx-rocm = { path = "../rlx/rlx-rocm" }
-rlx-runtime = { path = "../rlx/rlx-runtime" }
-rlx-text = { path = "../rlx/rlx-text" }
-rlx-umap = { path = "../rlx/rlx-umap" }
-rlx-wgpu = { path = "../rlx/rlx-wgpu" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
@@ -97,7 +72,7 @@ gio             = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 gio-sys         = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 # tribev2: using crates.io 0.1.0 (no patch needed — restore path dep when developing locally)
-# neutts: now provided by crates/skill-neutts (workspace subcrate wrapping rlx-neutts 0.2.4)
+# neutts: now provided by crates/skill-neutts (workspace subcrate wrapping rlx-neutts 0.2.5)
 # No patch needed — local path dep removed to eliminate the links="llama" conflict.
 # emotiv: using crates.io 0.0.12 (no patch needed — restore path dep when developing locally)
 # zuna-rs: using crates.io 0.2.0 (no patch needed — restore path dep when developing locally)
@@ -137,12 +112,12 @@ zip = { version = "7", features = ["deflate"] }
 # For local development against sibling checkouts, swap these back to path deps:
 #   rlx        = { path = "../rlx/rlx", default-features = false }
 #   rlx-models = { path = "../rlx-models/crates/rlx-models", default-features = false }
-rlx        = { version = "0.2.4", default-features = false }
-rlx-models = { version = "0.2.4", default-features = false }
-rlx-minicpm5 = { version = "0.2.4", default-features = false }
-rlx-minimax  = { version = "0.2.4", default-features = false }
-rlx-nemotron = { version = "0.2.4", default-features = false }
-rlx-gemma    = { version = "0.2.4", default-features = false }
+rlx        = { version = "0.2.5", default-features = false }
+rlx-models = { version = "0.2.5", default-features = false }
+rlx-minicpm5 = { version = "0.2.5", default-features = false }
+rlx-minimax  = { version = "0.2.5", default-features = false }
+rlx-nemotron = { version = "0.2.5", default-features = false }
+rlx-gemma    = { version = "0.2.5", default-features = false }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #
