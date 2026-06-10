@@ -5683,3 +5683,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - upgraded to rlx 0.2.5
 - upgrade to rlx 0.2.4
+
+## [0.0.131-rc.6] — 2026-06-10
+
+### Features
+
+- Minor updates and improvements
