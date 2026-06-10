@@ -28,6 +28,8 @@ interface ExgModelConfig {
   model_backend: string;
   luna_variant: string;
   luna_hf_repo: string;
+  eegdino_variant: string;
+  eegdino_hf_repo: string;
 }
 interface EegModelStatus {
   encoder_loaded: boolean;
@@ -92,6 +94,8 @@ let modelConfig = $state<ExgModelConfig>({
   model_backend: "zuna",
   luna_variant: "base",
   luna_hf_repo: "PulpBio/LUNA",
+  eegdino_variant: "small",
+  eegdino_hf_repo: "eugenehp/eegdino",
 });
 let modelStatus = $state<EegModelStatus>({
   encoder_loaded: false,

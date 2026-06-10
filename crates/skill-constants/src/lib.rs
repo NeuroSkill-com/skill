@@ -69,6 +69,9 @@ pub mod prelude {
         DEFAULT_HP_HZ,
         DEFAULT_LP_HZ,
         DEFAULT_NOTCH_BW_HZ,
+        EEGDINO_DEFAULT_VARIANT,
+        EEGDINO_HF_REPO,
+        EEGDINO_VARIANTS,
         // Hardware
         EEG_CHANNELS,
         EMBEDDING_EPOCH_SAMPLES,
@@ -513,6 +516,19 @@ pub const LUNA_VARIANTS: [(&str, &str); 3] = [
 
 /// Default LUNA model variant.
 pub const LUNA_DEFAULT_VARIANT: &str = "base";
+
+/// HuggingFace repository identifier for EEG-DINO safetensors weights.
+pub const EEGDINO_HF_REPO: &str = "eugenehp/eegdino";
+
+/// Available EEG-DINO model size variants: `(variant_name, weights_filename)`.
+pub const EEGDINO_VARIANTS: [(&str, &str); 3] = [
+    ("small", "eeg_dino_small.safetensors"),
+    ("medium", "eeg_dino_medium.safetensors"),
+    ("large", "eeg_dino_large.safetensors"),
+];
+
+/// Default EEG-DINO model variant.
+pub const EEGDINO_DEFAULT_VARIANT: &str = "small";
 
 /// Per-variant LUNA model hyperparameters: `(variant, embed_dim, num_queries, depth, num_heads)`.
 ///

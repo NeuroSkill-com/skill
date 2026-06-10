@@ -331,6 +331,54 @@
         }
       }
     },
+    "eegdino-small": {
+      "name": "EEG-DINO Small",
+      "description": "EEG-DINO foundation model (4.6M params, d_model=200). Hierarchical self-distillation on 9 000+ hours of EEG. RLX inference via eegdino-rs.",
+      "repo": "eugenehp/eegdino",
+      "tags": [
+        "eeg",
+        "embedding",
+        "small"
+      ],
+      "weights_file": "eeg_dino_small.safetensors",
+      "config_file": null,
+      "params_m": 4.6,
+      "embed_dim": 200,
+      "paper": "https://arxiv.org/abs/2503.06669",
+      "doi": null
+    },
+    "eegdino-medium": {
+      "name": "EEG-DINO Medium",
+      "description": "EEG-DINO foundation model (33M params, d_model=512). Medium variant for higher-quality embeddings.",
+      "repo": "eugenehp/eegdino",
+      "tags": [
+        "eeg",
+        "embedding",
+        "medium"
+      ],
+      "weights_file": "eeg_dino_medium.safetensors",
+      "config_file": null,
+      "params_m": 33,
+      "embed_dim": 512,
+      "paper": "https://arxiv.org/abs/2503.06669",
+      "doi": null
+    },
+    "eegdino-large": {
+      "name": "EEG-DINO Large",
+      "description": "EEG-DINO foundation model (201M params, d_model=1024). Largest variant; needs substantial VRAM on GPU backends.",
+      "repo": "eugenehp/eegdino",
+      "tags": [
+        "eeg",
+        "embedding",
+        "large"
+      ],
+      "weights_file": "eeg_dino_large.safetensors",
+      "config_file": null,
+      "params_m": 201,
+      "embed_dim": 1024,
+      "paper": "https://arxiv.org/abs/2503.06669",
+      "doi": null
+    },
     "neurorvq": {
       "name": "NeuroRVQ",
       "description": "NeuroRVQ biosignal tokenizer — residual vector quantization for EEG, ECG, and EMG. 4-branch encoder with patch-based FFT + RVQ codebooks. Modality-specific weights for tokenization and foundation model encoding. Burn 0.20 backend.",
@@ -608,6 +656,25 @@
       "size_mb": 20,
       "description": "OpenTSLM — ~5M trainable params, 128-dim encoder + frozen Qwen3 LLM backbone",
       "recommended": true
+    },
+    {
+      "family": "eegdino-small",
+      "filename": "eeg_dino_small.safetensors",
+      "size_mb": 17,
+      "description": "EEG-DINO Small — 4.6M params, d_model=200, RLX inference",
+      "recommended": true
+    },
+    {
+      "family": "eegdino-medium",
+      "filename": "eeg_dino_medium.safetensors",
+      "size_mb": 129,
+      "description": "EEG-DINO Medium — 33M params, d_model=512"
+    },
+    {
+      "family": "eegdino-large",
+      "filename": "eeg_dino_large.safetensors",
+      "size_mb": 770,
+      "description": "EEG-DINO Large — 201M params, d_model=1024"
     },
     {
       "family": "neurorvq",

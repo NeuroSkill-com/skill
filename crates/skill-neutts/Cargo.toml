@@ -19,7 +19,7 @@ gpu     = ["rlx-neutts/gpu"]
 
 [dependencies]
 anyhow      = { workspace = true }
-rlx-neutts  = { version = "0.2.4", default-features = false, features = ["codec", "llama"] }
+rlx-neutts  = { version = "0.2.5", default-features = false, features = ["codec", "llama"] }
 hound       = "3"
 sha2        = "0.10"
 dirs        = "6"
