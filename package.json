@@ -116,7 +116,7 @@
     "@threlte/core": "^8.4.0",
     "@threlte/extras": "^9.14.9",
     "@types/d3": "^7.4.3",
-    "@types/three": "^0.184.0",
+    "@types/three": "^0.185.0",
     "bits-ui": "^2.16.2",
     "d3": "^7.9.0",
     "maplibre-gl": "^5.24.0",
@@ -126,7 +126,7 @@
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.2.4",
-    "three": "^0.184.0"
+    "three": "^0.185.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
