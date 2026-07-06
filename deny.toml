@@ -204,6 +204,10 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "rlx-coreml" },
     { allow = ["GPL-3.0-only"], crate = "rlx-distributed" },
     { allow = ["GPL-3.0-only"], crate = "rlx-inflect-nano" },
+    # rlx-assets: shared weights/assets crate under rlx-models-core. Present in a
+    # local ../rlx-models checkout (not the published crates.io graph), so this
+    # exception keeps the local pre-push `cargo deny` green; unused (harmless) in CI.
+    { allow = ["GPL-3.0-only"], crate = "rlx-assets" },
     # rlx-tiny-tts disabled (reshape bug on Metal + MLX) — out of the graph, so
     # its exception is unused; re-enable with the engine in skill-tts/Cargo.toml.
     # { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
