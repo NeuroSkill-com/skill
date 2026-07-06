@@ -35,3 +35,6 @@ test-results/
 src-tauri/binaries/
 errors/
 logs/
+
+# Bundled TTS engine weights — staged by scripts/bundle-tts-weights.sh before packaging (not committed)
+src-tauri/resources/tts/

@@ -482,10 +482,11 @@ const llm: Record<string, string> = {
   "chat.tts.engineDesc": "מנוע טקסט-לדיבור שבו ה-daemon משתמש כדי להקריא תשובות.",
   "chat.tts.experimental":
     "עדיין לא מוכן לשימוש: Orpheus דורש מפענח SNAC שיוצא מראש; Kyutai-TTS עדיין אינו פעיל ב-rlx 0.2.9.",
-  "chat.tts.kyutaiExperimental":
-    "Kyutai-TTS עדיין אינו פעיל ב-rlx 0.2.9 (generate() במקור הוא stub).",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS עדיין אינו פעיל ב-rlx 0.2.9 (generate() במקור הוא stub).",
   "chat.tts.orpheusHint":
     "Orpheus מוריד את ה-backbone אוטומטית. ייצאו את מפענח SNAC פעם אחת עם scripts/export_snac_decoder.py (או הגדירו ORPHEUS_SNAC_PATH).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano ו-TinyTTS נטענים מחבילה שיוצאה פעם אחת — הניחו אותה ב-~/.skill/models/inflect-nano (או tiny-tts), או הגדירו INFLECT_NANO_DIR / TINY_TTS_DIR.",
   "chat.tts.modelLabel": "מודל קול",
   "chat.tts.modelDesc": "מאגר המודל עבור המנוע שנבחר.",
   "chat.tts.voiceLabel": "קול",

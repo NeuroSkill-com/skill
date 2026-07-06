@@ -32,9 +32,8 @@ export const TTS_ENGINE_FALLBACK: TtsEngineConfig = {
 export const TTS_ENGINE_KEY = "llm.ttsEngine";
 
 function coerce(parsed: Partial<TtsEngineConfig> | null | undefined): TtsEngineConfig {
-  const voices = Array.isArray(parsed?.voices)
-    ? parsed!.voices!.filter((v): v is string => typeof v === "string")
-    : undefined;
+  const rawVoices = parsed?.voices;
+  const voices = Array.isArray(rawVoices) ? rawVoices.filter((v): v is string => typeof v === "string") : undefined;
   return {
     engine: parsed?.engine ?? TTS_ENGINE_FALLBACK.engine,
     model: parsed?.model ?? TTS_ENGINE_FALLBACK.model,

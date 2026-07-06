@@ -83,9 +83,7 @@ const CUSTOM_SENTINEL = "__custom__";
 function onEngineSelect(engine: string) {
   // Reset the model to the engine's default unless the current one is valid for it.
   const models = MODELS_BY_ENGINE[engine] ?? [];
-  const model = models.includes(defaults.model)
-    ? defaults.model
-    : (DEFAULT_MODEL_BY_ENGINE[engine] ?? defaults.model);
+  const model = models.includes(defaults.model) ? defaults.model : (DEFAULT_MODEL_BY_ENGINE[engine] ?? defaults.model);
   update({ engine, model });
 }
 

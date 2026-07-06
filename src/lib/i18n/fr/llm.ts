@@ -507,6 +507,8 @@ const llm: Record<string, string> = {
     "Kyutai-TTS n'est pas encore fonctionnel dans rlx 0.2.9 (generate() upstream est un stub).",
   "chat.tts.orpheusHint":
     "Orpheus télécharge le backbone automatiquement. Exportez le décodeur SNAC une fois avec scripts/export_snac_decoder.py (ou définissez ORPHEUS_SNAC_PATH).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano et TinyTTS se chargent depuis un bundle exporté une seule fois — placez-le dans ~/.skill/models/inflect-nano (ou tiny-tts) ou définissez INFLECT_NANO_DIR / TINY_TTS_DIR.",
   "chat.tts.modelLabel": "Modèle vocal",
   "chat.tts.modelDesc": "Dépôt du modèle pour le moteur sélectionné.",
   "chat.tts.voiceLabel": "Voix",

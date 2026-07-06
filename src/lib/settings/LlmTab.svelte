@@ -15,13 +15,13 @@ import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import LlmAsrSection from "$lib/llm/LlmAsrSection.svelte";
-import LlmTtsSection from "$lib/llm/LlmTtsSection.svelte";
 import LlmHfSearchSection from "$lib/llm/LlmHfSearchSection.svelte";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
 import LlmMtpSection from "$lib/llm/LlmMtpSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
+import LlmTtsSection from "$lib/llm/LlmTtsSection.svelte";
 import type { LlmCatalog } from "$lib/llm/llm-helpers";
 
 // ── Types ──────────────────────────────────────────────────────────────────

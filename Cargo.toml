@@ -71,6 +71,8 @@ rlx-qwen3-tts   = { path = "../rlx-models/crates/rlx-qwen3-tts" }
 rlx-mimi        = { path = "../rlx-models/crates/rlx-mimi" }
 rlx-neutts      = { path = "../rlx-models/crates/rlx-neutts" }
 rlx-kittentts   = { path = "../rlx-models/crates/rlx-kittentts" }
+rlx-inflect-nano = { path = "../rlx-models/crates/rlx-inflect-nano" }
+rlx-tiny-tts    = { path = "../rlx-models/crates/rlx-tiny-tts" }
 rlx-whisper     = { path = "../rlx-models/crates/rlx-whisper" }
 rlx-models      = { path = "../rlx-models/crates/rlx-models" }
 rlx-minicpm5    = { path = "../rlx-models/crates/rlx-minicpm5" }
@@ -177,6 +179,8 @@ rlx-neutts   = { version = "=0.2.11", default-features = false }
 rlx-runtime   = { version = "=0.2.11", default-features = false }
 rlx-umap      = { version = "=0.2.11", default-features = false }
 rlx-kittentts = { version = "=0.2.11", default-features = false }
+rlx-inflect-nano = { version = "=0.2.11", default-features = false }
+rlx-tiny-tts  = { version = "=0.2.11", default-features = false }
 rlx-whisper   = { version = "=0.2.11", default-features = false }
 rlx-vad       = { version = "=0.2.11", default-features = false }
 rlx-qwen3-asr = { version = "=0.2.11", default-features = false }

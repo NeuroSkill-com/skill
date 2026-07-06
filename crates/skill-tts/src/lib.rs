@@ -5,7 +5,7 @@
 //! This crate contains:
 //!
 //! - **config** — `NeuttsConfig`
-//! KittenTTS backend — native RLX inference via `rlx-kittentts` (feature `tts-kitten`)
+//! - **kitten** — KittenTTS backend — native RLX inference via `rlx-kittentts` (feature `tts-kitten`)
 //! - **neutts** — NeuTTS backend (feature `tts-neutts`)
 //! - Core TTS logic: audio output, espeak init, backend routing, progress events
 
@@ -72,6 +72,8 @@ pub fn init_tts_dirs(dir: &std::path::Path) {
         "models/orpheus/hf-cache",
         "models/qwen3-tts/hf-cache",
         "models/kyutai-tts",
+        "models/inflect-nano",
+        "models/tiny-tts",
         "cache/neutts-wav",
         "cache/neutts-ref-codes",
     ] {
@@ -87,6 +89,29 @@ pub fn init_neutts_samples_dir(path: PathBuf) {
     neutts::set_samples_dir(path);
     #[cfg(not(feature = "tts-neutts"))]
     let _ = path;
+}
+
+// ─── Bundled resources (app-shipped model bundles) ────────────────────────────
+
+static TTS_RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Point the TTS subsystem at the app's bundled-resources directory (Tauri
+/// `resource_dir()`). Pre-exported single-speaker bundles (Inflect-Nano, TinyTTS)
+/// ship under `<resource_dir>/tts/<engine>/`. Called during Tauri setup; the
+/// spawned daemon inherits `SKILL_RESOURCE_DIR` (set alongside this), so
+/// [`tts_resource_dir`] also falls back to that env var for the daemon process.
+pub fn init_tts_resource_dir(dir: PathBuf) {
+    let _ = TTS_RESOURCE_DIR.set(dir);
+}
+
+/// The app's bundled-resources directory, if known — the static set by
+/// [`init_tts_resource_dir`] (Tauri process) or the `SKILL_RESOURCE_DIR` env var
+/// (daemon process, inherited from its parent).
+pub fn tts_resource_dir() -> Option<PathBuf> {
+    if let Some(p) = TTS_RESOURCE_DIR.get() {
+        return Some(p.clone());
+    }
+    std::env::var_os("SKILL_RESOURCE_DIR").map(PathBuf::from)
 }
 
 /// Return the resolved skill directory.

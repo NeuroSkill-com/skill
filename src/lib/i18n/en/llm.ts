@@ -472,12 +472,13 @@ const llm: Record<string, string> = {
   "chat.tts.section": "Voice output",
   "chat.tts.engineLabel": "Speech engine",
   "chat.tts.engineDesc": "Text-to-speech backend the daemon uses to speak replies.",
-  "chat.tts.experimental":
-    "Orpheus needs a one-time SNAC export. Kyutai-TTS is experimental (CPU, ~4 GB download).",
+  "chat.tts.experimental": "Orpheus needs a one-time SNAC export. Kyutai-TTS is experimental (CPU, ~4 GB download).",
   "chat.tts.kyutaiExperimental":
     "Kyutai-TTS downloads kyutai/tts-1.6b-en_fr on first use (~4 GB). CPU eager path; GPU is opt-in via SKILL_TTS_DEVICE.",
   "chat.tts.orpheusHint":
     "Orpheus downloads the backbone automatically. Export SNAC once (scripts/export_snac_decoder.py or ORPHEUS_SNAC_PATH). Metal uses F16 when available; set SKILL_TTS_DEVICE=cpu if speech sounds garbled.",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano and TinyTTS load from a one-time exported bundle — place it in ~/.skill/models/inflect-nano (or tiny-tts), or set INFLECT_NANO_DIR / TINY_TTS_DIR.",
   "chat.tts.modelLabel": "Voice model",
   "chat.tts.modelDesc": "Model repository for the selected engine.",
   "chat.tts.voiceLabel": "Voice",
