@@ -10,9 +10,9 @@
 
 #[allow(unused_imports)]
 pub use skill_tts::{
-    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_dirs, neutts_apply_config,
-    set_logging, tts_shutdown, use_neutts, NeuttsConfig, NeuttsVoiceInfo, TtsProgressEvent,
-    TTS_PROGRESS_EVENT,
+    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_dirs, init_tts_resource_dir,
+    neutts_apply_config, set_logging, tts_shutdown, use_neutts, NeuttsConfig, NeuttsVoiceInfo,
+    TtsProgressEvent, TTS_PROGRESS_EVENT,
 };
 
 /// Wire TTS log output through the app's [`SkillLogger`](crate::skill_log::SkillLogger).

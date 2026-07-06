@@ -500,10 +500,11 @@ const llm: Record<string, string> = {
   "chat.tts.engineDesc": "Text-zu-Sprache-Backend, mit dem der Daemon Antworten vorliest.",
   "chat.tts.experimental":
     "Noch nicht einsatzbereit: Orpheus benötigt einen vorab exportierten SNAC-Decoder; Kyutai-TTS funktioniert in rlx 0.2.9 noch nicht.",
-  "chat.tts.kyutaiExperimental":
-    "Kyutai-TTS funktioniert in rlx 0.2.9 noch nicht (upstream generate() ist ein Stub).",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS funktioniert in rlx 0.2.9 noch nicht (upstream generate() ist ein Stub).",
   "chat.tts.orpheusHint":
     "Orpheus lädt das Backbone automatisch herunter. SNAC-Decoder einmal mit scripts/export_snac_decoder.py exportieren (oder ORPHEUS_SNAC_PATH setzen).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano und TinyTTS laden aus einem einmalig exportierten Bundle – lege es unter ~/.skill/models/inflect-nano (bzw. tiny-tts) ab oder setze INFLECT_NANO_DIR / TINY_TTS_DIR.",
   "chat.tts.modelLabel": "Stimmenmodell",
   "chat.tts.modelDesc": "Modell-Repository für die gewählte Engine.",
   "chat.tts.voiceLabel": "Stimme",

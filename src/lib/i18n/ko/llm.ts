@@ -496,10 +496,11 @@ const llm: Record<string, string> = {
   "chat.tts.engineDesc": "데몬이 답변을 읽어 주는 데 사용하는 텍스트 음성 변환 백엔드입니다.",
   "chat.tts.experimental":
     "아직 바로 사용할 수 없습니다: Orpheus는 미리 내보낸 SNAC 디코더가 필요하고, Kyutai-TTS는 rlx 0.2.9에서 아직 작동하지 않습니다.",
-  "chat.tts.kyutaiExperimental":
-    "Kyutai-TTS는 rlx 0.2.9에서 아직 작동하지 않습니다(업스트림 generate()는 스텁입니다).",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS는 rlx 0.2.9에서 아직 작동하지 않습니다(업스트림 generate()는 스텁입니다).",
   "chat.tts.orpheusHint":
     "Orpheus는 백본을 자동으로 다운로드합니다. SNAC 디코더는 scripts/export_snac_decoder.py로 한 번보내거나 ORPHEUS_SNAC_PATH를 설정하세요.",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano와 TinyTTS는 한 번 내보낸 번들에서 로드됩니다. ~/.skill/models/inflect-nano(또는 tiny-tts)에 두거나 INFLECT_NANO_DIR / TINY_TTS_DIR을 설정하세요.",
   "chat.tts.modelLabel": "음성 모델",
   "chat.tts.modelDesc": "선택한 엔진의 모델 저장소입니다.",
   "chat.tts.voiceLabel": "음성",

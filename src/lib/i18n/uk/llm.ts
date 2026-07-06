@@ -494,10 +494,11 @@ const llm: Record<string, string> = {
   "chat.tts.engineDesc": "Бекенд синтезу мовлення, який демон використовує для озвучення відповідей.",
   "chat.tts.experimental":
     "Ще не готово до використання: Orpheus потребує попередньо експортованого декодера SNAC; Kyutai-TTS поки не працює в rlx 0.2.9.",
-  "chat.tts.kyutaiExperimental":
-    "Kyutai-TTS поки не працює в rlx 0.2.9 (upstream generate() — заглушка).",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS поки не працює в rlx 0.2.9 (upstream generate() — заглушка).",
   "chat.tts.orpheusHint":
     "Orpheus автоматично завантажує backbone. Експортуйте декодер SNAC один раз через scripts/export_snac_decoder.py (або встановіть ORPHEUS_SNAC_PATH).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano та TinyTTS завантажуються з одноразово експортованого пакета — розмістіть його в ~/.skill/models/inflect-nano (або tiny-tts) чи задайте INFLECT_NANO_DIR / TINY_TTS_DIR.",
   "chat.tts.modelLabel": "Модель голосу",
   "chat.tts.modelDesc": "Репозиторій моделі для вибраного рушія.",
   "chat.tts.voiceLabel": "Голос",

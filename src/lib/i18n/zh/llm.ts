@@ -482,12 +482,12 @@ const llm: Record<string, string> = {
   "chat.tts.section": "语音输出",
   "chat.tts.engineLabel": "语音引擎",
   "chat.tts.engineDesc": "守护进程用于朗读回复的文本转语音后端。",
-  "chat.tts.experimental":
-    "尚未开箱即用：Orpheus 需要预先导出的 SNAC 解码器；Kyutai-TTS 在 rlx 0.2.9 中尚不可用。",
-  "chat.tts.kyutaiExperimental":
-    "Kyutai-TTS 在 rlx 0.2.9 中尚不可用（上游 generate() 仍为桩实现）。",
+  "chat.tts.experimental": "尚未开箱即用：Orpheus 需要预先导出的 SNAC 解码器；Kyutai-TTS 在 rlx 0.2.9 中尚不可用。",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS 在 rlx 0.2.9 中尚不可用（上游 generate() 仍为桩实现）。",
   "chat.tts.orpheusHint":
     "Orpheus 会自动下载 backbone。请用 scripts/export_snac_decoder.py 一次性导出 SNAC 解码器（或设置 ORPHEUS_SNAC_PATH）。",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano 和 TinyTTS 从一次性导出的捆绑包加载 — 请将其放在 ~/.skill/models/inflect-nano（或 tiny-tts），或设置 INFLECT_NANO_DIR / TINY_TTS_DIR。",
   "chat.tts.modelLabel": "语音模型",
   "chat.tts.modelDesc": "所选引擎的模型仓库。",
   "chat.tts.voiceLabel": "音色",

@@ -10,12 +10,16 @@ build = "build.rs"
 default     = []
 tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio"]
 tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
-# Pluggable RLX TTS engines (Qwen3-TTS, Orpheus, Kyutai-TTS). Enabled on Linux,
-# Windows, and macOS via `tts_engines_active` (see build.rs).
+# Pluggable RLX TTS engines (Qwen3-TTS, Orpheus, Kyutai-TTS, Inflect-Nano,
+# TinyTTS). Enabled on Linux, Windows, and macOS via `tts_engines_active`
+# (see build.rs). Inflect-Nano and TinyTTS are lightweight English single-speaker
+# models loaded from a one-time exported bundle (no Hub auto-download).
 tts-engines = [
     "dep:rlx-qwen3-tts",
     "dep:rlx-orpheus",
     "dep:rlx-kyutai-tts",
+    "dep:rlx-inflect-nano",
+    "dep:rlx-tiny-tts",
     "dep:rlx-runtime",
     "dep:rodio",
     "dep:hound",
@@ -48,6 +52,10 @@ rlx-runtime   = { workspace = true, features = ["cpu", "cuda", "gpu"], optional 
 rlx-qwen3-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
 rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "cuda", "gpu"], optional = true }
 rlx-kyutai-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
+# Single-speaker English bundles loaded from a one-time export (rlx-graph → CPU
+# base; cuda/gpu add accelerated vocoder graphs).
+rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "cuda", "gpu"], optional = true }
+rlx-tiny-tts  = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 neutts = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
@@ -57,6 +65,8 @@ rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
 rlx-qwen3-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
 rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "metal", "coreml"], optional = true }
 rlx-kyutai-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
+rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "metal"], optional = true }
+rlx-tiny-tts  = { workspace = true, features = ["cpu", "metal"], optional = true }
 
 [lints]
 workspace = true

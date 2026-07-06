@@ -501,10 +501,11 @@ const llm: Record<string, string> = {
   "chat.tts.engineDesc": "デーモンが応答を読み上げるために使用する音声合成バックエンド。",
   "chat.tts.experimental":
     "まだ即利用できません：Orpheus は事前エクスポートした SNAC デコーダーが必要で、Kyutai-TTS は rlx 0.2.9 ではまだ動作しません。",
-  "chat.tts.kyutaiExperimental":
-    "Kyutai-TTS は rlx 0.2.9 ではまだ動作しません（上流の generate() はスタブです）。",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS は rlx 0.2.9 ではまだ動作しません（上流の generate() はスタブです）。",
   "chat.tts.orpheusHint":
     "Orpheus はバックボーンを自動ダウンロードします。SNAC デコーダーは scripts/export_snac_decoder.py で一度エクスポートしてください（または ORPHEUS_SNAC_PATH を設定）。",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano と TinyTTS は一度エクスポートしたバンドルから読み込みます。~/.skill/models/inflect-nano（または tiny-tts）に配置するか、INFLECT_NANO_DIR / TINY_TTS_DIR を設定してください。",
   "chat.tts.modelLabel": "音声モデル",
   "chat.tts.modelDesc": "選択したエンジンのモデルリポジトリ。",
   "chat.tts.voiceLabel": "声",

@@ -12,7 +12,10 @@ use crate::settings::load_settings;
 use crate::shortcut_cmds::apply_all_shortcuts;
 use crate::state::DiscoveredDevice;
 use crate::tray::build_menu;
-use crate::tts::{init_espeak_bundled_data_path, init_neutts_samples_dir, neutts_apply_config};
+use crate::tts::{
+    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_resource_dir,
+    neutts_apply_config,
+};
 use crate::ws_server;
 use crate::MutexExt;
 
@@ -161,6 +164,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
         init_espeak_bundled_data_path(&resource_dir);
         let samples_dir = resource_dir.join("neutts-samples");
         init_neutts_samples_dir(samples_dir);
+        // Bundled TTS engine weights (Inflect-Nano, TinyTTS) live under
+        // `<resource_dir>/tts/<engine>/`. Register the dir for this process and
+        // export it so the daemon we spawn (which runs the voice-loop TTS)
+        // inherits it and resolves the same bundles.
+        init_tts_resource_dir(resource_dir.clone());
+        // SAFETY: Tauri `setup` runs on the main thread before the daemon is
+        // spawned and before other threads read this variable.
+        unsafe { std::env::set_var("SKILL_RESOURCE_DIR", &resource_dir) };
     }
 
     // ── Linux: fix main-window property overrides ─────────────────────

@@ -47,7 +47,9 @@
       "infoPlist": "./Info.plist"
     },
     "resources": {
-      "resources/neutts-samples": "neutts-samples"
+      "resources/neutts-samples": "neutts-samples",
+      "resources/tts/inflect-nano": "tts/inflect-nano",
+      "resources/tts/tiny-tts": "tts/tiny-tts"
     },
     "createUpdaterArtifacts": true
   },

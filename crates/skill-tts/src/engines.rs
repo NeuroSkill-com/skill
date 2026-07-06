@@ -116,6 +116,48 @@ impl Synthesizer for KyutaiSynth {
     }
 }
 
+// ─── Inflect-Nano ─────────────────────────────────────────────────────────────
+//
+// Inflect-Nano-v1: FastSpeech-style acoustic + Snake HiFi-GAN vocoder, single
+// English speaker. Loaded from a one-time exported bundle (no Hub download).
+
+struct InflectNanoSynth {
+    model: rlx_inflect_nano::InflectNano,
+    device: Device,
+}
+
+impl Synthesizer for InflectNanoSynth {
+    fn synthesize(&mut self, text: &str, _voice: &str) -> Result<(Vec<f32>, u32)> {
+        let opts = rlx_inflect_nano::InferOpts::default();
+        let wav = self
+            .model
+            .synthesize_on(text, &opts, self.device)
+            .context("inflect-nano synthesize")?;
+        Ok((wav.samples, wav.sample_rate))
+    }
+}
+
+// ─── TinyTTS ──────────────────────────────────────────────────────────────────
+//
+// TinyTTS (MeloTTS / VITS2, 44.1 kHz), single English speaker. Loaded from a
+// one-time exported bundle (`config.json` + `onnx/` + `frontend/`).
+
+struct TinyTtsSynth {
+    model: rlx_tiny_tts::TinyTts,
+    device: Device,
+}
+
+impl Synthesizer for TinyTtsSynth {
+    fn synthesize(&mut self, text: &str, _voice: &str) -> Result<(Vec<f32>, u32)> {
+        let opts = rlx_tiny_tts::InferOpts::from_config(self.model.config());
+        let wav = self
+            .model
+            .synthesize_on(text, self.device, &opts)
+            .context("tiny-tts synthesize")?;
+        Ok((wav.samples, wav.sample_rate))
+    }
+}
+
 // ─── Construction ───────────────────────────────────────────────────────────────
 
 /// Pick the inference device for Qwen3-TTS and other RLX engines.
@@ -183,8 +225,75 @@ fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> 
                 max_steps_ceiling,
             }))
         }
+        "inflect-nano" | "inflect_nano" => {
+            let dir = resolve_bundle_dir(
+                model,
+                "INFLECT_NANO_DIR",
+                "inflect-nano",
+                "Export it once with rlx-inflect-nano's scripts/export_inflect_nano.py.",
+            )?;
+            let synth = rlx_inflect_nano::InflectNano::load_from_dir(&dir).context("load Inflect-Nano")?;
+            let device = resolve_device();
+            tts_log!("tts", "inflect-nano ready on {:?} ({})", device, dir.display());
+            Ok(Box::new(InflectNanoSynth { model: synth, device }))
+        }
+        "tiny-tts" | "tiny_tts" => {
+            let dir = resolve_bundle_dir(
+                model,
+                "TINY_TTS_DIR",
+                "tiny-tts",
+                "Export it once with rlx-tiny-tts's scripts/export_tiny_tts.py.",
+            )?;
+            let synth = rlx_tiny_tts::TinyTts::load_from_dir(&dir).context("load TinyTTS")?;
+            let device = resolve_device();
+            tts_log!("tts", "tiny-tts ready on {:?} ({})", device, dir.display());
+            Ok(Box::new(TinyTtsSynth { model: synth, device }))
+        }
         other => anyhow::bail!("unknown TTS engine: {other}"),
     }
+}
+
+/// Resolve a pre-exported model bundle directory for engines with no Hub download
+/// (Inflect-Nano, TinyTTS). Order:
+///   1. the engine's `model` override (an explicit bundle path),
+///   2. the app-bundled resource dir (`<resource_dir>/tts/<subdir>`),
+///   3. `$env_var` (`INFLECT_NANO_DIR` / `TINY_TTS_DIR`),
+///   4. `<skill_dir>/models/<subdir>`.
+///
+/// A valid bundle contains a `config.json`. Bails with export guidance when none
+/// is found.
+fn resolve_bundle_dir(model: &str, env_var: &str, subdir: &str, export_hint: &str) -> Result<PathBuf> {
+    let is_bundle = |p: &Path| p.join("config.json").is_file();
+
+    let model = model.trim();
+    if !model.is_empty() {
+        let p = PathBuf::from(model);
+        if is_bundle(&p) {
+            return Ok(p);
+        }
+    }
+    // Shipped inside the app bundle (Tauri `resources/tts/<subdir>`).
+    if let Some(res) = crate::tts_resource_dir() {
+        let p = res.join("tts").join(subdir);
+        if is_bundle(&p) {
+            return Ok(p);
+        }
+    }
+    if let Ok(v) = std::env::var(env_var) {
+        let p = PathBuf::from(v.trim());
+        if is_bundle(&p) {
+            return Ok(p);
+        }
+    }
+    let dir = skill_dir().join("models").join(subdir);
+    if is_bundle(&dir) {
+        return Ok(dir);
+    }
+    anyhow::bail!(
+        "{subdir} bundle not found. It ships in the app bundle; for a dev run place the exported \
+         bundle at {}, or set {env_var} to its directory. {export_hint}",
+        dir.display()
+    )
 }
 
 // ─── HF download ────────────────────────────────────────────────────────────────

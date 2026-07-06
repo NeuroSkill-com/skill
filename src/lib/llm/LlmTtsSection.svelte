@@ -15,8 +15,8 @@
 import { onMount } from "svelte";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
-import { type TtsEngineConfig, fetchTtsEngine, loadTtsEngine, saveTtsEngine } from "$lib/llm/tts";
 import { t } from "$lib/i18n/index.svelte";
+import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
 
 let cfg = $state<TtsEngineConfig>(loadTtsEngine());
 
@@ -35,6 +35,8 @@ const engineOptions: { val: string; label: string; experimental?: boolean }[] = 
   { val: "qwen3-tts", label: "Qwen3-TTS" },
   { val: "orpheus", label: "Orpheus" },
   { val: "kyutai-tts", label: "Kyutai-TTS", experimental: true },
+  { val: "inflect-nano", label: "Inflect-Nano", experimental: true },
+  { val: "tiny-tts", label: "TinyTTS", experimental: true },
 ];
 
 const MODELS_BY_ENGINE: Record<string, string[]> = {
@@ -49,17 +51,7 @@ const DEFAULT_VOICE_BY_ENGINE: Record<string, string> = {
 };
 /** Fallback when the daemon has not yet returned `voices`. */
 const VOICES_BY_ENGINE: Record<string, string[]> = {
-  "qwen3-tts": [
-    "vivian",
-    "serena",
-    "uncle_fu",
-    "dylan",
-    "eric",
-    "ryan",
-    "aiden",
-    "ono_anna",
-    "sohee",
-  ],
+  "qwen3-tts": ["vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee"],
   orpheus: ["tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"],
 };
 
@@ -69,17 +61,19 @@ const knownModels = $derived(MODELS_BY_ENGINE[cfg.engine] ?? []);
 const hasVoicePicker = $derived(knownVoices.length > 0);
 const isKyutai = $derived(cfg.engine === "kyutai-tts");
 const isOrpheus = $derived(cfg.engine === "orpheus");
+/** Inflect-Nano and TinyTTS load from a one-time exported bundle (no auto-download). */
+const needsBundleExport = $derived(cfg.engine === "inflect-nano" || cfg.engine === "tiny-tts");
 
 function onEngineSelect(engine: string) {
   const models = MODELS_BY_ENGINE[engine] ?? [];
-  const model = models.includes(cfg.model)
-    ? cfg.model
-    : (DEFAULT_MODEL_BY_ENGINE[engine] ?? "");
+  const model = models.includes(cfg.model) ? cfg.model : (DEFAULT_MODEL_BY_ENGINE[engine] ?? "");
   const voices = cfg.voices?.length ? cfg.voices : (VOICES_BY_ENGINE[engine] ?? []);
   const defaultVoice = DEFAULT_VOICE_BY_ENGINE[engine] ?? "";
   const voice = voices.includes(cfg.voice)
     ? cfg.voice
-    : (defaultVoice && voices.includes(defaultVoice) ? defaultVoice : "");
+    : defaultVoice && voices.includes(defaultVoice)
+      ? defaultVoice
+      : "";
   update({ engine, model, voice, voices: voices.length ? voices : undefined });
 }
 </script>
@@ -114,6 +108,9 @@ function onEngineSelect(engine: string) {
         {/if}
         {#if isOrpheus}
           <p class="text-ui-base text-muted-foreground">{t("chat.tts.orpheusHint")}</p>
+        {/if}
+        {#if needsBundleExport}
+          <p class="text-ui-base text-amber-600 dark:text-amber-400">{t("chat.tts.bundleExportHint")}</p>
         {/if}
       </div>
 

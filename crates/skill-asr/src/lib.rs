@@ -23,7 +23,10 @@
 //! of no-ops that report "unavailable" so callers compile unchanged.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+// `AtomicU64` is only used by the `asr_active`-gated session-generation counter.
+#[cfg(asr_active)]
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
