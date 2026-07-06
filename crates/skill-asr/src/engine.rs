@@ -423,8 +423,8 @@ fn ensure_whisper_model(model_repo: &str) -> Result<PathBuf> {
         .context("resolve Whisper model directory")
 }
 
-/// Ensure a Qwen3-ASR checkpoint dir is present (downloads safetensors + config
-/// + tokenizer on first use). When `model` isn't a Qwen3-ASR repo (e.g. it's
+/// Ensure a Qwen3-ASR checkpoint dir is present (downloads safetensors, config,
+/// and tokenizer on first use). When `model` isn't a Qwen3-ASR repo (e.g. it's
 /// still the Whisper default), use `Qwen/Qwen3-ASR-0.6B`.
 fn ensure_qwen3_asr_model(model: &str) -> Result<PathBuf> {
     let repo = if model.to_ascii_lowercase().contains("qwen3-asr") {
