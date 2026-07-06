@@ -17,8 +17,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::constants::{
-    EEGDINO_DEFAULT_VARIANT, EEGDINO_HF_REPO, EEGDINO_VARIANTS, HNSW_EF_CONSTRUCTION, HNSW_M, LUNA_DEFAULT_VARIANT,
-    LUNA_HF_REPO, MODEL_CONFIG_FILE, ZUNA_DATA_NORM, ZUNA_HF_REPO,
+    EEGDINO_DEFAULT_VARIANT, EEGDINO_HF_REPO, EEGDINO_VARIANTS, HNSW_EF_CONSTRUCTION, HNSW_M, LUMAMBA_DEFAULT_VARIANT,
+    LUMAMBA_HF_REPO, LUMAMBA_VARIANTS, LUNA_DEFAULT_VARIANT, LUNA_HF_REPO, MODEL_CONFIG_FILE, ZUNA_DATA_NORM,
+    ZUNA_HF_REPO,
 };
 
 // ── EXG embedding model backend ──────────────────────────────────────────────
@@ -54,10 +55,14 @@ pub enum ExgModelBackend {
     Opentslm,
     /// TRIBE v2 encoder (Meta AI) — multimodal fMRI brain encoding (video + audio + text → cortical surface).
     Tribev2,
+    /// Brain-JEPA encoder — fMRI foundation model (450 ROI parcellation, NeurIPS 2024 Spotlight).
+    Brainjepa,
     /// NeuroRVQ tokenizer — residual vector quantization for EEG/ECG/EMG.
     Neurorvq,
     /// EEG-DINO — hierarchical self-distillation EEG foundation model (RLX).
     Eegdino,
+    /// LuMamba — LUNA channel-unification + bidirectional Mamba (FEMBA) encoder (RLX).
+    Lumamba,
     /// ST-EEGFormer — ViT-based EEG foundation model (NeurIPS 2025 winner, ICLR 2026).
     Steegformer,
 }
@@ -84,8 +89,10 @@ impl ExgModelBackend {
             "sensorlm" => Self::Sensorlm,
             "opentslm" => Self::Opentslm,
             "tribev2" => Self::Tribev2,
+            "brainjepa" => Self::Brainjepa,
             "neurorvq" => Self::Neurorvq,
             "eegdino" => Self::Eegdino,
+            "lumamba" => Self::Lumamba,
             "steegformer" => Self::Steegformer,
             _ => Self::Zuna,
         }
@@ -107,8 +114,10 @@ impl ExgModelBackend {
             Self::Sensorlm => "sensorlm",
             Self::Opentslm => "opentslm",
             Self::Tribev2 => "tribev2",
+            Self::Brainjepa => "brainjepa",
             Self::Neurorvq => "neurorvq",
             Self::Eegdino => "eegdino",
+            Self::Lumamba => "lumamba",
             Self::Steegformer => "steegformer",
         }
     }
@@ -179,6 +188,15 @@ pub struct ExgModelConfig {
     /// HuggingFace repository for EEG-DINO weights.
     #[serde(default = "default_eegdino_hf_repo")]
     pub eegdino_hf_repo: String,
+
+    /// LuMamba checkpoint variant: `"recon"`, `"lejepa-recon-128"`,
+    /// `"lejepa-recon-300"`, or `"lejepa-128"`.
+    #[serde(default = "default_lumamba_variant")]
+    pub lumamba_variant: String,
+
+    /// HuggingFace repository for LuMamba weights.
+    #[serde(default = "default_lumamba_hf_repo")]
+    pub lumamba_hf_repo: String,
 }
 
 fn default_hf_repo() -> String {
@@ -205,6 +223,12 @@ fn default_eegdino_variant() -> String {
 fn default_eegdino_hf_repo() -> String {
     EEGDINO_HF_REPO.to_string()
 }
+fn default_lumamba_variant() -> String {
+    LUMAMBA_DEFAULT_VARIANT.to_string()
+}
+fn default_lumamba_hf_repo() -> String {
+    LUMAMBA_HF_REPO.to_string()
+}
 
 /// Legacy alias — old configs may have the old struct name.
 pub type EegModelConfig = ExgModelConfig;
@@ -221,6 +245,8 @@ impl Default for ExgModelConfig {
             luna_hf_repo: default_luna_hf_repo(),
             eegdino_variant: default_eegdino_variant(),
             eegdino_hf_repo: default_eegdino_hf_repo(),
+            lumamba_variant: default_lumamba_variant(),
+            lumamba_hf_repo: default_lumamba_hf_repo(),
         }
     }
 }
@@ -244,6 +270,15 @@ impl ExgModelConfig {
             .find(|(v, _)| *v == self.eegdino_variant.as_str())
             .map(|(_, f)| *f)
             .unwrap_or(EEGDINO_VARIANTS[0].1)
+    }
+
+    /// Return the LuMamba safetensors filename for the current variant.
+    pub fn lumamba_weights_file(&self) -> &'static str {
+        LUMAMBA_VARIANTS
+            .iter()
+            .find(|(v, _)| *v == self.lumamba_variant.as_str())
+            .map(|(_, f)| *f)
+            .unwrap_or(LUMAMBA_VARIANTS[0].1)
     }
 }
 
@@ -618,8 +653,10 @@ mod tests {
         ExgModelBackend::Sensorlm,
         ExgModelBackend::Opentslm,
         ExgModelBackend::Tribev2,
+        ExgModelBackend::Brainjepa,
         ExgModelBackend::Neurorvq,
         ExgModelBackend::Eegdino,
+        ExgModelBackend::Lumamba,
         ExgModelBackend::Steegformer,
     ];
 
@@ -676,6 +713,10 @@ mod tests {
         assert_eq!(ExgModelBackend::from_str_loose("OpenTSLM"), ExgModelBackend::Opentslm);
         assert_eq!(ExgModelBackend::from_str_loose("TRIBEv2"), ExgModelBackend::Tribev2);
         assert_eq!(ExgModelBackend::from_str_loose("tribev2"), ExgModelBackend::Tribev2);
+        assert_eq!(ExgModelBackend::from_str_loose("BrainJEPA"), ExgModelBackend::Brainjepa);
+        assert_eq!(ExgModelBackend::from_str_loose("brainjepa"), ExgModelBackend::Brainjepa);
+        assert_eq!(ExgModelBackend::from_str_loose("LuMamba"), ExgModelBackend::Lumamba);
+        assert_eq!(ExgModelBackend::from_str_loose("lumamba"), ExgModelBackend::Lumamba);
     }
 
     #[test]
@@ -745,6 +786,20 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn lumamba_weights_file_maps_variants() {
+        let mut cfg = ExgModelConfig::default();
+        cfg.lumamba_variant = "recon".into();
+        assert_eq!(cfg.lumamba_weights_file(), "LuMamba_ReconstructionOnly.safetensors");
+        cfg.lumamba_variant = "lejepa-recon-128".into();
+        assert_eq!(
+            cfg.lumamba_weights_file(),
+            "LuMamba_LeJEPA_reconstruction_128slices.safetensors"
+        );
+        cfg.lumamba_variant = "unknown".into();
+        assert_eq!(cfg.lumamba_weights_file(), "LuMamba_ReconstructionOnly.safetensors");
     }
 
     // ── ExgModelConfig alias ──────────────────────────────────────────────

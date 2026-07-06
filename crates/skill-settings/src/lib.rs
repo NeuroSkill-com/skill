@@ -542,9 +542,6 @@ pub fn default_daily_goal_min() -> u32 {
 pub fn default_embedding_model() -> String {
     "nomic-ai/nomic-embed-text-v1.5".into()
 }
-pub fn default_text_embedding_backend() -> String {
-    "fastembed".into()
-}
 pub fn default_label_index_backend() -> String {
     "hnsw".into()
 }
@@ -808,6 +805,42 @@ pub struct HookStatus {
     pub last_trigger: Option<HookLastTrigger>,
 }
 
+// ── ASR (voice input) ─────────────────────────────────────────────────────────
+
+/// Voice-input defaults for the LLM chat. The chat window may override `trigger`
+/// and `routing` per session; these are the fall-backs used when it doesn't.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AsrConfig {
+    /// Show the voice-input controls in the chat window.
+    pub enabled: bool,
+    /// Default microphone gating: continuous (VAD) or push-to-talk.
+    pub default_trigger: skill_asr::TriggerMode,
+    /// Default transcript routing: full voice loop or transcribe-only.
+    pub default_routing: skill_asr::RoutingMode,
+    /// ASR language hint. `"en"` for English-only Whisper models; engine-specific.
+    pub language: String,
+    /// ASR engine id: `"whisper"` (additional rlx backends added over time).
+    pub engine: String,
+    /// Model id for the engine — typically a HuggingFace repo, e.g.
+    /// `"openai/whisper-base.en"`, `"openai/whisper-small"`,
+    /// `"openai/whisper-large-v3"`. Interpreted per engine.
+    pub model: String,
+}
+
+impl Default for AsrConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_trigger: skill_asr::TriggerMode::default(),
+            default_routing: skill_asr::RoutingMode::default(),
+            language: "en".to_string(),
+            engine: "whisper".to_string(),
+            model: skill_constants::WHISPER_ASR_HF_REPO.to_string(),
+        }
+    }
+}
+
 // ── UserSettings (serialised to settings.json) ────────────────────────────────
 
 #[derive(Serialize, Deserialize)]
@@ -870,8 +903,6 @@ pub struct UserSettings {
     pub goal_notified_date: String,
     #[serde(default = "default_embedding_model")]
     pub text_embedding_model: String,
-    #[serde(default = "default_text_embedding_backend")]
-    pub text_embedding_backend: String,
     #[serde(default = "default_label_index_backend")]
     pub label_index_backend: String,
     #[serde(default = "default_text_embedding_rlx_device")]
@@ -913,6 +944,17 @@ pub struct UserSettings {
     /// NeuTTS voice-cloning TTS configuration.
     #[serde(default)]
     pub neutts: NeuttsConfig,
+    /// Selected TTS engine: `"kitten"` / `"neutts"` use the legacy backends;
+    /// `"qwen3-tts"` (and future engines) route through the `skill-tts` engine
+    /// abstraction.
+    #[serde(default = "default_tts_engine")]
+    pub tts_engine: String,
+    /// Engine-specific model repo override for `tts_engine` (empty = engine default).
+    #[serde(default)]
+    pub tts_model: String,
+    /// Engine-specific voice/speaker override for `tts_engine` (empty = engine default).
+    #[serde(default)]
+    pub tts_voice: String,
     /// Pre-warm the active TTS engine at startup.
     #[serde(default = "default_tts_preload")]
     pub tts_preload: bool,
@@ -963,6 +1005,9 @@ pub struct UserSettings {
     /// Embedded OpenAI-compatible LLM inference server.
     #[serde(default)]
     pub llm: LlmConfig,
+    /// Voice input (ASR + VAD) defaults for the LLM chat.
+    #[serde(default)]
+    pub asr: AsrConfig,
     /// Screenshot capture + vision embedding configuration.
     #[serde(default)]
     pub screenshot: ScreenshotConfig,
@@ -1141,6 +1186,9 @@ pub fn default_session_rollover_minutes() -> u32 {
 pub fn default_tts_preload() -> bool {
     true
 }
+pub fn default_tts_engine() -> String {
+    skill_constants::TTS_ENGINE_DEFAULT.to_string()
+}
 pub fn default_lsl_idle_timeout_secs() -> Option<u64> {
     Some(15)
 }
@@ -1274,7 +1322,6 @@ impl Default for UserSettings {
             daily_goal_min: default_daily_goal_min(),
             goal_notified_date: String::new(),
             text_embedding_model: default_embedding_model(),
-            text_embedding_backend: default_text_embedding_backend(),
             label_index_backend: default_label_index_backend(),
             text_embedding_rlx_device: default_text_embedding_rlx_device(),
             text_embedding_rlx_max_seq: default_text_embedding_rlx_max_seq(),
@@ -1287,6 +1334,9 @@ impl Default for UserSettings {
             openbci: OpenBciConfig::default(),
             device_api: DeviceApiConfig::default(),
             neutts: NeuttsConfig::default(),
+            tts_engine: default_tts_engine(),
+            tts_model: String::new(),
+            tts_voice: String::new(),
             tts_preload: default_tts_preload(),
             track_active_window: default_track_active_window(),
             track_input_activity: default_track_input_activity(),
@@ -1300,6 +1350,7 @@ impl Default for UserSettings {
             do_not_disturb: DoNotDisturbConfig::default(),
             last_seen_whats_new_version: String::new(),
             llm: LlmConfig::default(),
+            asr: AsrConfig::default(),
             accent_color: default_accent_color(),
             storage_format: default_storage_format(),
             session_rollover_minutes: default_session_rollover_minutes(),

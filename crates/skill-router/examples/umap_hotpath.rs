@@ -3,16 +3,17 @@
 //
 // Local-only UMAP profiling harness using hotpath-rs.
 //
-// Not built or run in CI. Run with:
+// Not built or run in CI. Pick a backend feature for your platform — e.g.
+// `metal` on macOS, `cuda`/`wgpu` on Linux/Windows. Run with:
 //   cargo run -p skill-router --release --example umap_hotpath \
-//       --features='gpu,hotpath'
+//       --features='metal,hotpath'
 //
 // Optional extras:
-//   --features='gpu,hotpath,hotpath-alloc'   # also tracks allocations
+//   --features='metal,hotpath,hotpath-alloc'   # also tracks allocations
 //
 // Adjust N_A / N_B below for larger/smaller workloads.
 
-#[cfg(all(feature = "hotpath", feature = "gpu"))]
+#[cfg(all(feature = "hotpath", feature = "accel"))]
 mod runner {
     use std::fs;
     use std::path::PathBuf;
@@ -112,16 +113,16 @@ mod runner {
     }
 }
 
-#[cfg(all(feature = "hotpath", feature = "gpu"))]
+#[cfg(all(feature = "hotpath", feature = "accel"))]
 fn main() {
     runner::run();
 }
 
-#[cfg(not(all(feature = "hotpath", feature = "gpu")))]
+#[cfg(not(all(feature = "hotpath", feature = "accel")))]
 fn main() {
     eprintln!(
-        "umap_hotpath requires --features='hotpath,gpu'.\n\
+        "umap_hotpath requires --features='hotpath,<backend>'.\n\
          e.g. cargo run -p skill-router --release --example umap_hotpath \\\n\
-                  --features='gpu,hotpath'"
+                  --features='metal,hotpath'"
     );
 }

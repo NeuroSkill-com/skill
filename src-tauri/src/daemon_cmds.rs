@@ -1549,6 +1549,86 @@ async fn daemon_post_async(
         .map_err(|e| e.to_string())?
 }
 
+// ── Voice input (ASR + VAD) proxies ─────────────────────────────────────────
+//
+// Thin pass-throughs to the daemon. The chat window picks the mode per session
+// (omitted fields fall back to the `settings.asr` defaults); transcript and
+// status events arrive on the `/v1/events` websocket as `"asr"` events.
+
+/// Start a voice session. `trigger`: `"continuous"` | `"push_to_talk"`.
+/// `routing`: `"voice_loop"` | `"transcribe_only"`.
+#[tauri::command]
+pub async fn asr_start(
+    trigger: Option<String>,
+    routing: Option<String>,
+    language: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::Map::new();
+    if let Some(t) = trigger {
+        body.insert("trigger".into(), serde_json::Value::String(t));
+    }
+    if let Some(r) = routing {
+        body.insert("routing".into(), serde_json::Value::String(r));
+    }
+    if let Some(l) = language {
+        body.insert("language".into(), serde_json::Value::String(l));
+    }
+    daemon_post_async("/v1/asr/start", serde_json::Value::Object(body)).await
+}
+
+/// Stop the active voice session.
+#[tauri::command]
+pub async fn asr_stop() -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/asr/stop", serde_json::json!({})).await
+}
+
+/// Current engine status (running, mode, push-to-talk state).
+#[tauri::command]
+pub async fn asr_status() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/asr/status").await
+}
+
+/// Push-to-talk gate: `true` on key-down, `false` on key-up.
+#[tauri::command]
+pub async fn asr_set_ptt(active: bool) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/asr/ptt", serde_json::json!({ "active": active })).await
+}
+
+/// Barge-in gate for frontend-side TTS: bracket the UI's own playback with
+/// `true`/`false` so the daemon mic doesn't transcribe the spoken reply (used
+/// when the daemon has no TTS backend and the UI speaks the reply itself).
+#[tauri::command]
+pub async fn asr_set_speaking(active: bool) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/asr/speaking", serde_json::json!({ "active": active })).await
+}
+
+/// Read persisted `settings.asr` (voice defaults + engine/model) from the daemon.
+#[tauri::command]
+pub async fn get_asr_settings() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/settings/asr").await
+}
+
+/// Write `settings.asr` back to settings.json via the daemon. `config` is the
+/// full `AsrConfig` object (enabled, default_trigger, default_routing, language,
+/// engine, model).
+#[tauri::command]
+pub async fn set_asr_settings(config: serde_json::Value) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/settings/asr", config).await
+}
+
+/// Read the persisted TTS engine selection (engine + model/voice overrides).
+#[tauri::command]
+pub async fn get_tts_engine() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/settings/tts-engine").await
+}
+
+/// Select the TTS engine via the daemon (applies live + persists to settings.json).
+/// `config` is `{ engine, model, voice }`.
+#[tauri::command]
+pub async fn set_tts_engine(config: serde_json::Value) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/settings/tts-engine", config).await
+}
+
 // ── EXG model proxies ───────────────────────────────────────────────────────
 
 #[tauri::command]

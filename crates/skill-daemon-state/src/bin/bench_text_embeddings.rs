@@ -1,33 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Benchmark FastEmbed/ORT vs RLX text embeddings.
+//! Benchmark RLX (`rlx-embed`) text embeddings across devices and batch sizes.
 //!
 //! Example:
 //! ```sh
 //! cargo run --release -p skill-daemon-state --features text-embeddings-rlx-metal \
 //!   --bin bench_text_embeddings -- \
-//!   --model nomic-ai/nomic-embed-text-v1.5 --backends all --batch-sizes 1,8,32
+//!   --model nomic-ai/nomic-embed-text-v1.5 --rlx-device metal --batch-sizes 1,8,32
 //! ```
 
 use anyhow::{anyhow, Result};
-use skill_daemon_state::text_embedder::{SharedTextEmbedder, TextEmbeddingBackend};
+use skill_daemon_state::text_embedder::SharedTextEmbedder;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
 struct Args {
     model: String,
-    backends: Backends,
     rlx_device: String,
     rlx_max_seq: usize,
     batch_sizes: Vec<usize>,
     warmup: usize,
     runs: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Backends {
-    All,
-    FastEmbed,
-    Rlx,
 }
 
 struct BenchRow {
@@ -49,33 +41,21 @@ fn main() -> Result<()> {
     );
 
     let corpus = sample_texts(*args.batch_sizes.iter().max().unwrap_or(&1));
-    let mut rows = Vec::new();
-
-    if matches!(args.backends, Backends::All | Backends::FastEmbed) {
-        rows.extend(run_backend(&args, TextEmbeddingBackend::FastEmbed, &corpus)?);
-    }
-    if matches!(args.backends, Backends::All | Backends::Rlx) {
-        rows.extend(run_backend(&args, TextEmbeddingBackend::Rlx, &corpus)?);
-    }
+    let rows = run_backend(&args, &corpus)?;
 
     print_rows(&rows);
     Ok(())
 }
 
-fn run_backend(args: &Args, backend: TextEmbeddingBackend, corpus: &[String]) -> Result<Vec<BenchRow>> {
+fn run_backend(args: &Args, corpus: &[String]) -> Result<Vec<BenchRow>> {
     let embedder = SharedTextEmbedder::new();
     embedder.set_model_code(&args.model);
-    embedder.set_backend(backend);
     embedder.set_rlx_device(&args.rlx_device);
     embedder.set_rlx_max_seq(args.rlx_max_seq);
 
     let t_load = Instant::now();
     if !embedder.reload() {
-        return Err(anyhow!(
-            "failed to load {} backend for {}",
-            backend.as_str(),
-            args.model
-        ));
+        return Err(anyhow!("failed to load rlx backend for {}", args.model));
     }
     let load_ms = t_load.elapsed().as_secs_f64() * 1000.0;
 
@@ -92,7 +72,7 @@ fn run_backend(args: &Args, backend: TextEmbeddingBackend, corpus: &[String]) ->
             let t = Instant::now();
             let vecs = embedder
                 .embed_batch(texts.clone())
-                .ok_or_else(|| anyhow!("{} embedding failed at batch {batch}", backend.as_str()))?;
+                .ok_or_else(|| anyhow!("rlx embedding failed at batch {batch}"))?;
             let ms = t.elapsed().as_secs_f64() * 1000.0;
             dim = vecs.first().map_or(0, Vec::len);
             times.push(ms);
@@ -100,7 +80,7 @@ fn run_backend(args: &Args, backend: TextEmbeddingBackend, corpus: &[String]) ->
 
         let mean_ms = times.iter().sum::<f64>() / times.len().max(1) as f64;
         rows.push(BenchRow {
-            backend: backend.as_str(),
+            backend: "rlx",
             batch,
             load_ms,
             mean_ms,
@@ -114,7 +94,6 @@ fn run_backend(args: &Args, backend: TextEmbeddingBackend, corpus: &[String]) ->
 
 fn parse_args() -> Result<Args> {
     let mut model = "nomic-ai/nomic-embed-text-v1.5".to_string();
-    let mut backends = Backends::All;
     let mut rlx_device = if cfg!(target_os = "macos") { "metal" } else { "cpu" }.to_string();
     let mut rlx_max_seq = 512usize;
     let mut batch_sizes = vec![1, 8, 32];
@@ -131,14 +110,6 @@ fn parse_args() -> Result<Args> {
         };
         match key.as_str() {
             "--model" => model = value()?,
-            "--backends" => {
-                backends = match value()?.as_str() {
-                    "all" => Backends::All,
-                    "fastembed" | "ort" => Backends::FastEmbed,
-                    "rlx" => Backends::Rlx,
-                    other => return Err(anyhow!("--backends must be all|fastembed|rlx, got {other}")),
-                };
-            }
             "--rlx-device" => rlx_device = value()?,
             "--rlx-max-seq" => rlx_max_seq = value()?.parse()?,
             "--batch-sizes" => {
@@ -162,7 +133,6 @@ fn parse_args() -> Result<Args> {
 
     Ok(Args {
         model,
-        backends,
         rlx_device,
         rlx_max_seq,
         batch_sizes,
@@ -201,7 +171,7 @@ fn print_rows(rows: &[BenchRow]) {
 
 fn print_usage() {
     eprintln!(
-        "Usage: bench_text_embeddings [--model HF_REPO] [--backends all|fastembed|rlx] \
+        "Usage: bench_text_embeddings [--model HF_REPO] \
          [--rlx-device metal] [--rlx-max-seq 512] [--batch-sizes 1,8,32] \
          [--warmup 2] [--runs 10]"
     );

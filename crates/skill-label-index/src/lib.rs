@@ -9,10 +9,10 @@
 //! Two independent indices are maintained:
 //!
 //! * **Text index** (`label_text_index.hnsw`): one node per label that has a
-//!   `text_embedding` in `labels.sqlite`.  Vectors live in the fastembed
-//!   embedding space (e.g. 384-dim for bge-small-en-v1.5).
+//!   `text_embedding` in `labels.sqlite`.  Vectors live in the rlx-embed
+//!   embedding space (e.g. 768-dim for nomic-embed-text-v1.5).
 //!
-//!   Query with: a fastembed vector from a free-text search string.
+//!   Query with: an rlx-embed vector from a free-text search string.
 //!
 //! * **EEG index** (`label_eeg_index.hnsw`): one node per label whose EEG
 //!   time window (`eeg_start … eeg_end`) overlaps with at least one recorded
@@ -378,7 +378,7 @@ pub struct LabelNeighbor {
     pub eeg_start: u64,
     pub eeg_end: u64,
     pub created_at: u64,
-    /// fastembed model code that produced `text_embedding` / `context_embedding`.
+    /// Embedding model code that produced `text_embedding` / `context_embedding`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embedding_model: Option<String>,
     /// Cosine distance in the queried space (0 = identical, 2 = opposite).

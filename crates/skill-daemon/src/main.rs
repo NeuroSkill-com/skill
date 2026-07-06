@@ -8,6 +8,7 @@ pub(crate) mod background;
 pub(crate) mod calibration_runner;
 pub(crate) mod cmd_dispatch;
 pub(crate) mod embed;
+mod embedding_migration;
 mod handlers;
 mod idle_reembed;
 pub(crate) mod monitor;
@@ -169,6 +170,25 @@ async fn daemon_main() -> anyhow::Result<()> {
     let skill_dir = skill_data_dir();
     let state = AppState::new(load_or_create_token()?, skill_dir.clone());
 
+    // Voice input (ASR): set the model-cache directory before any session starts.
+    skill_asr::init_asr_dirs(&skill_dir);
+    // Voice output (daemon-side TTS for the voice loop): point KittenTTS at the
+    // model cache. The worker lazy-loads on first speak.
+    #[cfg(feature = "voice-tts")]
+    {
+        skill_tts::init_tts_dirs(&skill_dir);
+        // Apply the persisted engine selection so the voice loop speaks through the
+        // configured backend (kitten/neutts keep the legacy path; qwen3-tts etc.
+        // route through the engine abstraction).
+        let s = skill_settings::load_settings(&skill_dir);
+        skill_tts::set_active_engine(s.tts_engine, s.tts_model, s.tts_voice);
+        if s.tts_preload {
+            tokio::spawn(async {
+                let _ = skill_tts::tts_init_with_callback(|_| {}).await;
+            });
+        }
+    }
+
     // CLI flag overrides the persisted setting
     if cli_iroh_logs {
         state
@@ -243,6 +263,11 @@ async fn daemon_main() -> anyhow::Result<()> {
         }
     }
 
+    // One-time embedding-scheme migration — runs its cheap invalidations
+    // synchronously *before* the screenshot worker spawns so the backfill picks
+    // up the cleared rows.
+    embedding_migration::run_if_needed(&state);
+
     // Spawn daemon-authoritative background loops.
     reconnect::spawn_reconnect_loop(state.clone(), state.reconnect.clone());
     monitor::spawn_status_monitor(state.clone());
@@ -276,80 +301,7 @@ async fn daemon_main() -> anyhow::Result<()> {
         });
     }
 
-    let v1 = Router::new()
-        .route("/version", get(handlers::version))
-        .route("/log/recent", get(handlers::get_log_recent))
-        .route("/pair/generate-code", axum::routing::post(handlers::pair_generate_code))
-        .route("/pair/start", axum::routing::post(handlers::pair_start))
-        .route("/pair/approve", axum::routing::post(handlers::pair_approve))
-        .route("/status", get(handlers::status).post(handlers::update_status))
-        .route("/devices", get(handlers::devices).post(handlers::update_devices))
-        .route(
-            "/devices/set-preferred",
-            axum::routing::post(handlers::set_preferred_device),
-        )
-        .route("/devices/pair", axum::routing::post(handlers::pair_device))
-        .route("/devices/forget", axum::routing::post(handlers::forget_device))
-        .route(
-            "/control/retry-connect",
-            axum::routing::post(handlers::control_retry_connect),
-        )
-        .route(
-            "/control/cancel-retry",
-            axum::routing::post(handlers::control_cancel_retry),
-        )
-        .route("/reconnect-state", get(handlers::get_reconnect_state))
-        .route(
-            "/control/enable-reconnect",
-            axum::routing::post(handlers::enable_reconnect),
-        )
-        .route(
-            "/control/disable-reconnect",
-            axum::routing::post(handlers::disable_reconnect),
-        )
-        .route(
-            "/control/start-session",
-            axum::routing::post(handlers::control_start_session),
-        )
-        .route(
-            "/control/switch-session",
-            axum::routing::post(handlers::control_switch_session),
-        )
-        .route(
-            "/control/cancel-session",
-            axum::routing::post(handlers::control_cancel_session),
-        )
-        .route(
-            "/control/scanner/start",
-            axum::routing::post(handlers::control_scanner_start),
-        )
-        .route(
-            "/control/scanner/stop",
-            axum::routing::post(handlers::control_scanner_stop),
-        )
-        .route("/control/scanner/state", get(handlers::control_scanner_state))
-        .route(
-            "/control/scanner/wifi-config",
-            axum::routing::post(handlers::control_scanner_wifi_config),
-        )
-        .route(
-            "/control/scanner/cortex-config",
-            axum::routing::post(handlers::control_scanner_cortex_config),
-        )
-        .route("/lsl/discover", get(handlers::lsl_discover))
-        .route("/ws-port", get(handlers::ws_port))
-        .route("/ws-clients", get(handlers::ws_clients))
-        .route("/ws-request-log", get(handlers::ws_request_log))
-        .route("/auth/tokens", get(handlers::list_tokens).post(handlers::create_token))
-        .route("/auth/tokens/revoke", axum::routing::post(handlers::revoke_token))
-        .route("/auth/tokens/delete", axum::routing::post(handlers::delete_token))
-        .route(
-            "/auth/default-token/refresh",
-            axum::routing::post(handlers::refresh_default_token),
-        )
-        .route("/events", get(handlers::ws_events))
-        .route("/events/push", axum::routing::post(handlers::push_event))
-        .route("/cmd", axum::routing::post(handlers::cmd_tunnel))
+    let v1 = routes::core::router()
         .merge(routes::labels::router())
         .merge(routes::history::router())
         .merge(routes::settings::router())
@@ -359,6 +311,7 @@ async fn daemon_main() -> anyhow::Result<()> {
         .merge(routes::iroh::router())
         .merge(routes::brain::router())
         .merge(routes::activity_status::router())
+        .merge(routes::asr::router())
         .merge(routes::validation::router());
 
     // Test-mode endpoints — debug builds only

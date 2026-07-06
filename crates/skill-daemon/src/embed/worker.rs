@@ -13,6 +13,8 @@ use skill_daemon_common::EventEnvelope;
 use skill_eeg::eeg_model_config::{ExgModelBackend, ExgModelConfig};
 #[cfg(feature = "embed-eegdino")]
 use skill_exg::eegdino::EegDino;
+#[cfg(feature = "embed-lumamba")]
+use skill_exg::lumamba::LuMamba;
 #[cfg(feature = "embed-neurorvq")]
 use skill_exg::neurorvq::{Modality as NeuroModality, NeuroRVQFM};
 use skill_settings::HookRule;
@@ -168,9 +170,9 @@ impl HookMatcher {
                 continue;
             }
 
-            // Embed keywords.
+            // Embed keywords as search queries (against the label index).
             let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
-            let Some(embeddings) = self.text_embedder.embed_batch(query_refs) else {
+            let Some(embeddings) = self.text_embedder.embed_queries(query_refs) else {
                 continue;
             };
 
@@ -523,12 +525,18 @@ pub(crate) enum Encoder {
     Zuna(Box<ZunaState>),
     #[cfg(feature = "embed-luna")]
     Luna(Box<luna_rs::LunaEncoder>),
+    #[cfg(feature = "embed-reve")]
+    Reve(Box<ReveState>),
+    #[cfg(feature = "embed-brainjepa")]
+    Brainjepa(Box<brainjepa::rlx::BrainJepaEncoder>),
     #[cfg(feature = "embed-tribev2")]
     Tribev2(Box<Tribev2State>),
     #[cfg(feature = "embed-neurorvq")]
     NeuroRVQ(Box<NeuroRVQState>),
     #[cfg(feature = "embed-eegdino")]
     EegDino(Box<EegDinoState>),
+    #[cfg(feature = "embed-lumamba")]
+    Lumamba(Box<LumambaState>),
     None,
 }
 
@@ -552,6 +560,36 @@ pub(crate) struct NeuroRVQState {
 #[cfg(feature = "embed-eegdino")]
 pub(crate) struct EegDinoState {
     model: EegDino,
+}
+
+#[cfg(feature = "embed-lumamba")]
+pub(crate) struct LumambaState {
+    model: LuMamba,
+}
+
+#[cfg(feature = "embed-reve")]
+pub(crate) struct ReveState {
+    encoder: reve_rs::ReveEncoder,
+    positions: reve_rs::PositionBank,
+}
+
+#[cfg(feature = "embed-reve")]
+const REVE_WEIGHTS_FILE: &str = "model.safetensors";
+#[cfg(feature = "embed-reve")]
+const REVE_CONFIG_FILE: &str = "config.json";
+#[cfg(feature = "embed-reve")]
+const REVE_POSITIONS_REPO: &str = "brain-bzh/reve-positions";
+
+#[cfg(feature = "embed-reve")]
+fn load_reve_position_bank() -> reve_rs::PositionBank {
+    if let Some(path) = skill_exg::resolve_hf_file(REVE_POSITIONS_REPO, "positions.json") {
+        if let Some(path_str) = path.to_str() {
+            if let Ok(bank) = reve_rs::PositionBank::from_json(path_str) {
+                return bank;
+            }
+        }
+    }
+    reve_rs::PositionBank::from_json_str("{}").expect("empty REVE position bank")
 }
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
@@ -599,6 +637,26 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
             warn!("EEG-DINO backend selected but support is not compiled (enable feature: embed-eegdino)");
             None
         }
+        #[cfg(feature = "embed-lumamba")]
+        ExgModelBackend::Lumamba => {
+            info!(variant = %config.lumamba_variant, repo = %config.lumamba_hf_repo, "loading LuMamba encoder");
+            let device = super::resolve_exg_device(&device_pref);
+            match LuMamba::load(&config.lumamba_hf_repo, &config.lumamba_variant, device) {
+                Ok(model) => {
+                    info!(dim = model.embed_dim(), "LuMamba encoder loaded");
+                    Some(Encoder::Lumamba(Box::new(LumambaState { model })))
+                }
+                Err(e) => {
+                    warn!(%e, repo = %config.lumamba_hf_repo, "LuMamba load failed — metrics-only");
+                    None
+                }
+            }
+        }
+        #[cfg(not(feature = "embed-lumamba"))]
+        ExgModelBackend::Lumamba => {
+            warn!("LuMamba backend selected but support is not compiled (enable feature: embed-lumamba)");
+            None
+        }
         #[cfg(feature = "embed-zuna")]
         ExgModelBackend::Zuna => {
             info!(repo = %config.hf_repo, "loading ZUNA encoder");
@@ -629,6 +687,78 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
                     }
                 },
             )
+        }
+        #[cfg(not(feature = "embed-luna"))]
+        ExgModelBackend::Luna => {
+            warn!("LUNA backend selected but support is not compiled (enable feature: embed-luna)");
+            None
+        }
+        #[cfg(feature = "embed-reve")]
+        ExgModelBackend::Reve => {
+            let device = super::resolve_exg_device(&device_pref);
+            info!(repo = %config.hf_repo, "loading REVE encoder");
+            skill_exg::resolve_exg_weights(&config.hf_repo, REVE_WEIGHTS_FILE, REVE_CONFIG_FILE)
+                .and_then(|(w, c)| match reve_rs::ReveEncoder::load(&c, &w, device) {
+                    Ok((enc, ms)) => {
+                        let positions = load_reve_position_bank();
+                        info!(ms, "REVE encoder loaded");
+                        Some(Encoder::Reve(Box::new(ReveState {
+                            encoder: enc,
+                            positions,
+                        })))
+                    }
+                    Err(e) => {
+                        warn!(%e, "REVE encoder load failed");
+                        None
+                    }
+                })
+                .or_else(|| {
+                    warn!(
+                        repo = %config.hf_repo,
+                        "REVE weights not found — metrics-only"
+                    );
+                    None
+                })
+        }
+        #[cfg(not(feature = "embed-reve"))]
+        ExgModelBackend::Reve => {
+            warn!("REVE backend selected but support is not compiled (enable feature: embed-reve)");
+            None
+        }
+        #[cfg(feature = "embed-brainjepa")]
+        ExgModelBackend::Brainjepa => {
+            let device = super::resolve_exg_device(&device_pref);
+            let repo = if config.hf_repo.is_empty() || config.hf_repo == skill_constants::ZUNA_HF_REPO {
+                skill_exg::BRAINJEPA_HF_REPO
+            } else {
+                config.hf_repo.as_str()
+            };
+            info!(repo, "loading Brain-JEPA encoder");
+            skill_exg::resolve_brainjepa_weights(repo).and_then(|(w, g)| {
+                let w_str = w.to_str()?;
+                let g_str = g.to_str()?;
+                match brainjepa::rlx::BrainJepaEncoder::from_weights(
+                    w_str,
+                    g_str,
+                    &brainjepa::ModelConfig::default(),
+                    &brainjepa::DataConfig::default(),
+                    &device,
+                ) {
+                    Ok((enc, ms)) => {
+                        info!(ms, "Brain-JEPA encoder loaded");
+                        Some(Encoder::Brainjepa(Box::new(enc)))
+                    }
+                    Err(e) => {
+                        warn!(%e, "Brain-JEPA encoder load failed");
+                        None
+                    }
+                }
+            })
+        }
+        #[cfg(not(feature = "embed-brainjepa"))]
+        ExgModelBackend::Brainjepa => {
+            warn!("Brain-JEPA backend selected but support is not compiled (enable feature: embed-brainjepa)");
+            None
         }
         #[cfg(feature = "embed-tribev2")]
         ExgModelBackend::Tribev2 => {
@@ -717,12 +847,18 @@ fn encode_epoch(encoder: &mut Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
         Encoder::Zuna(state) => encode_zuna(state, msg),
         #[cfg(feature = "embed-luna")]
         Encoder::Luna(enc) => encode_luna(enc, msg),
+        #[cfg(feature = "embed-reve")]
+        Encoder::Reve(state) => encode_reve(state, msg),
+        #[cfg(feature = "embed-brainjepa")]
+        Encoder::Brainjepa(enc) => encode_brainjepa(enc),
         #[cfg(feature = "embed-tribev2")]
         Encoder::Tribev2(state) => encode_tribev2(state, msg),
         #[cfg(feature = "embed-neurorvq")]
         Encoder::NeuroRVQ(state) => encode_neurorvq(state, msg),
         #[cfg(feature = "embed-eegdino")]
         Encoder::EegDino(state) => encode_eegdino(state, msg),
+        #[cfg(feature = "embed-lumamba")]
+        Encoder::Lumamba(state) => encode_lumamba(state, msg),
         #[allow(unreachable_patterns)]
         _ => None,
     }
@@ -810,6 +946,29 @@ fn encode_luna(enc: &mut luna_rs::LunaEncoder, msg: &EpochMsg) -> Option<Vec<f32
     Some(ep.output)
 }
 
+#[cfg(feature = "embed-reve")]
+fn encode_reve(state: &mut ReveState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let n_samples = msg.samples[0].len();
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let positions = state.positions.get_positions(&ch_names);
+    let flat: Vec<f32> = (0..n_ch).flat_map(|ch| msg.samples[ch].iter().copied()).collect();
+    state
+        .encoder
+        .run_one(flat, positions, n_ch, n_samples)
+        .ok()
+        .map(|out| out.output)
+}
+
+#[cfg(feature = "embed-brainjepa")]
+fn encode_brainjepa(_enc: &mut brainjepa::rlx::BrainJepaEncoder) -> Option<Vec<f32>> {
+    // Brain-JEPA expects parcellated fMRI time series, not live EEG epochs.
+    None
+}
+
 #[cfg(feature = "embed-tribev2")]
 fn encode_tribev2(_state: &mut Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>> {
     // TRIBEv2 takes multimodal fMRI features (text/audio/video), not EEG epochs.
@@ -818,6 +977,17 @@ fn encode_tribev2(_state: &mut Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>
 
 #[cfg(feature = "embed-eegdino")]
 fn encode_eegdino(state: &mut EegDinoState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let samples: Vec<Vec<f32>> = msg.samples.iter().take(n_ch).cloned().collect();
+    state.model.encode_pooled(&samples, &ch_names).ok()
+}
+
+#[cfg(feature = "embed-lumamba")]
+fn encode_lumamba(state: &mut LumambaState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {
         return None;

@@ -1,0 +1,97 @@
+warning: patch `rlx-nemo v0.2.10 (/Users/Shared/rlx/crates/rlx-nemo)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+warning: profile package spec `candle-core` in profile `dev` did not match any packages
+warning: unused variable: `use_silero`
+  --> /Users/Shared/rlx-models/crates/rlx-whisper/src/cli.rs:42:9
+   |
+42 |     let use_silero = false;
+   |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_use_silero`
+   |
+   = note: `-W unused-variables` implied by `-W unused`
+   = help: to override `-W unused` add `#[allow(unused_variables)]`
+
+warning: methods `transcribe_cross_tokens`, `greedy_decode_batch_tokens`, and `beam_decode_batch_tokens` are never used
+    --> /Users/Shared/rlx-models/crates/rlx-whisper/src/runner.rs:1914:8
+     |
+ 451 | impl WhisperRunner {
+     | ------------------ methods in this implementation
+...
+1914 |     fn transcribe_cross_tokens(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+1957 |     fn greedy_decode_batch_tokens(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2003 |     fn beam_decode_batch_tokens(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `-W dead-code` implied by `-W unused`
+     = help: to override `-W unused` add `#[expect(dead_code)]` or `#[allow(dead_code)]`
+
+warning: `rlx-whisper` (lib) generated 2 warnings (run `cargo fix --lib -p rlx-whisper` to apply 1 suggestion)
+warning: function `ts_r` is never used
+   --> /Users/Shared/rlx-models/crates/rlx-fft/src/precision_fft.rs:869:4
+    |
+869 | fn ts_r(a: f32, b: f32, r: &impl Fn(f32) -> f32) -> (f32, f32) {
+    |    ^^^^
+    |
+    = note: `-W dead-code` implied by `-W unused`
+    = help: to override `-W unused` add `#[expect(dead_code)]` or `#[allow(dead_code)]`
+
+warning: function `fts_r` is never used
+   --> /Users/Shared/rlx-models/crates/rlx-fft/src/precision_fft.rs:874:4
+    |
+874 | fn fts_r(a: f32, b: f32, r: &impl Fn(f32) -> f32) -> (f32, f32) {
+    |    ^^^^^
+
+warning: function `tp_r` is never used
+   --> /Users/Shared/rlx-models/crates/rlx-fft/src/precision_fft.rs:878:4
+    |
+878 | fn tp_r(a: f32, b: f32, r: &impl Fn(f32) -> f32) -> (f32, f32) {
+    |    ^^^^
+
+warning: function `base_roundtrip` is never used
+   --> /Users/Shared/rlx-models/crates/rlx-fft/src/precision_fft.rs:885:4
+    |
+885 | fn base_roundtrip(x: &[f32], fmt: (u32, u32), limbs: usize) -> f64 {
+    |    ^^^^^^^^^^^^^^
+
+warning: unused import: `bail`
+  --> /Users/Shared/rlx-models/crates/rlx-orpheus/src/download.rs:10:22
+   |
+10 | use anyhow::{Result, bail};
+   |                      ^^^^
+   |
+   = note: `-W unused-imports` implied by `-W unused`
+   = help: to override `-W unused` add `#[allow(unused_imports)]`
+
+warning: unused import: `DEFAULT_ORPHEUS_QUANT`
+ --> /Users/Shared/rlx-models/crates/rlx-orpheus/src/cli.rs:6:5
+  |
+6 |     DEFAULT_ORPHEUS_QUANT, default_hf_cache_dir, default_orpheus_dir, default_snac_dir,
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: `rlx-fft` (lib) generated 4 warnings
+warning: `rlx-orpheus` (lib) generated 2 warnings (run `cargo fix --lib -p rlx-orpheus` to apply 2 suggestions)
+   Compiling skill-tts v0.0.1 (/Users/Shared/skill/crates/skill-tts)
+    Finished `release` profile [optimized] target(s) in 24.96s
+     Running tests/tts_validate_e2e.rs (src-tauri/target/release/deps/tts_validate_e2e-462a896cf27e5176)
+
+running 1 test
+REFERENCE: Hello world.
+[tts] orpheus gguf: /Users/macmini/.cache/rlx-orpheus/orpheus-3b-0.1-ft-Q4_K_M.gguf
+[orpheus/backbone] soft RAM budget 51.2 GiB (RSS 0.0 GiB, headroom 51.2 GiB)
+[orpheus/backbone] bucket decode enabled (max_past=128) — set ORPHEUS_BUCKET_DECODE=0 to save RAM
+[orpheus/backbone] kv-cache LM on Metal /Users/macmini/.cache/rlx-orpheus/orpheus-3b-0.1-ft-Q4_K_M.gguf (prefill=PackedGguf, decode=device, compile_cap=128, decode=bucket)
+[tts] orpheus ready on Metal quant=Q4_K_M
+[orpheus/backbone] generating up to 121 tokens (prompt len=12)
+[llama32] packed GGUF prefill on Metal (logits+KV on device, no host F32 dequant)
+WAV[orpheus] 1.45s rms=0.058 peak=0.303 sr=24000 -> /Users/Shared/skill/output/tts-validate/orpheus-q4-length-fix.wav
+WHISPER[orpheus] PASS:  Hello World!
+test synthesize_engines_for_whisper_validation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 52.75s
+

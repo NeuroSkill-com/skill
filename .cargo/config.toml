@@ -101,6 +101,9 @@ CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDLL"
 #   - llama.cpp's std::filesystem (available since 10.15)
 #   - MLX Metal kernels using simdgroup_matrix (requires Metal 3.0 / macOS 14+)
 #
+# Apple Silicon (M-series, MacBook Neo A-series) — same Rust triple for all arm64 Macs.
+# Aliases: mac-neo, aarch64-apple-darwin-neo, apple-a18 (see scripts/lib/target-triples.mjs).
+#
 # Apple Silicon (M1+) ships with macOS 11.0 minimum, so 14.0 is fine.
 #
 # Two separate knobs are needed:

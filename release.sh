@@ -123,11 +123,12 @@
 #       locally; you can upload them manually.
 #
 #   TAURI_TARGET
-#       Override the Rust compilation target triple.
+#       Override the Rust compilation target triple (aliases supported).
 #       If unset, Tauri auto-detects the host architecture.
 #
 #       Common values:
-#         aarch64-apple-darwin      — Apple Silicon only
+#         aarch64-apple-darwin      — Apple Silicon (M-series, MacBook Neo)
+#         mac-neo                   — alias → aarch64-apple-darwin + neo profile
 #         x86_64-apple-darwin       — Intel only
 #         universal-apple-darwin    — Fat binary (both archs)
 #
@@ -365,7 +366,12 @@ cd "$REPO_ROOT"
 
 npm install --prefer-offline 2>/dev/null || npm install
 
-TAURI_TARGET="${TAURI_TARGET:-aarch64-apple-darwin}"
+TAURI_TARGET_RAW="${TAURI_TARGET:-aarch64-apple-darwin}"
+TAURI_TARGET="$(node "$REPO_ROOT/scripts/lib/target-triples.mjs" resolve "$TAURI_TARGET_RAW")"
+TAURI_PROFILE="$(node "$REPO_ROOT/scripts/lib/target-triples.mjs" profile "$TAURI_TARGET_RAW")"
+if [ -n "$TAURI_PROFILE" ] && [ "$TAURI_PROFILE" != "default" ]; then
+    export SKILL_MAC_PROFILE="$TAURI_PROFILE"
+fi
 
 TAURI_ARGS=(build --no-sign)
 if [ -n "${TAURI_TARGET:-}" ]; then

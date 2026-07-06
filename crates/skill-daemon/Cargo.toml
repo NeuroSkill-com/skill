@@ -5,7 +5,17 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx"]
+default = ["llm", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx", "asr", "voice-tts"]
+# Voice input for the LLM chat: Whisper ASR + Silero VAD + cpal mic capture
+# (skill-asr). `asr-metal` additionally routes the Whisper encoder through Metal
+# on Apple Silicon (decoder stays on CPU). Inert on Windows (no-op stubs).
+asr = ["skill-asr/asr"]
+asr-metal = ["asr", "skill-asr/asr-metal"]
+# Speak the voice-loop reply from the daemon itself (KittenTTS + pluggable RLX
+# engines), so the loop is self-contained and works headless / when no frontend
+# window is open. When this is off, the daemon only broadcasts the reply text and
+# the UI speaks it.
+voice-tts = ["asr", "skill-tts/tts-kitten", "skill-tts/tts-engines"]
 # `llm` gates the daemon-side glue (routes, init call, settings handlers).
 # Every backend flavor below enables it so the engine is actually wired up;
 # without this, skill-llm::init would never be called and the linker would
@@ -19,12 +29,16 @@ llm-rlx-mlx   = ["llm", "skill-llm/llm-rlx-mlx"]
 llm-rlx-cuda  = ["llm", "skill-llm/llm-rlx-cuda"]
 llm-rlx-rocm  = ["llm", "skill-llm/llm-rlx-rocm"]
 llm-rlx-wgpu  = ["llm", "skill-llm/llm-rlx-wgpu"]
-text-embeddings-fastembed = ["dep:fastembed", "skill-daemon-state/text-embeddings-fastembed", "skill-screenshots/text-embeddings-fastembed"]
 text-embeddings-rlx = ["skill-daemon-state/text-embeddings-rlx", "skill-screenshots/text-embeddings-rlx"]
-text-embeddings-rlx-metal = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-metal", "skill-screenshots/text-embeddings-rlx-metal"]
-text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-cuda", "skill-screenshots/text-embeddings-rlx-cuda"]
-text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-rocm", "skill-screenshots/text-embeddings-rlx-rocm"]
-text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-wgpu", "skill-screenshots/text-embeddings-rlx-wgpu"]
+# Each tier picks the GPU backend for the whole screenshots pipeline — both the
+# vision embedder AND OCR (rlx-ocr now runs on every backend at parity, with
+# per-image multi-shape detection). `mlx` added here (state + screenshots already
+# expose it).
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-metal", "skill-screenshots/text-embeddings-rlx-metal", "skill-screenshots/ocr-metal"]
+text-embeddings-rlx-mlx   = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-mlx",   "skill-screenshots/text-embeddings-rlx-mlx",   "skill-screenshots/ocr-mlx"]
+text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-cuda",  "skill-screenshots/text-embeddings-rlx-cuda",  "skill-screenshots/ocr-cuda"]
+text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-rocm",  "skill-screenshots/text-embeddings-rlx-rocm",  "skill-screenshots/ocr-rocm"]
+text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "skill-daemon-state/text-embeddings-rlx-wgpu",  "skill-screenshots/text-embeddings-rlx-wgpu",  "skill-screenshots/ocr-wgpu"]
 # EEG embedding encoders
 # embed-exg enables all encoder backends (ZUNA, LUNA, TRIBEv2, NeuroRVQ).
 # All use the RLX runtime. Device is chosen at runtime by resolve_exg_device():
@@ -32,31 +46,32 @@ text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "skill-daemon-state/text-emb
 # Compile-in backend tiers via embed-exg-{metal,mlx,gpu,cuda,rocm} below.
 # reve/osf/sleepfm/sleeplm/steegformer pending RLX migration — see comments below.
 embed-exg        = ["dep:skill-exg", "embed-zuna", "embed-luna", "embed-tribev2", "embed-neurorvq", "embed-eegdino",
-                    "skill-eeg/rlx-fft"]
+                    "embed-lumamba", "skill-eeg/rlx-fft"]
 # Backend tiers — each enables the matching RLX backend in every active encoder AND the FFT path.
 # macOS: Metal is also auto-enabled via [target.'cfg(macos)'.dependencies] so
 # the daemon always picks up Metal on Apple Silicon without extra flags.
-embed-exg-metal  = ["embed-exg", "skill-router/gpu-apple", "rlx/metal",
+embed-exg-metal  = ["embed-exg", "skill-router/metal", "rlx/metal",
                     "zuna-rs/rlx-metal", "luna-rs/rlx-metal", "tribev2/rlx-metal",
-                    "skill-exg/neurorvq-metal", "skill-exg/eegdino-metal", "skill-eeg/rlx-fft-metal"]
-embed-exg-mlx    = ["embed-exg", "skill-router/gpu-apple", "rlx/mlx",
+                    "skill-exg/neurorvq-metal", "skill-exg/eegdino-metal", "skill-exg/lumamba-metal", "skill-eeg/rlx-fft-metal"]
+embed-exg-mlx    = ["embed-exg", "skill-router/mlx", "rlx/mlx",
                     "zuna-rs/rlx-mlx", "luna-rs/rlx-mlx", "tribev2/rlx-mlx",
-                    "skill-exg/neurorvq-mlx", "skill-exg/eegdino-mlx"]
-embed-exg-gpu    = ["embed-exg", "skill-router/gpu", "rlx/gpu",
+                    "skill-exg/neurorvq-mlx", "skill-exg/eegdino-mlx", "skill-exg/lumamba-mlx"]
+embed-exg-gpu    = ["embed-exg", "skill-router/wgpu", "rlx/gpu",
                     "zuna-rs/rlx-gpu", "luna-rs/rlx-gpu", "tribev2/rlx-gpu",
-                    "skill-exg/neurorvq-gpu", "skill-exg/eegdino-gpu", "skill-eeg/rlx-fft-gpu"]
-embed-exg-cuda   = ["embed-exg", "rlx/cuda",
+                    "skill-exg/neurorvq-gpu", "skill-exg/eegdino-gpu", "skill-exg/lumamba-gpu", "skill-eeg/rlx-fft-gpu"]
+embed-exg-cuda   = ["embed-exg", "skill-router/cuda", "rlx/cuda",
                     "zuna-rs/rlx-cuda", "luna-rs/rlx-cuda", "tribev2/rlx-cuda",
-                    "skill-exg/neurorvq-cuda", "skill-exg/eegdino-cuda", "skill-eeg/rlx-fft-cuda"]
-embed-exg-rocm   = ["embed-exg", "rlx/rocm",
+                    "skill-exg/neurorvq-cuda", "skill-exg/eegdino-cuda", "skill-exg/lumamba-cuda", "skill-eeg/rlx-fft-cuda"]
+embed-exg-rocm   = ["embed-exg", "skill-router/rocm", "rlx/rocm",
                     "zuna-rs/rlx-rocm", "luna-rs/rlx-rocm", "tribev2/rlx-rocm",
-                    "skill-exg/neurorvq-rocm", "skill-exg/eegdino-rocm", "skill-eeg/rlx-fft-rocm"]
+                    "skill-exg/neurorvq-rocm", "skill-exg/eegdino-rocm", "skill-exg/lumamba-rocm", "skill-eeg/rlx-fft-rocm"]
 cpu-only         = ["dep:skill-exg", "skill-router/cpu"]
 embed-zuna       = ["dep:zuna-rs", "dep:rlx", "dep:ndarray"]
 embed-luna       = ["dep:luna-rs", "dep:rlx"]
 embed-tribev2    = ["dep:tribev2", "dep:rlx"]
 embed-neurorvq   = ["skill-exg/neurorvq-ndarray"]
 embed-eegdino    = ["skill-exg/eegdino-rlx"]
+embed-lumamba    = ["skill-exg/lumamba-rlx"]
 # reve/osf/sleepfm/sleeplm/steegformer: pending RLX migration.
 # When new rlx-cpu versions are published, restore as:
 #   embed-reve        = ["dep:reve-rs"]
@@ -89,7 +104,6 @@ notify = { version = "8", default-features = false, features = ["macos_fsevent"]
 rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
 ndarray   = { version = "0.17", optional = true }
-fastembed = { version = "5.13.0", features = ["ort-download-binaries-native-tls"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"] }
@@ -134,13 +148,14 @@ neurosity           = { version = "0.0.1", default-features = false }
 brainvision         = { version = "0.0.1", default-features = false }
 brainmaster         = { version = "0.0.1", default-features = false }
 # EXG encoder crates (behind feature flags)
-rlx                 = { version = "0.2.5", default-features = false, optional = true }
+rlx                 = { workspace = true, optional = true }
 zuna-rs             = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
 luna-rs             = { version = "0.1.0", default-features = false, features = ["rlx-cpu"], optional = true }
 tribev2             = { version = "0.1.0", default-features = false, features = ["rlx-cpu"], optional = true }
 skill-location      = { path = "../skill-location" }
 skill-llm           = { path = "../skill-llm" }
 skill-tts            = { path = "../skill-tts" }
+skill-asr            = { path = "../skill-asr" }
 skill-calendar       = { path = "../skill-calendar" }
 skill-iroh           = { path = "../skill-iroh" }
 notify-rust          = "4"
@@ -161,8 +176,8 @@ tokio-tungstenite    = "0.28"
 zuna-rs             = { version = "0.2.0", default-features = false, features = ["rlx-metal"], optional = true }
 luna-rs             = { version = "0.1.0", default-features = false, features = ["rlx-metal"], optional = true }
 tribev2             = { version = "0.1.0", default-features = false, features = ["rlx-metal"], optional = true }
-rlx                 = { version = "0.2.5", default-features = false, features = ["metal"], optional = true }
-skill-exg           = { path = "../skill-exg", features = ["neurorvq-metal", "eegdino-metal"], optional = true }
+rlx                 = { workspace = true, features = ["metal"], optional = true }
+skill-exg           = { path = "../skill-exg", features = ["neurorvq-metal", "eegdino-metal", "lumamba-metal"], optional = true }
 skill-eeg           = { path = "../skill-eeg", features = ["rlx-fft-metal"] }
 objc2               = "0.6"
 objc2-app-kit       = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSPasteboard"] }

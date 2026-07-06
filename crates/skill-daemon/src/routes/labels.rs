@@ -295,9 +295,9 @@ async fn create_label(
         let eeg_end = req.eeg_end.unwrap_or(now_secs);
         let context = req.context.clone().unwrap_or_default();
 
-        // Embed text and context
-        let text_emb = embedder.embed(&req.text);
-        let ctx_emb = embedder.embed(&context);
+        // Embed text and context (indexed documents)
+        let text_emb = embedder.embed_document(&req.text);
+        let ctx_emb = embedder.embed_document(&context);
         let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
         let ctx_blob = ctx_emb.as_ref().map(|v| f32_to_blob(v));
 
@@ -385,7 +385,7 @@ pub async fn submit_label_internal(state: &AppState, text: &str, eeg_start: u64,
         let conn = open_labels_db(&skill_dir).map_err(|e| e.to_string())?;
         let now_secs = eeg_start;
 
-        let text_emb = embedder.embed(&text);
+        let text_emb = embedder.embed_document(&text);
         let _ctx_emb: Option<Vec<f32>> = None;
         let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
 
@@ -437,9 +437,9 @@ async fn update_label(
         })?;
         let context = req.context.clone().unwrap_or_default();
 
-        // Re-embed updated text/context
-        let text_emb = embedder.embed(&req.text);
-        let ctx_emb = embedder.embed(&context);
+        // Re-embed updated text/context (indexed documents)
+        let text_emb = embedder.embed_document(&req.text);
+        let ctx_emb = embedder.embed_document(&context);
         let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
         let ctx_blob = ctx_emb.as_ref().map(|v| f32_to_blob(v));
 
@@ -534,8 +534,8 @@ async fn search_labels(State(state): State<AppState>, Json(req): Json<SearchLabe
     let query_text = req.query.clone();
 
     let results = tokio::task::spawn_blocking(move || {
-        // Embed the query text
-        let Some(query_vec) = embedder.embed(&query_text) else {
+        // Embed the search query
+        let Some(query_vec) = embedder.embed_query(&query_text) else {
             return serde_json::json!({ "results": [], "error": "failed to embed query" });
         };
 
@@ -641,7 +641,7 @@ async fn benchmark_label_index(
     let query_text = req.query.clone();
 
     let result = tokio::task::spawn_blocking(move || {
-        let Some(query_vec) = embedder.embed(&query_text) else {
+        let Some(query_vec) = embedder.embed_query(&query_text) else {
             return serde_json::json!({ "ok": false, "error": "failed to embed query" });
         };
         let benchmarks = match mode.as_str() {
@@ -741,6 +741,50 @@ async fn label_embedding_status(State(state): State<AppState>) -> Json<serde_jso
 }
 
 /// Re-embed all labels with the current embedding model and rebuild indices.
+/// Re-embed every label's text + context (as documents) and rebuild the label
+/// HNSW. Shared by the `reembed_all_labels` route and the embedding-scheme
+/// migration. Returns the number of labels processed.
+pub(crate) fn reembed_all_labels_blocking(
+    skill_dir: &std::path::Path,
+    reembed_cfg: &skill_settings::ReembedConfig,
+    label_index: &skill_label_index::LabelIndexState,
+    embedder: &crate::text_embedder::SharedTextEmbedder,
+) -> anyhow::Result<usize> {
+    let conn = open_labels_db(skill_dir)?;
+    let mut stmt = conn.prepare("SELECT id, text, COALESCE(context, '') FROM labels ORDER BY id")?;
+    let rows: Vec<(i64, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map(|rows| rows.filter_map(Result::ok).collect())
+        .unwrap_or_default();
+
+    let total = rows.len();
+    let batch_size = reembed_cfg.batch_size.max(1);
+    let batch_delay = std::time::Duration::from_millis(reembed_cfg.batch_delay_ms);
+    for (i, (id, text, context)) in rows.iter().enumerate() {
+        let text_emb = embedder.embed_document(text);
+        let ctx_emb = embedder.embed_document(context);
+        let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
+        let ctx_blob = ctx_emb.as_ref().map(|v| f32_to_blob(v));
+
+        conn.execute(
+            "UPDATE labels SET text_embedding = ?1, context_embedding = ?2, embedding_model = ?3 WHERE id = ?4",
+            rusqlite::params![text_blob, ctx_blob, EMBED_MODEL_NAME, id],
+        )?;
+
+        // Yield between batches to avoid saturating the CPU.
+        if (i + 1) % batch_size == 0 && batch_delay.as_millis() > 0 {
+            std::thread::sleep(batch_delay);
+        }
+    }
+
+    // Rebuild HNSW indices with new embeddings.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        skill_label_index::rebuild(skill_dir, label_index);
+    }));
+
+    Ok(total)
+}
+
 async fn reembed_all_labels(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let reembed_cfg = crate::routes::settings_io::load_user_settings(&state).reembed;
@@ -748,56 +792,16 @@ async fn reembed_all_labels(State(state): State<AppState>) -> Json<serde_json::V
     let embedder = state.text_embedder.clone();
 
     let result = tokio::task::spawn_blocking(move || {
-        let conn = open_labels_db(&skill_dir)?;
-
-        // Read all label ids + text + context.
-        let mut stmt = conn.prepare("SELECT id, text, COALESCE(context, '') FROM labels ORDER BY id")?;
-        let rows: Vec<(i64, String, String)> = stmt
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
-            .map(|rows| rows.filter_map(Result::ok).collect())
-            .unwrap_or_default();
-
-        let total = rows.len();
-        let mut updated = 0usize;
-
-        let batch_size = reembed_cfg.batch_size.max(1);
-        let batch_delay = std::time::Duration::from_millis(reembed_cfg.batch_delay_ms);
-        for (i, (id, text, context)) in rows.iter().enumerate() {
-            let text_emb = embedder.embed(text);
-            let ctx_emb = embedder.embed(context);
-            let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
-            let ctx_blob = ctx_emb.as_ref().map(|v| f32_to_blob(v));
-
-            conn.execute(
-                "UPDATE labels SET text_embedding = ?1, context_embedding = ?2, embedding_model = ?3 WHERE id = ?4",
-                rusqlite::params![text_blob, ctx_blob, EMBED_MODEL_NAME, id],
-            )?;
-            updated += 1;
-
-            // Yield between batches to avoid saturating the CPU.
-            if (i + 1) % batch_size == 0 && batch_delay.as_millis() > 0 {
-                std::thread::sleep(batch_delay);
-            }
-        }
-
-        // Rebuild HNSW indices with new embeddings.
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            skill_label_index::rebuild(&skill_dir, &label_index);
-        }));
-
-        Ok::<_, anyhow::Error>(serde_json::json!({
-            "ok": true,
-            "total": total,
-            "updated": updated,
-            "model": EMBED_MODEL_NAME,
-        }))
+        reembed_all_labels_blocking(&skill_dir, &reembed_cfg, &label_index, &embedder)
     })
     .await
     .map_err(|e| format!("{e}"))
     .and_then(|r| r.map_err(|e| format!("{e}")));
 
     match result {
-        Ok(v) => Json(v),
+        Ok(total) => Json(serde_json::json!({
+            "ok": true, "total": total, "updated": total, "model": EMBED_MODEL_NAME,
+        })),
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
     }
 }

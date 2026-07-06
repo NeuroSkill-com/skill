@@ -319,11 +319,6 @@ impl AppState {
                 if !settings.text_embedding_model.is_empty() {
                     te.set_model_code(&settings.text_embedding_model);
                 }
-                if let Some(backend) =
-                    crate::text_embedder::TextEmbeddingBackend::parse(&settings.text_embedding_backend)
-                {
-                    te.set_backend(backend);
-                }
                 if !settings.text_embedding_rlx_device.is_empty() {
                     te.set_rlx_device(&settings.text_embedding_rlx_device);
                 }

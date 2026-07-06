@@ -19,6 +19,13 @@ import { createConnection } from "node:net";
 import { arch, cpus, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  applyMacProfileEnv,
+  defaultMacBuildTarget,
+  resolveEnvTargets,
+  resolveTargetTriple,
+  rewriteTargetArgs,
+} from "./lib/target-triples.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -213,7 +220,7 @@ function removeBundleArg(args, parsedBundleArg) {
 const [subcommand = "", ...rawSubArgs] = process.argv.slice(2);
 
 let tuiPaneRole = null;
-const subArgs = [];
+let subArgs = [];
 for (const arg of rawSubArgs) {
   if (arg === "--__tui-pane-role=daemon") {
     tuiPaneRole = "daemon";
@@ -275,6 +282,9 @@ if (!needsSetup) {
 
 runMarkdownRendererGuard();
 
+// Resolve TAURI_TARGET / CARGO_BUILD_TARGET aliases (e.g. mac-neo → aarch64-apple-darwin).
+resolveEnvTargets(process.env);
+
 // ── Parse --target from subArgs ───────────────────────────────────────────────
 let explicitTarget = null;
 for (let i = 0; i < subArgs.length; i++) {
@@ -286,6 +296,17 @@ for (let i = 0; i < subArgs.length; i++) {
     explicitTarget = subArgs[i].slice("--target=".length);
     break;
   }
+}
+
+if (explicitTarget) {
+  const resolved = resolveTargetTriple(explicitTarget);
+  explicitTarget = resolved.triple;
+  applyMacProfileEnv(resolved.profile);
+  subArgs = rewriteTargetArgs(subArgs, resolved.triple);
+} else if (process.env.TAURI_TARGET) {
+  explicitTarget = process.env.TAURI_TARGET;
+} else if (process.env.CARGO_BUILD_TARGET) {
+  explicitTarget = process.env.CARGO_BUILD_TARGET;
 }
 
 const isMingwTarget = explicitTarget?.endsWith("-windows-gnu") ?? false;
@@ -338,7 +359,7 @@ if (isMingwTarget) {
 } else if (isMac) {
   // Release builds target Apple Silicon; dev builds use the host triple.
   if (subcommand === "build" && !explicitTarget) {
-    platformFlags = ["--target", "aarch64-apple-darwin", "--no-sign"];
+    platformFlags = ["--target", defaultMacBuildTarget(), "--no-sign"];
   }
 
   // Homebrew cmake/sccache are not on the default PATH when cargo invokes
@@ -743,7 +764,7 @@ const canRetryBundlesSequentially = isLinux && subcommand === "build" && bundleA
 // assemble the .app bundle manually from the already-built release binary,
 // Info.plist, icons, entitlements, and resources.
 function assembleMacOsApp() {
-  const triple = explicitTarget || "aarch64-apple-darwin";
+  const triple = explicitTarget || defaultMacBuildTarget();
   const binaryPath = resolve(root, "src-tauri/target", triple, "release/skill");
   if (!existsSync(binaryPath)) {
     return false;
@@ -1078,8 +1099,8 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-// ── macOS: build WidgetKit extension ──────────────────────────────────────────
-if (isMac && (subcommand === "dev" || subcommand === "build")) {
+// ── macOS: build WidgetKit extension (local validation only; CI uses ci.mjs) ─
+if (isMac && (subcommand === "dev" || subcommand === "build") && process.env.GITHUB_ACTIONS !== "true") {
   const widgetScript = resolve(root, "extensions", "widgets", "build-widgets.sh");
   if (existsSync(widgetScript)) {
     const isRelease = subcommand === "build" && !rawSubArgs.includes("--debug");

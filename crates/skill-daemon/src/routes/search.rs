@@ -152,13 +152,13 @@ async fn search_commands(
     let candidates = req.candidates;
 
     let result = tokio::task::spawn_blocking(move || {
-        let Some(query_vec) = embedder.embed(&query) else {
+        let Some(query_vec) = embedder.embed_query(&query) else {
             return serde_json::json!({ "results": [] });
         };
 
-        // Batch-embed all candidates
+        // Batch-embed all candidates (indexed documents)
         let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
-        let Some(cand_vecs) = embedder.embed_batch(texts) else {
+        let Some(cand_vecs) = embedder.embed_documents(texts) else {
             return serde_json::json!({ "results": [] });
         };
 
@@ -629,7 +629,7 @@ fn interactive_search_impl(
 
     // Step 1: Embed query text → search labels by text similarity.
     let t_embed = std::time::Instant::now();
-    let Some(query_vec) = embedder.embed(query) else {
+    let Some(query_vec) = embedder.embed_query(query) else {
         return serde_json::json!({
             "nodes": nodes, "edges": edges, "dot": "", "svg": "", "svg_col": "",
             "error": "failed to embed query text"
@@ -1070,7 +1070,7 @@ fn interactive_search_impl(
     // Step 4: Search screenshots by OCR text similarity (semantic, not proximity).
     if k_screenshots > 0 {
         if let Some(ref store) = ss_store {
-            let embed_fn = |text: &str| -> Option<Vec<f32>> { embedder.embed(text) };
+            let embed_fn = |text: &str| -> Option<Vec<f32>> { embedder.embed_query(text) };
             let mut ocr_results = skill_screenshots::capture::search_by_ocr_text_embedding(
                 skill_dir,
                 store,

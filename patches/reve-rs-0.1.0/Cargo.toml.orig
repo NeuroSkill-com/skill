@@ -1,0 +1,99 @@
+[package]
+name = "reve-rs"
+version = "0.1.0"
+edition = "2021"
+description = "REVE EEG Foundation Model — inference in Rust (RLX)"
+keywords      = ["eeg", "foundational", "BCI", "GPU", "CPU"]
+categories    = ["science", "mathematics"]
+authors       = ["Eugene Hauptmann"]
+license       = "Apache-2.0"
+homepage      = "https://github.com/eugenehp/reve-rs"
+repository    = "https://github.com/eugenehp/reve-rs"
+documentation = "https://docs.rs/reve-rs"
+readme        = "README.md"
+
+exclude = [
+    "data/",
+    "figures/",
+    "scripts/",
+    "tests/vectors/",
+]
+
+[lib]
+name = "reve_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "infer"
+path = "src/bin/infer.rs"
+required-features = ["rlx"]
+
+[[bin]]
+name = "download_weights"
+path = "src/bin/download_weights.rs"
+required-features = ["hf-download"]
+
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"
+required-features = ["rlx"]
+
+[[test]]
+name = "rlx_backend_parity"
+path = "tests/rlx_backend_parity.rs"
+required-features = ["rlx", "rlx-cpu", "rlx-metal", "rlx-mlx"]
+
+[[test]]
+name = "rlx_attn_parity"
+path = "tests/rlx_attn_parity.rs"
+required-features = ["rlx", "rlx-cpu", "rlx-mlx", "rlx-metal"]
+
+[features]
+default = ["rlx", "rlx-cpu"]
+
+# ── RLX runtime ───────────────────────────────────────────────────────────────
+rlx = ["dep:rlx"]
+
+# ── RLX backends (forwarded to the rlx crate) ────────────────────────────────
+rlx-cpu             = ["rlx", "rlx/cpu"]
+rlx-blas-accelerate = ["rlx", "rlx/blas-accelerate"]
+rlx-blas-mkl        = ["rlx", "rlx/blas-mkl"]
+rlx-blas-openblas   = ["rlx", "rlx/blas-openblas"]
+rlx-metal           = ["rlx-cpu", "rlx/metal"]
+rlx-mlx             = ["rlx-cpu", "rlx/mlx"]
+rlx-gpu             = ["rlx-cpu", "rlx/gpu"]
+rlx-cuda            = ["rlx-cpu", "rlx/cuda"]
+rlx-rocm            = ["rlx-cpu", "rlx/rocm"]
+rlx-tpu             = ["rlx-cpu", "rlx/tpu"]
+rlx-apple-silicon   = ["rlx-cpu", "rlx/apple-silicon"]
+rlx-nvidia          = ["rlx-cpu", "rlx/nvidia"]
+
+# Shorthand aliases (RLX)
+cpu             = ["rlx-cpu"]
+mlx             = ["rlx-mlx"]
+gpu             = ["rlx-gpu"]
+cuda            = ["rlx-cuda"]
+rocm            = ["rlx-rocm"]
+tpu             = ["rlx-tpu"]
+apple-silicon   = ["rlx-apple-silicon"]
+nvidia          = ["rlx-nvidia"]
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+hf-download     = ["dep:hf-hub", "dep:ureq"]
+
+[dependencies]
+rlx = { version = "0.2.6", default-features = false, optional = true }
+
+safetensors = "0.7"
+half = { version = "2", features = ["bytemuck"] }
+clap = { version = "4", features = ["derive", "env"] }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0.102"
+hf-hub = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
+ureq = { version = "3", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

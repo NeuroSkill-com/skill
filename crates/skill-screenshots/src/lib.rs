@@ -2,10 +2,10 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! `skill-screenshots` — screenshot capture + vision embedding.
 //!
-//! - **config** — re-exports `ScreenshotConfig` from `skill-settings` +
-//!   `fastembed_model_enum()` helper
+//! - **config** — re-exports `ScreenshotConfig` from `skill-settings`
 //! - **context** — `ScreenshotContext` trait (abstracts tauri/AppState)
 //! - **capture** — capture worker, embed thread, HNSW search, OCR
+//! - **rlx_image** — RLX (`rlx-embed`) image embedder for query-by-image
 
 pub mod capture;
 pub mod chat_image;

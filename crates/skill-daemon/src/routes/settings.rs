@@ -331,6 +331,10 @@ pub fn router() -> Router<AppState> {
             get(settings_ui::get_tts_preload).post(settings_ui::set_tts_preload),
         )
         .route(
+            "/settings/tts-engine",
+            get(settings_ui::get_tts_engine).post(settings_ui::set_tts_engine),
+        )
+        .route(
             "/settings/sleep-config",
             get(settings_ui::get_sleep_config).post(settings_ui::set_sleep_config),
         )
@@ -755,7 +759,7 @@ async fn get_text_embedding_model(State(state): State<AppState>) -> Json<serde_j
     let code = state.text_embedder.model_code();
     Json(serde_json::json!({
         "model": code,
-        "backend": state.text_embedder.backend().as_str(),
+        "backend": "rlx",
         "rlx_device": state.text_embedder.rlx_device(),
         "rlx_max_seq": state.text_embedder.rlx_max_seq(),
     }))
@@ -769,18 +773,6 @@ async fn set_text_embedding_model(
         return Json(serde_json::json!({ "ok": false, "error": "missing 'model' field" }));
     };
     let code = code.to_string();
-    let backend = match body.get("backend").and_then(|v| v.as_str()) {
-        Some(raw) => match crate::text_embedder::TextEmbeddingBackend::parse(raw) {
-            Some(backend) => Some(backend),
-            None => {
-                return Json(serde_json::json!({
-                    "ok": false,
-                    "error": "backend must be 'fastembed' or 'rlx'"
-                }));
-            }
-        },
-        None => None,
-    };
     let rlx_device = body
         .get("rlx_device")
         .or_else(|| body.get("rlxDevice"))
@@ -795,9 +787,6 @@ async fn set_text_embedding_model(
     let state_clone = state.clone();
     let result = tokio::task::spawn_blocking(move || {
         embedder.set_model_code(&code);
-        if let Some(backend) = backend {
-            embedder.set_backend(backend);
-        }
         if let Some(device) = &rlx_device {
             embedder.set_rlx_device(device);
         }
@@ -806,13 +795,11 @@ async fn set_text_embedding_model(
         }
         let ok = embedder.reload();
         if ok {
-            let backend = embedder.backend().as_str().to_string();
             let rlx_device = embedder.rlx_device();
             let rlx_max_seq = embedder.rlx_max_seq();
             let model = code.clone();
             patch_user_settings_sync(&state_clone, move |s| {
                 s.text_embedding_model = model;
-                s.text_embedding_backend = backend;
                 s.text_embedding_rlx_device = rlx_device;
                 s.text_embedding_rlx_max_seq = rlx_max_seq;
             });
@@ -825,7 +812,7 @@ async fn set_text_embedding_model(
         Ok((true, code)) => Json(serde_json::json!({
             "ok": true,
             "model": code,
-            "backend": state.text_embedder.backend().as_str(),
+            "backend": "rlx",
             "rlx_device": state.text_embedder.rlx_device(),
             "rlx_max_seq": state.text_embedder.rlx_max_seq(),
         })),
@@ -1046,7 +1033,7 @@ async fn activity_shell_command(
                 let short = if command.len() > 30 { &command[..30] } else { command };
                 format!("{short} {status}")
             };
-            let text_emb = embedder.embed(&label);
+            let text_emb = embedder.embed_document(&label);
             let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
             let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
             let label_id = conn.execute(
@@ -2451,7 +2438,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "text-embeddings-fastembed")]
+    #[cfg(feature = "text-embeddings-rlx")]
     async fn set_text_embedding_model_valid_persists() {
         let (td, st) = mk_state();
         // Set to bge-small

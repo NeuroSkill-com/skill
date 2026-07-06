@@ -2659,6 +2659,19 @@ impl ActivityStore {
         );
     }
 
+    /// Invalidate all stored terminal-output embeddings so the background
+    /// embed worker regenerates them. The `stripped_text` source is untouched
+    /// (only the derived vector is cleared), so this is recoverable. Used by
+    /// the one-time embedding-scheme migration. Returns the rows reset.
+    pub fn clear_terminal_embeddings(&self) -> usize {
+        let c = self.conn.lock_or_recover();
+        c.execute(
+            "UPDATE terminal_outputs SET embedding = NULL WHERE embedding IS NOT NULL",
+            [],
+        )
+        .unwrap_or(0)
+    }
+
     /// Look up the most recent N terminal commands missing `terminal_outputs`
     /// rows but already finalized (have a non-null `ended_at`). The session
     /// finalizer uses this to find work to do.
@@ -6272,6 +6285,24 @@ mod tests {
             browser_title: None,
             monitor_id: None,
         }
+    }
+
+    #[test]
+    fn clear_terminal_embeddings_nulls_vectors_keeps_text() {
+        let store = open_temp();
+        let cmd_id = store.insert_terminal_command_start("zsh", "ls -la", "/tmp", 1000, None, None, None);
+        store.insert_terminal_output(cmd_id, 1000, 2000, None, 0, "total 0 file.txt");
+        store.set_terminal_embedding(cmd_id, &[1u8, 2, 3, 4]);
+        assert_eq!(store.all_terminal_embeddings().len(), 1);
+
+        // Migration clears the derived vector...
+        let n = store.clear_terminal_embeddings();
+        assert_eq!(n, 1);
+        assert!(store.all_terminal_embeddings().is_empty(), "embedding cleared");
+
+        // ...but the source text survives, so the embed worker re-embeds it.
+        let row = store.get_terminal_output(cmd_id).expect("row");
+        assert_eq!(row.3, "total 0 file.txt", "stripped_text preserved → re-embeddable");
     }
 
     #[test]

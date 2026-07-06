@@ -19,6 +19,12 @@ eegdino-mlx      = ["eegdino-rlx", "eegdino/mlx"]
 eegdino-gpu      = ["eegdino-rlx", "eegdino/gpu"]
 eegdino-cuda     = ["eegdino-rlx", "eegdino/cuda"]
 eegdino-rocm     = ["eegdino-rlx", "eegdino/rocm"]
+lumamba-rlx      = ["dep:lumamba", "dep:rlx", "dep:log"]
+lumamba-metal    = ["lumamba-rlx", "lumamba/rlx-metal"]
+lumamba-mlx      = ["lumamba-rlx", "lumamba/rlx-mlx"]
+lumamba-gpu      = ["lumamba-rlx", "lumamba/rlx-gpu"]
+lumamba-cuda     = ["lumamba-rlx", "lumamba/rlx-cuda"]
+lumamba-rocm     = ["lumamba-rlx", "lumamba/rlx-rocm"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -32,7 +38,8 @@ hf-hub          = "0.5"
 ureq            = { version = "3.3", features = ["native-tls", "json"] }
 neurorvq-rs     = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
 eegdino         = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
-rlx             = { version = "0.2.5", default-features = false, optional = true }
+lumamba         = { version = "0.0.1", default-features = false, features = ["rlx-cpu"], optional = true }
+rlx             = { workspace = true, optional = true }
 log             = { version = "0.4", optional = true }
 
 [lints]

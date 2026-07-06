@@ -507,6 +507,46 @@ const llm: Record<string, string> = {
   "model.maxResidentMemoryDesc":
     "Omitir la incrustación en segundo plano cuando la memoria del sistema supere este porcentaje. 100% desactiva el límite.",
   "model.maxResidentMemoryDisabled": "desact.",
+
+  "chat.tts.section": "Salida de voz",
+  "chat.tts.engineLabel": "Motor de voz",
+  "chat.tts.engineDesc": "Backend de texto a voz que el daemon usa para leer las respuestas.",
+  "chat.tts.experimental":
+    "Aún no listo para usar: Orpheus necesita un decodificador SNAC preexportado; Kyutai-TTS todavía no funciona en rlx 0.2.9.",
+  "chat.tts.kyutaiExperimental":
+    "Kyutai-TTS todavía no funciona en rlx 0.2.9 (generate() upstream es un stub).",
+  "chat.tts.orpheusHint":
+    "Orpheus descarga el backbone automáticamente. Exporta el decodificador SNAC una vez con scripts/export_snac_decoder.py (o define ORPHEUS_SNAC_PATH).",
+  "chat.tts.modelLabel": "Modelo de voz",
+  "chat.tts.modelDesc": "Repositorio del modelo para el motor seleccionado.",
+  "chat.tts.voiceLabel": "Voz",
+  "chat.tts.voiceDesc": "Hablante predefinido para el motor seleccionado.",
+  "chat.tts.voiceDefault": "Predeterminada",
+  "chat.voice.section": "Entrada de voz",
+  "chat.voice.enabled": "Mostrar controles de voz",
+  "chat.voice.enabledDesc": "Mostrar el micrófono y el selector de modo de voz en la ventana de chat.",
+  "chat.voice.triggerLabel": "Activación predeterminada",
+  "chat.voice.triggerDesc": "Cómo se controla el micrófono en una nueva sesión de voz.",
+  "chat.voice.triggerContinuous": "Continua",
+  "chat.voice.triggerPtt": "Pulsar para hablar",
+  "chat.voice.routingLabel": "Enrutamiento predeterminado",
+  "chat.voice.routingDesc": "Qué ocurre con una transcripción finalizada.",
+  "chat.voice.routingLoop": "Bucle de voz",
+  "chat.voice.routingTranscribe": "Solo transcribir",
+  "chat.voice.engineLabel": "Motor de reconocimiento",
+  "chat.voice.engineDesc": "Backend de voz a texto usado para transcribir tu voz.",
+  "chat.voice.modelLabel": "Modelo de reconocimiento",
+  "chat.voice.modelDesc": "Repositorio del modelo Whisper. Los modelos más grandes son más precisos pero más lentos.",
+  "chat.voice.modelCustom": "Personalizado…",
+  "chat.voice.languageLabel": "Idioma",
+  "chat.voice.languageDesc": 'Sugerencia de idioma para el reconocimiento de voz (p. ej. "en").',
+  "chat.voice.start": "Iniciar entrada de voz",
+  "chat.voice.stop": "Detener entrada de voz",
+  "chat.voice.pttHint": "Mantén pulsado para hablar",
+  "chat.voice.statusLoading": "Cargando…",
+  "chat.voice.statusListening": "Escuchando",
+  "chat.voice.statusSpeaking": "Hablando",
+  "chat.voice.dismissError": "Descartar error de voz",
 };
 
 export default llm;

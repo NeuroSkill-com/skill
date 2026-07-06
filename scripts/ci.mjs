@@ -14,6 +14,8 @@
 //   discord-notify ...       Send Discord webhook notification
 //   download-llama PLAT TGT FEAT  Download + validate prebuilt llama libs
 //   import-apple-cert        Import .p12 into temporary keychain (macOS)
+//   setup-widget-signing     Prepare WidgetKit automatic signing (macOS CI)
+//   build-widgets            Build SkillWidgets.appex with CI signing (macOS)
 //   validate-notarization    Check Apple notarization credentials (macOS)
 //   validate-apple-signing-identity   Assert APPLE_SIGNING_IDENTITY is a Developer ID Application cert
 //   free-disk-space          Remove unused toolchains on Linux runners
@@ -486,6 +488,54 @@ function cmdImportAppleCert() {
   console.log(`✓ Apple Developer certificate imported into ${keychain}`);
 }
 
+/** Prepare WidgetKit automatic signing on GitHub Actions runners. */
+function cmdSetupWidgetSigning() {
+  const teamId = process.env.APPLE_TEAM_ID;
+  if (!teamId) {
+    warning("APPLE_TEAM_ID not set — skipping widget signing setup");
+    return;
+  }
+
+  ghEnv("WIDGET_CODE_SIGN_STYLE", "Automatic");
+
+  // Optional: App Store Connect API key for -allowProvisioningUpdates.
+  const ascKeyId = process.env.APPLE_ASC_KEY_ID;
+  const ascIssuer = process.env.APPLE_ASC_KEY_ISSUER_ID;
+  const ascKeyB64 = process.env.APPLE_ASC_KEY_BASE64;
+  if (ascKeyId && ascIssuer && ascKeyB64) {
+    const keyDir = join(process.env.HOME, ".private_keys");
+    mkdirSync(keyDir, { recursive: true });
+    const keyPath = join(keyDir, `AuthKey_${ascKeyId}.p8`);
+    writeFileSync(keyPath, Buffer.from(ascKeyB64, "base64"), { mode: 0o600 });
+    ghEnv("AUTH_KEY_PATH", keyPath);
+    ghEnv("AUTH_KEY_ID", ascKeyId);
+    ghEnv("AUTH_KEY_ISSUER_ID", ascIssuer);
+    console.log(`✓ App Store Connect API key installed for widget provisioning (${ascKeyId})`);
+  } else {
+    console.log("ℹ No APPLE_ASC_KEY_* secrets — relying on portal profiles + -allowProvisioningUpdates");
+  }
+
+  // Optional: pre-downloaded macOS provisioning profile (base64 .provisionprofile).
+  const profileB64 = process.env.APPLE_WIDGET_PROVISIONING_PROFILE_BASE64;
+  if (profileB64) {
+    const profileDir = join(process.env.HOME, "Library/MobileDevice/Provisioning Profiles");
+    mkdirSync(profileDir, { recursive: true });
+    const profilePath = join(profileDir, "SkillWidgetsWidgetExtension.provisionprofile");
+    writeFileSync(profilePath, Buffer.from(profileB64, "base64"));
+    console.log(`✓ Widget provisioning profile installed (${profilePath})`);
+  }
+
+  console.log(`✓ Widget signing ready (team ${teamId}, automatic)`);
+}
+
+function cmdBuildWidgets() {
+  const widgetScript = join("extensions", "widgets", "build-widgets.sh");
+  if (!existsSync(widgetScript)) {
+    throw new Error(`Missing ${widgetScript}`);
+  }
+  run(["bash", widgetScript, "--release", "--ci"], { check: true });
+}
+
 function cmdValidateNotarization() {
   console.log("Checking notarization credentials …");
   const r = run(["xcrun", "notarytool", "history", "--apple-id", process.env.APPLE_ID, "--password", process.env.APPLE_PASSWORD, "--team-id", process.env.APPLE_TEAM_ID, "--output-format", "json"], { capture: true });
@@ -563,7 +613,10 @@ function cmdSelfTest() {
     "resolve-version": cmdResolveVersion, "verify-secrets": cmdVerifySecrets,
     "prepare-changelog": cmdPrepareChangelog, "update-latest-json": cmdUpdateLatestJson,
     "discord-notify": cmdDiscordNotify, "download-llama": cmdDownloadLlama,
-    "import-apple-cert": cmdImportAppleCert, "validate-notarization": cmdValidateNotarization,
+    "import-apple-cert": cmdImportAppleCert,
+    "setup-widget-signing": cmdSetupWidgetSigning,
+    "build-widgets": cmdBuildWidgets,
+    "validate-notarization": cmdValidateNotarization,
     "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
     "free-disk-space": cmdFreeDiskSpace, "install-protoc-windows": cmdInstallProtocWindows,
     "self-test": cmdSelfTest, "dry-run-release": cmdDryRunRelease,
@@ -662,6 +715,8 @@ const COMMANDS = {
   "discord-notify": (a) => cmdDiscordNotify(a),
   "download-llama": (a) => cmdDownloadLlama(a),
   "import-apple-cert": cmdImportAppleCert,
+  "setup-widget-signing": cmdSetupWidgetSigning,
+  "build-widgets": cmdBuildWidgets,
   "validate-notarization": cmdValidateNotarization,
   "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
   "free-disk-space": cmdFreeDiskSpace,

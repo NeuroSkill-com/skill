@@ -8,7 +8,7 @@ license = "GPL-3.0-only"
 
 # ── Feature flags ─────────────────────────────────────────────────────────────
 #
-#  tts-kitten  — enable KittenTTS (ONNX, English, ~30 MB, espeak-ng required)
+#  tts-kitten  — enable KittenTTS (native RLX via rlx-kittentts, English, ~30 MB)
 #  tts-neutts  — enable NeuTTS   (GGUF backbone + NeuCodec, voice-cloning,
 #                                  multi-language, espeak-ng + cmake required)
 #
@@ -21,7 +21,7 @@ license = "GPL-3.0-only"
 default    = ["tts-kitten", "mw75-rfcomm", "gps"]
 gps        = ["skill-data/gps"]
 mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
-tts-kitten = ["dep:kittentts", "dep:rodio", "skill-tts/tts-kitten"]
+tts-kitten = ["dep:rodio", "skill-tts/tts-kitten"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:hound", "skill-tts/tts-neutts"]
 
 # ── Frontend asset embedding ──────────────────────────────────────────────────
@@ -58,7 +58,7 @@ stacker = "0.1"
 zip = { workspace = true }
 
 # rustls is pulled transitively by reqwest (tauri-plugin-updater), emotiv
-# (tokio-tungstenite), hf-hub (fastembed) etc.  Because *both* the `ring`
+# (tokio-tungstenite), hf-hub etc.  Because *both* the `ring`
 # and `aws-lc-rs` crypto back-ends end up enabled via different dep paths,
 # rustls cannot auto-detect a CryptoProvider at runtime.  We add it as a
 # direct dep so we can call `ring::default_provider().install_default()`
@@ -97,14 +97,13 @@ tokio-util = { version = "0.7", features = ["rt"] }
 # CSV writing
 csv = "1"
 
-# TTS — lightweight ONNX-based speech synthesis (English only for calibration)
-# Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
+# TTS — lightweight RLX-native speech synthesis (English only for calibration)
+# Model weights are downloaded from HuggingFace Hub on first use (voices/config +
+# RLX bundle from eugenehp/kitten-tts-mini-0.8-rlx).
 #
-# espeak feature: active on macOS and Linux. Windows skips KittenTTS entirely
-# so we don't have to ship onnxruntime.dll alongside the installer — the
-# tts-kitten feature becomes a no-op on Windows because the optional dep is
-# only declared for non-Windows targets (see [target.cfg(...)] block below).
-# When NeuTTS or another TTS backend lands for Windows, hook it in there.
+# espeak feature: active on macOS and Linux. Windows skips KittenTTS entirely;
+# the tts-kitten feature becomes a no-op on Windows because skill-tts gates the
+# optional rlx-kittentts dep to non-Windows targets.
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
 # 0.1.0: backbone is llama-cpp-4.  This means neutts
@@ -137,7 +136,7 @@ hound = { version = "3", optional = true }
 skill-vision = { path = "../crates/skill-vision" }
 
 # Image processing — resize/pad screenshots before saving and embedding.
-# Already compiled transitively via fastembed; listing it here gives
+# Compiled transitively via several deps; listing it here gives
 # screenshot.rs direct access to DynamicImage, GenericImageView, etc.
 image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
 
@@ -202,14 +201,8 @@ dispatch2        = "0.3.1"
 # 30–120 s, making TTS appear broken.
 neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
 
-# KittenTTS lives behind a non-Windows target gate so Windows builds never pull
-# `ort` / onnxruntime. The `tts-kitten` feature stays in `default` for the cross-
-# platform UX; on Windows it activates the `dep:kittentts` reference into a
-# missing dep, which Cargo treats as a no-op (target-conditional optional dep).
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-kittentts = { version = "0.4.1", features = ["espeak"], optional = true }
-
-[dev-dependencies]
+# KittenTTS lives behind skill-tts (rlx-kittentts, non-Windows only).
+# Windows: tts-kitten feature is enabled for UX parity but synthesis is skipped.
 tempfile = "3"
 
 # ── [patch] and [profile] ──────────────────────────────────────────────────────

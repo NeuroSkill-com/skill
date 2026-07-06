@@ -299,11 +299,49 @@ Implementation: `src-tauri/src/widget_reload.rs` — uses objc2 to call `WGWidge
 
 ## Code Signing
 
-For development: ad-hoc signing (`CODE_SIGN_IDENTITY="-"`) — no provisioning profile needed.
+### Local validation (default)
 
-For distribution: use `--sign` flag with your Developer ID:
+Ad-hoc signing — no Apple account or provisioning profile:
+
 ```bash
-./build-widgets.sh --release --sign "Developer ID Application: NeuroSkill Inc (TEAMID)"
+./build-widgets.sh --release    # builds SkillWidgets.appex
+./build-widgets.sh --test       # 93 Swift unit tests
+npm run tauri:build:mac:neo:app # embeds widget into NeuroSkill.app
 ```
 
-The App Group entitlement in the release entitlements file requires a provisioning profile with the `group.com.neuroskill.skill` App Group registered in the Apple Developer portal.
+Uses `SkillWidgets.debug.entitlements` (no App Group).
+
+### GitHub CI (automatic signing)
+
+Release workflows (`release-mac.yml`, `pr-build.yml`) run after `import-apple-cert`:
+
+1. `node scripts/ci.mjs setup-widget-signing` — team ID + optional ASC API key / profile
+2. `node scripts/ci.mjs build-widgets` — automatic signing, release entitlements + App Group
+
+Required secrets (already used for notarization):
+
+| Secret | Purpose |
+|---|---|
+| `APPLE_TEAM_ID` | Development team |
+| `APPLE_SIGNING_IDENTITY` | Developer ID Application cert |
+| `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` | .p12 in keychain |
+
+Optional (recommended if automatic profile download fails):
+
+| Secret | Purpose |
+|---|---|
+| `APPLE_ASC_KEY_ID` | App Store Connect API key ID |
+| `APPLE_ASC_KEY_ISSUER_ID` | ASC issuer UUID |
+| `APPLE_ASC_KEY_BASE64` | `.p8` key (base64) |
+| `APPLE_WIDGET_PROVISIONING_PROFILE_BASE64` | Pre-built macOS profile (base64) |
+
+Register in [Apple Developer → Identifiers](https://developer.apple.com/account/resources/identifiers/list):
+
+- App Group: `group.com.neuroskill.skill`
+- App IDs: `com.neuroskill.skill`, `com.neuroskill.skill.widgets` (App Groups enabled)
+
+### Manual distribution signing
+
+```bash
+./build-widgets.sh --release --sign "Developer ID Application: …"
+```
