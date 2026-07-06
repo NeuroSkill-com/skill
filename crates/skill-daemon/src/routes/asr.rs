@@ -196,7 +196,7 @@ async fn voice_loop_turn_inner(state: &AppState, text: String) {
     let srv = match state.llm_state_cell.lock().ok().and_then(|g| g.clone()) {
         Some(s) => s,
         None => {
-            state.broadcast("asr", &json!({ "kind": "error", "message": "LLM server not running" }));
+            state.broadcast("asr", json!({ "kind": "error", "message": "LLM server not running" }));
             return;
         }
     };
@@ -274,10 +274,10 @@ async fn voice_loop_turn_inner(state: &AppState, text: String) {
             // when this daemon has no TTS backend).
             state.broadcast(
                 "asr",
-                &json!({ "kind": "assistant", "text": answer, "spoken": DAEMON_TTS }),
+                json!({ "kind": "assistant", "text": answer, "spoken": DAEMON_TTS }),
             );
         }
-        Err(e) => state.broadcast("asr", &json!({ "kind": "error", "message": format!("chat: {e:#}") })),
+        Err(e) => state.broadcast("asr", json!({ "kind": "error", "message": format!("chat: {e:#}") })),
     }
 }
 
