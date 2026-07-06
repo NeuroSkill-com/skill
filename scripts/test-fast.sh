@@ -95,6 +95,7 @@ if [[ $TIER -ge 2 ]]; then
     -p skill-router
     -p skill-autostart
     -p skill-tts
+    -p skill-asr
     -p skill-label-index
     -p skill-skills
     -p skill-commands

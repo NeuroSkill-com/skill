@@ -110,7 +110,7 @@ fn multiplier_at_max() {
 // ── model_id ─────────────────────────────────────────────────────────────────
 
 #[test]
-fn model_id_fastembed_default() {
+fn model_id_rlx_default() {
     let cfg = ScreenshotConfig::default();
     assert!(cfg.model_id().contains("nomic"));
 }

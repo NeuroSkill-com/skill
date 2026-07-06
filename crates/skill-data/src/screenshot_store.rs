@@ -346,6 +346,23 @@ impl ScreenshotStore {
         );
     }
 
+    /// Invalidate stored embeddings (vision + OCR) so the embed thread
+    /// regenerates them via the backfill. `ocr_text` is **kept** — only the
+    /// derived vectors are cleared — so the backfill re-embeds the existing OCR
+    /// text without re-running OCR (see [`rows_without_ocr_embedding`]). Source
+    /// data (filenames, images, OCR text) is untouched, so this is recoverable.
+    /// Used by the one-time embedding-scheme migration. Returns rows reset.
+    pub fn clear_embeddings(&self) -> usize {
+        let conn = self.conn.lock_or_recover();
+        conn.execute(
+            "UPDATE screenshots SET
+                embedding = NULL, embedding_dim = 0, hnsw_id = NULL,
+                ocr_embedding = NULL, ocr_embedding_dim = 0, ocr_hnsw_id = NULL",
+            [],
+        )
+        .unwrap_or(0)
+    }
+
     /// Load all embeddings from the database (for HNSW rebuild).
     pub fn all_embeddings(&self) -> Vec<(i64, Vec<f32>)> {
         let conn = self.conn.lock_or_recover();
@@ -515,6 +532,30 @@ impl ScreenshotStore {
         let Ok(mut stmt) = conn.prepare(
             "SELECT id, filename FROM screenshots
              WHERE ocr_text = '' OR ocr_text IS NULL
+             ORDER BY id",
+        ) else {
+            return vec![];
+        };
+        let Ok(rows) = stmt.query_map([], |r| {
+            Ok(EmbeddableRow {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+            })
+        }) else {
+            return vec![];
+        };
+        rows.filter_map(std::result::Result::ok).collect()
+    }
+
+    /// Rows that already have OCR text but no OCR embedding — re-embeddable
+    /// without re-running OCR. The backfill uses this so an embedding-scheme
+    /// migration (which clears vectors but keeps `ocr_text`) regenerates OCR
+    /// embeddings cheaply.
+    pub fn rows_without_ocr_embedding(&self) -> Vec<EmbeddableRow> {
+        let conn = self.conn.lock_or_recover();
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT id, filename FROM screenshots
+             WHERE ocr_text != '' AND ocr_embedding IS NULL
              ORDER BY id",
         ) else {
             return vec![];

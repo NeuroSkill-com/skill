@@ -61,6 +61,54 @@ crate::settings_struct!(
     set_neutts_config => neutts
 );
 crate::settings_bool!(get_tts_preload, set_tts_preload => tts_preload);
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct TtsEngineRequest {
+    pub(crate) engine: String,
+    #[serde(default)]
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) voice: String,
+}
+
+/// Read the persisted TTS engine selection (engine + model/voice overrides).
+pub(crate) async fn get_tts_engine(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let s = load_user_settings(&state);
+    #[cfg(feature = "voice-tts")]
+    let voices = skill_tts::engines::voices_for(&s.tts_engine);
+    #[cfg(not(feature = "voice-tts"))]
+    let voices: Vec<String> = Vec::new();
+    Json(serde_json::json!({
+        "engine": s.tts_engine,
+        "model": s.tts_model,
+        "voice": s.tts_voice,
+        "voices": voices,
+    }))
+}
+
+/// Select the TTS engine: applies it to the live `skill-tts` router and persists
+/// the choice to settings.json.
+pub(crate) async fn set_tts_engine(
+    State(state): State<AppState>,
+    Json(req): Json<TtsEngineRequest>,
+) -> Json<serde_json::Value> {
+    let engine = req.engine.trim().to_string();
+    let model = req.model.trim().to_string();
+    let voice = req.voice.trim().to_string();
+    skill_tts::set_active_engine(engine.clone(), model.clone(), voice.clone());
+    patch_settings(&state, move |s| {
+        s.tts_engine = engine;
+        s.tts_model = model;
+        s.tts_voice = voice;
+    })
+    .await;
+    #[cfg(feature = "voice-tts")]
+    tokio::spawn(async {
+        let _ = skill_tts::tts_init_with_callback(|_| {}).await;
+    });
+    Json(serde_json::json!({"ok": true}))
+}
+
 crate::settings_struct!(skill_settings::SleepConfig, get_sleep_config, set_sleep_config => sleep);
 
 pub(crate) async fn get_ws_config(State(state): State<AppState>) -> Json<serde_json::Value> {

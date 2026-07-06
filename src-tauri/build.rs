@@ -60,9 +60,8 @@ fn main() {
 // version. CI shallow checkouts work fine because the workflows already do
 // fetch-depth: 0.
 
-// `tts-kitten` is a portable feature flag, but the `kittentts` dep itself is
-// target-conditional (Windows skips it — see kittentts dep in src-tauri/Cargo.toml
-// and crates/skill-tts/Cargo.toml). Use this derived cfg in source code instead
+// `tts-kitten` is a portable feature flag, but `rlx-kittentts` in skill-tts is
+// target-conditional (Windows skips it — see skill-tts/Cargo.toml).
 // of bare `cfg(feature = "tts-kitten")` so Windows skips the kitten code path
 // even when the feature is enabled by `default`.
 fn emit_tts_kitten_cfg() {

@@ -15,8 +15,8 @@ fn make_row(ts: u64, filename: &str) -> ScreenshotRow {
         hnsw_id: None,
         embedding: None,
         embedding_dim: 0,
-        model_backend: "fastembed".into(),
-        model_id: "clip-vit-b-32".into(),
+        model_backend: "rlx".into(),
+        model_id: "nomic-ai/nomic-embed-text-v1.5".into(),
         image_size: 1920,
         quality: 80,
         app_name: "Firefox".into(),
@@ -135,7 +135,14 @@ fn update_embedding_changes_counts() {
     assert_eq!(store.count_unembedded(), 1);
     assert_eq!(store.count_embedded(), 0);
 
-    store.update_embedding(id, &[0.1, 0.2, 0.3], Some(1), "fastembed", "clip-vit-b-32", 224);
+    store.update_embedding(
+        id,
+        &[0.1, 0.2, 0.3],
+        Some(1),
+        "rlx",
+        "nomic-ai/nomic-embed-text-v1.5",
+        224,
+    );
 
     assert_eq!(store.count_unembedded(), 0);
     assert_eq!(store.count_embedded(), 1);
@@ -182,7 +189,7 @@ fn rows_needing_embed_finds_unembedded_and_stale() {
     current.embedding_dim = 1;
     store.insert(&current);
 
-    let needing = store.rows_needing_embed("fastembed", "clip-vit-b-32");
+    let needing = store.rows_needing_embed("rlx", "nomic-ai/nomic-embed-text-v1.5");
     assert_eq!(needing.len(), 2);
 }
 
@@ -477,4 +484,71 @@ fn get_timestamp_returns_correct_value() {
 
     let ts = store.get_timestamp(id).expect("timestamp");
     assert_eq!(ts, 1700000400);
+}
+
+// ── embedding-scheme migration: clear_embeddings ─────────────────────────────
+
+#[test]
+fn clear_embeddings_invalidates_vectors_but_keeps_ocr_text() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("open");
+
+    // Old-scheme row: vision embedding + OCR text + OCR embedding all present.
+    let mut row = make_row(1700000000, "a.webp");
+    row.ocr_text = "hello world".into();
+    let id = store.insert(&row).expect("insert");
+    store.update_embedding(id, &[0.1, 0.2, 0.3], Some(1), "rlx", "old-model", 224);
+    store.update_ocr(id, "hello world", Some(&[0.4, 0.5, 0.6]), Some(2));
+    assert_eq!(store.count_embedded(), 1);
+
+    // Migration clears the derived vectors.
+    let n = store.clear_embeddings();
+    assert_eq!(n, 1);
+    assert_eq!(store.count_embedded(), 0, "vision embedding should be cleared");
+
+    let eo = store.get_embedding_and_ocr(id).expect("row");
+    assert!(eo.embedding.is_none(), "vision embedding cleared");
+    assert!(eo.ocr_embedding.is_none(), "ocr embedding cleared");
+    assert_eq!(eo.ocr_text, "hello world", "OCR text preserved — no re-OCR");
+
+    // Backfill detection: needs vision re-embed + OCR re-embed, but NOT re-OCR.
+    assert!(
+        store.rows_without_embedding().iter().any(|r| r.id == id),
+        "needs vision re-embed"
+    );
+    assert!(
+        store.rows_without_ocr_embedding().iter().any(|r| r.id == id),
+        "needs OCR re-embed"
+    );
+    assert!(
+        !store.rows_without_ocr().iter().any(|r| r.id == id),
+        "must NOT need re-OCR"
+    );
+}
+
+#[test]
+fn clear_embeddings_scales_to_a_5min_chunk() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("open");
+    let n = 60usize; // ~5 min at a 5 s capture interval
+
+    for i in 0..n {
+        let mut row = make_row(1_700_000_000 + i as u64, &format!("c{i}.webp"));
+        row.ocr_text = format!("ocr text sample {i}");
+        let id = store.insert(&row).expect("insert");
+        store.update_embedding(id, &[0.1, 0.2, 0.3], Some(i as u64), "rlx", "old", 224);
+        store.update_ocr(id, &row.ocr_text, Some(&[0.4, 0.5, 0.6]), Some(i as u64));
+    }
+    assert_eq!(store.count_embedded(), n);
+
+    let cleared = store.clear_embeddings();
+    assert_eq!(cleared, n, "all rows cleared");
+    assert_eq!(store.count_embedded(), 0);
+    assert_eq!(store.rows_without_embedding().len(), n, "all need vision re-embed");
+    assert_eq!(
+        store.rows_without_ocr_embedding().len(),
+        n,
+        "all need OCR re-embed (text kept)"
+    );
+    assert!(store.rows_without_ocr().is_empty(), "none need re-OCR");
 }

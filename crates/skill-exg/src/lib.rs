@@ -22,6 +22,9 @@ pub mod neurorvq;
 #[cfg(feature = "eegdino-rlx")]
 pub mod eegdino;
 
+#[cfg(feature = "lumamba-rlx")]
+pub mod lumamba;
+
 // ── Cosine distance ───────────────────────────────────────────────────────────
 
 /// Cosine distance between two `f32` vectors (0 = identical, 2 = opposite).
@@ -212,6 +215,27 @@ pub fn probe_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
 /// Find LUNA weights in the HuggingFace disk cache for the given `hf_repo`
 /// and `weights_file` (e.g. `LUNA_base.safetensors`).
 pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
+    resolve_exg_weights(hf_repo, weights_file, LUNA_CONFIG_FILE)
+}
+
+/// Find LuMamba weights + `config.json` in the HuggingFace disk cache for the
+/// given `hf_repo` and `weights_file` (e.g. `LuMamba_ReconstructionOnly.safetensors`).
+pub fn resolve_lumamba_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
+    resolve_exg_weights(hf_repo, weights_file, skill_constants::LUMAMBA_CONFIG_FILE)
+}
+
+/// Default HuggingFace repo for Brain-JEPA weights.
+pub const BRAINJEPA_HF_REPO: &str = "eugenehp/BrainJEPA";
+pub const BRAINJEPA_WEIGHTS_FILE: &str = "brainjepa.safetensors";
+pub const BRAINJEPA_GRADIENT_FILE: &str = "gradient_mapping_450.csv";
+
+/// Find Brain-JEPA weights + gradient CSV in the HuggingFace disk cache.
+pub fn resolve_brainjepa_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
+    resolve_exg_weights(hf_repo, BRAINJEPA_WEIGHTS_FILE, BRAINJEPA_GRADIENT_FILE)
+}
+
+/// Find EXG model weights + config in the HuggingFace disk cache.
+pub fn resolve_exg_weights(hf_repo: &str, weights_file: &str, config_file: &str) -> Option<(PathBuf, PathBuf)> {
     let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
     let mut dirs: Vec<_> = std::fs::read_dir(&snaps)
         .ok()?
@@ -225,9 +249,31 @@ pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBu
     });
     for snap in dirs.into_iter().rev() {
         let w = snap.path().join(weights_file);
-        let c = snap.path().join(LUNA_CONFIG_FILE);
+        let c = snap.path().join(config_file);
         if validate_or_remove(&w) && c.exists() {
             return Some((w, c));
+        }
+    }
+    None
+}
+
+/// Find a single file in the HuggingFace disk cache for `hf_repo`.
+pub fn resolve_hf_file(hf_repo: &str, filename: &str) -> Option<PathBuf> {
+    let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
+    let mut dirs: Vec<_> = std::fs::read_dir(&snaps)
+        .ok()?
+        .filter_map(std::result::Result::ok)
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .collect();
+    dirs.sort_by_key(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH)
+    });
+    for snap in dirs.into_iter().rev() {
+        let path = snap.path().join(filename);
+        if path.exists() {
+            return Some(path);
         }
     }
     None

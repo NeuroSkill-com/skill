@@ -6,26 +6,15 @@
 
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
-import { arch, platform } from "node:os";
+import { platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { detectHostTriple, resolveEnvTargets, resolveTargetTriple } from "./lib/target-triples.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const targetDir = resolve(root, "src-tauri", "target");
 const binDir = resolve(root, "src-tauri", "binaries");
-
-function detectTargetTriple() {
-  const p = platform();
-  const a = arch();
-  if (p === "darwin" && a === "arm64") return "aarch64-apple-darwin";
-  if (p === "darwin" && a === "x64") return "x86_64-apple-darwin";
-  if (p === "linux" && a === "x64") return "x86_64-unknown-linux-gnu";
-  if (p === "linux" && a === "arm64") return "aarch64-unknown-linux-gnu";
-  if (p === "win32" && a === "x64") return "x86_64-pc-windows-msvc";
-  if (p === "win32" && a === "arm64") return "aarch64-pc-windows-msvc";
-  return "";
-}
 
 function runOrThrow(cmd, args) {
   const result = spawnSync(cmd, args, {
@@ -39,7 +28,14 @@ function runOrThrow(cmd, args) {
   }
 }
 
-const triple = process.env.SKILL_DAEMON_TARGET || detectTargetTriple();
+resolveEnvTargets(process.env);
+
+const rawTriple = process.env.SKILL_DAEMON_TARGET || detectHostTriple();
+const resolved = resolveTargetTriple(rawTriple || undefined);
+const triple = resolved.triple;
+if (resolved.profile !== "default") {
+  process.env.SKILL_MAC_PROFILE = resolved.profile;
+}
 const ext = triple.includes("windows") ? ".exe" : "";
 const tripleLabel = triple || "native";
 const isWindows = triple.includes("windows") || platform() === "win32";

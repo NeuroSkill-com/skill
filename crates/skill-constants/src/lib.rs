@@ -18,6 +18,15 @@
 #[macro_use]
 pub mod log_macros;
 
+pub mod target;
+
+pub use target::{
+    apple_mac_profile_from_hw_model, detect_apple_mac_profile, effective_apple_mac_profile, read_hw_model,
+    AppleMacProfile, AARCH64_APPLE_DARWIN, AARCH64_PC_WINDOWS_MSVC, AARCH64_UNKNOWN_LINUX_GNU,
+    SUPPORTED_TARGET_TRIPLES, UNIVERSAL_APPLE_DARWIN, X86_64_APPLE_DARWIN, X86_64_PC_WINDOWS_MSVC,
+    X86_64_UNKNOWN_LINUX_GNU,
+};
+
 // ── Poison-recovering Mutex helper ────────────────────────────────────────────
 
 /// Extension trait for `std::sync::Mutex` that recovers from poison.
@@ -119,6 +128,10 @@ pub mod prelude {
         LLM_LOG_CAP,
         LLM_LOG_DIR,
         LOG_CONFIG_FILE,
+        LUMAMBA_CONFIG_FILE,
+        LUMAMBA_DEFAULT_VARIANT,
+        LUMAMBA_HF_REPO,
+        LUMAMBA_VARIANTS,
         LUNA_CONFIG_FILE,
         LUNA_DEFAULT_VARIANT,
         LUNA_HF_REPO,
@@ -530,6 +543,33 @@ pub const EEGDINO_VARIANTS: [(&str, &str); 3] = [
 /// Default EEG-DINO model variant.
 pub const EEGDINO_DEFAULT_VARIANT: &str = "small";
 
+/// HuggingFace repository identifier for the LuMamba EEG foundation model.
+pub const LUMAMBA_HF_REPO: &str = "PulpBio/LuMamba";
+
+/// Config filename within the LuMamba HF repo snapshot.
+pub const LUMAMBA_CONFIG_FILE: &str = "config.json";
+
+/// Available LuMamba checkpoint variants: `(variant_name, weights_filename)`.
+///
+/// All four released checkpoints share the same 4.1M-parameter "tiny"
+/// architecture (embed_dim 64 × 6 queries → 384-dim embedding); they differ
+/// only in the pre-training objective.
+pub const LUMAMBA_VARIANTS: [(&str, &str); 4] = [
+    ("recon", "LuMamba_ReconstructionOnly.safetensors"),
+    (
+        "lejepa-recon-128",
+        "LuMamba_LeJEPA_reconstruction_128slices.safetensors",
+    ),
+    (
+        "lejepa-recon-300",
+        "LuMamba_LeJEPA_reconstruction_300slices.safetensors",
+    ),
+    ("lejepa-128", "LuMamba_LeJEPAOnly_128slices.safetensors"),
+];
+
+/// Default LuMamba checkpoint variant.
+pub const LUMAMBA_DEFAULT_VARIANT: &str = "recon";
+
 /// Per-variant LUNA model hyperparameters: `(variant, embed_dim, num_queries, depth, num_heads)`.
 ///
 /// These override the generic `config.json` defaults so that each checkpoint
@@ -585,16 +625,23 @@ pub const SCREENSHOT_HNSW_SAVE_EVERY: usize = 10;
 pub const SCREENSHOTS_OCR_HNSW: &str = "screenshots_ocr.hnsw";
 
 /// URL for the ocrs text-detection model (~10 MB).
-pub const OCR_DETECTION_MODEL_URL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten";
+///
+/// NOTE: this must be the `robertknight/ocrs` HF checkpoint, NOT the
+/// `ocrs-models` S3 bucket export. rlx-ocr's RLX graph builder expects the
+/// HF checkpoint's clean weight names; the S3 export uses raw ONNX names
+/// (`onnx::Conv_*`) which fail to map (`missing weight onnx::Conv_470`).
+pub const OCR_DETECTION_MODEL_URL: &str =
+    "https://huggingface.co/robertknight/ocrs/resolve/main/text-detection-ssfbcj81.rten";
 
-/// URL for the ocrs text-recognition model (~10 MB).
-pub const OCR_RECOGNITION_MODEL_URL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
+/// URL for the ocrs text-recognition model (~10 MB). See the detection note.
+pub const OCR_RECOGNITION_MODEL_URL: &str =
+    "https://huggingface.co/robertknight/ocrs/resolve/main/text-rec-checkpoint-s52qdbqt.rten";
 
 /// Filename for the cached OCR detection model.
-pub const OCR_DETECTION_MODEL_FILE: &str = "text-detection.rten";
+pub const OCR_DETECTION_MODEL_FILE: &str = "text-detection-ssfbcj81.rten";
 
 /// Filename for the cached OCR recognition model.
-pub const OCR_RECOGNITION_MODEL_FILE: &str = "text-recognition.rten";
+pub const OCR_RECOGNITION_MODEL_FILE: &str = "text-rec-checkpoint-s52qdbqt.rten";
 
 // ── Label index files ─────────────────────────────────────────────────────────
 
@@ -645,11 +692,44 @@ pub const TTS_TAIL_SILENCE_SECS: f32 = 0.25;
 /// HuggingFace repository for the KittenTTS model.
 pub const KITTEN_TTS_HF_REPO: &str = "KittenML/kitten-tts-mini-0.8";
 
+/// HuggingFace repository for the RLX-native KittenTTS bundle.
+/// Voices + config still come from [`KITTEN_TTS_HF_REPO`]; this repo supplies the
+/// decomposed RLX graph used by `rlx-kittentts` without ONNX Runtime.
+pub const KITTEN_TTS_RLX_HF_REPO: &str = "eugenehp/kitten-tts-mini-0.8-rlx";
+
+/// Files fetched from [`KITTEN_TTS_RLX_HF_REPO`] and copied into `<snapshot>/rlx_bundle/`.
+pub const KITTEN_TTS_RLX_BUNDLE_FILES: [&str; 3] = ["graph.json", "manifest.json", "weights.safetensors"];
+
 /// Default KittenTTS voice name.
 pub const KITTEN_TTS_VOICE_DEFAULT: &str = "Jasper";
 
 /// Default KittenTTS speech speed multiplier.
 pub const KITTEN_TTS_SPEED: f32 = 1.0;
+
+/// Default selected TTS engine. `"kitten"` / `"neutts"` use the legacy backends;
+/// `"qwen3-tts"` (and future engines) route through the `skill-tts` engine
+/// abstraction (`tts-engines` feature).
+pub const TTS_ENGINE_DEFAULT: &str = "kitten";
+
+/// HuggingFace repository for the Qwen3-TTS model (daemon voice-output engine).
+/// 0.6B custom-voice checkpoint at 12 Hz; small, fast, F32 on Metal/CPU.
+pub const QWEN3_TTS_HF_REPO: &str = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice";
+
+/// Default Qwen3-TTS preset speaker (one of `PRESET_SPEAKERS`).
+pub const QWEN3_TTS_VOICE_DEFAULT: &str = "vivian";
+
+/// Default Orpheus built-in voice prefix (one of `rlx_orpheus::VOICES`).
+pub const ORPHEUS_VOICE_DEFAULT: &str = "tara";
+
+/// Output sample rate (Hz) of the Qwen3-TTS codec.
+pub const QWEN3_TTS_SAMPLE_RATE: u32 = 24_000;
+
+// ── ASR (voice input) ──────────────────────────────────────────────────────────
+
+/// HuggingFace repository for the Whisper ASR model used by the voice chat mode.
+/// `base.en` is a good speed/quality balance for English dictation; the daemon
+/// downloads `model.safetensors` + `config.json` + `tokenizer.json` on first use.
+pub const WHISPER_ASR_HF_REPO: &str = "openai/whisper-base.en";
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 

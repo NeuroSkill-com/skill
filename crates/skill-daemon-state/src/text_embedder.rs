@@ -1,40 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Shared text embedder (fastembed by default, optional RLX backend).
+//! Shared text embedder backed by `rlx-embed` (the RLX runtime).
 //!
-//! A single `TextEmbedding` instance is created at daemon startup and shared
-//! across labels, hooks, screenshot OCR, and screenshot search.  This avoids
-//! loading the ~130 MB ONNX model multiple times.
+//! A single embedder instance is created lazily and shared across labels,
+//! hooks, screenshot OCR, and screenshot search. This avoids loading the
+//! model weights multiple times.
 
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Once};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextEmbeddingBackend {
-    FastEmbed,
-    Rlx,
-}
-
-impl TextEmbeddingBackend {
-    pub fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "fastembed" | "fast-embed" | "ort" | "onnx" => Some(Self::FastEmbed),
-            "rlx" => Some(Self::Rlx),
-            _ => None,
-        }
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::FastEmbed => "fastembed",
-            Self::Rlx => "rlx",
-        }
-    }
-}
-
 enum LoadedTextEmbedder {
-    #[cfg(feature = "text-embeddings-fastembed")]
-    FastEmbed(fastembed::TextEmbedding),
     #[cfg(feature = "text-embeddings-rlx")]
     Rlx(Box<RlxTextEmbedding>),
     /// Compiled without any embedding backend — every embed call returns None.
@@ -45,14 +20,13 @@ enum LoadedTextEmbedder {
 
 /// Shared, cheaply-cloneable handle to the text embedder.
 ///
-/// The ONNX model is loaded **lazily** on first use (not at daemon
-/// startup) so the GPU isn't hammered during init.
+/// The model is loaded **lazily** on first use (not at daemon startup) so the
+/// GPU isn't hammered during init.
 #[derive(Clone)]
 pub struct SharedTextEmbedder {
     inner: Arc<Mutex<Option<LoadedTextEmbedder>>>,
     init: Arc<Once>,
     model_code: Arc<Mutex<String>>,
-    backend: Arc<Mutex<TextEmbeddingBackend>>,
     rlx_device: Arc<Mutex<String>>,
     rlx_max_seq: Arc<Mutex<usize>>,
 }
@@ -70,7 +44,6 @@ impl SharedTextEmbedder {
             inner: Arc::new(Mutex::new(None)),
             init: Arc::new(Once::new()),
             model_code: Arc::new(Mutex::new("nomic-ai/nomic-embed-text-v1.5".into())),
-            backend: Arc::new(Mutex::new(TextEmbeddingBackend::FastEmbed)),
             rlx_device: Arc::new(Mutex::new(default_rlx_device())),
             rlx_max_seq: Arc::new(Mutex::new(512)),
         }
@@ -94,19 +67,6 @@ impl SharedTextEmbedder {
     /// Get the current model code.
     pub fn model_code(&self) -> String {
         self.model_code.lock().map(|g| g.clone()).unwrap_or_default()
-    }
-
-    pub fn set_backend(&self, backend: TextEmbeddingBackend) {
-        if let Ok(mut guard) = self.backend.lock() {
-            *guard = backend;
-        }
-    }
-
-    pub fn backend(&self) -> TextEmbeddingBackend {
-        self.backend
-            .lock()
-            .map(|g| *g)
-            .unwrap_or(TextEmbeddingBackend::FastEmbed)
     }
 
     pub fn set_rlx_device(&self, device: &str) {
@@ -136,15 +96,11 @@ impl SharedTextEmbedder {
     /// Blocks while loading weights. Returns false for unknown model codes.
     pub fn reload(&self) -> bool {
         let code = self.model_code();
-        let loaded = load_embedder(&code, self.backend(), &self.rlx_device(), self.rlx_max_seq(), true);
+        let loaded = load_rlx_embedder(&code, &self.rlx_device(), self.rlx_max_seq());
         let ok = loaded.is_ok();
         match &loaded {
-            Ok(_) => eprintln!("[text-embedder] {} loaded via {}", code, self.backend().as_str()),
-            Err(e) => eprintln!(
-                "[text-embedder] failed to load {} via {}: {e:#}",
-                code,
-                self.backend().as_str()
-            ),
+            Ok(_) => eprintln!("[text-embedder] {code} loaded via rlx"),
+            Err(e) => eprintln!("[text-embedder] failed to load {code} via rlx: {e:#}"),
         }
         if let Ok(mut guard) = self.inner.lock() {
             *guard = loaded.ok();
@@ -156,21 +112,19 @@ impl SharedTextEmbedder {
     fn ensure_loaded(&self) {
         let inner = self.inner.clone();
         let model_code = self.model_code.clone();
-        let backend = self.backend.clone();
         let rlx_device = self.rlx_device.clone();
         let rlx_max_seq = self.rlx_max_seq.clone();
         self.init.call_once(move || {
             let code = model_code.lock().map(|g| g.clone()).unwrap_or_default();
-            let backend = backend.lock().map(|g| *g).unwrap_or(TextEmbeddingBackend::FastEmbed);
             let rlx_device = rlx_device
                 .lock()
                 .map(|g| g.clone())
                 .unwrap_or_else(|_| default_rlx_device());
             let rlx_max_seq = rlx_max_seq.lock().map(|g| *g).unwrap_or(512);
-            let loaded = load_embedder(&code, backend, &rlx_device, rlx_max_seq, false);
+            let loaded = load_rlx_embedder(&code, &rlx_device, rlx_max_seq);
             match &loaded {
-                Ok(_) => eprintln!("[text-embedder] {code} loaded via {}", backend.as_str()),
-                Err(e) => eprintln!("[text-embedder] failed to load {code} via {}: {e:#}", backend.as_str()),
+                Ok(_) => eprintln!("[text-embedder] {code} loaded via rlx"),
+                Err(e) => eprintln!("[text-embedder] failed to load {code} via rlx: {e:#}"),
             }
             if let Ok(mut guard) = inner.lock() {
                 *guard = loaded.ok();
@@ -199,9 +153,57 @@ impl SharedTextEmbedder {
         let model = guard.as_mut()?;
         embed_with_loaded(model, texts).ok()
     }
+
+    /// Whether the active model expects nomic task-instruction prefixes
+    /// (`search_query:` / `search_document:`). nomic-embed-text-v1.5 is trained
+    /// with these and produces materially better retrieval when they're used.
+    pub fn needs_task_prefix(&self) -> bool {
+        self.model_code().to_ascii_lowercase().contains("nomic")
+    }
+
+    fn with_prefix(&self, text: &str, task: &str) -> String {
+        if self.needs_task_prefix() {
+            format!("{task}: {text}")
+        } else {
+            text.to_string()
+        }
+    }
+
+    /// Embed a search **query** (prepends `search_query:` for nomic models).
+    /// Use this for the text the user is searching *with*.
+    pub fn embed_query(&self, text: &str) -> Option<Vec<f32>> {
+        self.embed(&self.with_prefix(text, "search_query"))
+    }
+
+    /// Embed an indexed **document** (prepends `search_document:` for nomic
+    /// models). Use this for text being stored/indexed for later retrieval.
+    pub fn embed_document(&self, text: &str) -> Option<Vec<f32>> {
+        self.embed(&self.with_prefix(text, "search_document"))
+    }
+
+    /// Batch variant of [`embed_document`].
+    pub fn embed_documents(&self, texts: Vec<&str>) -> Option<Vec<Vec<f32>>> {
+        self.embed_batch_prefixed(texts, "search_document")
+    }
+
+    /// Batch variant of [`embed_query`].
+    pub fn embed_queries(&self, texts: Vec<&str>) -> Option<Vec<Vec<f32>>> {
+        self.embed_batch_prefixed(texts, "search_query")
+    }
+
+    fn embed_batch_prefixed(&self, texts: Vec<&str>, task: &str) -> Option<Vec<Vec<f32>>> {
+        if self.needs_task_prefix() {
+            let prefixed: Vec<String> = texts.iter().map(|t| format!("{task}: {t}")).collect();
+            self.embed_batch(prefixed.iter().map(String::as_str).collect())
+        } else {
+            self.embed_batch(texts)
+        }
+    }
 }
 
 fn default_rlx_device() -> String {
+    // Apple Silicon: Metal is the fastest backend for these models — benchmarked
+    // ~1144 docs/s (nomic-text) vs MLX ~833 and CPU ~296. See bench_text_embeddings.
     if cfg!(target_os = "macos") {
         "metal".into()
     } else {
@@ -209,51 +211,12 @@ fn default_rlx_device() -> String {
     }
 }
 
-fn load_embedder(
-    code: &str,
-    backend: TextEmbeddingBackend,
-    rlx_device: &str,
-    rlx_max_seq: usize,
-    show_progress: bool,
-) -> Result<LoadedTextEmbedder> {
-    match backend {
-        TextEmbeddingBackend::FastEmbed => load_fastembed(code, show_progress),
-        TextEmbeddingBackend::Rlx => load_rlx_embedder(code, rlx_device, rlx_max_seq),
-    }
-}
-
-#[cfg(feature = "text-embeddings-fastembed")]
-fn load_fastembed(code: &str, show_progress: bool) -> Result<LoadedTextEmbedder> {
-    let Some(fe_model) = model_code_to_fastembed(code) else {
-        return Err(anyhow!("unknown fastembed model code: {code}"));
-    };
-    let cache_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".cache")
-        .join("fastembed");
-    let model = fastembed::TextEmbedding::try_new(
-        fastembed::InitOptions::new(fe_model)
-            .with_cache_dir(cache_dir)
-            .with_show_download_progress(show_progress),
-    )?;
-    Ok(LoadedTextEmbedder::FastEmbed(model))
-}
-
-#[cfg(not(feature = "text-embeddings-fastembed"))]
-fn load_fastembed(_code: &str, _show_progress: bool) -> Result<LoadedTextEmbedder> {
-    Err(anyhow!(
-        "FastEmbed backend requested but this build lacks the text-embeddings-fastembed feature"
-    ))
-}
-
 fn embed_with_loaded(model: &mut LoadedTextEmbedder, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
     match model {
-        #[cfg(feature = "text-embeddings-fastembed")]
-        LoadedTextEmbedder::FastEmbed(model) => Ok(model.embed(texts, None)?),
         #[cfg(feature = "text-embeddings-rlx")]
         LoadedTextEmbedder::Rlx(model) => model.embed(texts),
         LoadedTextEmbedder::None => Err(anyhow!(
-            "no text-embedding backend compiled in (enable text-embeddings-fastembed or text-embeddings-rlx)"
+            "no text-embedding backend compiled in (enable text-embeddings-rlx)"
         )),
     }
 }
@@ -515,32 +478,24 @@ fn l2_normalize(v: &mut [f32]) {
     }
 }
 
-/// Map a model code string to the fastembed enum variant.
-/// Returns `None` for unrecognized model codes.
-#[cfg(feature = "text-embeddings-fastembed")]
-pub fn model_code_to_fastembed(code: &str) -> Option<fastembed::EmbeddingModel> {
-    Some(match code {
-        "nomic-ai/nomic-embed-text-v1" => fastembed::EmbeddingModel::NomicEmbedTextV1,
-        "nomic-ai/nomic-embed-text-v1.5" => fastembed::EmbeddingModel::NomicEmbedTextV15,
-        "nomic-ai/nomic-embed-text-v1.5-Q" => fastembed::EmbeddingModel::NomicEmbedTextV15Q,
-        "BAAI/bge-small-en-v1.5" => fastembed::EmbeddingModel::BGESmallENV15,
-        "BAAI/bge-small-en-v1.5-Q" => fastembed::EmbeddingModel::BGESmallENV15Q,
-        "BAAI/bge-base-en-v1.5" => fastembed::EmbeddingModel::BGEBaseENV15,
-        "BAAI/bge-base-en-v1.5-Q" => fastembed::EmbeddingModel::BGEBaseENV15Q,
-        "BAAI/bge-large-en-v1.5" => fastembed::EmbeddingModel::BGELargeENV15,
-        "BAAI/bge-large-en-v1.5-Q" => fastembed::EmbeddingModel::BGELargeENV15Q,
-        "BAAI/bge-m3" => fastembed::EmbeddingModel::BGEM3,
-        "sentence-transformers/all-MiniLM-L6-v2" => fastembed::EmbeddingModel::AllMiniLML6V2,
-        "sentence-transformers/all-MiniLM-L12-v2" => fastembed::EmbeddingModel::AllMiniLML12V2,
-        "sentence-transformers/all-mpnet-base-v2" => fastembed::EmbeddingModel::AllMpnetBaseV2,
-        "sentence-transformers/paraphrase-MiniLM-L12-v2" => fastembed::EmbeddingModel::ParaphraseMLMiniLML12V2,
-        "intfloat/multilingual-e5-small" => fastembed::EmbeddingModel::MultilingualE5Small,
-        "intfloat/multilingual-e5-base" => fastembed::EmbeddingModel::MultilingualE5Base,
-        "intfloat/multilingual-e5-large" => fastembed::EmbeddingModel::MultilingualE5Large,
-        "mixedbread-ai/mxbai-embed-large-v1" => fastembed::EmbeddingModel::MxbaiEmbedLargeV1,
-        "Alibaba-NLP/gte-base-en-v1.5" => fastembed::EmbeddingModel::GTEBaseENV15,
-        // Also handle the Xenova/ prefix used in older settings
-        "Xenova/bge-small-en-v1.5" => fastembed::EmbeddingModel::BGESmallENV15,
-        _ => return None,
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nomic_models_get_task_prefixes() {
+        let te = SharedTextEmbedder::new();
+        te.set_model_code("nomic-ai/nomic-embed-text-v1.5");
+        assert!(te.needs_task_prefix());
+        assert_eq!(te.with_prefix("hello", "search_query"), "search_query: hello");
+        assert_eq!(te.with_prefix("a doc", "search_document"), "search_document: a doc");
+    }
+
+    #[test]
+    fn non_nomic_models_get_no_prefix() {
+        let te = SharedTextEmbedder::new();
+        te.set_model_code("BAAI/bge-small-en-v1.5");
+        assert!(!te.needs_task_prefix());
+        assert_eq!(te.with_prefix("hello", "search_query"), "hello");
+    }
 }

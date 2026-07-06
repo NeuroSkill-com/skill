@@ -50,6 +50,8 @@ interface ExgModelConfig {
   luna_hf_repo: string;
   eegdino_variant: string;
   eegdino_hf_repo: string;
+  lumamba_variant: string;
+  lumamba_hf_repo: string;
 }
 interface EegModelStatus {
   encoder_loaded: boolean;
@@ -85,7 +87,9 @@ function familyToBackend(id: string): string {
   if (id === "zuna") return "zuna";
   if (id.startsWith("luna-")) return "luna";
   if (id.startsWith("eegdino-")) return "eegdino";
+  if (id.startsWith("lumamba-")) return "lumamba";
   if (id === "reve-base" || id === "reve-large") return "reve";
+  if (id === "brainjepa") return "brainjepa";
   if (id === "cbramod") return "cbramod";
   if (id === "eegpt") return "eegpt";
   if (id === "labram") return "labram";
@@ -110,6 +114,10 @@ const activeFamilyId = $derived.by(() => {
   if (backend === "eegdino") {
     const variant = modelConfig.eegdino_variant;
     return `eegdino-${variant}`;
+  }
+  if (backend === "lumamba") {
+    const variant = modelConfig.lumamba_variant;
+    return `lumamba-${variant}`;
   }
   if (backend === "zuna") return "zuna";
   // For other backends find matching family by backend name
@@ -176,6 +184,13 @@ async function selectModel() {
       eegdino_variant: variant,
       eegdino_hf_repo: selectedFamily.repo,
     });
+  } else if (backend === "lumamba") {
+    const variant = id.replace("lumamba-", "");
+    await onSaveConfig({
+      model_backend: "lumamba",
+      lumamba_variant: variant,
+      lumamba_hf_repo: selectedFamily.repo,
+    });
   } else {
     await onSaveConfig({
       model_backend: backend,
@@ -202,6 +217,13 @@ async function pickLocalWeights() {
       model_backend: "eegdino",
       eegdino_variant: variant,
       eegdino_hf_repo: `local:${file}`,
+    });
+  } else if (backend === "lumamba") {
+    const variant = selectedFamilyId.replace("lumamba-", "");
+    await onSaveConfig({
+      model_backend: "lumamba",
+      lumamba_variant: variant,
+      lumamba_hf_repo: `local:${file}`,
     });
   } else {
     await onSaveConfig({

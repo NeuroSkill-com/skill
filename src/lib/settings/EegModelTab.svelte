@@ -30,6 +30,8 @@ interface ExgModelConfig {
   luna_hf_repo: string;
   eegdino_variant: string;
   eegdino_hf_repo: string;
+  lumamba_variant: string;
+  lumamba_hf_repo: string;
 }
 interface EegModelStatus {
   encoder_loaded: boolean;
@@ -96,6 +98,8 @@ let modelConfig = $state<ExgModelConfig>({
   luna_hf_repo: "PulpBio/LUNA",
   eegdino_variant: "small",
   eegdino_hf_repo: "eugenehp/eegdino",
+  lumamba_variant: "recon",
+  lumamba_hf_repo: "PulpBio/LuMamba",
 });
 let modelStatus = $state<EegModelStatus>({
   encoder_loaded: false,

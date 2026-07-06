@@ -14,6 +14,8 @@ import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
+import LlmAsrSection from "$lib/llm/LlmAsrSection.svelte";
+import LlmTtsSection from "$lib/llm/LlmTtsSection.svelte";
 import LlmHfSearchSection from "$lib/llm/LlmHfSearchSection.svelte";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
@@ -456,6 +458,16 @@ onDestroy(() => {
   onToggleOffloadKqv={async () => { config = { ...config, offload_kqv: !config.offload_kqv }; await saveConfig(); }}
   onSetRuntime={async (val) => { config = { ...config, runtime: val }; await saveConfig(); }}
 />
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Voice input (ASR + VAD) defaults                                            -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<LlmAsrSection />
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Voice output (TTS) engine                                                   -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<LlmTtsSection />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Server log                                                                  -->

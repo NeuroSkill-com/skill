@@ -1,0 +1,164 @@
+[package]
+name = "eegdino"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.87"
+description = "EEG-DINO Foundation Model — inference in Rust with RLX"
+keywords      = ["eeg", "foundation-model", "BCI", "GPU", "deep-learning"]
+categories    = ["science", "algorithms"]
+authors       = ["Eugene Hauptmann"]
+license       = "MIT"
+readme        = "README.md"
+repository    = "https://github.com/eugenehp/eegdino-rs"
+homepage      = "https://github.com/eugenehp/eegdino-rs"
+documentation = "https://docs.rs/eegdino"
+
+exclude = [
+    "weights/*",
+    "tests/*",
+    "scripts/*",
+    "examples/*",
+    "ABLATION.md",
+]
+
+[lib]
+name = "eegdino_rs"
+path = "src/lib.rs"
+
+[[example]]
+name = "infer"
+path = "examples/infer.rs"
+required-features = ["rlx"]
+
+[[example]]
+name = "bench"
+path = "examples/bench.rs"
+required-features = ["rlx"]
+
+[[example]]
+name = "parity_check"
+path = "examples/parity_check.rs"
+required-features = ["rlx"]
+
+[[example]]
+name = "backend_compare"
+path = "examples/backend_compare.rs"
+required-features = ["rlx", "rlx-cpu"]
+
+[[example]]
+name = "debug_parity"
+path = "examples/debug_parity.rs"
+required-features = ["rlx", "rlx-cpu"]
+
+[[example]]
+name = "profile_encoder"
+path = "examples/profile_encoder.rs"
+required-features = ["rlx", "rlx-cpu"]
+
+[[test]]
+name = "parity_rlx_backends"
+path = "tests/parity_rlx_backends.rs"
+required-features = ["rlx", "rlx-cpu"]
+
+[[test]]
+name = "profile_taps"
+path = "tests/profile_taps.rs"
+required-features = ["rlx", "rlx-cpu"]
+
+[[test]]
+name = "wgpu_bisect"
+path = "tests/wgpu_bisect.rs"
+required-features = ["rlx", "rlx-cpu", "rlx-gpu"]
+
+[[test]]
+name = "wgpu_broadcast_add"
+path = "tests/wgpu_broadcast_add.rs"
+required-features = ["rlx", "rlx-cpu", "rlx-gpu"]
+
+[[test]]
+name = "cuda_broadcast_add"
+path = "tests/cuda_broadcast_add.rs"
+required-features = ["rlx", "rlx-cpu", "rlx-cuda"]
+
+[[test]]
+name = "cuda_gelu_eeg"
+path = "tests/cuda_gelu_eeg.rs"
+required-features = ["rlx", "rlx-cpu", "rlx-cuda"]
+
+[[test]]
+name = "cuda_bisect"
+path = "tests/cuda_bisect.rs"
+required-features = ["rlx", "rlx-cpu"]
+
+[[test]]
+name = "parity_rlx_vs_burn"
+path = "tests/parity_rlx_vs_burn.rs"
+required-features = ["burn", "rlx", "ndarray", "rlx-cpu"]
+
+[features]
+default = ["rlx", "rlx-cpu", "rlx-blas-accelerate"]
+
+# ── Inference engines ──────────────────────────────────────────────────────
+rlx  = ["dep:rlx"]
+burn = ["dep:burn"]
+
+# Optional Burn reference backend (parity / legacy examples).
+ndarray         = ["burn", "dep:burn-ndarray", "burn/ndarray"]
+blas-accelerate = ["burn", "ndarray", "burn-ndarray?/blas-accelerate"]
+openblas-system = ["burn", "ndarray", "burn-ndarray?/blas-openblas"]
+wgpu            = ["burn", "burn/wgpu"]
+wgpu-f16        = ["wgpu"]
+
+# ── RLX backends (forwarded to rlx) ────────────────────────────────────────
+rlx-cpu             = ["rlx", "rlx/cpu"]
+rlx-blas-accelerate = ["rlx", "rlx-cpu", "rlx/blas-accelerate"]
+rlx-blas-mkl        = ["rlx", "rlx-cpu", "rlx/blas-mkl"]
+rlx-blas-openblas   = ["rlx", "rlx-cpu", "rlx/blas-openblas"]
+rlx-metal           = ["rlx", "rlx-cpu", "rlx/metal"]
+rlx-mlx             = ["rlx", "rlx-cpu", "rlx/mlx"]
+rlx-gpu             = ["rlx", "rlx-cpu", "rlx/gpu"]
+rlx-cuda            = ["rlx", "rlx-cpu", "rlx/cuda"]
+rlx-rocm            = ["rlx", "rlx-cpu", "rlx/rocm"]
+rlx-tpu             = ["rlx", "rlx-cpu", "rlx/tpu"]
+
+# All RLX backends used by EEG-DINO (CPU + Metal + MLX + wgpu).
+all-backends = [
+    "rlx-cpu",
+    "rlx-blas-accelerate",
+    "rlx-metal",
+    "rlx-mlx",
+    "rlx-gpu",
+]
+
+# Shorthand aliases
+cpu   = ["rlx-cpu"]
+metal = ["rlx-metal"]
+mlx   = ["rlx-mlx"]
+gpu   = ["rlx-gpu"]
+cuda  = ["rlx-cuda"]
+rocm  = ["rlx-rocm"]
+tpu   = ["rlx-tpu"]
+
+[dependencies]
+rlx = { path = "../rlx/rlx", version = "0.2.5", default-features = false, optional = true }
+burn = { version = "0.20.1", default-features = false, features = ["std", "simd"], optional = true }
+burn-ndarray = { version = "0.20.1", default-features = false, features = ["std", "simd", "multi-threads"], optional = true }
+
+safetensors = "0.7"
+half = "2"
+rustfft = "6"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+[dev-dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -1,0 +1,52 @@
+[package]
+name = "skill-asr"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "ASR + VAD voice-input engine for NeuroSkill — rlx-whisper (ASR) + rlx-vad (Silero) + cpal mic capture"
+build = "build.rs"
+
+[features]
+default = []
+# `asr` wires up the real engine: Whisper ASR (rlx-whisper), streaming Silero VAD
+# (rlx-vad) and cpal microphone capture. Mirrors skill-tts's `tts-kitten`: the
+# optional rlx deps are non-Windows only, so build.rs emits `asr_active` only when
+# the feature is on AND the target ships those deps. Windows builds keep the
+# feature (UX parity) but compile the no-op stubs.
+asr = ["dep:cpal", "dep:hf-hub", "dep:rlx-whisper", "dep:rlx-vad", "dep:rlx-runtime", "dep:rlx-qwen3-asr", "dep:rlx-voxtral"]
+# Route GPU-capable engines through Metal on Apple Silicon (Whisper encoder;
+# Qwen3-ASR / Voxtral F32 encoder+decoder). Inert unless `asr` is also on.
+asr-metal = ["asr", "rlx-whisper?/metal", "rlx-vad?/metal", "rlx-runtime?/metal", "rlx-qwen3-asr?/metal", "rlx-voxtral?/metal"]
+
+[dependencies]
+anyhow          = { workspace = true }
+skill-constants = { path = "../skill-constants" }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs       = "6"
+hf-hub     = { version = "0.5", optional = true }
+
+# cpal works on every desktop target (CoreAudio / WASAPI / ALSA); the rlx model
+# crates are gated to non-Windows below to match skill-tts.
+cpal = { version = "0.17", optional = true }
+
+# macOS: compile the Metal backend in so the Whisper encoder runs on the GPU by
+# default (the runner picks Metal at runtime via `is_available`; decoder stays
+# CPU per rlx-whisper routing). `SKILL_ASR_DEVICE=cpu` overrides at runtime.
+[target.'cfg(target_os = "macos")'.dependencies]
+rlx-whisper   = { workspace = true, features = ["tokenizer", "metal"], optional = true }
+rlx-vad       = { workspace = true, features = ["silero", "metal"], optional = true }
+rlx-runtime   = { workspace = true, features = ["cpu", "metal"], optional = true }
+rlx-qwen3-asr = { workspace = true, features = ["tokenizer", "metal"], optional = true }
+rlx-voxtral   = { workspace = true, features = ["tokenizer", "metal"], optional = true }
+
+# Other non-Windows (Linux): CPU baseline; GPU via the opt-in `asr-metal`/etc.
+[target.'cfg(all(not(target_os = "windows"), not(target_os = "macos")))'.dependencies]
+rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
+rlx-vad       = { workspace = true, features = ["silero"], optional = true }
+rlx-runtime   = { workspace = true, features = ["cpu"], optional = true }
+rlx-qwen3-asr = { workspace = true, features = ["tokenizer"], optional = true }
+rlx-voxtral   = { workspace = true, features = ["tokenizer"], optional = true }
+
+[lints]
+workspace = true

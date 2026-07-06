@@ -4,14 +4,10 @@
 # Usage:
 #   bash scripts/assemble-macos-app.sh [target-triple]
 #
-# Default target: aarch64-apple-darwin
+# Default target: aarch64-apple-darwin (aliases: mac-neo, mac-arm64)
 #
-# This script replaces `cargo tauri bundle --bundles app` when the Tauri CLI
-# itself stack-overflows during the bundling phase (a known issue with large
-# projects that have 150+ Tauri commands).
-#
-# The resulting .app is ad-hoc signed and ready to run locally.
-# For distribution, re-sign with a Developer ID certificate.
+# Aliases like mac-neo resolve to aarch64-apple-darwin and set
+# SKILL_MAC_PROFILE=neo for MacBook Neo (A-series) tuning.
 
 set -euo pipefail
 
@@ -19,7 +15,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TAURI_DIR="$ROOT/src-tauri"
 
-TARGET="${1:-aarch64-apple-darwin}"
+# shellcheck source=lib/resolve-target-triple.sh
+source "$SCRIPT_DIR/lib/resolve-target-triple.sh"
+RAW_TARGET="${1:-aarch64-apple-darwin}"
+apply_target_profile_env "$RAW_TARGET"
+TARGET="$(resolve_target_triple "$RAW_TARGET")"
 BINARY="$TAURI_DIR/target/$TARGET/release/skill"
 
 if [[ ! -f "$BINARY" ]]; then
@@ -294,6 +294,29 @@ if [[ -n "$FRONTEND_DIR" && -d "$FRONTEND_DIR" ]]; then
   echo "  ✓ frontend ($JS_COUNT js, $CSS_COUNT css)"
 fi
 
+# ── WidgetKit extension (optional) ────────────────────────────────────────
+WIDGET_DIR="$ROOT/extensions/widgets"
+WIDGET_APPEX=""
+for candidate in \
+  "$WIDGET_DIR/.build/Build/Products/Release/SkillWidgets.appex" \
+  "$WIDGET_DIR/.build/Build/Products/Debug/SkillWidgets.appex"
+do
+  if [[ -d "$candidate" ]]; then
+    WIDGET_APPEX="$candidate"
+    break
+  fi
+done
+
+if [[ -n "$WIDGET_APPEX" ]]; then
+  PLUGINS_DIR="$CONTENTS/PlugIns"
+  mkdir -p "$PLUGINS_DIR"
+  rm -rf "$PLUGINS_DIR/SkillWidgets.appex"
+  cp -R "$WIDGET_APPEX" "$PLUGINS_DIR/"
+  echo "  ✓ SkillWidgets.appex (from $(basename "$(dirname "$WIDGET_APPEX")"))"
+elif [[ -x "$WIDGET_DIR/build-widgets.sh" ]]; then
+  echo "  ⚠ SkillWidgets.appex not found — run: bash extensions/widgets/build-widgets.sh --release"
+fi
+
 
 # ── Entitlements & codesign (inside-out) ──────────────────────────────────
 # Apple recommends signing nested bundles individually before the outer one
@@ -322,6 +345,24 @@ fi
 if [[ -d "$TTY_APP" ]]; then
   codesign "${inner_sign_args[@]}" "$TTY_APP"
   echo "  ✓ codesigned skill-tty.app"
+fi
+
+WIDGET_APPEX_BUNDLE="$APP_DIR/Contents/PlugIns/SkillWidgets.appex"
+if [[ -d "$WIDGET_APPEX_BUNDLE" ]]; then
+  if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && "$SIGN_ID" != "-" ]]; then
+    WIDGET_ENTITLEMENTS="$WIDGET_DIR/Sources/SkillWidgets.entitlements"
+  else
+    WIDGET_ENTITLEMENTS="$WIDGET_DIR/Sources/SkillWidgets.debug.entitlements"
+  fi
+  widget_sign=(--force --sign "$SIGN_ID")
+  if [[ "$SIGN_ID" != "-" ]]; then
+    widget_sign+=(--options runtime --timestamp=none)
+  fi
+  if [[ -f "$WIDGET_ENTITLEMENTS" ]]; then
+    widget_sign+=(--entitlements "$WIDGET_ENTITLEMENTS")
+  fi
+  codesign "${widget_sign[@]}" "$WIDGET_APPEX_BUNDLE"
+  echo "  ✓ codesigned SkillWidgets.appex"
 fi
 
 # Outer .app — same args as before, minus --deep (nested bundles are already

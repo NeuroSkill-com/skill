@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! RLX-backed image embedder (alternative to fastembed).
+//! RLX-backed image embedder (`rlx-embed`).
 //!
 //! Loads `nomic-ai/nomic-embed-vision-v1.5` (the one image-embedding family
 //! covered by `rlx-embed`) from HuggingFace and forwards a single image
 //! through the compiled RLX graph. Returns a 768-dim L2-normalized vector.
 //!
 //! The whole module is gated on `text-embeddings-rlx` so it disappears
-//! cleanly in fastembed-only builds.
+//! cleanly when image embeddings are not compiled in.
 
 #![cfg(feature = "text-embeddings-rlx")]
 
@@ -77,13 +77,21 @@ impl RlxImageEmbedder {
 }
 
 fn parse_device(s: &str) -> rlx::Device {
-    match s.trim().to_ascii_lowercase().as_str() {
-        "metal" => rlx::Device::Metal,
-        "mlx" => rlx::Device::Mlx,
-        "cuda" => rlx::Device::Cuda,
-        "rocm" => rlx::Device::Rocm,
-        "gpu" | "wgpu" => rlx::Device::Gpu,
-        _ => rlx::Device::Cpu,
+    use rlx::Device;
+    let want = match s.trim().to_ascii_lowercase().as_str() {
+        "metal" => Device::Metal,
+        "mlx" => Device::Mlx,
+        "cuda" => Device::Cuda,
+        "rocm" => Device::Rocm,
+        "gpu" | "wgpu" => Device::Gpu,
+        _ => Device::Cpu,
+    };
+    // Fall back to CPU when the requested GPU backend isn't compiled in / present,
+    // rather than handing rlx an unavailable device (which panics at session setup).
+    if matches!(want, Device::Cpu) || rlx::runtime::device_ext::is_available(want) {
+        want
+    } else {
+        Device::Cpu
     }
 }
 

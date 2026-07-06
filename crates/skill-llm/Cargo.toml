@@ -21,7 +21,10 @@ default    = []
 llm                = []
 # Base rlx feature pulls cpu dispatch so the runtime always has at least
 # one usable target. GPU-flavor features add their backend on top.
-llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "dep:rlx-minicpm5", "dep:rlx-minimax", "dep:rlx-nemotron", "dep:rlx-gemma", "dep:image", "rlx?/cpu"]
+# `rlx-models/runner` gates the `run` module (LmRunner, Qwen3Runner, auto_*,
+# ChatTemplate/ChatMessage). rlx-models 0.2.9+ made model families opt-in, so
+# this must be enabled explicitly now (was default in 0.2.5).
+llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "rlx-models?/runner", "dep:rlx-minicpm5", "dep:rlx-minimax", "dep:rlx-nemotron", "dep:rlx-gemma", "dep:image", "rlx?/cpu"]
 llm-rlx-cpu   = ["llm-rlx"]
 llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal", "rlx-minicpm5?/metal", "rlx-minimax?/metal", "rlx-nemotron?/metal", "rlx-gemma?/metal"]
 llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx", "rlx-minicpm5?/mlx", "rlx-minimax?/mlx", "rlx-nemotron?/mlx", "rlx-gemma?/mlx"]

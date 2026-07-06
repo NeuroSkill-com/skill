@@ -143,7 +143,29 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: node scripts/ci.mjs import-apple-cert
 
-      # ── Compile: frontend + Rust binary + Daemon ─────────────────────────────
+      # ── WidgetKit extension (automatic signing, release entitlements) ───────
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Setup WidgetKit signing
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
+          APPLE_ASC_KEY_ISSUER_ID: ${{ secrets.APPLE_ASC_KEY_ISSUER_ID }}
+          APPLE_ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 }}
+          APPLE_WIDGET_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_WIDGET_PROVISIONING_PROFILE_BASE64 }}
+        run: node scripts/ci.mjs setup-widget-signing
+
+      - name: Build WidgetKit extension
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          AUTH_KEY_PATH: ${{ env.AUTH_KEY_PATH }}
+          AUTH_KEY_ID: ${{ env.AUTH_KEY_ID }}
+          AUTH_KEY_ISSUER_ID: ${{ env.AUTH_KEY_ISSUER_ID }}
+        run: node scripts/ci.mjs build-widgets
+
+      # ── Compile: frontend + Rust binary + sidecar ───────────────────────────
       #
       # `npx tauri build` crashes on macOS 26 with SIGILL *after* compilation,
       # inside the Tauri CLI napi binary's bundling code.  The crash occurs

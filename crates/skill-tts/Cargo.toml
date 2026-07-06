@@ -8,11 +8,22 @@ build = "build.rs"
 
 [features]
 default     = []
-tts-kitten  = ["dep:kittentts", "dep:rodio"]
+tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio"]
 tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
+# Pluggable RLX TTS engines (Qwen3-TTS, Orpheus, Kyutai-TTS). Enabled on Linux,
+# Windows, and macOS via `tts_engines_active` (see build.rs).
+tts-engines = [
+    "dep:rlx-qwen3-tts",
+    "dep:rlx-orpheus",
+    "dep:rlx-kyutai-tts",
+    "dep:rlx-runtime",
+    "dep:rodio",
+    "dep:hound",
+]
+whisper-validate = ["dep:rlx-whisper", "dep:hound"]
 
 [dependencies]
-anyhow = { workspace = true }
+anyhow      = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -26,14 +37,31 @@ hound      = { version = "3", optional = true }
 
 neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }
 
-# KittenTTS pulls in `ort` (ONNX Runtime). We keep it off Windows so the
-# installer doesn't have to ship onnxruntime.dll. Cargo treats `dep:kittentts`
-# in the `tts-kitten` feature as a no-op on targets where the dep is absent.
+# KittenTTS via rlx-kittentts (ONNX Runtime — native RLX graph not yet ASR-valid).
+# Windows skips the optional dep; `tts-kitten` stays in default for UX parity.
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-kittentts  = { version = "0.4.1", features = ["espeak"], optional = true }
+rlx-kittentts = { workspace = true, features = ["espeak", "onnx", "hf-download"], optional = true }
+rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+rlx-runtime   = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
+rlx-qwen3-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
+rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "cuda", "gpu"], optional = true }
+rlx-kyutai-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
+neutts = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
+rlx-kittentts = { workspace = true, features = ["espeak", "onnx", "hf-download", "metal"], optional = true }
+rlx-runtime   = { workspace = true, features = ["cpu", "metal"], optional = true }
+rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
+rlx-qwen3-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
+rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "metal", "coreml"], optional = true }
+rlx-kyutai-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "kitten-e2e"
+path = "src/bin/kitten_e2e.rs"
+required-features = ["tts-kitten", "whisper-validate"]

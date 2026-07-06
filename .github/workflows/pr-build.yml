@@ -263,6 +263,28 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: node scripts/ci.mjs import-apple-cert
 
+      # ── WidgetKit extension (automatic signing) ─────────────────────────────
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Setup WidgetKit signing
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
+          APPLE_ASC_KEY_ISSUER_ID: ${{ secrets.APPLE_ASC_KEY_ISSUER_ID }}
+          APPLE_ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 }}
+          APPLE_WIDGET_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_WIDGET_PROVISIONING_PROFILE_BASE64 }}
+        run: node scripts/ci.mjs setup-widget-signing
+
+      - name: Build WidgetKit extension
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          AUTH_KEY_PATH: ${{ env.AUTH_KEY_PATH }}
+          AUTH_KEY_ID: ${{ env.AUTH_KEY_ID }}
+          AUTH_KEY_ISSUER_ID: ${{ env.AUTH_KEY_ISSUER_ID }}
+        run: node scripts/ci.mjs build-widgets
+
       # ── Compile: frontend + Rust binary ──────────────────────────────────────
       # Identical rationale to release-mac.yml — see that file for full details.
       # --features custom-protocol tells Tauri to embed the SvelteKit build

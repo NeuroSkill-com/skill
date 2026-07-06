@@ -83,7 +83,8 @@ impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
         None
     }
     fn embed_text(&self, text: &str) -> Option<Vec<f32>> {
-        self.text_embedder.embed(text)
+        // OCR text is indexed for later retrieval → document-side prefix.
+        self.text_embedder.embed_document(text)
     }
 }
 
@@ -183,33 +184,7 @@ pub(crate) async fn get_screenshots_around(
     Json(out)
 }
 
-#[cfg(feature = "text-embeddings-fastembed")]
-fn image_search_inner(
-    settings: skill_settings::UserSettings,
-    skill_dir: std::path::PathBuf,
-    req: ScreenshotImageSearchRequest,
-) -> Vec<skill_data::screenshot_store::ScreenshotResult> {
-    let Some(mut encoder) = skill_screenshots::capture::load_fastembed_image_pub(&settings.screenshot, &skill_dir)
-    else {
-        return vec![];
-    };
-    let Some(query) = skill_screenshots::capture::fastembed_embed_pub(&mut encoder, &req.image_bytes) else {
-        return vec![];
-    };
-    let Some(store) = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir) else {
-        return vec![];
-    };
-    let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
-    let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
-        &hnsw_path,
-        fast_hnsw::distance::Cosine,
-    ) else {
-        return vec![];
-    };
-    skill_screenshots::capture::search_by_vector(&hnsw, &store, &query, req.k)
-}
-
-#[cfg(all(not(feature = "text-embeddings-fastembed"), feature = "text-embeddings-rlx"))]
+#[cfg(feature = "text-embeddings-rlx")]
 fn image_search_inner(
     settings: skill_settings::UserSettings,
     skill_dir: std::path::PathBuf,
@@ -239,7 +214,7 @@ fn image_search_inner(
     skill_screenshots::capture::search_by_vector(&hnsw, &store, &query, req.k)
 }
 
-#[cfg(all(not(feature = "text-embeddings-fastembed"), not(feature = "text-embeddings-rlx")))]
+#[cfg(not(feature = "text-embeddings-rlx"))]
 fn image_search_inner(
     _settings: skill_settings::UserSettings,
     _skill_dir: std::path::PathBuf,
@@ -357,7 +332,9 @@ pub(crate) async fn search_screenshots_by_text(
             return skill_screenshots::capture::search_by_ocr_text_like(&store, &req.query, k);
         }
 
-        let embed_fn = |text: &str| -> Option<Vec<f32>> { embedder.embed(text) };
+        // Search query → uses the `search_query:` prefix so it aligns with both
+        // the nomic-vision image vectors and the search_document: OCR vectors.
+        let embed_fn = |text: &str| -> Option<Vec<f32>> { embedder.embed_query(text) };
 
         // Try semantic search (text query → image embedding HNSW)
         let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);

@@ -21,6 +21,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount, tick } from "svelte";
+import {
+  type AsrEventPayload,
+  type AsrPhase,
+  type AsrRouting,
+  type AsrStatus,
+  type AsrTrigger,
+  fetchAsrDefaults,
+  loadAsrDefaults,
+} from "$lib/chat/asr";
 import ChatContextBreakdown, { type ContextSegment } from "$lib/chat/ChatContextBreakdown.svelte";
 import ChatContextViewer from "$lib/chat/ChatContextViewer.svelte";
 import ChatHeader from "$lib/chat/ChatHeader.svelte";
@@ -29,6 +38,7 @@ import ChatMessageList from "$lib/chat/ChatMessageList.svelte";
 import ChatSettingsPanel from "$lib/chat/ChatSettingsPanel.svelte";
 import ChatSidebar from "$lib/chat/ChatSidebar.svelte";
 import ChatToolsPanel from "$lib/chat/ChatToolsPanel.svelte";
+import ChatVoiceControls from "$lib/chat/ChatVoiceControls.svelte";
 import { buildEegBlock } from "$lib/chat/chat-eeg";
 import {
   type Attachment,
@@ -54,6 +64,7 @@ import {
 } from "$lib/chat/chat-types";
 import { parseAssistantOutput } from "$lib/chat/chat-utils";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { type DaemonEvent, onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
 
@@ -71,6 +82,22 @@ let toolConfig = $state<ToolConfig>({ ...DEFAULT_TOOL_CONFIG });
 let messages = $state<Message[]>([]);
 let sessionId = $state(0);
 let input = $state("");
+
+// ── Voice input (ASR + VAD) ─────────────────────────────────────────────────
+// The daemon owns the engine; per-session mode is seeded from settings.asr.
+// The localStorage cache gives an instant first paint, then `fetchAsrDefaults`
+// reconciles against the daemon (settings.json) on mount. The in-chat mode
+// picker overrides per session.
+const _asrDefaults = loadAsrDefaults();
+let asrEnabled = $state(_asrDefaults.enabled);
+let asrAvailable = $state(true);
+let asrRunning = $state(false);
+let asrPhase = $state<AsrPhase>("idle");
+let asrError = $state("");
+let asrTrigger = $state<AsrTrigger>(_asrDefaults.default_trigger);
+let asrRouting = $state<AsrRouting>(_asrDefaults.default_routing);
+let asrLanguage = $state(_asrDefaults.language);
+const showVoice = $derived(asrEnabled && asrAvailable);
 
 // ── System prompt ──────────────────────────────────────────────────────────
 function loadSystemPrompt(): string {
@@ -1152,14 +1179,163 @@ function stopTypingLabelTimer() {
   commitTypingLabel();
 }
 
+// ── Voice input (ASR + VAD) control ─────────────────────────────────────────
+
+/** Speak text via the app's TTS path (used when the daemon didn't speak it).
+ *  Brackets playback with the daemon barge-in gate so the mic doesn't transcribe
+ *  the spoken reply (only relevant when a voice session is active). */
+async function speakText(text: string) {
+  if (!text.trim()) return;
+  const gate = asrRunning;
+  if (gate) await invoke("asr_set_speaking", { active: true }).catch((_e) => {});
+  try {
+    await invoke("tts_init").catch((_e) => {});
+    await invoke("tts_speak", { text, voice: null });
+  } catch (_e) {
+    // ignore TTS failures
+  } finally {
+    if (gate) invoke("asr_set_speaking", { active: false }).catch((_e) => {});
+  }
+}
+
+/** Start a voice session with the current per-session mode. Idempotent. */
+async function startVoice(): Promise<boolean> {
+  asrError = "";
+  try {
+    const res = await invoke<{ ok: boolean; error?: string }>("asr_start", {
+      trigger: asrTrigger,
+      routing: asrRouting,
+      language: asrLanguage,
+    });
+    if (res && res.ok === false) {
+      asrError = res.error ?? "Failed to start voice input";
+      asrRunning = false;
+      asrPhase = "idle";
+      return false;
+    }
+    asrRunning = true;
+    return true;
+  } catch (e) {
+    asrError = typeof e === "string" ? e : e instanceof Error ? e.message : "Failed to start voice input";
+    asrRunning = false;
+    asrPhase = "idle";
+    return false;
+  }
+}
+
+async function stopVoice() {
+  try {
+    await invoke("asr_stop");
+  } catch (e) {}
+  asrRunning = false;
+  asrPhase = "idle";
+}
+
+/** Continuous trigger: toggle the session on click. */
+function toggleVoice() {
+  if (asrRunning) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+/** Push-to-talk: open the gate (starting the session first if needed). */
+async function pttDown() {
+  if (!asrRunning) {
+    const ok = await startVoice();
+    if (!ok) return;
+  }
+  try {
+    await invoke("asr_set_ptt", { active: true });
+  } catch (e) {}
+}
+
+/** Push-to-talk: close the gate. */
+async function pttUp() {
+  try {
+    await invoke("asr_set_ptt", { active: false });
+  } catch (e) {}
+}
+
+function setAsrTrigger(trigger: AsrTrigger) {
+  if (asrRunning) return; // mode is locked while a session is live
+  asrTrigger = trigger;
+}
+
+function setAsrRouting(routing: AsrRouting) {
+  if (asrRunning) return;
+  asrRouting = routing;
+}
+
+/** Handle one `"asr"` event from the daemon WebSocket. */
+function handleAsrEvent(event: DaemonEvent) {
+  const p = event.payload as unknown as AsrEventPayload;
+  switch (p.kind) {
+    case "loading":
+      asrPhase = "loading";
+      break;
+    case "listening":
+      asrRunning = true;
+      asrPhase = "listening";
+      break;
+    case "speech_start":
+      asrPhase = "speaking";
+      break;
+    case "speech_end":
+      asrPhase = "listening";
+      break;
+    case "transcript":
+      if (p.is_final && p.text) {
+        if (asrRouting === "transcribe_only") {
+          // Append the finalized transcript to the input box.
+          input = input ? `${input} ${p.text}`.replace(/\s+/g, " ") : p.text;
+          tick().then(() => {
+            autoResizeInput();
+            inputBarRef?.focus();
+          });
+        }
+        // voice_loop: the daemon auto-sends; the assistant reply arrives below.
+      }
+      break;
+    case "assistant":
+      if (p.text) {
+        // Render the daemon-driven reply in the transcript.
+        messages = [...messages, { id: ++msgId, role: "assistant", content: p.text }];
+        msgListRef?.scrollBottom();
+        // spoken === false → the daemon has no TTS backend; speak it ourselves.
+        if (p.spoken === false) speakText(p.text);
+      }
+      break;
+    case "error":
+      asrError = p.message ?? "Voice input error";
+      break;
+    case "stopped":
+      asrRunning = false;
+      asrPhase = "idle";
+      break;
+  }
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 let unlistenStatus: (() => void) | undefined;
 let unlistenBands: (() => void) | undefined;
 let unlistenLoadSession: (() => void) | undefined;
+let unlistenAsr: (() => void) | undefined;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 onMount(async () => {
+  // Reconcile the per-session voice defaults against the daemon (settings.json),
+  // the source of truth. The synchronous localStorage seed above is just a cache.
+  try {
+    const d = await fetchAsrDefaults();
+    asrEnabled = d.enabled;
+    asrTrigger = d.default_trigger;
+    asrRouting = d.default_routing;
+    asrLanguage = d.language;
+  } catch (e) {}
+
   // Initial status
   try {
     const s = await daemonInvoke<{
@@ -1283,6 +1459,21 @@ onMount(async () => {
     unlistenBands = unsub;
   } catch (e) {}
 
+  // Voice input (ASR) — availability + live status, then subscribe to events.
+  try {
+    const s = await invoke<{ ok: boolean; status?: AsrStatus }>("asr_status");
+    if (s?.status) {
+      asrAvailable = s.status.available;
+      asrRunning = s.status.running;
+      if (s.status.running) {
+        if (s.status.trigger) asrTrigger = s.status.trigger;
+        if (s.status.routing) asrRouting = s.status.routing;
+        asrPhase = "listening";
+      }
+    }
+  } catch (e) {}
+  unlistenAsr = onDaemonEvent("asr", handleAsrEvent);
+
   // Load persisted chat history
   try {
     const resp = await daemonInvoke<ChatSessionResponse>("get_last_chat_session");
@@ -1305,12 +1496,14 @@ onDestroy(() => {
   unlistenStatus?.();
   unlistenBands?.();
   unlistenLoadSession?.();
+  unlistenAsr?.();
   clearInterval(pollTimer);
   stopTypingLabelTimer();
   if (prefillTimer) {
     clearTimeout(prefillTimer);
     prefillTimer = undefined;
   }
+  if (asrRunning) invoke("asr_stop").catch((_e) => {});
   if (generating || prefillInFlight) daemonInvoke("abort_llm_stream").catch((_e) => {});
 });
 </script>
@@ -1441,6 +1634,25 @@ onDestroy(() => {
         onRegenerate={regenerate}
         onStartServer={startServer}
       />
+
+      {#if showVoice}
+        <div class="shrink-0 border-t border-border dark:border-white/[0.06] bg-surface-3 px-3 py-2">
+          <ChatVoiceControls
+            trigger={asrTrigger}
+            routing={asrRouting}
+            running={asrRunning}
+            phase={asrPhase}
+            errorMsg={asrError}
+            disabled={status !== "running"}
+            onSetTrigger={setAsrTrigger}
+            onSetRouting={setAsrRouting}
+            onToggle={toggleVoice}
+            onPttDown={pttDown}
+            onPttUp={pttUp}
+            onDismissError={() => asrError = ""}
+          />
+        </div>
+      {/if}
 
       <ChatInputBar
         bind:this={inputBarRef}

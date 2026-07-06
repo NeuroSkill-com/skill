@@ -247,13 +247,16 @@ fn looks_like_gemma(path: &Path) -> bool {
     )
 }
 
-fn try_minicpm5_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
+fn try_minicpm5_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
     if !looks_like_minicpm5(path) {
         return None;
     }
+    let (device, packed) = gpu_plan(path, config);
     Some(
         rlx_minicpm5::MiniCpm5Runner::builder()
             .weights(path)
+            .device(device)
+            .packed_weights(packed)
             .build()
             .map(|runner| Box::new(MiniCpm5LmRunner(runner)) as Box<dyn LmRunner>),
     )
@@ -307,23 +310,112 @@ fn try_nemotron_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
     )
 }
 
-fn try_gemma_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
+fn try_gemma_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
     if !looks_like_gemma(path) {
         return None;
     }
+    let (device, packed) = gpu_plan(path, config);
     Some(
         rlx_gemma::GemmaRunner::builder()
             .weights(path)
+            .device(device)
+            .packed_weights(packed)
             .build()
             .map(|runner| Box::new(runner) as Box<dyn LmRunner>),
     )
 }
 
-fn try_catalog_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
-    try_gemma_runner(path)
-        .or_else(|| try_minicpm5_runner(path))
+fn try_catalog_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    // gemma + minicpm5 expose `.device()` + `.packed_weights()`, so they get the
+    // GPU-F32 plan. minimax + nemotron have no packed toggle (can't force F32 off
+    // the broken packed-GPU path) → left on their device-less CPU default.
+    try_gemma_runner(path, config)
+        .or_else(|| try_minicpm5_runner(path, config))
         .or_else(|| try_minimax_runner(path))
         .or_else(|| try_nemotron_runner(path))
+}
+
+fn looks_like_qwen3(path: &Path) -> bool {
+    matches!(peek_gguf_arch(path).as_deref(), Some("qwen3"))
+}
+
+/// Resolve the rlx inference device from config: explicit `rlx_device`, honouring
+/// a CPU request / disabled GPU offload, else the best available accelerator.
+fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
+    use rlx::runtime::{device_ext::is_available, Device};
+
+    if config.n_gpu_layers == 0 || config.rlx_device.eq_ignore_ascii_case("cpu") {
+        return Device::Cpu;
+    }
+    let pick = |d: Device| is_available(d).then_some(d);
+    let explicit = match config.rlx_device.to_ascii_lowercase().as_str() {
+        "metal" => pick(Device::Metal),
+        "mlx" => pick(Device::Mlx),
+        "cuda" => pick(Device::Cuda),
+        "rocm" => pick(Device::Rocm),
+        "gpu" | "vulkan" => pick(Device::Gpu),
+        _ => None, // "auto"/unknown → best-available below
+    };
+    explicit
+        .or_else(|| {
+            [Device::Metal, Device::Cuda, Device::Mlx, Device::Gpu]
+                .into_iter()
+                .find(|d| is_available(*d))
+        })
+        .unwrap_or(Device::Cpu)
+}
+
+/// Resolve `(device, packed_weights)` for a GGUF family runner.
+///
+/// rlx 0.2.9's packed-K-quant `Op::DequantMatMul` is numerically broken on GPU
+/// backends (Metal emits garbage), while dequant-to-F32 + GPU GEMM is correct and
+/// fast. So GPU uses the **non-packed F32** path — but that materializes the whole
+/// model at F32, so it's only taken for small GGUFs (≈≤1.7B params). Larger models,
+/// or a CPU preference / no GPU available, fall back to CPU + packed K-quant.
+fn gpu_plan(path: &Path, config: &LlmConfig) -> (rlx::runtime::Device, bool) {
+    use rlx::runtime::Device;
+    const MAX_F32_GPU_GGUF_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+    let device = resolve_rlx_device(config);
+    if device == Device::Cpu {
+        return (Device::Cpu, true);
+    }
+    let too_big = std::fs::metadata(path)
+        .map(|m| m.len() > MAX_F32_GPU_GGUF_BYTES)
+        .unwrap_or(true);
+    if too_big {
+        eprintln!(
+            "[rlx] GGUF too large for F32 on {device:?}; using CPU packed \
+             (packed-GPU parity pending upstream)"
+        );
+        (Device::Cpu, true)
+    } else {
+        (device, false) // F32 on GPU
+    }
+}
+
+/// Build a Qwen3 GGUF runner on a GPU device (F32). Returns `None` when the model
+/// isn't Qwen3, when the plan resolves to CPU (the default `auto_runner` covers
+/// that), or when the GPU build fails (graceful CPU fallback).
+fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<dyn LmRunner>> {
+    if !looks_like_qwen3(path) {
+        return None;
+    }
+    let (device, packed) = gpu_plan(path, config);
+    if device == rlx::runtime::Device::Cpu {
+        return None;
+    }
+    match rlx_models::run::Qwen3Runner::builder()
+        .weights(path)
+        .device(device)
+        .packed_weights(packed)
+        .build()
+    {
+        Ok(runner) => Some(Box::new(runner) as Box<dyn LmRunner>),
+        Err(e) => {
+            eprintln!("[rlx] Qwen3 on {device:?} failed to build ({e}); falling back to CPU auto_runner");
+            None
+        }
+    }
 }
 
 fn resolve_gemma_tokenizer(weights: &Path) -> Option<PathBuf> {
@@ -364,14 +456,14 @@ pub(super) struct RlxTextRunner {
 }
 
 impl RlxTextRunner {
-    pub(super) fn load(model_path: &Path, _config: &LlmConfig) -> Result<Self> {
-        Self::load_with_mmproj(model_path, None, _config)
+    pub(super) fn load(model_path: &Path, config: &LlmConfig) -> Result<Self> {
+        Self::load_with_mmproj(model_path, None, config)
     }
 
     /// Like [`load`] but attaches an mmproj vision encoder (e.g. for
     /// Qwen3.5-VL). When `mmproj` is `None` the runner is text-only.
-    pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, _config: &LlmConfig) -> Result<Self> {
-        if let Some(result) = try_catalog_runner(model_path) {
+    pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
+        if let Some(result) = try_catalog_runner(model_path, config) {
             let runner = result?;
             let family = runner.family();
             let explicit_tokenizer = match family {
@@ -384,6 +476,20 @@ impl RlxTextRunner {
                 family,
                 weights_path: model_path.to_path_buf(),
                 explicit_tokenizer,
+            });
+        }
+
+        // Qwen3 GGUF: build with an explicit GPU device. rlx-models'
+        // `auto_runner` builds every family device-less (→ `Device::Cpu`), so the
+        // packed-K-quant `Op::DequantMatMul` runs single-threaded on CPU even with
+        // `--features llm-rlx-metal`. Honour `config.rlx_device` here. Falls back
+        // to the CPU `auto_runner` path if the GPU build fails.
+        if let Some(runner) = try_qwen3_runner_with_device(model_path, config) {
+            return Ok(Self {
+                family: runner.family(),
+                runner,
+                weights_path: model_path.to_path_buf(),
+                explicit_tokenizer: None,
             });
         }
 
@@ -590,5 +696,33 @@ impl RlxTextRunner {
                 n_ctx: completion_tokens,
             })
             .ok();
+    }
+}
+
+#[cfg(all(test, feature = "llm-rlx"))]
+mod device_tests {
+    use super::resolve_rlx_device;
+    use crate::config::LlmConfig;
+    use rlx::runtime::Device;
+
+    #[test]
+    fn explicit_cpu_forces_cpu() {
+        let cfg = LlmConfig {
+            rlx_device: "cpu".into(),
+            n_gpu_layers: u32::MAX,
+            ..LlmConfig::default()
+        };
+        assert_eq!(resolve_rlx_device(&cfg), Device::Cpu);
+    }
+
+    #[test]
+    fn zero_gpu_layers_forces_cpu() {
+        // GPU offload disabled → CPU regardless of the requested device string.
+        let cfg = LlmConfig {
+            rlx_device: "metal".into(),
+            n_gpu_layers: 0,
+            ..LlmConfig::default()
+        };
+        assert_eq!(resolve_rlx_device(&cfg), Device::Cpu);
     }
 }

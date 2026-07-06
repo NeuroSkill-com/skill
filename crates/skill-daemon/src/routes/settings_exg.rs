@@ -44,21 +44,36 @@ pub(crate) async fn get_model_status_impl(State(state): State<AppState>) -> Json
 
 /// Public so `main.rs` can call it during daemon startup.
 pub fn probe_weights_for_config(config: &ExgModelConfig) -> Option<(String, String)> {
+    if config.model_backend == skill_eeg::eeg_model_config::ExgModelBackend::Brainjepa {
+        let repo = if config.hf_repo.is_empty() || config.hf_repo == skill_constants::ZUNA_HF_REPO {
+            skill_exg::BRAINJEPA_HF_REPO
+        } else {
+            config.hf_repo.as_str()
+        };
+        return skill_exg::resolve_brainjepa_weights(repo)
+            .map(|(w, _g)| (w.display().to_string(), config.model_backend.as_str().to_string()));
+    }
+
     let catalog: serde_json::Value =
         serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).ok()?;
     let backend = config.model_backend.as_str();
-    let family_id = if backend == "luna" {
-        format!("luna-{}", config.luna_variant)
-    } else if backend == "eegdino" {
-        format!("eegdino-{}", config.eegdino_variant)
-    } else {
-        let families = catalog.get("families")?.as_object()?;
-        families
-            .keys()
-            .find(|id| family_id_to_backend(id) == backend)
-            .cloned()
-            .unwrap_or_else(|| backend.to_string())
-    };
+
+    if backend == "lumamba" {
+        if let Some(path) = config.lumamba_hf_repo.strip_prefix("local:") {
+            let wp = std::path::Path::new(path);
+            if skill_exg::validate_or_remove(wp) {
+                return Some((wp.display().to_string(), backend.to_string()));
+            }
+            return None;
+        }
+        if let Some((w, _c)) =
+            skill_exg::resolve_lumamba_weights(&config.lumamba_hf_repo, config.lumamba_weights_file())
+        {
+            return Some((w.display().to_string(), backend.to_string()));
+        }
+    }
+
+    let family_id = family_id_for_config(&catalog, config);
 
     let fam = catalog.get("families")?.get(&family_id)?;
     let repo = fam.get("repo")?.as_str()?;
@@ -993,21 +1008,7 @@ fn spawn_exg_download(
 fn resolve_download_target(catalog: &serde_json::Value, config: &ExgModelConfig) -> (String, String, String) {
     let backend = config.model_backend.as_str();
 
-    let family_id = if backend == "luna" {
-        format!("luna-{}", config.luna_variant)
-    } else if backend == "eegdino" {
-        format!("eegdino-{}", config.eegdino_variant)
-    } else {
-        let families = catalog.get("families").and_then(|f| f.as_object());
-        if let Some(fams) = families {
-            fams.keys()
-                .find(|id| family_id_to_backend(id) == backend)
-                .cloned()
-                .unwrap_or_else(|| backend.to_string())
-        } else {
-            backend.to_string()
-        }
-    };
+    let family_id = family_id_for_config(catalog, config);
 
     if let Some(fam) = catalog.get("families").and_then(|f| f.get(&family_id)) {
         let repo = fam.get("repo").and_then(|v| v.as_str()).unwrap_or(&config.hf_repo);
@@ -1032,6 +1033,12 @@ fn resolve_download_target(catalog: &serde_json::Value, config: &ExgModelConfig)
             config.luna_weights_file().to_string(),
             "config.json".to_string(),
         )
+    } else if backend == "lumamba" {
+        (
+            config.lumamba_hf_repo.clone(),
+            config.lumamba_weights_file().to_string(),
+            "config.json".to_string(),
+        )
     } else {
         (
             config.hf_repo.clone(),
@@ -1051,6 +1058,9 @@ fn family_id_to_backend(id: &str) -> &str {
     if id == "reve-base" || id == "reve-large" {
         return "reve";
     }
+    if id == "brainjepa" {
+        return "brainjepa";
+    }
     if id == "osf-base" {
         return "osf";
     }
@@ -1060,7 +1070,45 @@ fn family_id_to_backend(id: &str) -> &str {
     if id.starts_with("eegdino-") {
         return "eegdino";
     }
+    if id.starts_with("lumamba-") {
+        return "lumamba";
+    }
     id
+}
+
+fn family_id_for_config(catalog: &serde_json::Value, config: &ExgModelConfig) -> String {
+    let backend = config.model_backend.as_str();
+    if backend == "luna" {
+        return format!("luna-{}", config.luna_variant);
+    }
+    if backend == "eegdino" {
+        return format!("eegdino-{}", config.eegdino_variant);
+    }
+    if backend == "lumamba" {
+        return format!("lumamba-{}", config.lumamba_variant);
+    }
+    if backend == "reve" {
+        if let Some(families) = catalog.get("families").and_then(|f| f.as_object()) {
+            if let Some(id) = families.iter().find_map(|(id, fam)| {
+                fam.get("repo")
+                    .and_then(|r| r.as_str())
+                    .filter(|repo| *repo == config.hf_repo.as_str())
+                    .map(|_| id.clone())
+            }) {
+                return id;
+            }
+        }
+        if config.hf_repo.contains("reve-large") {
+            return "reve-large".to_string();
+        }
+        return "reve-base".to_string();
+    }
+    if let Some(families) = catalog.get("families").and_then(|f| f.as_object()) {
+        if let Some(id) = families.keys().find(|id| family_id_to_backend(id) == backend).cloned() {
+            return id;
+        }
+    }
+    backend.to_string()
 }
 
 pub(crate) async fn cancel_weights_download_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -1174,7 +1222,9 @@ pub(crate) async fn get_exg_catalog_impl(State(state): State<AppState>) -> Json<
             for (_id, fam) in families.iter_mut() {
                 let repo = fam.get("repo").and_then(|r| r.as_str()).unwrap_or("");
                 let weights_file = fam.get("weights_file").and_then(|w| w.as_str()).unwrap_or("");
-                let cached = if !repo.is_empty() && !weights_file.is_empty() {
+                let cached = if weights_file == skill_exg::BRAINJEPA_WEIGHTS_FILE && !repo.is_empty() {
+                    skill_exg::resolve_brainjepa_weights(repo).is_some()
+                } else if !repo.is_empty() && !weights_file.is_empty() {
                     let snaps_dir = skill_data::util::hf_model_dir(repo).join("snapshots");
                     std::fs::read_dir(&snaps_dir)
                         .ok()
@@ -1217,6 +1267,19 @@ pub(crate) async fn get_exg_catalog_impl(State(state): State<AppState>) -> Json<
                         .to_string()
                 } else {
                     "EEG-DINO".to_string()
+                }
+            }
+            skill_eeg::eeg_model_config::ExgModelBackend::Lumamba => {
+                if let Some(fam) = v
+                    .get("families")
+                    .and_then(|f| f.get(format!("lumamba-{}", config.lumamba_variant)))
+                {
+                    fam.get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("LuMamba")
+                        .to_string()
+                } else {
+                    "LuMamba".to_string()
                 }
             }
             _ => {
@@ -1280,9 +1343,34 @@ mod tests {
         assert_eq!(family_id_to_backend("zuna"), "zuna");
         assert_eq!(family_id_to_backend("luna-v1"), "luna");
         assert_eq!(family_id_to_backend("reve-base"), "reve");
+        assert_eq!(family_id_to_backend("brainjepa"), "brainjepa");
         assert_eq!(family_id_to_backend("osf-base"), "osf");
         assert_eq!(family_id_to_backend("steegformer-x"), "steegformer");
         assert_eq!(family_id_to_backend("eegdino-small"), "eegdino");
+        assert_eq!(family_id_to_backend("lumamba-recon"), "lumamba");
+        assert_eq!(family_id_to_backend("lumamba-lejepa-recon-128"), "lumamba");
+    }
+
+    #[test]
+    fn family_id_for_config_resolves_reve_by_hf_repo() {
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).unwrap();
+        let mut cfg = skill_eeg::eeg_model_config::ExgModelConfig::default();
+        cfg.model_backend = skill_eeg::eeg_model_config::ExgModelBackend::Reve;
+        cfg.hf_repo = "brain-bzh/reve-large".into();
+        assert_eq!(family_id_for_config(&catalog, &cfg), "reve-large");
+        cfg.hf_repo = "brain-bzh/reve-base".into();
+        assert_eq!(family_id_for_config(&catalog, &cfg), "reve-base");
+    }
+
+    #[test]
+    fn family_id_for_config_resolves_lumamba_variant() {
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../src-tauri/exg_catalog.json")).unwrap();
+        let mut cfg = skill_eeg::eeg_model_config::ExgModelConfig::default();
+        cfg.model_backend = skill_eeg::eeg_model_config::ExgModelBackend::Lumamba;
+        cfg.lumamba_variant = "lejepa-recon-128".into();
+        assert_eq!(family_id_for_config(&catalog, &cfg), "lumamba-lejepa-recon-128");
     }
 
     // ── Helpers for reembed tests ─────────────────────────────────────────

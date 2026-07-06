@@ -1031,8 +1031,8 @@ pub(crate) async fn activity_vscode_events_impl(
 
             // Insert the auto-label with inline embeddings for immediate searchability.
             if let Some(ref conn) = labels_conn {
-                let text_emb = embedder.embed(&label);
-                let ctx_emb = if !ctx.is_empty() { embedder.embed(&ctx) } else { None };
+                let text_emb = embedder.embed_document(&label);
+                let ctx_emb = if !ctx.is_empty() { embedder.embed_document(&ctx) } else { None };
                 let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let ctx_blob = ctx_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
@@ -1294,8 +1294,8 @@ pub(crate) async fn activity_browser_events_impl(
             };
 
             if let Some(ref conn) = labels_conn {
-                let text_emb = embedder.embed(&label);
-                let ctx_emb = if !ctx.is_empty() { embedder.embed(&ctx) } else { None };
+                let text_emb = embedder.embed_document(&label);
+                let ctx_emb = if !ctx.is_empty() { embedder.embed_document(&ctx) } else { None };
                 let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let ctx_blob = ctx_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };

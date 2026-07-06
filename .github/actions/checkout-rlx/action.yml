@@ -12,10 +12,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Clone MIT-RLX/rlx
+    - name: Clone MIT-RLX/rlx + rlx-models
       shell: bash
       env:
         RLX_REF: ${{ inputs.ref }}
         RLX_URL: https://github.com/MIT-RLX/rlx.git
         GITHUB_ACTIONS: "true"
-      run: bash scripts/ensure-rlx.sh
+      run: |
+        bash scripts/ensure-rlx.sh
+        bash scripts/ensure-rlx-models.sh

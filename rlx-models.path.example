@@ -1,0 +1,3 @@
+# Copy to rlx-models.path (gitignored) to point scripts/ensure-rlx-models.sh at a
+# non-default checkout. Default: /Users/Shared/rlx-models
+/Users/Shared/rlx-models

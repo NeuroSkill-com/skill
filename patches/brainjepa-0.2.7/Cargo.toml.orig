@@ -1,0 +1,160 @@
+[package]
+name = "brainjepa"
+version = "0.2.7"
+edition = "2021"
+rust-version = "1.78"
+description = "Brain-JEPA fMRI Foundation Model — inference in Rust (RLX)"
+keywords      = ["fmri", "foundation-model", "neuroscience", "brain", "vision-transformer"]
+categories    = ["science", "mathematics", "algorithms"]
+authors       = ["Eugene Hauptmann"]
+license       = "MIT"
+homepage      = "https://github.com/eugenehp/brainjepa-rs"
+repository    = "https://github.com/eugenehp/brainjepa-rs"
+documentation = "https://docs.rs/brainjepa"
+readme        = "README.md"
+
+exclude = [
+    "data/*",
+    "figures/*",
+    "hf_model_card/*",
+]
+
+autoexamples = false
+autotests    = false
+
+[lib]
+name = "brainjepa"
+path = "src/lib.rs"
+
+[[bin]]
+name = "infer"
+path = "src/bin/infer.rs"
+required-features = ["rlx-engine"]
+
+[[bin]]
+name = "classify"
+path = "src/bin/classify.rs"
+required-features = ["rlx-engine"]
+
+[[bin]]
+name = "predict"
+path = "src/bin/predict.rs"
+required-features = ["rlx-engine"]
+
+[[bin]]
+name = "download_weights"
+path = "src/bin/download_weights.rs"
+required-features = ["hf-download"]
+
+[[example]]
+name = "embed_rlx"
+path = "examples/embed_rlx.rs"
+required-features = ["rlx-engine"]
+
+[[example]]
+name = "backend_compare"
+path = "examples/backend_compare.rs"
+required-features = ["rlx-engine"]
+
+# ── Tests ──────────────────────────────────────────────────────────────────
+[[test]]
+name = "config"
+path = "tests/config.rs"
+
+[[test]]
+name = "csv_export"
+path = "tests/csv_export.rs"
+required-features = ["rlx-engine"]
+
+[[test]]
+name = "rlx_graph_compile"
+path = "tests/rlx_graph_compile.rs"
+required-features = ["rlx-engine"]
+
+[[test]]
+name = "rlx_weights_load"
+path = "tests/rlx_weights_load.rs"
+required-features = ["rlx-engine"]
+
+[[test]]
+name = "rlx_device_errors"
+path = "tests/rlx_device_errors.rs"
+required-features = ["rlx-engine"]
+
+[[test]]
+name = "parity_rlx_cross_backend"
+path = "tests/parity_rlx_cross_backend.rs"
+required-features = ["rlx-engine"]
+
+[[test]]
+name = "rlx_classification"
+path = "tests/rlx_classification.rs"
+required-features = ["rlx-engine"]
+
+[[test]]
+name = "masks_indices"
+path = "tests/masks_indices.rs"
+
+[[test]]
+name = "rlx_predictor_compile"
+path = "tests/rlx_predictor_compile.rs"
+required-features = ["rlx-engine"]
+
+[features]
+default = ["rlx-engine"]
+
+# ── Inference engine ────────────────────────────────────────────────────────
+rlx  = ["dep:rlx"]
+rlx-engine = ["rlx", "rlx-cpu"]
+
+# ── RLX backends (forwarded to the rlx crate) ───────────────────────────────
+rlx-cpu             = ["rlx", "rlx/cpu"]
+rlx-blas-accelerate = ["rlx", "rlx/blas-accelerate"]
+rlx-blas-mkl        = ["rlx", "rlx/blas-mkl"]
+rlx-blas-openblas   = ["rlx", "rlx/blas-openblas"]
+rlx-metal           = ["rlx", "rlx/metal"]
+rlx-mlx             = ["rlx", "rlx/mlx"]
+rlx-gpu             = ["rlx", "rlx/gpu"]
+rlx-cuda            = ["rlx", "rlx/cuda"]
+rlx-rocm            = ["rlx", "rlx/rocm"]
+rlx-tpu             = ["rlx", "rlx/tpu"]
+rlx-apple-silicon   = ["rlx", "rlx/apple-silicon"]
+rlx-nvidia          = ["rlx", "rlx/nvidia"]
+
+# Shorthand aliases
+cpu             = ["rlx-cpu"]
+mlx             = ["rlx-mlx"]
+metal           = ["rlx-metal"]
+gpu             = ["rlx-gpu"]
+cuda            = ["rlx-cuda"]
+rocm            = ["rlx-rocm"]
+tpu             = ["rlx-tpu"]
+apple-silicon   = ["rlx-apple-silicon"]
+nvidia          = ["rlx-nvidia"]
+
+hf-download = ["dep:hf-hub"]
+
+[dependencies]
+rlx = { version = "0.2.6", default-features = false, optional = true }
+
+safetensors = "0.7"
+half = { version = "2", features = ["bytemuck"] }
+rayon = "1"
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+anyhow = "1"
+fastrand = "2"
+thiserror = "2"
+
+hf-hub = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

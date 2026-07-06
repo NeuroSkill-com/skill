@@ -633,7 +633,7 @@ async fn terminal_semantic_search(
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
 
     let result = tokio::task::spawn_blocking(move || -> serde_json::Value {
-        let Some(query_vec) = embedder.embed(&query) else {
+        let Some(query_vec) = embedder.embed_query(&query) else {
             return serde_json::json!({"command_ids": [], "scores": [], "error": "embedder unavailable"});
         };
         let Some(store) = ActivityStore::open_readonly(&skill_dir) else {
@@ -641,7 +641,7 @@ async fn terminal_semantic_search(
         };
         let rows = store.all_terminal_embeddings();
         // Cosine via L2-normalised dot — normalise the query once and the
-        // dequantised rows on the fly. fastembed already L2-normalises its
+        // dequantised rows on the fly. rlx-embed already L2-normalises its
         // outputs, so row vectors are unit-length too.
         let qn = l2_normalize(query_vec);
         let mut ranked: Vec<(i64, f32)> = rows

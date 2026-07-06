@@ -1,30 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! KittenTTS backend — ONNX-based English TTS, ~30 MB, no GPU required.
+//! KittenTTS backend — inference via `rlx-kittentts` (ONNX Runtime).
 //!
-//! Compiled only when the `tts-kitten` Cargo feature is enabled.
+//! Native RLX graph synthesis is not yet intelligible (fails Whisper ASR vs ONNX);
+//! we load the published ONNX checkpoint until `rlx-kittentts` native parity is fixed.
 
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     OnceLock,
 };
 
-use kittentts::{
-    download::{self, LoadProgress},
-    KittenTTS,
-};
-use rodio::{DeviceSinkBuilder, MixerDeviceSink};
+use anyhow::Context;
+use rlx_kittentts::KittenTTS;
+use rlx_runtime::Device;
+use rodio::MixerDeviceSink;
 use tokio::sync::oneshot;
 
-use crate::{init_espeak_data_path, play_f32_audio};
-use anyhow::Context;
+use crate::{init_espeak_data_path, play_f32_audio, skill_dir};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 pub use skill_constants::KITTEN_TTS_HF_REPO as HF_REPO;
 pub use skill_constants::KITTEN_TTS_VOICE_DEFAULT as VOICE_DEFAULT;
 const SPEED: f32 = skill_constants::KITTEN_TTS_SPEED;
-pub const SAMPLE_RATE: u32 = kittentts::SAMPLE_RATE;
+const LANG: &str = "en";
+pub const SAMPLE_RATE: u32 = rlx_kittentts::SAMPLE_RATE;
+
+/// Progress event emitted during model loading (mirrors legacy `kittentts` API).
+#[derive(Debug, Clone)]
+pub enum LoadProgress {
+    Fetching { step: u32, total: u32, file: String },
+    Loading,
+}
 
 // ─── Statics ──────────────────────────────────────────────────────────────────
 
@@ -73,8 +81,6 @@ pub enum Cmd {
 
 static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
 
-/// Send a blocking `Shutdown` command to the worker if it has been started.
-/// Returns `true` if the channel send succeeded (worker is running).
 pub fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
     TX.get()
         .map(|ch| ch.send(Cmd::Shutdown { done }).is_ok())
@@ -87,9 +93,49 @@ pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
         std::thread::Builder::new()
             .name("skill-tts".into())
             .spawn(|| worker(rx))
-            .expect("failed to spawn KittenTTS worker thread"); // thread spawn — unrecoverable
+            .expect("failed to spawn KittenTTS worker thread");
         tx
     })
+}
+
+// ─── Model load ─────────────────────────────────────────────────────────────
+
+fn hf_cache_dir() -> PathBuf {
+    skill_dir().join("models/kittentts/hf-cache")
+}
+
+fn resolve_device() -> Device {
+    if std::env::var("KITTEN_TTS_DEVICE").as_deref() == Ok("metal") {
+        #[cfg(all(target_os = "macos", feature = "tts-kitten"))]
+        if rlx_runtime::device_ext::is_available(Device::Metal) {
+            return Device::Metal;
+        }
+    }
+    Device::Cpu
+}
+
+fn load_from_hub_cb<F>(repo_id: &str, mut on_progress: F) -> anyhow::Result<KittenTTS>
+where
+    F: FnMut(LoadProgress),
+{
+    const TOTAL: u32 = 3;
+
+    on_progress(LoadProgress::Fetching {
+        step: 1,
+        total: TOTAL,
+        file: "config.json".into(),
+    });
+    let snapshot = rlx_kittentts::download::fetch_repo(repo_id, &hf_cache_dir())
+        .with_context(|| format!("fetch KittenTTS checkpoint {repo_id}"))?;
+
+    on_progress(LoadProgress::Fetching {
+        step: 2,
+        total: TOTAL,
+        file: "voices.npz".into(),
+    });
+
+    on_progress(LoadProgress::Loading);
+    KittenTTS::load_from_dir(&snapshot, resolve_device()).context("load KittenTTS (ONNX)")
 }
 
 // ─── Worker ───────────────────────────────────────────────────────────────────
@@ -97,10 +143,7 @@ pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
 fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
     init_espeak_data_path();
 
-    // Audio device is NOT pre-opened here — we open fresh on every Speak
-    // command so that device changes (e.g. Bluetooth reconnect, USB DAC
-    // unplug) are always picked up.  See the Speak arm below.
-    let mut stream: Option<MixerDeviceSink> = None;
+    let mut stream: Option<rodio::MixerDeviceSink> = None;
     let mut model: Option<KittenTTS> = None;
 
     for cmd in rx {
@@ -110,24 +153,24 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     done.send(Ok(())).ok();
                     continue;
                 }
-                match download::load_from_hub_cb(HF_REPO, cb) {
+                match load_from_hub_cb(HF_REPO, cb) {
                     Ok(m) => {
                         let voices = m.available_voices.clone();
                         let _ = AVAILABLE_VOICES.set(voices.clone());
-                        tts_log!("tts", "KittenTTS ready (voices={voices:?})");
+                        tts_log!("tts", "KittenTTS ready (ONNX, voices={voices:?})");
                         model = Some(m);
                         LOADED.store(true, Ordering::Relaxed);
                         done.send(Ok(())).ok();
                     }
                     Err(e) => {
-                        done.send(Err(anyhow::anyhow!("kittentts load failed: {e}"))).ok();
+                        done.send(Err(anyhow::anyhow!("rlx-kittentts load failed: {e}"))).ok();
                     }
                 }
             }
 
             Cmd::Speak { text, voice, done } => {
                 if model.is_none() {
-                    match download::load_from_hub_cb(HF_REPO, |_| {}) {
+                    match load_from_hub_cb(HF_REPO, |_| {}) {
                         Ok(m) => {
                             let _ = AVAILABLE_VOICES.set(m.available_voices.clone());
                             LOADED.store(true, Ordering::Relaxed);
@@ -140,16 +183,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                     }
                 }
-                // Re-open the audio device on every utterance.
-                //
-                // The system default output device can change at any time —
-                // Bluetooth headphones reconnect, the user switches output,
-                // a USB DAC is unplugged, etc.  A stale `MixerDeviceSink`
-                // from a previous utterance would either route audio to the
-                // wrong device or fail with "device is no longer available".
-                //
-                // Re-opening is cheap (~1 ms) relative to synthesis time.
-                stream = DeviceSinkBuilder::open_default_sink()
+                stream = rodio::DeviceSinkBuilder::open_default_sink()
                     .map_err(|e| tts_log!("tts", "could not open audio: {e}"))
                     .ok();
                 if let (Some(m), Some(s)) = (&model, &stream) {
@@ -170,7 +204,6 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
             }
 
             Cmd::Shutdown { done } => {
-                // Explicitly drop resources before process static teardown.
                 drop(stream.take());
                 drop(model.take());
                 LOADED.store(false, Ordering::Relaxed);
@@ -187,7 +220,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 fn speak_inner(model: &KittenTTS, stream: &MixerDeviceSink, text: &str, voice: &str) -> anyhow::Result<()> {
     let t0 = std::time::Instant::now();
     let samples = model
-        .generate(text, voice, SPEED, true)
+        .generate_from_text(text, voice, SPEED, LANG)
         .with_context(|| format!("synthesis failed for {text:?}"))?;
     if samples.is_empty() {
         tts_log!("tts", "no samples for {text:?} voice={voice:?}");
@@ -202,4 +235,122 @@ fn speak_inner(model: &KittenTTS, stream: &MixerDeviceSink, text: &str, voice: &
     );
     play_f32_audio(stream, samples, SAMPLE_RATE);
     Ok(())
+}
+
+/// Headless E2E: download checkpoints, synthesize, write WAV.
+pub fn e2e_synthesize_to_wav(
+    text: &str,
+    voice: &str,
+    out: &Path,
+    mut on_progress: impl FnMut(LoadProgress),
+) -> anyhow::Result<()> {
+    let model = load_from_hub_cb(HF_REPO, &mut on_progress)?;
+    let audio = model
+        .generate_from_text(text, voice, SPEED, LANG)
+        .with_context(|| format!("synthesis failed for {text:?}"))?;
+    anyhow::ensure!(!audio.is_empty(), "synthesised audio is empty");
+    model
+        .write_wav(&audio, out)
+        .with_context(|| format!("write WAV {}", out.display()))?;
+    Ok(())
+}
+
+#[cfg(feature = "whisper-validate")]
+fn resample_linear(samples: &[f32], from_hz: u32, to_hz: u32) -> Vec<f32> {
+    if from_hz == to_hz || samples.is_empty() {
+        return samples.to_vec();
+    }
+    let out_len = (samples.len() as u64 * to_hz as u64 / from_hz as u64).max(1) as usize;
+    let mut out = Vec::with_capacity(out_len);
+    for i in 0..out_len {
+        let src = i as f64 * from_hz as f64 / to_hz as f64;
+        let idx = src.floor() as usize;
+        let frac = (src - idx as f64) as f32;
+        let a = samples[idx.min(samples.len() - 1)];
+        let b = samples[(idx + 1).min(samples.len() - 1)];
+        out.push(a + (b - a) * frac);
+    }
+    out
+}
+
+#[cfg(feature = "whisper-validate")]
+fn whisper_weights_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("RLX_WHISPER_DIR") {
+        let p = PathBuf::from(dir);
+        if p.join("model.safetensors").is_file() && p.join("tokenizer.json").is_file() {
+            return Some(p);
+        }
+    }
+    for name in ["whisper-base.en", "whisper-tiny.en", "whisper-tiny"] {
+        for root in [
+            PathBuf::from(".cache").join(name),
+            dirs::home_dir()
+                .map(|h| h.join(".cache/rlx-models").join(name))
+                .unwrap_or_default(),
+            PathBuf::from("../rlx-models/.cache").join(name),
+        ] {
+            if root.join("model.safetensors").is_file() && root.join("tokenizer.json").is_file() {
+                return Some(root);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(feature = "whisper-validate")]
+fn transcript_covers_reference(reference: &str, transcript: &str, min_ratio: f32) -> bool {
+    fn words(text: &str) -> Vec<String> {
+        text.to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.len() > 2)
+            .map(str::to_string)
+            .collect()
+    }
+    let reference_words = words(reference);
+    if reference_words.is_empty() {
+        return false;
+    }
+    let heard = words(transcript);
+    let hits = reference_words
+        .iter()
+        .filter(|w| heard.iter().any(|h| h == *w || h.contains(w.as_str())))
+        .count();
+    hits as f32 / reference_words.len() as f32 >= min_ratio
+}
+
+/// Resample synthesized WAV to 16 kHz and transcribe with `rlx-whisper` (intelligibility gate).
+#[cfg(feature = "whisper-validate")]
+pub fn e2e_validate_wav_with_whisper(wav: &Path, reference_text: &str) -> anyhow::Result<String> {
+    use rlx_whisper::{WhisperRunner, SAMPLE_RATE as WHISPER_RATE};
+
+    let whisper_dir = whisper_weights_dir().with_context(|| {
+        "Whisper weights not found for ASR validation.\n\
+         Set RLX_WHISPER_DIR or run `just fetch-whisper` in rlx-models."
+    })?;
+
+    let pcm_24k = hound::WavReader::open(wav)
+        .with_context(|| format!("open WAV {}", wav.display()))?
+        .samples::<i16>()
+        .map(|s| s.unwrap_or(0) as f32 / i16::MAX as f32)
+        .collect::<Vec<_>>();
+    let pcm_16k = resample_linear(&pcm_24k, SAMPLE_RATE, WHISPER_RATE as u32);
+
+    let mut runner = WhisperRunner::builder()
+        .weights(whisper_dir.join("model.safetensors"))
+        .config_path(whisper_dir.join("config.json"))
+        .tokenizer_path(whisper_dir.join("tokenizer.json"))
+        .device(Device::Cpu)
+        .language("en")
+        .build()
+        .context("build WhisperRunner")?;
+
+    let transcript = runner.transcribe_greedy(&pcm_16k).context("Whisper transcribe")?;
+
+    anyhow::ensure!(
+        transcript_covers_reference(reference_text, &transcript, 0.45),
+        "Whisper transcript missed reference text.\n\
+         reference: {reference_text:?}\n\
+         heard:     {transcript:?}"
+    );
+    Ok(transcript)
 }

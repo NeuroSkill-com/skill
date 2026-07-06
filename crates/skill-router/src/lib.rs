@@ -15,10 +15,10 @@ use serde::Serialize;
 
 use skill_constants::{LABELS_FILE, SQLITE_FILE};
 
-#[cfg(feature = "gpu")]
+#[cfg(feature = "accel")]
 mod umap_device;
 
-#[cfg(feature = "gpu")]
+#[cfg(feature = "accel")]
 pub use umap_device::{device_label, resolve_umap_device};
 
 // ── Rounding helpers ──────────────────────────────────────────────────────────
@@ -379,11 +379,11 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 
 /// Returns the list of backends available in this build.
 pub fn available_backends() -> Vec<&'static str> {
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "accel")]
     {
         umap_device::available_backends()
     }
-    #[cfg(not(feature = "gpu"))]
+    #[cfg(not(feature = "accel"))]
     {
         vec!["cpu"]
     }
@@ -570,12 +570,12 @@ pub fn umap_compute_inner(
 }
 
 fn select_umap_device(pref: &str) -> (rlx_umap::Device, &'static str) {
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "accel")]
     {
         let device = umap_device::resolve_umap_device(pref);
         (device, umap_device::device_label(device))
     }
-    #[cfg(not(feature = "gpu"))]
+    #[cfg(not(feature = "accel"))]
     {
         let _ = pref;
         (rlx_umap::Device::Cpu, "cpu")

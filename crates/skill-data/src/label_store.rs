@@ -45,7 +45,7 @@ const MIGRATE_CONTEXT: &str = "ALTER TABLE labels ADD COLUMN context TEXT NOT NU
 /// Migration: add embedding BLOBs (nullable; populated asynchronously after insert).
 const MIGRATE_TEXT_EMBEDDING: &str = "ALTER TABLE labels ADD COLUMN text_embedding BLOB";
 const MIGRATE_CONTEXT_EMBEDDING: &str = "ALTER TABLE labels ADD COLUMN context_embedding BLOB";
-/// Migration: track which fastembed model produced the stored vectors.
+/// Migration: track which embedding model produced the stored vectors.
 /// NULL means the row has not been embedded yet (or was embedded before this
 /// column was added and needs re-embedding).
 const MIGRATE_EMBEDDING_MODEL: &str = "ALTER TABLE labels ADD COLUMN embedding_model TEXT";

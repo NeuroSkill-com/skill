@@ -7,7 +7,7 @@
 # Usage:
 #   bash scripts/create-macos-dmg.sh [target-triple]
 #
-# Default target: aarch64-apple-darwin
+# Default target: aarch64-apple-darwin (aliases: mac-neo, mac-arm64)
 #
 # Options (via environment variables):
 #   APPLE_SIGNING_IDENTITY  — codesign identity (default: ad-hoc "-")
@@ -22,7 +22,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TAURI_DIR="$ROOT/src-tauri"
 
-TARGET="${1:-aarch64-apple-darwin}"
+# shellcheck source=lib/resolve-target-triple.sh
+source "$SCRIPT_DIR/lib/resolve-target-triple.sh"
+RAW_TARGET="${1:-aarch64-apple-darwin}"
+apply_target_profile_env "$RAW_TARGET"
+TARGET="$(resolve_target_triple "$RAW_TARGET")"
 CONF="$TAURI_DIR/tauri.conf.json"
 
 # ── Cleanup tracking ─────────────────────────────────────────────────────
