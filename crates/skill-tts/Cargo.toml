@@ -19,7 +19,7 @@ tts-engines = [
     "dep:rlx-orpheus",
     "dep:rlx-kyutai-tts",
     "dep:rlx-inflect-nano",
-    "dep:rlx-tiny-tts",
+    # "dep:rlx-tiny-tts",  # DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX)
     "dep:rlx-runtime",
     "dep:rodio",
     "dep:hound",
@@ -55,7 +55,8 @@ rlx-kyutai-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], 
 # Single-speaker English bundles loaded from a one-time export (rlx-graph → CPU
 # base; cuda/gpu add accelerated vocoder graphs).
 rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "cuda", "gpu"], optional = true }
-rlx-tiny-tts  = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
+# DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX):
+# rlx-tiny-tts  = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 neutts = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
@@ -66,7 +67,8 @@ rlx-qwen3-tts = { workspace = true, features = ["hf-download", "metal"], optiona
 rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "metal", "coreml"], optional = true }
 rlx-kyutai-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
 rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "metal"], optional = true }
-rlx-tiny-tts  = { workspace = true, features = ["cpu", "metal"], optional = true }
+# DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX):
+# rlx-tiny-tts  = { workspace = true, features = ["cpu", "metal"], optional = true }
 
 [lints]
 workspace = true

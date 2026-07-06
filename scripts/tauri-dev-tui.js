@@ -47,6 +47,10 @@ let daemonChild = null;
 let tauriChild = null;
 let shuttingDown = false;
 let showHelp = false;
+// Mouse-wheel scroll is on by default; toggle off ('m') to release the mouse to
+// the terminal so you can select and copy text (mouse reporting otherwise
+// captures drags and blocks native selection).
+let mouseEnabled = true;
 let renderQueued = false;
 let forceKillTimer = null;
 const logoAnimStart = Date.now();
@@ -383,8 +387,10 @@ function render() {
 
   const helpRow = infoRow + 1;
   const helpLine = showHelp
-    ? "Keys: Tab switch pane | ↑/k up | ↓/j down | PgUp/PgDn page | g top | G bottom | f follow | mouse wheel scroll | ? help | q quit"
-    : "Press ? for key help (mouse wheel supported)";
+    ? "Keys: Tab switch pane | ↑/k up | ↓/j down | PgUp/PgDn page | g top | G bottom | f follow | m mouse⇄copy | ? help | q quit"
+    : mouseEnabled
+      ? "Press ? for key help · m: release mouse to select/copy text"
+      : "COPY MODE — select & copy text normally · m: re-enable wheel scroll";
   if (helpRow <= rows) process.stdout.write(`\x1b[${helpRow};1H${fitText(helpLine, cols)}`);
 
   // Schedule next animation frame if still animating
@@ -416,7 +422,7 @@ function render() {
     process.stdout.write(`\x1b[${r};${dividerCol + 1}H${fitText(right, rightWidth)}`);
   }
 
-  const footer = `Active: ${activePane} | daemon=${panes.daemon.status} | tauri=${panes.tauri.status}`;
+  const footer = `Active: ${activePane} | daemon=${panes.daemon.status} | tauri=${panes.tauri.status} | mouse ${mouseEnabled ? "on" : "off (copy)"}`;
   process.stdout.write(`\x1b[${rows};1H\x1b[37;100m${fitText(footer, cols)}\x1b[0m`);
 }
 
@@ -667,6 +673,16 @@ process.stdin.on("data", (input) => {
     handled = true;
   } else if (key === "f") {
     toggleFollow(activePane);
+    handled = true;
+  } else if (key === "m") {
+    // Toggle mouse reporting so the terminal's native text selection/copy works
+    // (off) or the log panes get wheel-scroll (on).
+    mouseEnabled = !mouseEnabled;
+    try {
+      process.stdout.write(mouseEnabled ? "\x1b[?1000h\x1b[?1002h\x1b[?1006h" : "\x1b[?1000l\x1b[?1002l\x1b[?1006l");
+    } catch {
+      // Ignore — terminal may not support these sequences.
+    }
     handled = true;
   } else if (key === "?") {
     showHelp = !showHelp;

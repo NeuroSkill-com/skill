@@ -498,7 +498,7 @@ const llm: Record<string, string> = {
   "chat.tts.orpheusHint":
     "Orpheus автоматично завантажує backbone. Експортуйте декодер SNAC один раз через scripts/export_snac_decoder.py (або встановіть ORPHEUS_SNAC_PATH).",
   "chat.tts.bundleExportHint":
-    "Inflect-Nano та TinyTTS завантажуються з одноразово експортованого пакета — розмістіть його в ~/.skill/models/inflect-nano (або tiny-tts) чи задайте INFLECT_NANO_DIR / TINY_TTS_DIR.",
+    "Inflect-Nano завантажується з одноразово експортованого пакета. Він автоматично входить до складу застосунку; для запуску в режимі розробки розмістіть його в ~/.skill/models/inflect-nano або задайте INFLECT_NANO_DIR.",
   "chat.tts.modelLabel": "Модель голосу",
   "chat.tts.modelDesc": "Репозиторій моделі для вибраного рушія.",
   "chat.tts.voiceLabel": "Голос",

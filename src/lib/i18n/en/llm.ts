@@ -478,7 +478,7 @@ const llm: Record<string, string> = {
   "chat.tts.orpheusHint":
     "Orpheus downloads the backbone automatically. Export SNAC once (scripts/export_snac_decoder.py or ORPHEUS_SNAC_PATH). Metal uses F16 when available; set SKILL_TTS_DEVICE=cpu if speech sounds garbled.",
   "chat.tts.bundleExportHint":
-    "Inflect-Nano and TinyTTS load from a one-time exported bundle — place it in ~/.skill/models/inflect-nano (or tiny-tts), or set INFLECT_NANO_DIR / TINY_TTS_DIR.",
+    "Inflect-Nano loads from a one-time exported bundle. It ships inside the app automatically; for a dev run, place it in ~/.skill/models/inflect-nano or set INFLECT_NANO_DIR.",
   "chat.tts.modelLabel": "Voice model",
   "chat.tts.modelDesc": "Model repository for the selected engine.",
   "chat.tts.voiceLabel": "Voice",

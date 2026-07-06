@@ -487,7 +487,7 @@ const llm: Record<string, string> = {
   "chat.tts.orpheusHint":
     "Orpheus 会自动下载 backbone。请用 scripts/export_snac_decoder.py 一次性导出 SNAC 解码器（或设置 ORPHEUS_SNAC_PATH）。",
   "chat.tts.bundleExportHint":
-    "Inflect-Nano 和 TinyTTS 从一次性导出的捆绑包加载 — 请将其放在 ~/.skill/models/inflect-nano（或 tiny-tts），或设置 INFLECT_NANO_DIR / TINY_TTS_DIR。",
+    "Inflect-Nano 从一次性导出的捆绑包加载。它会自动包含在应用中；开发运行时请将其放在 ~/.skill/models/inflect-nano，或设置 INFLECT_NANO_DIR。",
   "chat.tts.modelLabel": "语音模型",
   "chat.tts.modelDesc": "所选引擎的模型仓库。",
   "chat.tts.voiceLabel": "音色",

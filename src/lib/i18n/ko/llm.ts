@@ -500,7 +500,7 @@ const llm: Record<string, string> = {
   "chat.tts.orpheusHint":
     "Orpheus는 백본을 자동으로 다운로드합니다. SNAC 디코더는 scripts/export_snac_decoder.py로 한 번보내거나 ORPHEUS_SNAC_PATH를 설정하세요.",
   "chat.tts.bundleExportHint":
-    "Inflect-Nano와 TinyTTS는 한 번 내보낸 번들에서 로드됩니다. ~/.skill/models/inflect-nano(또는 tiny-tts)에 두거나 INFLECT_NANO_DIR / TINY_TTS_DIR을 설정하세요.",
+    "Inflect-Nano는 한 번 내보낸 번들에서 로드됩니다. 앱에 자동으로 포함됩니다. 개발 실행 시 ~/.skill/models/inflect-nano에 두거나 INFLECT_NANO_DIR을 설정하세요.",
   "chat.tts.modelLabel": "음성 모델",
   "chat.tts.modelDesc": "선택한 엔진의 모델 저장소입니다.",
   "chat.tts.voiceLabel": "음성",

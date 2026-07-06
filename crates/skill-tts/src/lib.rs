@@ -73,7 +73,7 @@ pub fn init_tts_dirs(dir: &std::path::Path) {
         "models/qwen3-tts/hf-cache",
         "models/kyutai-tts",
         "models/inflect-nano",
-        "models/tiny-tts",
+        // "models/tiny-tts",  // DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX)
         "cache/neutts-wav",
         "cache/neutts-ref-codes",
     ] {

@@ -990,6 +990,22 @@ if (subcommand === "dev") {
   }
 }
 
+// Dev: point the daemon at the staged bundled resources (src-tauri/resources)
+// so pluggable TTS engines (e.g. Inflect-Nano) find their weights the same way
+// the packaged .app does — via SKILL_RESOURCE_DIR → <res>/tts/<engine>. In a
+// packaged build the Tauri app sets this to Contents/Resources; in `tauri dev`
+// the daemon is a plain child of this script, so set it here. Stage the weights
+// first with `bash scripts/bundle-tts-weights.sh` (no-op / hint if missing).
+if (subcommand === "dev" && !process.env.SKILL_RESOURCE_DIR) {
+  const devResourceDir = resolve(root, "src-tauri", "resources");
+  if (existsSync(devResourceDir)) {
+    process.env.SKILL_RESOURCE_DIR = devResourceDir;
+    if (!existsSync(resolve(devResourceDir, "tts", "inflect-nano", "config.json"))) {
+      console.log("ℹ Inflect-Nano weights not staged — run `bash scripts/bundle-tts-weights.sh` to enable it in dev.");
+    }
+  }
+}
+
 let daemonChild = null;
 if (subcommand === "dev" && !tuiTauriPane) {
   console.log("\n🔧 Building skill-daemon + skill-tty…");

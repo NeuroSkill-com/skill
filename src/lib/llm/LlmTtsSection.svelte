@@ -36,7 +36,8 @@ const engineOptions: { val: string; label: string; experimental?: boolean }[] = 
   { val: "orpheus", label: "Orpheus" },
   { val: "kyutai-tts", label: "Kyutai-TTS", experimental: true },
   { val: "inflect-nano", label: "Inflect-Nano", experimental: true },
-  { val: "tiny-tts", label: "TinyTTS", experimental: true },
+  // DISABLED FOR NOW — rlx-tiny-tts reshape bug on Metal + MLX:
+  // { val: "tiny-tts", label: "TinyTTS", experimental: true },
 ];
 
 const MODELS_BY_ENGINE: Record<string, string[]> = {
@@ -61,8 +62,8 @@ const knownModels = $derived(MODELS_BY_ENGINE[cfg.engine] ?? []);
 const hasVoicePicker = $derived(knownVoices.length > 0);
 const isKyutai = $derived(cfg.engine === "kyutai-tts");
 const isOrpheus = $derived(cfg.engine === "orpheus");
-/** Inflect-Nano and TinyTTS load from a one-time exported bundle (no auto-download). */
-const needsBundleExport = $derived(cfg.engine === "inflect-nano" || cfg.engine === "tiny-tts");
+/** Inflect-Nano loads from a one-time exported bundle (no auto-download). */
+const needsBundleExport = $derived(cfg.engine === "inflect-nano");
 
 function onEngineSelect(engine: string) {
   const models = MODELS_BY_ENGINE[engine] ?? [];
