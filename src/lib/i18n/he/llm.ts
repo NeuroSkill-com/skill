@@ -486,7 +486,7 @@ const llm: Record<string, string> = {
   "chat.tts.orpheusHint":
     "Orpheus מוריד את ה-backbone אוטומטית. ייצאו את מפענח SNAC פעם אחת עם scripts/export_snac_decoder.py (או הגדירו ORPHEUS_SNAC_PATH).",
   "chat.tts.bundleExportHint":
-    "Inflect-Nano ו-TinyTTS נטענים מחבילה שיוצאה פעם אחת — הניחו אותה ב-~/.skill/models/inflect-nano (או tiny-tts), או הגדירו INFLECT_NANO_DIR / TINY_TTS_DIR.",
+    "Inflect-Nano נטען מחבילה שיוצאה פעם אחת. הוא כלול באפליקציה אוטומטית; להרצת פיתוח הניחו אותו ב-~/.skill/models/inflect-nano או הגדירו INFLECT_NANO_DIR.",
   "chat.tts.modelLabel": "מודל קול",
   "chat.tts.modelDesc": "מאגר המודל עבור המנוע שנבחר.",
   "chat.tts.voiceLabel": "קול",

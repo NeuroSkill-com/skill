@@ -25,6 +25,23 @@ ignore = [
     { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
     # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
     # Pulled transitively; not directly used by workspace code paths that call IterMut.
+    #
+    # anyhow's RUSTSEC-2026-0190 (downcast_mut unsoundness) is fixed by upgrading
+    # to anyhow >=1.0.103 (done in Cargo.lock), so it is NOT ignored here.
+    #
+    # quick-xml 0.30/0.37/0.39 — DoS advisories, fixed in >=0.41.0. Pinned by
+    # tauri/plist (build-time codegen + macOS Info.plist parsing); reaching 0.41
+    # needs a Tauri major bump. Inputs are trusted local config/plist, not
+    # attacker-controlled network XML.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
+    # protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2. BUILD-ONLY dep via
+    # onnx → protoc-rust (rlx-onnx-import ← rlx-tiny-tts); protoc-rust 1.x pins
+    # protobuf 1.x. Codegen at build time, never shipped in the binary.
+    { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    # remove_dir_all 0.5.3 — TOCTOU, fixed in >=0.8.0. BUILD-ONLY dep via
+    # tempdir → protoc-rust (same onnx/rlx-tiny-tts chain); tempdir 0.3.7 pins it.
+    { id = "RUSTSEC-2023-0018", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
@@ -64,6 +81,7 @@ exceptions = [
     # Our own crates use GPL-3.0-only (Cargo.toml) / GPL-3.0 (deprecated SPDX alias)
     { allow = ["GPL-3.0-only"], crate = "skill" },
     { allow = ["GPL-3.0-only"], crate = "brainmaster" },
+    { allow = ["GPL-3.0-only"], crate = "skill-asr" },
     { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
     { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
     { allow = ["GPL-3.0-only"], crate = "skill-commands" },
@@ -102,6 +120,7 @@ exceptions = [
     { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dicts" },
+    { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dict-en" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dict-ru" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-phonemes" },
     { allow = ["GPL-3.0-only"], crate = "skill-location" },
@@ -179,6 +198,17 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "rlx-wav2vec2-bert" },
     { allow = ["GPL-3.0-only"], crate = "rlx-wgpu" },
     { allow = ["GPL-3.0-only"], crate = "rlx-whisper" },
+    # RLX 0.2.11 additions (backends, TTS/ASR model crates).
+    { allow = ["GPL-3.0-only"], crate = "rlx-coreml" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-distributed" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-inflect-nano" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-kyutai-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-mimi" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-orpheus" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-qwen3-asr" },
+    # EEG encoder (Mamba-family) pulled by skill-exg, GPL-3.0-only.
+    { allow = ["GPL-3.0-only"], crate = "lumamba" },
 ]
 
 [[licenses.clarify]]

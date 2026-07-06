@@ -201,6 +201,16 @@ rlx-ocr       = { version = "=0.2.11" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
+# skill-daemon gates two EEG encoders (reve, brainjepa) that are pending RLX
+# migration — their `reve-rs` / `brainjepa` deps aren't published yet, so the
+# features stay commented out in skill-daemon/Cargo.toml while the
+# `#[cfg(feature = "embed-reve" / "embed-brainjepa")]` guards remain in src.
+# Declare those cfg values as known so `unexpected_cfgs` stays quiet without
+# making the half-wired features selectable (an empty stub feature would break
+# `--all-features`). Drop a value here once its real feature lands.
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("embed-reve", "embed-brainjepa"))',
+] }
 
 [workspace.lints.clippy]
 # Phase 1 hardening: make critical runtime-safety lints hard errors.

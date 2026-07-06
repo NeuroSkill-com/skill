@@ -505,7 +505,7 @@ const llm: Record<string, string> = {
   "chat.tts.orpheusHint":
     "Orpheus はバックボーンを自動ダウンロードします。SNAC デコーダーは scripts/export_snac_decoder.py で一度エクスポートしてください（または ORPHEUS_SNAC_PATH を設定）。",
   "chat.tts.bundleExportHint":
-    "Inflect-Nano と TinyTTS は一度エクスポートしたバンドルから読み込みます。~/.skill/models/inflect-nano（または tiny-tts）に配置するか、INFLECT_NANO_DIR / TINY_TTS_DIR を設定してください。",
+    "Inflect-Nano は一度エクスポートしたバンドルから読み込みます。アプリに自動的に同梱されます。開発実行の場合は ~/.skill/models/inflect-nano に配置するか、INFLECT_NANO_DIR を設定してください。",
   "chat.tts.modelLabel": "音声モデル",
   "chat.tts.modelDesc": "選択したエンジンのモデルリポジトリ。",
   "chat.tts.voiceLabel": "声",

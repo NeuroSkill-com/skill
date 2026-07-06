@@ -141,22 +141,28 @@ impl Synthesizer for InflectNanoSynth {
 //
 // TinyTTS (MeloTTS / VITS2, 44.1 kHz), single English speaker. Loaded from a
 // one-time exported bundle (`config.json` + `onnx/` + `frontend/`).
-
-struct TinyTtsSynth {
-    model: rlx_tiny_tts::TinyTts,
-    device: Device,
-}
-
-impl Synthesizer for TinyTtsSynth {
-    fn synthesize(&mut self, text: &str, _voice: &str) -> Result<(Vec<f32>, u32)> {
-        let opts = rlx_tiny_tts::InferOpts::from_config(self.model.config());
-        let wav = self
-            .model
-            .synthesize_on(text, self.device, &opts)
-            .context("tiny-tts synthesize")?;
-        Ok((wav.samples, wav.sample_rate))
-    }
-}
+//
+// DISABLED FOR NOW: the rlx-tiny-tts graph emits an inconsistent reshape that
+// fails on every backend we validated — Metal (MPSGraph verification abort) and
+// MLX (`Cannot reshape array of size N into shape …`). Re-enable once the
+// upstream reshape/length bug in rlx-tiny-tts is fixed; the wiring below plus the
+// `dep:rlx-tiny-tts` feature and the `"tiny-tts"` build arm just need uncommenting.
+//
+// struct TinyTtsSynth {
+//     model: rlx_tiny_tts::TinyTts,
+//     device: Device,
+// }
+//
+// impl Synthesizer for TinyTtsSynth {
+//     fn synthesize(&mut self, text: &str, _voice: &str) -> Result<(Vec<f32>, u32)> {
+//         let opts = rlx_tiny_tts::InferOpts::from_config(self.model.config());
+//         let wav = self
+//             .model
+//             .synthesize_on(text, self.device, &opts)
+//             .context("tiny-tts synthesize")?;
+//         Ok((wav.samples, wav.sample_rate))
+//     }
+// }
 
 // ─── Construction ───────────────────────────────────────────────────────────────
 
@@ -237,18 +243,19 @@ fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> 
             tts_log!("tts", "inflect-nano ready on {:?} ({})", device, dir.display());
             Ok(Box::new(InflectNanoSynth { model: synth, device }))
         }
-        "tiny-tts" | "tiny_tts" => {
-            let dir = resolve_bundle_dir(
-                model,
-                "TINY_TTS_DIR",
-                "tiny-tts",
-                "Export it once with rlx-tiny-tts's scripts/export_tiny_tts.py.",
-            )?;
-            let synth = rlx_tiny_tts::TinyTts::load_from_dir(&dir).context("load TinyTTS")?;
-            let device = resolve_device();
-            tts_log!("tts", "tiny-tts ready on {:?} ({})", device, dir.display());
-            Ok(Box::new(TinyTtsSynth { model: synth, device }))
-        }
+        // DISABLED FOR NOW — rlx-tiny-tts reshape bug (see TinyTtsSynth above).
+        // "tiny-tts" | "tiny_tts" => {
+        //     let dir = resolve_bundle_dir(
+        //         model,
+        //         "TINY_TTS_DIR",
+        //         "tiny-tts",
+        //         "Export it once with rlx-tiny-tts's scripts/export_tiny_tts.py.",
+        //     )?;
+        //     let synth = rlx_tiny_tts::TinyTts::load_from_dir(&dir).context("load TinyTTS")?;
+        //     let device = resolve_device();
+        //     tts_log!("tts", "tiny-tts ready on {:?} ({})", device, dir.display());
+        //     Ok(Box::new(TinyTtsSynth { model: synth, device }))
+        // }
         other => anyhow::bail!("unknown TTS engine: {other}"),
     }
 }
