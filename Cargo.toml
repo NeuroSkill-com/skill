@@ -240,6 +240,13 @@ items_after_test_module = "allow"
 module_inception = "allow"
 assertions_on_constants = "allow"
 unnecessary_cast = "allow"
+# doc_lazy_continuation — clippy 1.95 made this a default warn and it fires on
+# dozens of pre-existing doc comments across the workspace (a wrapped line under
+# a `-`/`*`/`+`/`N.` list item that isn't re-indented). It is a doc-rendering
+# nit, not a correctness issue; allow it so the strict `-D warnings` push hook
+# passes without churning every crate's docs. (Specific-lint allow overrides the
+# `warnings` group even under `-D warnings`.)
+doc_lazy_continuation = "allow"
 
 # ── Build profiles ────────────────────────────────────────────────────────────
 #
