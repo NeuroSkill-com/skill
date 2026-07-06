@@ -64,68 +64,10 @@ members = [
 
 [patch.crates-io]
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
-# TTS / ASR model crates — sibling ../rlx-models (see scripts/ensure-rlx-models.sh).
-rlx-orpheus     = { path = "../rlx-models/crates/rlx-orpheus" }
-rlx-kyutai-tts  = { path = "../rlx-models/crates/rlx-kyutai-tts" }
-rlx-qwen3-tts   = { path = "../rlx-models/crates/rlx-qwen3-tts" }
-rlx-mimi        = { path = "../rlx-models/crates/rlx-mimi" }
-rlx-neutts      = { path = "../rlx-models/crates/rlx-neutts" }
-rlx-kittentts   = { path = "../rlx-models/crates/rlx-kittentts" }
-rlx-inflect-nano = { path = "../rlx-models/crates/rlx-inflect-nano" }
-rlx-tiny-tts    = { path = "../rlx-models/crates/rlx-tiny-tts" }
-rlx-whisper     = { path = "../rlx-models/crates/rlx-whisper" }
-rlx-models      = { path = "../rlx-models/crates/rlx-models" }
-rlx-minicpm5    = { path = "../rlx-models/crates/rlx-minicpm5" }
-rlx-minimax     = { path = "../rlx-models/crates/rlx-minimax" }
-rlx-nemotron    = { path = "../rlx-models/crates/rlx-nemotron" }
-rlx-gemma       = { path = "../rlx-models/crates/rlx-gemma" }
-rlx-vad         = { path = "../rlx-models/crates/rlx-vad" }
-rlx-qwen3-asr   = { path = "../rlx-models/crates/rlx-qwen3-asr" }
-rlx-voxtral     = { path = "../rlx-models/crates/rlx-voxtral" }
-rlx-ocr         = { path = "../rlx-models/crates/rlx-ocr" }
-# Qwen3 stack — tribev2 on crates.io pulls rlx-llama32 0.2.x → old rlx-qwen3; patch
-# to sibling 0.2.9 so rlx-flow 0.2.10 API (export_qk, bind_decode_inputs, mask) matches.
-rlx-qwen3       = { path = "../rlx-models/crates/rlx-qwen3" }
-rlx-llama32     = { path = "../rlx-models/crates/rlx-llama32" }
-rlx-qwen35      = { path = "../rlx-models/crates/rlx-qwen35" }
-rlx-models-core = { path = "../rlx-models/crates/rlx-models-core" }
-# RLX 0.2.11 runtime — sibling ../rlx (see scripts/ensure-rlx.sh).
-# NOTE: ../rlx reorganized its workspace into grouped subdirs
-# (core/ backends/ io/ numerics/); paths below track that layout.
-rlx             = { path = "../rlx/crates/rlx" }
-# core/
-rlx-ir          = { path = "../rlx/crates/core/rlx-ir" }
-rlx-flow        = { path = "../rlx/crates/core/rlx-flow" }
-rlx-runtime     = { path = "../rlx/crates/core/rlx-runtime" }
-rlx-compile     = { path = "../rlx/crates/core/rlx-compile" }
-rlx-opt         = { path = "../rlx/crates/core/rlx-opt" }
-rlx-autodiff    = { path = "../rlx/crates/core/rlx-autodiff" }
-rlx-fusion      = { path = "../rlx/crates/core/rlx-fusion" }
-rlx-driver      = { path = "../rlx/crates/core/rlx-driver" }
-rlx-tensor      = { path = "../rlx/crates/core/rlx-tensor" }
-rlx-macros      = { path = "../rlx/crates/core/rlx-macros" }
-rlx-optim       = { path = "../rlx/crates/core/rlx-optim" }
-rlx-collectives = { path = "../rlx/crates/core/rlx-collectives" }
-# io/
-rlx-gguf        = { path = "../rlx/crates/io/rlx-gguf" }
-rlx-nemo        = { path = "../rlx/crates/io/rlx-nemo" }
-rlx-text        = { path = "../rlx/crates/io/rlx-text" }
-rlx-onnx-import = { path = "../rlx/crates/io/rlx-onnx-import" }
-# backends/
-rlx-cpu         = { path = "../rlx/crates/backends/rlx-cpu" }
-rlx-metal       = { path = "../rlx/crates/backends/rlx-metal" }
-rlx-mlx         = { path = "../rlx/crates/backends/rlx-mlx" }
-rlx-mlx-sys     = { path = "../rlx/crates/backends/rlx-mlx-sys" }
-rlx-cuda        = { path = "../rlx/crates/backends/rlx-cuda" }
-rlx-wgpu        = { path = "../rlx/crates/backends/rlx-wgpu" }
-rlx-rocm        = { path = "../rlx/crates/backends/rlx-rocm" }
-rlx-coreml      = { path = "../rlx/crates/backends/rlx-coreml" }
-rlx-gpu-kernels = { path = "../rlx/crates/backends/rlx-gpu-kernels" }
-# numerics/
-rlx-umap        = { path = "../rlx/crates/numerics/rlx-umap" }
-rlx-linalg      = { path = "../rlx/crates/numerics/rlx-linalg" }
-rlx-sparse      = { path = "../rlx/crates/numerics/rlx-sparse" }
-rlx-vq          = { path = "../rlx/crates/numerics/rlx-vq" }
+# rlx / rlx-models: resolved from crates.io (=0.2.11, pinned in [workspace.dependencies]).
+# ../rlx and ../rlx-models are LOCAL-DEV ONLY — never patched here so CI/published
+# builds use the registry. For local work against sibling checkouts, run
+# `bash scripts/ensure-rlx.sh` (writes a cargo `paths` override outside the repo).
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
 glib            = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
@@ -166,9 +108,10 @@ zip = { version = "7", features = ["deflate"] }
 # RLX — published on crates.io (features set per crate).
 #   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR
 #   rlx-models — https://github.com/MIT-RLX/rlx-models — model loaders / runners
-# For local development against sibling checkouts, swap these back to path deps:
-#   rlx        = { path = "../rlx/rlx", default-features = false }
-#   rlx-models = { path = "../rlx-models/crates/rlx-models", default-features = false }
+# These pins are what CI and release builds use. For local development against
+# sibling ../rlx / ../rlx-models checkouts, run `bash scripts/ensure-rlx.sh` — it
+# registers a cargo `paths` override OUTSIDE the repo, so you build against your
+# local rlx without editing Cargo.toml/Cargo.lock (never commit `../` paths here).
 rlx          = { version = "=0.2.11", default-features = false }
 rlx-models   = { version = "=0.2.11", default-features = false }
 rlx-minicpm5 = { version = "=0.2.11", default-features = false }

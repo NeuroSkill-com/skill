@@ -1,22 +1,21 @@
 name: Checkout RLX
 description: >-
-  Clone https://github.com/MIT-RLX/rlx next to the skill repo so path
-  dependencies (../../../rlx/rlx) resolve in CI.
+  No-op in CI: rlx / rlx-models are resolved from crates.io (pinned =0.2.11 in
+  the workspace). ../rlx is local-development only. Kept as a composite action so
+  existing workflow call sites stay valid; the scripts short-circuit under CI.
 
 inputs:
   ref:
-    description: Branch, tag, or SHA to checkout
+    description: Ignored in CI (kept for call-site compatibility).
     required: false
     default: main
 
 runs:
   using: composite
   steps:
-    - name: Clone MIT-RLX/rlx + rlx-models
+    - name: rlx from crates.io (no sibling checkout in CI)
       shell: bash
       env:
-        RLX_REF: ${{ inputs.ref }}
-        RLX_URL: https://github.com/MIT-RLX/rlx.git
         GITHUB_ACTIONS: "true"
       run: |
         bash scripts/ensure-rlx.sh
