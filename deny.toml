@@ -35,13 +35,15 @@ ignore = [
     # attacker-controlled network XML.
     { id = "RUSTSEC-2026-0194", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
-    # protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2. BUILD-ONLY dep via
-    # onnx → protoc-rust (rlx-onnx-import ← rlx-tiny-tts); protoc-rust 1.x pins
-    # protobuf 1.x. Codegen at build time, never shipped in the binary.
-    { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
-    # remove_dir_all 0.5.3 — TOCTOU, fixed in >=0.8.0. BUILD-ONLY dep via
-    # tempdir → protoc-rust (same onnx/rlx-tiny-tts chain); tempdir 0.3.7 pins it.
-    { id = "RUSTSEC-2023-0018", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    # DISABLED with rlx-tiny-tts (reshape bug on Metal + MLX). The onnx → protoc
+    # codegen chain (protobuf 1.x, tempdir → remove_dir_all) only entered the
+    # graph via rlx-tiny-tts; with that engine commented out no crate matches
+    # these advisories, so cargo-deny warns `advisory-not-detected`. Re-enable
+    # both lines together with rlx-tiny-tts in crates/skill-tts/Cargo.toml.
+    #   protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2 (build-only, never shipped)
+    # { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    #   remove_dir_all 0.5.3 — TOCTOU, fixed in >=0.8.0 (build-only, via tempdir 0.3.7)
+    # { id = "RUSTSEC-2023-0018", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
@@ -202,7 +204,9 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "rlx-coreml" },
     { allow = ["GPL-3.0-only"], crate = "rlx-distributed" },
     { allow = ["GPL-3.0-only"], crate = "rlx-inflect-nano" },
-    { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
+    # rlx-tiny-tts disabled (reshape bug on Metal + MLX) — out of the graph, so
+    # its exception is unused; re-enable with the engine in skill-tts/Cargo.toml.
+    # { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
     { allow = ["GPL-3.0-only"], crate = "rlx-kyutai-tts" },
     { allow = ["GPL-3.0-only"], crate = "rlx-mimi" },
     { allow = ["GPL-3.0-only"], crate = "rlx-orpheus" },
