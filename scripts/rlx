@@ -45,6 +45,7 @@ rlx — switch skill between local and deployed rlx / rlx-models
   scripts/rlx local        build against ../rlx + ../rlx-models   (aliases: on, dev)
   scripts/rlx deployed     build against crates.io                (aliases: off, crates)
   scripts/rlx toggle       flip between the two
+  scripts/rlx refresh      re-scan ../rlx for added/removed crates (aliases: re)
 EOF
 }
 
@@ -52,6 +53,7 @@ case "${1:-status}" in
   status|st)                            status ;;
   local|on|dev|up)                      bash "${SCRIPT_DIR}/ensure-rlx.sh"     >/dev/null; status ;;
   deployed|off|crates|published|prod)   bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null; status ;;
+  refresh|re)                           RLX_REFRESH=1 bash "${SCRIPT_DIR}/ensure-rlx.sh" >/dev/null; status ;;
   toggle)
     if is_local; then bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null
     else              bash "${SCRIPT_DIR}/ensure-rlx.sh"     >/dev/null; fi

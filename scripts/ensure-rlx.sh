@@ -31,10 +31,17 @@ CONFIG="${CONFIG_DIR}/config.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
 
 # Keep local [patch] lock churn out of the committed registry-pinned Cargo.lock.
-lock_protect()   { git -C "${REPO_ROOT}" update-index --skip-worktree    Cargo.lock 2>/dev/null || true; }
+lock_protect() { git -C "${REPO_ROOT}" update-index --skip-worktree Cargo.lock 2>/dev/null || true; }
+# Resume tracking Cargo.lock and restore the DEPLOYED (crates.io) registry lock.
+# Regenerate from crates.io rather than `git checkout HEAD`, so this yields a
+# correct registry lock even if a poisoned local lock was previously committed.
 lock_unprotect() {
   git -C "${REPO_ROOT}" update-index --no-skip-worktree Cargo.lock 2>/dev/null || true
-  git -C "${REPO_ROOT}" checkout --   Cargo.lock 2>/dev/null || true   # restore committed registry lock
+  if command -v cargo >/dev/null 2>&1 \
+     && ( cd "${REPO_ROOT}" && cargo metadata --format-version=1 >/dev/null 2>&1 ); then
+    return 0
+  fi
+  git -C "${REPO_ROOT}" checkout -- Cargo.lock 2>/dev/null || true   # offline fallback
 }
 
 # Remove our override (if any) and resume tracking Cargo.lock at its committed state.
@@ -99,6 +106,15 @@ if [[ -f "${CONFIG}" ]] && ! grep -qF "${MARK}" "${CONFIG}"; then
   exit 0
 fi
 
+# Fast path: override already active → just re-assert lock protection and exit,
+# so repeated direnv loads don't pay the regeneration cost. `RLX_REFRESH=1` (or
+# `scripts/rlx refresh`) forces a rebuild to pick up added/removed rlx crates.
+if [[ -f "${CONFIG}" ]] && grep -qF "${MARK}" "${CONFIG}" && [[ "${RLX_REFRESH:-}" != 1 ]]; then
+  lock_protect
+  echo "ensure-rlx: local override already active ($(grep -c ' = { path = ' "${CONFIG}") rlx crates) — RLX_REFRESH=1 to regenerate"
+  exit 0
+fi
+
 # rlx-family package crates available locally, as "<name>\t<dir>" lines.
 avail_crates() {
   local cargo name
@@ -134,8 +150,11 @@ mkdir -p "${CONFIG_DIR}"
   echo "[patch.crates-io]"
   for r in "${roots[@]}"; do avail_crates "$r"; done | sort | awk -F'\t' '!seen[$1]++' \
     | while IFS="$(printf '\t')" read -r name dir; do
-        printf '%s\n' "${needed_rlx}" | grep -qxF "${name}" \
-          && printf '%s = { path = "%s" }\n' "${name}" "${dir}"
+        # `if` (not `&&`) so a non-matching crate returns 0 — otherwise the last
+        # unmatched line would make the loop/pipeline non-zero and set -e aborts.
+        if printf '%s\n' "${needed_rlx}" | grep -qxF "${name}"; then
+          printf '%s = { path = "%s" }\n' "${name}" "${dir}"
+        fi
       done
 } > "${CONFIG}"
 
