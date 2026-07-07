@@ -13,6 +13,34 @@ if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
+# ── rlx source guard ──────────────────────────────────────────────────────────
+# Commits must always carry the DEPLOYED rlx (crates.io); ../rlx is local-dev
+# only. Safety net for when the Cargo.lock skip-worktree bit is bypassed (fresh
+# clone, `git add -A`, GUI clients, etc. — see scripts/ensure-rlx.sh).
+RLX_REGISTRY='^source = "registry+https://github.com/rust-lang/crates.io-index"'
+
+# 1) Cargo.toml must not reintroduce a ../rlx path patch (hard block).
+if ! git diff --cached --quiet -- Cargo.toml 2>/dev/null; then
+  if git show :Cargo.toml 2>/dev/null | grep -vE '^[[:space:]]*#' | grep -qE 'path[[:space:]]*=[[:space:]]*"\.\./rlx'; then
+    echo "❌ Staged Cargo.toml adds a ../rlx path patch — that must stay local-only." >&2
+    echo "   Remove it and use 'scripts/rlx local' (writes an override OUTSIDE the repo)." >&2
+    exit 1
+  fi
+fi
+
+# 2) Cargo.lock (as it will be committed = the index blob) must pin rlx to
+#    crates.io, not a local ../rlx checkout. Content-based, so it catches a
+#    locally-patched lock however it got staged (and even if HEAD is poisoned).
+if git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1; then
+  if ! git show :Cargo.lock 2>/dev/null | grep -A3 '^name = "rlx"$' | grep -q "$RLX_REGISTRY"; then
+    echo "❌ Cargo.lock pins rlx to a LOCAL ../rlx checkout, not crates.io — refusing to commit." >&2
+    echo "   ../rlx is local-dev only; CI and published builds resolve rlx from crates.io." >&2
+    echo "   Fix: run 'scripts/rlx deployed' (restores the registry lock), then commit." >&2
+    echo "        Run 'scripts/rlx local' afterward to resume local development." >&2
+    exit 1
+  fi
+fi
+
 # Basic JSON validation for catalog files
 if echo "$STAGED_FILES" | grep -q 'llm_catalog.json'; then
   if ! python3 -m json.tool src-tauri/llm_catalog.json > /dev/null 2>&1; then
