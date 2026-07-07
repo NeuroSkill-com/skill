@@ -67,7 +67,7 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 # rlx / rlx-models: resolved from crates.io (=0.2.11, pinned in [workspace.dependencies]).
 # ../rlx and ../rlx-models are LOCAL-DEV ONLY — never patched here so CI/published
 # builds use the registry. For local work against sibling checkouts, run
-# `bash scripts/ensure-rlx.sh` (writes a cargo `paths` override outside the repo).
+# `bash scripts/ensure-rlx.sh` (writes a cargo `[patch]` override outside the repo).
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
 glib            = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
@@ -110,8 +110,9 @@ zip = { version = "7", features = ["deflate"] }
 #   rlx-models — https://github.com/MIT-RLX/rlx-models — model loaders / runners
 # These pins are what CI and release builds use. For local development against
 # sibling ../rlx / ../rlx-models checkouts, run `bash scripts/ensure-rlx.sh` — it
-# registers a cargo `paths` override OUTSIDE the repo, so you build against your
-# local rlx without editing Cargo.toml/Cargo.lock (never commit `../` paths here).
+# registers a cargo `[patch]` override OUTSIDE the repo (and skip-worktrees the
+# lock), so you build against your local rlx without editing Cargo.toml or
+# committing a path-based Cargo.lock (never commit `../` paths here).
 rlx          = { version = "=0.2.11", default-features = false }
 rlx-models   = { version = "=0.2.11", default-features = false }
 rlx-minicpm5 = { version = "=0.2.11", default-features = false }

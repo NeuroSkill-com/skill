@@ -1,5 +1,5 @@
 # Copy to rlx-models.path (gitignored) to point scripts/ensure-rlx.sh at a
-# non-default local rlx-models checkout for the cargo `paths` override that makes
-# local builds resolve rlx-models from here (CI uses crates.io).
+# non-default local rlx-models checkout for the cargo `[patch]` override that
+# makes local builds resolve rlx-models from here (CI uses crates.io).
 # Default: /Users/Shared/rlx-models
 /Users/Shared/rlx-models
