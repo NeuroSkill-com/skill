@@ -29,6 +29,7 @@ fn synthesize_engines_for_whisper_validation() {
     std::fs::create_dir_all(&out_dir).unwrap();
 
     let wav_name = std::env::var("SKILL_TTS_VALIDATE_WAV_NAME").ok();
+    #[cfg(feature = "whisper-validate")]
     let whisper_soft = std::env::var("SKILL_TTS_WHISPER_SOFT")
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "TRUE"));
@@ -39,6 +40,7 @@ fn synthesize_engines_for_whisper_validation() {
     // Default to both; override with SKILL_TTS_VALIDATE_ENGINES=qwen3-tts to scope.
     let engines = std::env::var("SKILL_TTS_VALIDATE_ENGINES").unwrap_or_else(|_| "qwen3-tts,orpheus".into());
 
+    #[cfg(feature = "whisper-validate")]
     let whisper_min = std::env::var("SKILL_TTS_WHISPER_MIN_RATIO")
         .ok()
         .and_then(|s| s.parse().ok())
