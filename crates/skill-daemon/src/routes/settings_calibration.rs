@@ -204,9 +204,10 @@ mod tests {
 
     fn mk_state() -> (TempDir, AppState) {
         let td = TempDir::new().unwrap();
-        // Write default settings with a default calibration profile.
-        let mut settings = skill_settings::UserSettings::default();
-        settings.calibration_profiles = vec![CalibrationProfile::default()];
+        // Write default settings. calibration_profiles is left at its
+        // Vec::new() default — load_settings()'s backfill (restored from
+        // 3abfaf60) is what populates it, not this fixture.
+        let settings = skill_settings::UserSettings::default();
         let path = skill_settings::settings_path(td.path());
         if let Some(p) = path.parent() {
             std::fs::create_dir_all(p).unwrap();
@@ -214,6 +215,29 @@ mod tests {
         std::fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
         let state = AppState::new("token".into(), td.path().to_path_buf());
         (td, state)
+    }
+
+    /// Regression test for the backfill dropped by 3abfaf60: a settings.json
+    /// with `"calibration_profiles": []` explicitly present (not merely
+    /// missing) must still yield exactly one profile, and its id must equal
+    /// active_calibration_id (M-1 — the other half of the deleted block).
+    /// Written as raw JSON text so this cannot silently stop covering the
+    /// explicit-`[]` case if the struct ever gains `skip_serializing_if`.
+    #[tokio::test]
+    async fn list_profiles_backfills_when_explicitly_empty() {
+        let td = TempDir::new().unwrap();
+        let path = skill_settings::settings_path(td.path());
+        if let Some(p) = path.parent() {
+            std::fs::create_dir_all(p).unwrap();
+        }
+        std::fs::write(&path, r#"{"calibration_profiles": [], "active_calibration_id": ""}"#).unwrap();
+        let state = AppState::new("token".into(), td.path().to_path_buf());
+
+        let res = list_profiles(State(state.clone())).await.0;
+        assert_eq!(res.len(), 1);
+
+        let active = get_active_profile_id(State(state)).await.0;
+        assert_eq!(active["value"], res[0].id);
     }
 
     #[tokio::test]

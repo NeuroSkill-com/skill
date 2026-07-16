@@ -1291,6 +1291,20 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         s.settings_shortcut = default_settings_shortcut();
     }
 
+    // ── Calibration migration: 3abfaf60 moved calibration ownership to the
+    // daemon and deleted the backfill that ran in the Tauri client
+    // (v0.0.121:src-tauri/src/setup.rs:370-382). Nothing re-established it
+    // daemon-side. Restore it where settings are now loaded. In-memory only,
+    // deliberately — this re-applies on every load and lands on disk
+    // incidentally, the first time any route calls modify_settings_blocking,
+    // matching the shortcut migrations directly above.
+    if s.calibration_profiles.is_empty() {
+        s.calibration_profiles = vec![CalibrationProfile::from_legacy(&s.calibration)];
+    }
+    if s.active_calibration_id.is_empty() {
+        s.active_calibration_id = s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default();
+    }
+
     // ── Secret migration: plaintext JSON → system keychain ───────────────
     //
     // If the JSON file still contains non-empty secret values (from a
