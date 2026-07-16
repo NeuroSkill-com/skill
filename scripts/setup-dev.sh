@@ -129,6 +129,7 @@ if [[ "$OS" == "Darwin" ]]; then
 protobuf|protoc|Protocol Buffers compiler (protoc)
 binutils|/opt/homebrew/opt/binutils/bin/gar|GNU ar (fixes 'illegal option -- D' warnings)
 sccache|sccache|Compilation cache (~50% faster clean rebuilds)
+cmake|cmake|CMake (required by llama-cpp-sys-4)
 DEPS
 
   if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
@@ -264,9 +265,16 @@ echo ""
 if [[ -d "node_modules" ]]; then
   ok "node_modules exists"
 else
-  if confirm "Run npm install?"; then
-    npm install
-    INSTALLED+=("node_modules")
+  if [[ -f "package-lock.json" ]]; then
+    if confirm "Run npm ci?"; then
+      npm ci
+      INSTALLED+=("node_modules")
+    fi
+  else
+    if confirm "Run npm install?"; then
+      npm install
+      INSTALLED+=("node_modules")
+    fi
   fi
 fi
 
