@@ -788,7 +788,11 @@ onMount(async () => {
     onboardingStatus = await invoke<OnboardingStatus>("get_onboarding_status");
   } catch {}
 
-  status = await daemonInvoke<DeviceStatus>("get_status");
+  try {
+    status = await daemonInvoke<DeviceStatus>("get_status");
+  } catch (e) {
+    console.error(e);
+  }
   unsubs.push(
     await listen<DeviceStatus>("status", (ev) => {
       status = ev.payload;
