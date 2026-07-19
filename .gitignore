@@ -36,5 +36,10 @@ src-tauri/binaries/
 errors/
 logs/
 
-# Bundled TTS engine weights — staged by scripts/bundle-tts-weights.sh before packaging (not committed)
-src-tauri/resources/tts/
+# Bundled TTS engine weights — staged by scripts/bundle-tts-weights.sh before packaging.
+# inflect-nano is committed (declared in tauri.conf.json bundle.resources so CI can build the app);
+# other engine bundles (e.g. tiny-tts) stay local-only.
+src-tauri/resources/tts/*
+!src-tauri/resources/tts/inflect-nano/
+# Re-include the bundle contents too, overriding the global **/*.safetensors ignore above.
+!src-tauri/resources/tts/inflect-nano/**
