@@ -71,7 +71,7 @@ describe.skipIf(!submoduleAvailable)("vscode extension — research-use disclaim
     const readme = readFileSync(`${extRoot}/README.md`, "utf-8");
     const head = readme.slice(0, 2000);
     expect(head).toMatch(/Research tool only/i);
-    expect(head).toMatch(/not a medical device/i);
+    expect(head).toMatch(/not a medical (system or )?device/i);
     expect(head).toMatch(/FDA/);
     expect(head).toMatch(/CE/);
   });
