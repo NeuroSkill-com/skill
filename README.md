@@ -19,7 +19,7 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 ## Quick links
 
 - **Downloads:** [macOS](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.dmg) · [Windows](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.exe) · [Linux](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.AppImage)
-- **Install (Homebrew):** `brew tap NeuroSkill-com/skill && brew install --cask neuroskill`
+- **Install (Homebrew):** `brew install --cask https://raw.githubusercontent.com/NeuroSkill-com/skill/main/Casks/neuroskill.rb`
 - **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 

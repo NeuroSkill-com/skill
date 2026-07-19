@@ -30,6 +30,7 @@ import { tmpdir } from "os";
 import { createWriteStream } from "fs";
 import https from "https";
 import http from "http";
+import { createHash } from "crypto";
 
 const LLAMA_PREBUILT_TAG = "v0.3.0";
 
@@ -323,6 +324,69 @@ function ensureRcLatestRelease() {
     "--title", "RC channel pointer",
     "--notes", "Mutable release that always carries the latest latest.json (RC or stable build). Used by users opted into the rc update channel. Do not delete.",
   ], { check: true });
+}
+
+/**
+ * Reconcile the Homebrew cask (Casks/neuroskill.rb) to a released build.
+ *
+ * Usage:
+ *   node scripts/ci.mjs update-cask [--version <ver>] [--sha256 <hex>]
+ *                                   [--dmg <path>] [--cask <path>] [--repo <owner/name>]
+ *
+ * Resolution:
+ *   version : --version, else the latest *stable* (non-prerelease) GitHub release.
+ *   sha256  : --sha256, else computed from --dmg, else the release asset's digest
+ *             fetched via `gh api` (no download of the ~100 MB DMG).
+ *
+ * Only the `version` and `sha256` lines are rewritten — every other stanza
+ * (depends_on, zap, url template, …) is preserved. Idempotent: a no-op when the
+ * cask already matches, so the reconcile workflow only opens a PR on real drift.
+ */
+function cmdUpdateCask(args) {
+  const repo = args.repo || process.env.GITHUB_REPOSITORY || "NeuroSkill-com/skill";
+  const caskPath = args.cask || "Casks/neuroskill.rb";
+
+  // 1. Resolve the target version — explicit, or the latest non-prerelease release.
+  let version = args.version;
+  if (version) {
+    version = version.replace(/^v/, "");
+  } else {
+    const r = run(["gh", "api", `repos/${repo}/releases/latest`, "-q", ".tag_name"], { capture: true, check: true });
+    version = (r.stdout || "").trim().replace(/^v/, "");
+    if (!version) throw new Error("could not resolve the latest stable release");
+  }
+  const dmgName = `NeuroSkill_${version}_aarch64.dmg`;
+
+  // 2. Resolve the sha256 — explicit, from a local DMG, or the release asset digest.
+  let sha256 = args.sha256;
+  if (!sha256 && args.dmg) {
+    sha256 = createHash("sha256").update(readFileSync(args.dmg)).digest("hex");
+  }
+  if (!sha256) {
+    const q = `.assets[] | select(.name=="${dmgName}") | .digest`;
+    const r = run(["gh", "api", `repos/${repo}/releases/tags/v${version}`, "-q", q], { capture: true, check: true });
+    const digest = (r.stdout || "").trim();
+    if (!digest) throw new Error(`release v${version} has no asset named ${dmgName}`);
+    sha256 = digest.replace(/^sha256:/, "");
+  }
+  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`invalid sha256: ${sha256}`);
+
+  // 3. Rewrite the version + sha256 lines, preserving everything else.
+  const before = readFileSync(caskPath, "utf8");
+  if (!/^\s*version\s+"/m.test(before) || !/^\s*sha256\s+"/m.test(before)) {
+    throw new Error(`${caskPath} is missing a version or sha256 stanza`);
+  }
+  const after = before
+    .replace(/^(\s*version\s+)"[^"]*"/m, `$1"${version}"`)
+    .replace(/^(\s*sha256\s+)"[^"]*"/m, `$1"${sha256}"`);
+
+  if (after === before) {
+    console.log(`Cask already current: version ${version}, sha256 ${sha256.slice(0, 12)}…`);
+    return;
+  }
+
+  writeFileSync(caskPath, after);
+  console.log(`Updated ${caskPath} → version ${version}, sha256 ${sha256.slice(0, 12)}…`);
 }
 
 async function cmdDiscordNotify(args) {
@@ -723,6 +787,7 @@ const COMMANDS = {
   "install-protoc-windows": cmdInstallProtocWindows,
   "self-test": cmdSelfTest,
   "dry-run-release": (a) => cmdDryRunRelease(a),
+  "update-cask": cmdUpdateCask,
 };
 
 async function main() {
@@ -748,6 +813,7 @@ async function main() {
     "--mirror-to-rc-latest": true,
     "--status": "status", "--title": "title", "--release-url": "release-url",
     "--run-url": "run-url", "--target": "target", "--skip-compile": true,
+    "--sha256": "sha256", "--dmg": "dmg", "--cask": "cask", "--repo": "repo",
   });
 
   log("starting");
