@@ -12,7 +12,6 @@
 //   prepare-changelog VER OUT [RANGE]  Generate release notes markdown
 //   update-latest-json ...   Merge platform entry into Tauri updater manifest
 //   discord-notify ...       Send Discord webhook notification
-//   download-llama PLAT TGT FEAT  Download + validate prebuilt llama libs
 //   import-apple-cert        Import .p12 into temporary keychain (macOS)
 //   setup-widget-signing     Prepare WidgetKit automatic signing (macOS CI)
 //   build-widgets            Build SkillWidgets.appex with CI signing (macOS)
@@ -27,12 +26,7 @@ import { execSync, spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync, statSync } from "fs";
 import { basename, join, dirname } from "path";
 import { tmpdir } from "os";
-import { createWriteStream } from "fs";
-import https from "https";
-import http from "http";
 import { createHash } from "crypto";
-
-const LLAMA_PREBUILT_TAG = "v0.3.0";
 
 // ── Globals ──────────────────────────────────────────────────────────────────
 
@@ -98,29 +92,6 @@ function run(cmd, opts = {}) {
     throw err;
   }
   return result;
-}
-
-function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const follow = (u) => {
-      const proto = u.startsWith("https") ? https : http;
-      proto.get(u, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          follow(res.headers.location);
-          return;
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode} for ${u}`));
-          return;
-        }
-        const ws = createWriteStream(dest);
-        res.pipe(ws);
-        ws.on("finish", () => ws.close(resolve));
-        ws.on("error", reject);
-      }).on("error", reject);
-    };
-    follow(url);
-  });
 }
 
 function parseArgs(argv, spec) {
@@ -440,58 +411,6 @@ async function cmdDiscordNotify(args) {
   }
 }
 
-async function cmdDownloadLlama(args) {
-  const [plat, target, feature] = args._;
-  const url = `https://github.com/eugenehp/llama-cpp-rs/releases/download/${LLAMA_PREBUILT_TAG}/llama-prebuilt-${plat}-${target}-${feature}-static.tar.gz`;
-  const tmp = process.env.RUNNER_TEMP || tmpdir();
-  const archive = join(tmp, `llama-prebuilt-${plat}.tar.gz`);
-  const dest = join(tmp, `llama-prebuilt-${plat}`);
-  mkdirSync(dest, { recursive: true });
-
-  console.log(`Downloading prebuilt llama ${LLAMA_PREBUILT_TAG}: ${url}`);
-  try {
-    await downloadFile(url, archive);
-  } catch (e) {
-    console.log(`[warn] prebuilt llama artifact unavailable (${e.message}); fallback to source build`);
-    return;
-  }
-
-  run(["tar", "-xzf", archive, "-C", dest], { check: true });
-
-  // Find root
-  let root = dest;
-  if (!["lib", "lib64", "bin"].some((d) => existsSync(join(root, d)))) {
-    const sub = readdirSync(dest).filter((f) => statSync(join(dest, f)).isDirectory());
-    root = sub.length ? join(dest, sub[0]) : "";
-  }
-  if (!root || !existsSync(root)) {
-    console.log("[warn] prebuilt llama archive layout invalid; fallback to source build");
-    return;
-  }
-
-  // Check for libs
-  const exts = { macos: [".a", ".dylib"], linux: [".a", ".so"], windows: [".lib", ".dll"] }[plat] || [".a", ".so", ".lib"];
-  const hasLibs = findFiles(root).some((f) => exts.some((e) => f.endsWith(e)));
-  if (!hasLibs) {
-    console.log("[warn] prebuilt llama archive contains no libs; fallback to source build");
-    return;
-  }
-
-  // Validate metadata
-  const metaPath = join(root, "metadata.json");
-  if (existsSync(metaPath)) {
-    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
-    if (meta.target !== target || !(meta.features || "").includes(feature)) {
-      console.log(`[warn] prebuilt metadata mismatch (target=${meta.target} features=${meta.features}); fallback to source build`);
-      return;
-    }
-  }
-
-  ghEnv("LLAMA_PREBUILT_DIR", root);
-  ghEnv("LLAMA_PREBUILT_SHARED", "0");
-  console.log(`[ok] LLAMA_PREBUILT_DIR=${root}`);
-}
-
 function findFiles(dir) {
   const results = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -679,7 +598,7 @@ function cmdSelfTest() {
   const commandMap = {
     "resolve-version": cmdResolveVersion, "verify-secrets": cmdVerifySecrets,
     "prepare-changelog": cmdPrepareChangelog, "update-latest-json": cmdUpdateLatestJson,
-    "discord-notify": cmdDiscordNotify, "download-llama": cmdDownloadLlama,
+    "discord-notify": cmdDiscordNotify,
     "import-apple-cert": cmdImportAppleCert,
     "setup-widget-signing": cmdSetupWidgetSigning,
     "build-widgets": cmdBuildWidgets,
@@ -781,7 +700,6 @@ const COMMANDS = {
   "prepare-changelog": cmdPrepareChangelog,
   "update-latest-json": (a) => cmdUpdateLatestJson(a),
   "discord-notify": (a) => cmdDiscordNotify(a),
-  "download-llama": (a) => cmdDownloadLlama(a),
   "import-apple-cert": cmdImportAppleCert,
   "setup-widget-signing": cmdSetupWidgetSigning,
   "build-widgets": cmdBuildWidgets,

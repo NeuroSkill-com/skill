@@ -32,7 +32,7 @@ case "${SCOPE:-A}" in
     # We deliberately don't build the real skill-daemon: the orchestrator's
     # contract with it is just /v1/version + pidfile + port-bind. A 25-line
     # Python stub gives identical coverage in ~5s instead of ~5min, and skips
-    # the llama-cpp-sys / libclang / GPU build chain.
+    # the libclang / GPU build chain.
     cargo test \
       --manifest-path src-tauri/Cargo.toml \
       --lib --no-default-features \

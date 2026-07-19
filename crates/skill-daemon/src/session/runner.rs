@@ -2034,7 +2034,7 @@ mod tests {
 
         // ── E2E: real consumer code paths must accept rolled-over chunks ──
         //
-        // Build env can't link the bin (llama-cpp-sys-4 native lib mismatch),
+        // Build env can't link the bin (native GPU/BLAS lib mismatch),
         // so instead of going over HTTP we drive the same in-process Rust
         // readers the HTTP routes call. This is the layer where rollover
         // could break behaviour — HTTP is just transport.

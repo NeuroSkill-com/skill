@@ -7,7 +7,7 @@
 //! [`actor`](super::actor) module's event-loop shape so the rest of the
 //! engine machinery (init, channels, status events) stays unchanged.
 //!
-//! Capabilities vs the llama-cpp actor:
+//! Capabilities:
 //!   * Generate / Complete — supported (text-only).
 //!   * Embed                — not supported (returns an error).
 //!   * EmbedImage           — not supported (returns `None`).

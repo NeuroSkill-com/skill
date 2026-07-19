@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Build script for skill-daemon.
 //!
-//! Fixes missing linker directives when using prebuilt llama-cpp-sys static
-//! archives on Linux.  The upstream build.rs prebuilt code path omits:
-//!   - `cargo:rustc-link-lib=vulkan` (Vulkan symbols from ggml-vulkan.cpp)
+//! On Linux, emits the extra link directives the daemon binary needs but that
+//! the crates providing those symbols don't emit themselves:
+//!   - `cargo:rustc-link-lib=vulkan` (Vulkan loader symbols)
 //!   - OpenBLAS search path + rpath (see `build-support/linux_openblas.rs`)
 
 mod linux_openblas {

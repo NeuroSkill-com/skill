@@ -53,7 +53,6 @@ powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1 -Buil
 
 ```bash
 npm run setup:build-cache
-npm run setup:llama-prebuilt
 ```
 
 Environment toggles:
