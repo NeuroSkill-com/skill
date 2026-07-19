@@ -415,7 +415,12 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
         run: |
-          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
+          # Full commit message (subject + body); HEAD here is the PR's real
+          # head sha (checked out with fetch-depth: 0), not a merge commit.
+          COMMIT_MSG=$(git log -1 --format='%B')
+          if [ "${#COMMIT_MSG}" -gt 500 ]; then
+            COMMIT_MSG="${COMMIT_MSG:0:500}…"
+          fi
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           SHA="${{ steps.label.outputs.sha }}"
           VERSION="${{ steps.label.outputs.conf_version }}"
