@@ -1,22 +1,122 @@
 name: Checkout RLX
 description: >-
-  No-op in CI: rlx / rlx-models are resolved from crates.io (pinned =0.2.11 in
-  the workspace). ../rlx is local-development only. Kept as a composite action so
-  existing workflow call sites stay valid; the scripts short-circuit under CI.
+  Build the workspace against MIT-RLX/rlx + rlx-models from git instead of
+  crates.io. Resolves each repo's ref to a commit SHA (cheap `git ls-remote`,
+  no clone), restores a per-SHA cache of shallow checkouts — re-cloning only when
+  a SHA changes — then wires a cargo `[patch.crates-io]` override and refreshes
+  Cargo.lock so the workspace's `--locked` build/test steps still pass.
+
+  Both repos are public, so no token is needed. Default ref is `main` (the most
+  recent commit); the resolved SHA feeds the cache key, so unchanged upstream =
+  instant cache restore. Pin a job by passing rlx-ref / rlx-models-ref a tag or
+  SHA, or set enabled=false to fall back to the crates.io build.
 
 inputs:
-  ref:
-    description: Ignored in CI (kept for call-site compatibility).
+  rlx-ref:
+    description: git ref (branch, tag, or full SHA) for MIT-RLX/rlx.
     required: false
     default: main
+  rlx-models-ref:
+    description: git ref (branch, tag, or full SHA) for MIT-RLX/rlx-models.
+    required: false
+    default: main
+  enabled:
+    description: When "false", no-op and build rlx/rlx-models from crates.io.
+    required: false
+    default: "true"
 
 runs:
   using: composite
   steps:
-    - name: rlx from crates.io (no sibling checkout in CI)
+    # ── Resolve refs → commit SHAs ────────────────────────────────────────────
+    # `git ls-remote` is a metadata-only call (no objects), so this is where the
+    # cache key comes from without paying for a clone. A full SHA passed as the
+    # ref won't appear in ls-remote output, so we fall back to using it verbatim.
+    - name: Resolve RLX commit SHAs
+      if: inputs.enabled == 'true'
+      id: rev
+      shell: bash
+      run: |
+        set -euo pipefail
+        resolve() { # $1 url  $2 ref -> full SHA
+          local sha
+          sha="$(git ls-remote "$1" "$2" | awk 'NR==1{print $1}')"
+          [ -n "$sha" ] || sha="$2"
+          printf '%s' "$sha"
+        }
+        rlx_sha="$(resolve https://github.com/MIT-RLX/rlx.git        '${{ inputs.rlx-ref }}')"
+        mdl_sha="$(resolve https://github.com/MIT-RLX/rlx-models.git '${{ inputs.rlx-models-ref }}')"
+
+        # Check the shallow clones out NEXT TO the workspace, so the cargo
+        # [patch] override (written to ../.cargo/config.toml by ensure-rlx.sh)
+        # is discovered as an ancestor config — the same layout local dev uses.
+        # Normalise to a mixed path (C:/…) on Windows so git-bash, cargo, and
+        # actions/cache all agree; a plain POSIX path elsewhere.
+        ws="$GITHUB_WORKSPACE"
+        if command -v cygpath >/dev/null 2>&1; then ws="$(cygpath -u "$GITHUB_WORKSPACE")"; fi
+        parent="$(cd "$ws/.." && pwd)"
+        if command -v cygpath >/dev/null 2>&1; then parent="$(cygpath -m "$parent")"; fi
+
+        {
+          echo "rlx_sha=$rlx_sha"
+          echo "mdl_sha=$mdl_sha"
+          echo "rlx_dir=$parent/rlx"
+          echo "mdl_dir=$parent/rlx-models"
+        } >> "$GITHUB_OUTPUT"
+        echo "rlx        @ $rlx_sha (${{ inputs.rlx-ref }})"
+        echo "rlx-models @ $mdl_sha (${{ inputs.rlx-models-ref }})"
+
+    # ── Cache the checkouts, keyed by the resolved SHAs ───────────────────────
+    # Exact-match key (no restore-keys): a SHA change must miss and re-clone
+    # rather than restore a stale tree. A hit skips the clone step below.
+    - name: Restore RLX source cache
+      if: inputs.enabled == 'true'
+      id: cache
+      uses: actions/cache@v5
+      with:
+        path: |
+          ${{ steps.rev.outputs.rlx_dir }}
+          ${{ steps.rev.outputs.mdl_dir }}
+        key: rlx-src-${{ runner.os }}-${{ steps.rev.outputs.rlx_sha }}-${{ steps.rev.outputs.mdl_sha }}
+
+    # ── Shallow-fetch just the pinned commit (cache miss only) ────────────────
+    # `fetch --depth 1 origin <sha>` pulls a single commit's tree (~25 MB for
+    # both repos combined after the history cleanup). GitHub serves reachable
+    # SHAs, and we resolved these from a ref moments ago. Drop .git afterwards —
+    # nothing needs history, and it keeps the saved cache tiny.
+    - name: Shallow-clone RLX (cache miss)
+      if: inputs.enabled == 'true' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        fetch_at() { # $1 url  $2 sha  $3 dest
+          rm -rf "$3"
+          git init -q "$3"
+          git -C "$3" remote add origin "$1"
+          git -C "$3" -c protocol.version=2 fetch -q --depth 1 origin "$2"
+          git -C "$3" checkout -q --detach FETCH_HEAD
+          rm -rf "$3/.git"
+        }
+        fetch_at https://github.com/MIT-RLX/rlx.git        '${{ steps.rev.outputs.rlx_sha }}' '${{ steps.rev.outputs.rlx_dir }}'
+        fetch_at https://github.com/MIT-RLX/rlx-models.git '${{ steps.rev.outputs.mdl_sha }}' '${{ steps.rev.outputs.mdl_dir }}'
+        echo "cloned rlx -> ${{ steps.rev.outputs.rlx_dir }}"
+        echo "cloned rlx-models -> ${{ steps.rev.outputs.mdl_dir }}"
+
+    # ── Wire the [patch] override + refresh Cargo.lock ────────────────────────
+    # RLX_CI_PATCH=1 tells ensure-rlx.sh to skip its "CI uses crates.io"
+    # short-circuit, patch crates.io -> these checkouts, and run `cargo metadata`
+    # (no --locked) so the on-disk Cargo.lock matches the patched sources before
+    # any --locked cargo step runs. cargo is preinstalled on hosted runners.
+    - name: Wire cargo [patch] override
+      if: inputs.enabled == 'true'
       shell: bash
       env:
-        GITHUB_ACTIONS: "true"
-      run: |
-        bash scripts/ensure-rlx.sh
-        bash scripts/ensure-rlx-models.sh
+        RLX_CI_PATCH: "1"
+        RLX_ROOT: ${{ steps.rev.outputs.rlx_dir }}
+        RLX_MODELS_ROOT: ${{ steps.rev.outputs.mdl_dir }}
+      run: bash scripts/ensure-rlx.sh
+
+    - name: RLX from crates.io (disabled)
+      if: inputs.enabled != 'true'
+      shell: bash
+      run: echo "checkout-rlx enabled=false - building rlx/rlx-models from crates.io"
