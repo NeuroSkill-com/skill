@@ -89,6 +89,23 @@ label_for() {
 repo_dirty()  { [ -n "$(git -C "$1" status --porcelain)" ]; }
 repo_branch() { git -C "$1" rev-parse --abbrev-ref HEAD; }
 
+# Guard against the classic broken-superproject state: a superproject commit
+# that points at a submodule commit which was never pushed to its remote (CI
+# and fresh clones then fail with "not our ref"). Before the superproject is
+# committed, make sure every submodule's checked-out commit exists on a remote.
+verify_submodules_pushed() {
+  local d sha ok=true
+  for d in ${SUB_DIRS[@]+"${SUB_DIRS[@]}"}; do
+    sha="$(git -C "$d" rev-parse HEAD)"
+    git -C "$d" fetch --quiet origin 2>/dev/null || true
+    if [ -z "$(git -C "$d" branch -r --contains "$sha" 2>/dev/null)" ]; then
+      echo "  ✗ $(label_for "$d"): commit ${sha:0:12} is not on any remote branch" >&2
+      ok=false
+    fi
+  done
+  $ok
+}
+
 # Ordered work list: every submodule (deepest first) then the superproject.
 ALL_DIRS=()
 for d in ${SUB_DIRS[@]+"${SUB_DIRS[@]}"}; do ALL_DIRS+=("$d"); done
@@ -179,6 +196,18 @@ push_repo() {
 for d in ${SUB_DIRS[@]+"${SUB_DIRS[@]}"}; do
   push_repo "$d"
 done
+
+# Never record submodule pointers in the superproject that the remotes don't
+# have — that is exactly what breaks CI checkouts. Skipped with --no-push,
+# where unpushed submodule commits are expected.
+if ! $NO_PUSH; then
+  echo "Verifying submodule commits are on their remotes…"
+  if ! verify_submodules_pushed; then
+    echo "Aborting before the superproject commit: push the submodule(s) above first." >&2
+    exit 1
+  fi
+fi
+
 push_repo "$REPO_ROOT"
 
 echo
