@@ -5703,3 +5703,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 ### Features
 
 - build: commit rlx-ocr safetensors bundle so CI can build skill-screenshots
+
+## [0.0.131-rc.9] — 2026-07-19
+
+### Features
+
+- updated rlx metal
