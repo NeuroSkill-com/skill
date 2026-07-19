@@ -100,6 +100,9 @@ jobs:
       - name: Fetch skills submodule
         run: git submodule update --init --depth=1 skills
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
 
@@ -112,12 +115,6 @@ jobs:
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
           cache-targets: false
           cache-on-failure: false
-
-      # ── ONNX Runtime (official binaries) ───────────────────────────────────
-      # Avoid ort-sys download flakiness from cdn.pyke.io in CI by installing
-      # the official Microsoft release and pointing ORT_LIB_LOCATION at it.
-      - name: Setup ONNX Runtime (Linux x64)
-        uses: ./.github/actions/setup-onnxruntime-linux
 
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
@@ -134,10 +131,7 @@ jobs:
             cmake binutils mold clang
             protobuf-compiler libopenblas-dev
             vulkan-sdk
-          version: tauri-rust-check-v6
-
-      - name: Download prebuilt llama libs (Linux, optional)
-        run: node scripts/ci.mjs download-llama linux x86_64-unknown-linux-gnu vulkan
+          version: tauri-rust-check-v7
 
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
@@ -150,18 +144,13 @@ jobs:
           set -euo pipefail
           run_cmd() {
             cargo clippy --locked --target x86_64-unknown-linux-gnu \
-              --workspace --exclude skill \
+              --workspace --exclude skill --exclude skill-router \
+              -- -D warnings
+            cargo clippy --locked --target x86_64-unknown-linux-gnu \
+              --no-default-features -p skill-router --features cpu \
               -- -D warnings
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::clippy failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          run_cmd
 
       # clippy (app crate — needs espeak + Vulkan)
       - name: cargo clippy (app)
@@ -169,7 +158,7 @@ jobs:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Cache cmake-based -sys crate builds (llama-cpp-sys, etc.)
+          # Cache cmake-based -sys crate builds (espeak-ng-sys, etc.)
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         shell: bash
@@ -178,15 +167,7 @@ jobs:
           run_cmd() {
             cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu -- -D warnings
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::app clippy failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          run_cmd
 
       # Determine which crates need testing based on changed files.
       # On PRs: compare against the base branch.
@@ -245,6 +226,18 @@ jobs:
             echo "::notice::No integration-testable crates affected"
           fi
 
+          if echo "$CRATE_FLAGS" | grep -qw "\-p skill-router"; then
+            echo "test_router=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "test_router=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          ROUTERLESS_FLAGS="$(echo "$CRATE_FLAGS" | sed 's/-p skill-router//g' | xargs || true)"
+          echo "routerless_flags=$ROUTERLESS_FLAGS" >> "$GITHUB_OUTPUT"
+
+          ROUTERLESS_INT="$(echo "$INT_FLAGS" | sed 's/-p skill-router//g' | xargs || true)"
+          echo "routerless_int_flags=$ROUTERLESS_INT" >> "$GITHUB_OUTPUT"
+
       - name: cargo test (affected crates — unit)
         id: rust_unit_tests
         if: steps.changed.outputs.skip != 'true'
@@ -257,19 +250,24 @@ jobs:
           set -euo pipefail
           start_ts="$(date +%s)"
           run_cmd() {
+            local flags="$1"
+            [[ -z "$flags" ]] && return 0
             cargo test --locked --target x86_64-unknown-linux-gnu \
-              ${{ steps.changed.outputs.crate_flags }} \
+              $flags \
               --lib
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::unit tests failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
+          run_router_cmd() {
+            cargo test --locked --target x86_64-unknown-linux-gnu \
+              --no-default-features -p skill-router --features cpu \
+              --lib
+          }
+          run_all() {
+            run_cmd "${{ steps.changed.outputs.routerless_flags }}"
+            if [[ "${{ steps.changed.outputs.test_router }}" == "true" ]]; then
+              run_router_cmd
             fi
-          fi
+          }
+          run_all
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -285,19 +283,24 @@ jobs:
           set -euo pipefail
           start_ts="$(date +%s)"
           run_cmd() {
+            local flags="$1"
+            [[ -z "$flags" ]] && return 0
             cargo test --locked --target x86_64-unknown-linux-gnu \
-              ${{ steps.changed.outputs.int_flags }} \
+              $flags \
               --test '*'
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::integration tests failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
+          run_router_cmd() {
+            cargo test --locked --target x86_64-unknown-linux-gnu \
+              --no-default-features -p skill-router --features cpu \
+              --test '*'
+          }
+          run_all() {
+            run_cmd "${{ steps.changed.outputs.routerless_int_flags }}"
+            if [[ "${{ steps.changed.outputs.test_router }}" == "true" ]]; then
+              run_router_cmd
             fi
-          fi
+          }
+          run_all
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -373,6 +376,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
 
       - name: Cache node_modules
         id: cache-node-modules
@@ -470,13 +476,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       - name: Validate Windows app manifest
         shell: bash
         run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
 
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
       # Required for the espeak-ng static library build (lib.exe) and for
-      # the Vulkan SDK CMake integration used by the llm-vulkan feature.
+      # the Vulkan SDK CMake integration used by wgpu/rlx-gpu features.
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -534,11 +543,6 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      # ── ONNX Runtime (official binaries) ───────────────────────────────────
-      # Avoid ort-sys download flakiness from cdn.pyke.io in CI.
-      - name: Setup ONNX Runtime (Windows x64)
-        uses: ./.github/actions/setup-onnxruntime-windows
-
       # ── Build cache (sccache) ───────────────────────────────────────────────
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
@@ -579,6 +583,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
       # Retry handles transient ETXTBSY from esbuild postinstall on Linux.
       - name: Install JS dependencies
         run: npm ci || npm ci
@@ -610,6 +617,10 @@ jobs:
       # only happens once per change to the install script.  On cache hit the
       # install script detects the SDK via filesystem and skips the download.
       - name: Cache Vulkan SDK
+        # Don't fail the job on transient cache-service errors (actions/cache@v5
+        # occasionally returns "failure" instead of "miss"). The install script
+        # below handles a missing SDK by downloading it on the spot.
+        continue-on-error: true
         uses: actions/cache@v5
         with:
           path: C:\VulkanSDK
@@ -631,14 +642,10 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
 
-      - name: Download prebuilt llama libs (Windows, optional)
-        shell: bash
-        run: node scripts/ci.mjs download-llama windows x86_64-pc-windows-msvc vulkan
-
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
       # mmintrin.h references __builtin_ia32_* GCC-style intrinsics that
-      # clang-cl doesn't implement, causing bindgen (llama-cpp-sys-4) to panic
+      # clang-cl doesn't implement, causing bindgen to panic
       # with ~20 "use of undeclared identifier '__builtin_ia32_…'" errors.
       #
       # Fix: standalone LLVM 19 (non-MSVC-compat) implements all those builtins
@@ -695,15 +702,7 @@ jobs:
               --target x86_64-pc-windows-msvc \
               -- -D warnings
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::windows clippy failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          run_cmd
 
       - name: Capture + summarize sccache hit rate (Windows job)
         if: always()
@@ -742,6 +741,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
 
@@ -757,9 +759,6 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      - name: Setup ONNX Runtime (Linux x64)
-        uses: ./.github/actions/setup-onnxruntime-linux
-
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
 
@@ -774,7 +773,7 @@ jobs:
             libpipewire-0.3-dev mold clang
             protobuf-compiler libopenblas-dev
             vulkan-sdk
-          version: llm-e2e-v5
+          version: llm-e2e-v6
 
       - name: Cache HuggingFace model
         uses: actions/cache@v5
@@ -787,7 +786,7 @@ jobs:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Cache cmake-based -sys crate builds (llama-cpp-sys, etc.)
+          # Cache cmake-based -sys crate builds (espeak-ng-sys, etc.)
           CMAKE_C_COMPILER_LAUNCHER:   sccache
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
@@ -850,6 +849,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
+
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
 
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
@@ -936,6 +938,9 @@ jobs:
       - name: Fetch skills submodule
         run: git submodule update --init --depth=1 skills
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       - name: Free disk space
         run: node scripts/ci.mjs free-disk-space
 
@@ -966,7 +971,7 @@ jobs:
             cmake binutils mold clang
             protobuf-compiler libopenblas-dev
             vulkan-sdk
-          version: tauri-rust-check-v6
+          version: tauri-rust-check-v7
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
@@ -982,7 +987,7 @@ jobs:
             --exclude iroh-example-client \
             --exclude skill \
             --no-default-features \
-            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
+            --features llm-rlx-cpu,skill-router/cpu,skill-daemon/cpu-only \
             --lcov \
             --output-path lcov.info
 
@@ -992,7 +997,7 @@ jobs:
             --exclude iroh-example-client \
             --exclude skill \
             --no-default-features \
-            --features llm-native,skill-router/cpu,skill-daemon/cpu-only \
+            --features llm-rlx-cpu,skill-router/cpu,skill-daemon/cpu-only \
             --summary-only \
             --fail-under-lines ${COVERAGE_MIN_LINES}
 
@@ -1022,11 +1027,17 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
 
       - name: npm audit
         run: npm audit --omit=dev --audit-level=high
@@ -1063,8 +1074,23 @@ jobs:
           fetch-depth: 1
       - name: Send CI result to Discord
         if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          # Take the real commit message from the event payload. On
+          # pull_request the checked-out HEAD is an auto-generated merge
+          # commit, so `git log` would show "Merge <sha> into <sha>" instead
+          # of the actual change. Passed via env to avoid script injection.
+          EVENT_COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         run: |
-          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
+          COMMIT_MSG="$EVENT_COMMIT_MSG"
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG=$(git log -1 --format='%B')
+          fi
+          # Cap length for the Discord embed field (limit 1024) and add an
+          # ellipsis so it's clear when there's more. Substring is char-based
+          # so it never splits a multi-byte UTF-8 sequence.
+          if [ "${#COMMIT_MSG}" -gt 500 ]; then
+            COMMIT_MSG="${COMMIT_MSG:0:500}…"
+          fi
           RUST="${{ needs.rust-check.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
@@ -1093,7 +1119,10 @@ jobs:
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           REF="${{ github.ref_name }}"
-          SHA="${{ github.sha }}"
+          # On pull_request github.sha is the merge commit; prefer the PR's
+          # real head commit so the SHA and its link point at the change.
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/$SHA"
           ACTOR="${{ github.actor }}"
           EVENT="${{ github.event_name }}"
 
@@ -1106,7 +1135,7 @@ jobs:
                 \"color\": $COLOR,
                 \"fields\": [
                   {\"name\": \"Branch\",    \"value\": \"\`$REF\`\",          \"inline\": true},
-                  {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
+                  {\"name\": \"Commit\",    \"value\": \"[\`${SHA:0:8}\`]($COMMIT_URL)\", \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
                   {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false},
                   {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},

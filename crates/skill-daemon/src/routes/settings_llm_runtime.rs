@@ -8,7 +8,7 @@ use crate::{
         settings::{
             BoolValueRequest, FilenameRequest, HfFilesParams, HfSearchParams, LlmAddModelRequest, LlmFilenameRequest,
         },
-        settings_io::{load_user_settings, save_user_settings},
+        settings_io::{modify_settings_blocking, patch_user_settings_sync},
     },
     state::AppState,
 };
@@ -231,9 +231,9 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
             if let Ok(mut g) = state.llm_config.lock() {
                 g.enabled = true;
             }
-            let mut settings = load_user_settings(&state);
-            settings.llm.enabled = true;
-            save_user_settings(&state, &settings);
+            patch_user_settings_sync(&state, |s| {
+                s.llm.enabled = true;
+            });
         }
 
         if cell.lock().ok().and_then(|g| g.clone()).is_some() {
@@ -308,9 +308,9 @@ pub(crate) async fn llm_server_stop_impl(State(state): State<AppState>) -> Json<
         if let Ok(mut g) = state.llm_config.lock() {
             g.enabled = false;
         }
-        let mut settings = load_user_settings(&state);
-        settings.llm.enabled = false;
-        save_user_settings(&state, &settings);
+        patch_user_settings_sync(&state, |s| {
+            s.llm.enabled = false;
+        });
     }
     if let Ok(mut st) = state.llm_status.lock() {
         *st = "stopped".to_string();
@@ -657,6 +657,7 @@ pub(crate) async fn llm_add_model_impl(
             let entry = skill_llm::catalog::LlmModelEntry {
                 repo: req.repo.clone(),
                 filename: req.filename.clone(),
+                remote_filename: None,
                 quant: infer_quant(&req.filename),
                 size_gb: req.size_gb.unwrap_or(0.0),
                 description: "External model".to_string(),
@@ -677,6 +678,7 @@ pub(crate) async fn llm_add_model_impl(
                 tags: vec!["external".to_string()],
                 is_mmproj: req.mmproj.as_ref().map(|m| m == &req.filename).unwrap_or(false)
                     || req.filename.to_ascii_lowercase().contains("mmproj"),
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 0.0,
@@ -896,9 +898,11 @@ pub(crate) async fn llm_set_autoload_mmproj_impl(
     State(state): State<AppState>,
     Json(req): Json<BoolValueRequest>,
 ) -> Json<serde_json::Value> {
-    let mut settings = load_user_settings(&state);
-    settings.llm.autoload_mmproj = req.value;
-    save_user_settings(&state, &settings);
+    let value = req.value;
+    modify_settings_blocking(&state, move |s| {
+        s.llm.autoload_mmproj = value;
+    })
+    .await;
     #[cfg(feature = "llm")]
     {
         if let Ok(mut cfg) = state.llm_config.lock() {
@@ -984,6 +988,7 @@ mod tests {
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: "a/b".into(),
                 filename: "model.gguf".into(),
+                remote_filename: None,
                 quant: "Q4".into(),
                 size_gb: 1.0,
                 description: String::new(),
@@ -992,6 +997,7 @@ mod tests {
                 family_desc: String::new(),
                 tags: vec![],
                 is_mmproj: false,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 1.0,
@@ -1035,6 +1041,7 @@ mod tests {
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: "a/b".into(),
                 filename: "model-a.gguf".into(),
+                remote_filename: None,
                 quant: "Q4".into(),
                 size_gb: 1.0,
                 description: String::new(),
@@ -1043,6 +1050,7 @@ mod tests {
                 family_desc: String::new(),
                 tags: vec![],
                 is_mmproj: false,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 1.0,
@@ -1057,6 +1065,7 @@ mod tests {
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: "a/b".into(),
                 filename: "model-b-mmproj.gguf".into(),
+                remote_filename: None,
                 quant: "F16".into(),
                 size_gb: 0.2,
                 description: String::new(),
@@ -1065,6 +1074,7 @@ mod tests {
                 family_desc: String::new(),
                 tags: vec![],
                 is_mmproj: true,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 0.0,

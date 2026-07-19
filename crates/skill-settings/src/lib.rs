@@ -28,7 +28,7 @@ pub use skill_tts::config::default_neutts_backbone_repo;
 pub use skill_tts::NeuttsConfig;
 
 // Re-export LLM config types from skill-llm.
-pub use skill_llm::config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
+pub use skill_llm::config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ToolExecutionMode};
 
 // Screenshot configuration — defined locally to avoid pulling in the heavy
 // skill-screenshots crate (xcap → pipewire on Linux) for settings I/O.
@@ -320,7 +320,7 @@ pub struct UmapUserConfig {
     pub n_neighbors: usize,
     /// Milliseconds to sleep between training epochs (0 = max throughput).
     pub cooldown_ms: u64,
-    /// Compute backend: "auto", "mlx", or "gpu".
+    /// Compute backend: "auto", "cpu", "metal", "mlx", "cuda", "gpu", or "rocm".
     /// "auto" selects MLX on macOS when available, GPU otherwise.
     pub backend: String,
     /// Floating-point precision: "f32" or "f16".
@@ -541,6 +541,19 @@ pub fn default_daily_goal_min() -> u32 {
 }
 pub fn default_embedding_model() -> String {
     "nomic-ai/nomic-embed-text-v1.5".into()
+}
+pub fn default_label_index_backend() -> String {
+    "hnsw".into()
+}
+pub fn default_text_embedding_rlx_device() -> String {
+    if cfg!(target_os = "macos") {
+        "metal".into()
+    } else {
+        "cpu".into()
+    }
+}
+pub fn default_text_embedding_rlx_max_seq() -> usize {
+    512
 }
 pub fn default_overlap_secs() -> f32 {
     EMBEDDING_OVERLAP_SECS
@@ -792,6 +805,42 @@ pub struct HookStatus {
     pub last_trigger: Option<HookLastTrigger>,
 }
 
+// ── ASR (voice input) ─────────────────────────────────────────────────────────
+
+/// Voice-input defaults for the LLM chat. The chat window may override `trigger`
+/// and `routing` per session; these are the fall-backs used when it doesn't.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AsrConfig {
+    /// Show the voice-input controls in the chat window.
+    pub enabled: bool,
+    /// Default microphone gating: continuous (VAD) or push-to-talk.
+    pub default_trigger: skill_asr::TriggerMode,
+    /// Default transcript routing: full voice loop or transcribe-only.
+    pub default_routing: skill_asr::RoutingMode,
+    /// ASR language hint. `"en"` for English-only Whisper models; engine-specific.
+    pub language: String,
+    /// ASR engine id: `"whisper"` (additional rlx backends added over time).
+    pub engine: String,
+    /// Model id for the engine — typically a HuggingFace repo, e.g.
+    /// `"openai/whisper-base.en"`, `"openai/whisper-small"`,
+    /// `"openai/whisper-large-v3"`. Interpreted per engine.
+    pub model: String,
+}
+
+impl Default for AsrConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_trigger: skill_asr::TriggerMode::default(),
+            default_routing: skill_asr::RoutingMode::default(),
+            language: "en".to_string(),
+            engine: "whisper".to_string(),
+            model: skill_constants::WHISPER_ASR_HF_REPO.to_string(),
+        }
+    }
+}
+
 // ── UserSettings (serialised to settings.json) ────────────────────────────────
 
 #[derive(Serialize, Deserialize)]
@@ -854,6 +903,12 @@ pub struct UserSettings {
     pub goal_notified_date: String,
     #[serde(default = "default_embedding_model")]
     pub text_embedding_model: String,
+    #[serde(default = "default_label_index_backend")]
+    pub label_index_backend: String,
+    #[serde(default = "default_text_embedding_rlx_device")]
+    pub text_embedding_rlx_device: String,
+    #[serde(default = "default_text_embedding_rlx_max_seq")]
+    pub text_embedding_rlx_max_seq: usize,
     #[serde(default)]
     pub hooks: Vec<HookRule>,
     /// WebSocket server bind host.
@@ -889,6 +944,17 @@ pub struct UserSettings {
     /// NeuTTS voice-cloning TTS configuration.
     #[serde(default)]
     pub neutts: NeuttsConfig,
+    /// Selected TTS engine: `"kitten"` / `"neutts"` use the legacy backends;
+    /// `"qwen3-tts"` (and future engines) route through the `skill-tts` engine
+    /// abstraction.
+    #[serde(default = "default_tts_engine")]
+    pub tts_engine: String,
+    /// Engine-specific model repo override for `tts_engine` (empty = engine default).
+    #[serde(default)]
+    pub tts_model: String,
+    /// Engine-specific voice/speaker override for `tts_engine` (empty = engine default).
+    #[serde(default)]
+    pub tts_voice: String,
     /// Pre-warm the active TTS engine at startup.
     #[serde(default = "default_tts_preload")]
     pub tts_preload: bool,
@@ -939,6 +1005,9 @@ pub struct UserSettings {
     /// Embedded OpenAI-compatible LLM inference server.
     #[serde(default)]
     pub llm: LlmConfig,
+    /// Voice input (ASR + VAD) defaults for the LLM chat.
+    #[serde(default)]
+    pub asr: AsrConfig,
     /// Screenshot capture + vision embedding configuration.
     #[serde(default)]
     pub screenshot: ScreenshotConfig,
@@ -948,6 +1017,11 @@ pub struct UserSettings {
     /// Recording storage format: `"csv"` (default), `"parquet"`, or `"both"`.
     #[serde(default = "default_storage_format")]
     pub storage_format: String,
+    /// Roll the session writer to a new file every N minutes. Bounds the
+    /// blast radius of a daemon crash to ≤ N minutes of data and keeps any
+    /// single file small enough for readers to load. `0` disables rollover.
+    #[serde(default = "default_session_rollover_minutes")]
+    pub session_rollover_minutes: u32,
     /// Background scanner backend toggles.
     #[serde(default)]
     pub scanner: ScannerConfig,
@@ -989,10 +1063,9 @@ pub struct UserSettings {
     #[serde(default = "default_llm_gpu_layers_saved")]
     pub llm_gpu_layers_saved: u32,
 
-    /// Inference backend for EXG embeddings: `"auto"`, `"mlx"`, `"gpu"`, or `"cpu"`.
+    /// Inference backend for EXG embeddings: `"auto"`, `"gpu"`, or `"cpu"`.
     ///
-    /// `"auto"` selects MLX on macOS when available, GPU (wgpu) otherwise.
-    /// `"mlx"` uses Apple Silicon native acceleration via burn-mlx.
+    /// `"auto"` selects GPU (wgpu) when available, CPU otherwise.
     /// `"gpu"` uses the wgpu backend (Metal on macOS, Vulkan on Linux).
     /// `"cpu"` uses burn's NdArray backend (no GPU required, slower).
     #[serde(default = "default_exg_inference_device")]
@@ -1060,6 +1133,10 @@ pub struct ReembedConfig {
     /// Milliseconds to sleep between epochs during background reembed.
     /// Higher values reduce CPU/GPU contention with other daemon tasks.
     pub idle_reembed_throttle_ms: u64,
+    /// Skip starting an idle reembed run when system memory usage (used / total)
+    /// is above this percent. Avoids OOM'ing the user's machine when other apps
+    /// already have heavy RSS. Set to 100 to disable. Re-evaluated each loop tick.
+    pub max_resident_memory_percent: u8,
 }
 
 fn default_daemon_auto_restart() -> bool {
@@ -1081,7 +1158,12 @@ impl Default for ReembedConfig {
             idle_reembed_delay_secs: 1800, // 30 minutes
             idle_reembed_gpu: true,
             gpu_precision: "f16".into(),
-            idle_reembed_throttle_ms: 10,
+            // Sleep between epochs during background reembed. The previous
+            // default (10ms) drove the daemon to ~100% CPU on machines without
+            // a discrete GPU; 200ms keeps a typical day's backlog finishing
+            // overnight while leaving headroom for foreground work.
+            idle_reembed_throttle_ms: 200,
+            max_resident_memory_percent: 85,
         }
     }
 }
@@ -1097,8 +1179,15 @@ pub fn default_storage_format() -> String {
     "csv".into()
 }
 
+pub fn default_session_rollover_minutes() -> u32 {
+    60
+}
+
 pub fn default_tts_preload() -> bool {
     true
+}
+pub fn default_tts_engine() -> String {
+    skill_constants::TTS_ENGINE_DEFAULT.to_string()
 }
 pub fn default_lsl_idle_timeout_secs() -> Option<u64> {
     Some(15)
@@ -1233,6 +1322,9 @@ impl Default for UserSettings {
             daily_goal_min: default_daily_goal_min(),
             goal_notified_date: String::new(),
             text_embedding_model: default_embedding_model(),
+            label_index_backend: default_label_index_backend(),
+            text_embedding_rlx_device: default_text_embedding_rlx_device(),
+            text_embedding_rlx_max_seq: default_text_embedding_rlx_max_seq(),
             hooks: Vec::new(),
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),
@@ -1242,6 +1334,9 @@ impl Default for UserSettings {
             openbci: OpenBciConfig::default(),
             device_api: DeviceApiConfig::default(),
             neutts: NeuttsConfig::default(),
+            tts_engine: default_tts_engine(),
+            tts_model: String::new(),
+            tts_voice: String::new(),
             tts_preload: default_tts_preload(),
             track_active_window: default_track_active_window(),
             track_input_activity: default_track_input_activity(),
@@ -1255,8 +1350,10 @@ impl Default for UserSettings {
             do_not_disturb: DoNotDisturbConfig::default(),
             last_seen_whats_new_version: String::new(),
             llm: LlmConfig::default(),
+            asr: AsrConfig::default(),
             accent_color: default_accent_color(),
             storage_format: default_storage_format(),
+            session_rollover_minutes: default_session_rollover_minutes(),
             screenshot: ScreenshotConfig::default(),
             sleep: SleepConfig::default(),
             scanner: ScannerConfig::default(),
@@ -1282,6 +1379,7 @@ fn default_brainmaster_model() -> String {
 pub fn load_settings(skill_dir: &Path) -> UserSettings {
     let path = settings_path(skill_dir);
     let mut s: UserSettings = skill_data::util::load_json_or_default(&path);
+    let mut json_dirty = false;
 
     // ── Shortcut migrations ──────────────────────────────────────────────
     if s.search_shortcut == "CmdOrCtrl+Shift+F" {
@@ -1289,6 +1387,19 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
     }
     if s.settings_shortcut == "CmdOrCtrl+Shift+S" {
         s.settings_shortcut = default_settings_shortcut();
+    }
+
+    // ── Idle re-embed throttle migration ─────────────────────────────────
+    // The original default was 10 ms, which kept the encoder running flat
+    // out and pinned a core to ~100% on machines without a fast GPU. The new
+    // default is 200 ms. We can't tell whether a user-saved 10 was an
+    // explicit choice or just the previous default, but anyone who set 10
+    // intentionally was almost certainly hitting the same CPU complaint —
+    // so promote the value either way and re-save so the migration sticks.
+    if s.reembed.idle_reembed_throttle_ms == 10 {
+        tracing::info!("[settings] migrating idle_reembed_throttle_ms 10 -> 200 (CPU-pinning legacy default)");
+        s.reembed.idle_reembed_throttle_ms = 200;
+        json_dirty = true;
     }
 
     // ── Secret migration: plaintext JSON → system keychain ───────────────
@@ -1306,27 +1417,23 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
         neurosity_password: s.device_api.neurosity_password.clone(),
         neurosity_device_id: s.device_api.neurosity_device_id.clone(),
     });
-    if migrated {
+    if migrated || json_dirty {
         // Re-save without the secret fields (skip_serializing takes care of it).
         if let Ok(json) = serde_json::to_string_pretty(&s) {
             let _ = std::fs::write(&path, &json);
         }
     }
 
-    // ── Load secrets from keychain (release) or keep JSON values (debug) ──
-    if !cfg!(debug_assertions) {
-        let secrets = keychain::load_secrets();
-        s.api_token = secrets.api_token;
-        s.device_api.emotiv_client_id = secrets.emotiv_client_id;
-        s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
-        s.device_api.idun_api_token = secrets.idun_api_token;
-        s.device_api.oura_access_token = secrets.oura_access_token;
-        s.device_api.neurosity_email = secrets.neurosity_email;
-        s.device_api.neurosity_password = secrets.neurosity_password;
-        s.device_api.neurosity_device_id = secrets.neurosity_device_id;
-    }
-    // In debug mode, secrets stay as loaded from the JSON file — no keychain
-    // interaction, no macOS authorization prompts on every dev build.
+    // Secrets are deliberately **not** hydrated here.  Loading every secret at
+    // startup triggers one macOS keychain prompt per item per process whenever
+    // the binary's code signature changes (i.e. on every release upgrade), and
+    // `load_settings` is called by both the Tauri shell and the daemon during
+    // boot.  Callers that actually need a secret read it on demand from
+    // `keychain::get_*`, so a prompt only appears when the user initiates an
+    // action that requires that specific secret.
+    //
+    // In debug builds, secrets stay as loaded from the JSON file (the JSON
+    // round-trip is preserved by `skip_secret_in_release` returning false).
 
     s
 }

@@ -45,14 +45,19 @@
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
 
-  /* ── UI type scale ── */
-  --text-ui-2xs: 0.5rem;     /* 8px  — micro metadata, axis labels           */
-  --text-ui-xs:  0.56rem;    /* 9px  — section headers, small badges, ON/OFF */
-  --text-ui-sm:  0.62rem;    /* 10px — descriptions, helper text              */
-  --text-ui-base: 0.68rem;   /* 11px — input labels, chip buttons, status     */
-  --text-ui-md:  0.75rem;    /* 12px — primary form labels                    */
-  --text-ui-lg:  0.82rem;    /* 13px — card / section headings                */
-  --text-ui-xl:  0.95rem;    /* 15px — page-level titles                      */
+  /* ── UI type scale ──
+     Sized for readability on Retina + non-Retina displays. Every step
+     meets or exceeds the macOS HIG minimum (11pt = 13px) and iOS HIG
+     minimum (11pt = 14.7px) for legible UI text. The 2xs tier is the
+     hard floor — used only for micro-metadata where context makes the
+     content non-essential. Avoid going below 2xs; use 2xs sparingly. */
+  --text-ui-2xs: 0.6875rem;  /* 11px — micro metadata, axis labels           */
+  --text-ui-xs:  0.75rem;    /* 12px — section headers, small badges, ON/OFF */
+  --text-ui-sm:  0.8125rem;  /* 13px — descriptions, helper text              */
+  --text-ui-base: 0.875rem;  /* 14px — input labels, chip buttons, status     */
+  --text-ui-md:  0.9375rem;  /* 15px — primary form labels                    */
+  --text-ui-lg:  1rem;       /* 16px — card / section headings                */
+  --text-ui-xl:  1.125rem;   /* 18px — page-level titles                      */
 }
 
 /* ── Light theme (day) ─────────────────────────────────────────────────────── */
@@ -501,6 +506,11 @@
 }
 
 .mdr .mdr-code {
+  /* `inline-block` so vertical padding contributes to line layout —
+     prevents the bounding box from overlapping adjacent <strong>/<code>
+     siblings on the same line. */
+  display: inline-block;
+  vertical-align: baseline;
   font-family: ui-monospace, "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 0.83em;
   background: oklch(from var(--color-violet-600) l c h / 9%);

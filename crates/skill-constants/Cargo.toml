@@ -7,3 +7,6 @@ description = "Single source of truth for all NeuroSkill constants"
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"

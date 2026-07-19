@@ -7,7 +7,7 @@
 # Usage:
 #   bash scripts/create-macos-dmg.sh [target-triple]
 #
-# Default target: aarch64-apple-darwin
+# Default target: aarch64-apple-darwin (aliases: mac-neo, mac-arm64)
 #
 # Options (via environment variables):
 #   APPLE_SIGNING_IDENTITY  — codesign identity (default: ad-hoc "-")
@@ -22,7 +22,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TAURI_DIR="$ROOT/src-tauri"
 
-TARGET="${1:-aarch64-apple-darwin}"
+# shellcheck source=lib/resolve-target-triple.sh
+source "$SCRIPT_DIR/lib/resolve-target-triple.sh"
+RAW_TARGET="${1:-aarch64-apple-darwin}"
+apply_target_profile_env "$RAW_TARGET"
+TARGET="$(resolve_target_triple "$RAW_TARGET")"
 CONF="$TAURI_DIR/tauri.conf.json"
 
 # ── Cleanup tracking ─────────────────────────────────────────────────────
@@ -58,9 +62,14 @@ if [[ "$VERSION" != "$VERSION_CHECK" ]]; then
   echo "  Using config version: $VERSION"
 fi
 
-# ── Sign the .app ─────────────────────────────────────────────────────────
+# ── Re-sign the .app (outer bundle only) ─────────────────────────────────
+# Inner bundles (skill-daemon.app, skill-tty.app) were already signed
+# individually with their entitlements by assemble-macos-app.sh (inside-out).
+# Using --deep here would re-sign them WITHOUT entitlements (--deep applies
+# entitlements only to the outermost bundle), stripping the daemon's
+# Bluetooth/networking capabilities. Sign outer only, no --deep.
 echo "  Signing .app with identity: $SIGN_ID"
-SIGN_ARGS=(--deep --force --verify --verbose --sign "$SIGN_ID")
+SIGN_ARGS=(--force --verify --verbose --sign "$SIGN_ID")
 if [[ "$SIGN_ID" != "-" ]]; then
   SIGN_ARGS+=(--timestamp --options runtime)
 fi
@@ -73,7 +82,9 @@ echo "  ✓ .app signed"
 # ── Ensure appdmg is available ────────────────────────────────────────────
 if ! node -e "require('appdmg')" 2>/dev/null; then
   echo "  Installing appdmg …"
-  npm install --global appdmg
+  # npm@latest skips dependency install scripts by default; appdmg's native deps
+  # (fs-xattr, macos-alias) need theirs to build `volume.node`. Allowlist them.
+  npm install --global appdmg --allow-scripts=fs-xattr,macos-alias
 fi
 
 # Clean up any existing DMG files to avoid using cached versions.

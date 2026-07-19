@@ -6,12 +6,104 @@
 //! processing un-embedded epochs in the background.  Immediately pauses
 //! when a device reconnects (real-time embedding takes priority).
 
-use std::sync::atomic::Ordering;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::time::{Duration, Instant};
 
 use tracing::{info, warn};
 
-use crate::state::AppState;
+use crate::state::{AppState, IdleReembedStatus};
+
+const NO_PROGRESS_BACKOFF: Duration = Duration::from_secs(60 * 60);
+
+/// RAII guard that clears the `reembed_running` flag and the `active` UI bit
+/// when dropped — even if the closure that owns it panics outside
+/// `catch_unwind`, or the runtime cancels the task. This is what guarantees
+/// the loop can't get permanently stuck thinking a run is in flight.
+struct RunGuard {
+    flag: Arc<AtomicBool>,
+    state: Arc<Mutex<IdleReembedStatus>>,
+}
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::Relaxed);
+        if let Ok(mut st) = self.state.lock() {
+            st.active = false;
+        }
+    }
+}
+
+/// Sample system memory usage and return (used_percent, used_bytes, total_bytes).
+/// Cheap enough to call once per 10s tick.
+fn sample_memory_percent() -> (u8, u64, u64) {
+    let sys = sysinfo::System::new_with_specifics(
+        sysinfo::RefreshKind::nothing().with_memory(sysinfo::MemoryRefreshKind::everything()),
+    );
+    let used = sys.used_memory();
+    let total = sys.total_memory();
+    if total == 0 {
+        return (0, used, total);
+    }
+    let pct = ((used as u128 * 100) / total as u128).min(100) as u8;
+    (pct, used, total)
+}
+
+/// Whether to record a no-progress cooldown after a run finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BackoffAfterRun {
+    /// Do not start the 1h cooldown (cancelled or embeddings were written).
+    Cleared,
+    /// Same or higher missing count — avoid restarting every 10s.
+    Set { remaining: i64 },
+}
+
+fn backoff_after_run(remaining: i64, started_missing: i64, cancelled: bool) -> BackoffAfterRun {
+    if cancelled {
+        BackoffAfterRun::Cleared
+    } else if remaining >= started_missing {
+        BackoffAfterRun::Set { remaining }
+    } else {
+        BackoffAfterRun::Cleared
+    }
+}
+
+fn should_back_off_no_progress(
+    no_progress_backoff: &Mutex<Option<(i64, Instant)>>,
+    needed: i64,
+    backoff_for: Duration,
+) -> bool {
+    no_progress_backoff
+        .lock()
+        .map(|mut guard| {
+            let (active, stale) = match guard.as_ref() {
+                Some((missing, started_at)) => (*missing == needed && started_at.elapsed() < backoff_for, true),
+                None => (false, false),
+            };
+            if stale && !active {
+                *guard = None;
+            }
+            active
+        })
+        .unwrap_or(false)
+}
+
+/// Compute remaining backoff seconds (0 if backoff is not active for `needed`).
+fn backoff_remaining_secs(
+    no_progress_backoff: &Mutex<Option<(i64, Instant)>>,
+    needed: i64,
+    backoff_for: Duration,
+) -> u64 {
+    no_progress_backoff
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().copied())
+        .filter(|(missing, _)| *missing == needed)
+        .map(|(_, started_at)| backoff_for.saturating_sub(started_at.elapsed()).as_secs())
+        .unwrap_or(0)
+}
 
 /// Spawn the background idle-reembed loop.
 /// Runs forever, checking device state every 10 seconds.
@@ -21,10 +113,17 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
         let mut last_connected = Instant::now();
-        let mut reembed_running = false;
+        let reembed_running = Arc::new(AtomicBool::new(false));
+        let no_progress_backoff: Arc<Mutex<Option<(i64, Instant)>>> = Arc::new(Mutex::new(None));
+        let mut last_throttle_log = Instant::now()
+            .checked_sub(Duration::from_secs(600))
+            .unwrap_or_else(Instant::now);
 
         loop {
             tokio::time::sleep(Duration::from_secs(10)).await;
+            // Heartbeat marks the polling loop tick (not the actual embed run,
+            // which spawn_blocking does separately and updates `idle_reembed_state`).
+            state.record_task_heartbeat("idle-reembed", 0);
 
             // Load current settings every tick (user may change them).
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
@@ -32,9 +131,8 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             let cfg = &settings.reembed;
 
             if !cfg.idle_reembed_enabled {
-                if reembed_running {
+                if reembed_running.load(Ordering::Relaxed) {
                     state.idle_reembed_cancel.store(true, Ordering::Relaxed);
-                    reembed_running = false;
                 }
                 continue;
             }
@@ -47,10 +145,9 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             if is_connected {
                 last_connected = Instant::now();
                 // Cancel any running background reembed immediately.
-                if reembed_running {
+                if reembed_running.load(Ordering::Relaxed) {
                     info!("[idle-reembed] device connected — pausing background reembed");
                     state.idle_reembed_cancel.store(true, Ordering::Relaxed);
-                    reembed_running = false;
                 }
                 continue;
             }
@@ -62,7 +159,7 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             if let Ok(mut st) = state.idle_reembed_state.lock() {
                 st.idle_secs = idle_secs;
                 st.delay_secs = cfg.idle_reembed_delay_secs;
-                if !reembed_running {
+                if !reembed_running.load(Ordering::Relaxed) {
                     st.active = false;
                 }
             }
@@ -72,7 +169,7 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             }
 
             // Check if there's work to do.
-            if reembed_running {
+            if reembed_running.load(Ordering::Relaxed) {
                 continue; // Already processing.
             }
 
@@ -87,8 +184,54 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
                     st.active = false;
                     st.total = 0;
                     st.done = 0;
+                    st.memory_throttled = false;
                 }
                 continue;
+            }
+
+            if should_back_off_no_progress(&no_progress_backoff, needed, NO_PROGRESS_BACKOFF) {
+                let remaining = backoff_remaining_secs(&no_progress_backoff, needed, NO_PROGRESS_BACKOFF);
+                if let Ok(mut st) = state.idle_reembed_state.lock() {
+                    st.backoff_secs_remaining = remaining;
+                    st.backoff_reason = format!("no embedding progress; {needed} still missing");
+                    st.active = false;
+                }
+                continue;
+            }
+            // Clear any stale backoff display once it has expired or cleared.
+            if let Ok(mut st) = state.idle_reembed_state.lock() {
+                if st.backoff_secs_remaining != 0 || !st.backoff_reason.is_empty() {
+                    st.backoff_secs_remaining = 0;
+                    st.backoff_reason.clear();
+                }
+            }
+
+            // Memory backpressure: skip the run if system memory is already
+            // saturated. Embedding (especially with GPU/Metal) can add hundreds
+            // of MB of resident memory and OOM the user's machine.
+            let (mem_pct, mem_used, mem_total) = sample_memory_percent();
+            let limit = cfg.max_resident_memory_percent.min(100);
+            if limit < 100 && mem_pct >= limit {
+                if let Ok(mut st) = state.idle_reembed_state.lock() {
+                    st.memory_throttled = true;
+                    st.memory_percent = mem_pct;
+                    st.active = false;
+                }
+                // Rate-limit the warning so we don't spam the log every 10s.
+                if last_throttle_log.elapsed() >= Duration::from_secs(300) {
+                    warn!(
+                        "[idle-reembed] deferring: system memory {mem_pct}% \
+                         ({} / {} MiB) >= max_resident_memory_percent={limit}",
+                        mem_used / (1024 * 1024),
+                        mem_total / (1024 * 1024),
+                    );
+                    last_throttle_log = Instant::now();
+                }
+                continue;
+            }
+            if let Ok(mut st) = state.idle_reembed_state.lock() {
+                st.memory_throttled = false;
+                st.memory_percent = mem_pct;
             }
 
             info!(
@@ -98,7 +241,7 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
 
             // Reset cancel flag and start.
             state.idle_reembed_cancel.store(false, Ordering::Relaxed);
-            reembed_running = true;
+            reembed_running.store(true, Ordering::Relaxed);
 
             if let Ok(mut st) = state.idle_reembed_state.lock() {
                 st.active = true;
@@ -108,32 +251,98 @@ pub fn spawn_idle_reembed_loop(state: AppState) {
             }
 
             let state_clone = state.clone();
+            let running_flag = reembed_running.clone();
+            let backoff_state = no_progress_backoff.clone();
+            let started_missing = needed;
+            let skill_dir_for_backoff = skill_dir.clone();
+            let cancel_for_backoff = state.idle_reembed_cancel.clone();
             let use_gpu = cfg.idle_reembed_gpu;
             let throttle_ms = cfg.idle_reembed_throttle_ms;
             let batch_size = cfg.batch_size.max(1);
 
-            tokio::task::spawn_blocking(move || {
-                if let Err(e) = run_idle_reembed(&state_clone, use_gpu, throttle_ms, batch_size) {
-                    warn!("[idle-reembed] failed: {e}");
-                }
-                // Rebuild label EEG index so interactive search picks up new embeddings.
-                let skill_dir = state_clone.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-                let stats = skill_label_index::rebuild(&skill_dir, &state_clone.label_index);
-                info!(
-                    "[idle-reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
-                    stats.text_nodes, stats.eeg_nodes, stats.eeg_skipped
-                );
-                // Mark idle reembed as done.
-                if let Ok(mut st) = state_clone.idle_reembed_state.lock() {
-                    st.active = false;
-                }
-                // Signal completion.
+            let state_for_guard = state.idle_reembed_state.clone();
+            let running_for_guard = running_flag.clone();
+            let handle = tokio::task::spawn_blocking(move || {
+                // RAII guard: even if the closure panics *outside* catch_unwind
+                // (or the runtime drops the task), the flag and UI active bit
+                // are restored. Watcher failures can no longer orphan us.
+                let _guard = RunGuard {
+                    flag: running_for_guard,
+                    state: state_for_guard,
+                };
+
+                // Wrap the reembed body in catch_unwind so a panic in encoder
+                // load, encode, or label-index rebuild surfaces as a logged
+                // join error rather than a silently orphaned task.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if let Err(e) = run_idle_reembed(&state_clone, use_gpu, throttle_ms, batch_size) {
+                        warn!("[idle-reembed] failed: {e}");
+                    }
+                    // Rebuild label EEG index so interactive search picks up new embeddings.
+                    let skill_dir = state_clone.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+                    let stats = skill_label_index::rebuild(&skill_dir, &state_clone.label_index);
+                    info!(
+                        "[idle-reembed] label index rebuilt: {} text, {} eeg ({} skipped)",
+                        stats.text_nodes, stats.eeg_nodes, stats.eeg_skipped
+                    );
+                }));
+
+                let panicked = result.is_err();
+                let status = if panicked { "idle_panic" } else { "idle_done" };
                 let _ = state_clone.events_tx.send(skill_daemon_common::EventEnvelope {
                     r#type: "reembed-progress".into(),
                     ts_unix_ms: now_unix_ms(),
                     correlation_id: None,
-                    payload: serde_json::json!({ "status": "idle_done" }),
+                    payload: serde_json::json!({ "status": status }),
                 });
+
+                if panicked {
+                    warn!("[idle-reembed] worker panicked — task body unwound, state cleared");
+                }
+                // _guard drops here, clearing reembed_running and active.
+            });
+
+            // Watcher: compute backoff after the work task finishes. The
+            // work task's RunGuard owns the flag-clear, so a panic in this
+            // watcher (or a runtime drop) can no longer wedge the loop.
+            let running_for_watcher = reembed_running.clone();
+            tokio::spawn(async move {
+                let join_result = handle.await;
+                if let Err(join_err) = &join_result {
+                    if join_err.is_panic() {
+                        warn!("[idle-reembed] task panicked outside catch_unwind: {join_err}");
+                    } else if join_err.is_cancelled() {
+                        info!("[idle-reembed] task cancelled");
+                    }
+                }
+                let cancelled = cancel_for_backoff.load(Ordering::Relaxed);
+                let remaining = if cancelled {
+                    started_missing
+                } else {
+                    tokio::task::spawn_blocking(move || count_missing_embeddings(&skill_dir_for_backoff))
+                        .await
+                        .unwrap_or(started_missing)
+                };
+                match backoff_after_run(remaining, started_missing, cancelled) {
+                    BackoffAfterRun::Cleared => {
+                        if let Ok(mut guard) = backoff_state.lock() {
+                            *guard = None;
+                        }
+                    }
+                    BackoffAfterRun::Set { remaining } => {
+                        if let Ok(mut guard) = backoff_state.lock() {
+                            *guard = Some((remaining, Instant::now()));
+                        }
+                        warn!(
+                            "[idle-reembed] made no embedding progress ({remaining} still missing); backing off for {} minutes",
+                            NO_PROGRESS_BACKOFF.as_secs() / 60
+                        );
+                    }
+                }
+                // Belt-and-suspenders: if the work task ran to completion the
+                // RunGuard already cleared this. If it was dropped without
+                // running, clear it here so the next tick can start work.
+                running_for_watcher.store(false, Ordering::Relaxed);
             });
         }
     });
@@ -185,9 +394,15 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
     // Subscribe to progress events so we can mirror them into the observable state.
     let mut rx = state.events_tx.subscribe();
 
-    // Spawn a helper thread to update idle_reembed_state from progress events.
+    // Spawn a helper thread to update idle_reembed_state from progress events
+    // *and* record a real heartbeat for each batch — so the activity panel
+    // shows actual embed throughput (e.g. "took 240 ms · 1234 ticks") rather
+    // than the 0-ms ticks of the outer 10s polling loop.
     let idle_state_clone = idle_state.clone();
+    let state_for_hb = state.clone();
     let updater = std::thread::spawn(move || {
+        let mut prev_done: u64 = 0;
+        let mut prev_progress_at = std::time::Instant::now();
         while let Ok(ev) = rx.blocking_recv() {
             if ev.r#type != "reembed-progress" {
                 continue;
@@ -205,7 +420,21 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
                     st.current_day = day;
                 }
             }
-            if matches!(status, "done" | "idle_done" | "complete" | "paused") {
+
+            // If `done` advanced, that batch finished work — record a heartbeat
+            // with the elapsed wall-clock for that batch. We use saturating
+            // arithmetic in case events arrive out of order.
+            if done > prev_done {
+                let elapsed_ms = prev_progress_at.elapsed().as_millis() as u64;
+                state_for_hb.record_task_heartbeat("idle-reembed", elapsed_ms);
+                prev_done = done;
+                prev_progress_at = std::time::Instant::now();
+            }
+
+            if matches!(
+                status,
+                "done" | "idle_done" | "complete" | "paused" | "error" | "idle_panic"
+            ) {
                 break;
             }
         }
@@ -221,6 +450,82 @@ fn run_idle_reembed(state: &AppState, use_gpu: bool, throttle_ms: u64, batch_siz
         batch_size,
     );
 
+    if let Err(e) = &result {
+        let _ = state.events_tx.send(skill_daemon_common::EventEnvelope {
+            r#type: "reembed-progress".into(),
+            ts_unix_ms: now_unix_ms(),
+            correlation_id: None,
+            payload: serde_json::json!({ "status": "error", "message": e.to_string() }),
+        });
+    }
+
     let _ = updater.join();
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn idle_reembed_no_backoff_when_state_unset() {
+        let backoff = Mutex::new(None);
+        assert!(!should_back_off_no_progress(&backoff, 42, Duration::from_secs(60 * 60)));
+    }
+
+    #[test]
+    fn idle_reembed_backoff_active_for_same_missing_count() {
+        let backoff = Mutex::new(Some((42, Instant::now())));
+
+        assert!(should_back_off_no_progress(&backoff, 42, Duration::from_secs(60 * 60)));
+        assert!(backoff.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn idle_reembed_backoff_clears_when_missing_count_changes() {
+        let backoff = Mutex::new(Some((42, Instant::now())));
+
+        assert!(!should_back_off_no_progress(&backoff, 41, Duration::from_secs(60 * 60)));
+        assert!(backoff.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn idle_reembed_backoff_clears_after_cooldown() {
+        let backoff = Mutex::new(Some((
+            42,
+            Instant::now()
+                .checked_sub(Duration::from_secs(60 * 61))
+                .expect("test duration is within Instant range"),
+        )));
+
+        assert!(!should_back_off_no_progress(&backoff, 42, Duration::from_secs(60 * 60)));
+        assert!(backoff.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_when_no_progress() {
+        assert_eq!(
+            backoff_after_run(100, 100, false),
+            BackoffAfterRun::Set { remaining: 100 }
+        );
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_when_count_increased() {
+        assert_eq!(
+            backoff_after_run(110, 100, false),
+            BackoffAfterRun::Set { remaining: 110 }
+        );
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_cleared_on_partial_progress() {
+        assert_eq!(backoff_after_run(80, 100, false), BackoffAfterRun::Cleared);
+    }
+
+    #[test]
+    fn idle_reembed_backoff_after_run_cleared_when_cancelled() {
+        assert_eq!(backoff_after_run(100, 100, true), BackoffAfterRun::Cleared);
+        assert_eq!(backoff_after_run(110, 100, true), BackoffAfterRun::Cleared);
+    }
 }

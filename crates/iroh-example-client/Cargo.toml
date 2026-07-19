@@ -6,8 +6,8 @@ license = "GPL-3.0-only"
 description = "End-to-end example: create TOTP, spin up iroh endpoint, generate OTP, register with Skill iroh server"
 
 [dependencies]
-iroh = "0.97"
-iroh-base = "0.97"
+iroh = "1.0.0-rc.0"
+iroh-base = "1.0.0-rc.0"
 skill-iroh = { path = "../skill-iroh" }
 tokio = { version = "1", features = ["full"] }
 totp-rs = "5.7"

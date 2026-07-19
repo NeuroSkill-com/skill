@@ -4,7 +4,7 @@
 //!
 //! Everything here is **Tauri-free**: cosine distance, fuzzy text matching,
 //! UTC timestamp formatting, HuggingFace weight resolution and download,
-//! cubecl GPU-cache setup, epoch metrics derivation, and panic helpers.
+//! epoch metrics derivation, and panic helpers.
 
 use std::path::{Path, PathBuf};
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
@@ -16,12 +16,14 @@ use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_model_config::EegModelStatus;
 
-#[cfg(any(
-    feature = "neurorvq-ndarray",
-    feature = "neurorvq-metal",
-    feature = "neurorvq-vulkan"
-))]
+#[cfg(feature = "neurorvq-ndarray")]
 pub mod neurorvq;
+
+#[cfg(feature = "eegdino-rlx")]
+pub mod eegdino;
+
+#[cfg(feature = "lumamba-rlx")]
+pub mod lumamba;
 
 // ── Cosine distance ───────────────────────────────────────────────────────────
 
@@ -149,7 +151,6 @@ pub fn validate_safetensors(path: &Path) -> bool {
         }
     }
     let expected = 8 + header_len + max_offset;
-    // Burn's safetensors loader requires exact size match.
     // Allow a small tolerance (< 16 bytes) for alignment padding,
     // but reject files with significant extra data — they indicate
     // a corrupt or incomplete download.
@@ -214,6 +215,27 @@ pub fn probe_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
 /// Find LUNA weights in the HuggingFace disk cache for the given `hf_repo`
 /// and `weights_file` (e.g. `LUNA_base.safetensors`).
 pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
+    resolve_exg_weights(hf_repo, weights_file, LUNA_CONFIG_FILE)
+}
+
+/// Find LuMamba weights + `config.json` in the HuggingFace disk cache for the
+/// given `hf_repo` and `weights_file` (e.g. `LuMamba_ReconstructionOnly.safetensors`).
+pub fn resolve_lumamba_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
+    resolve_exg_weights(hf_repo, weights_file, skill_constants::LUMAMBA_CONFIG_FILE)
+}
+
+/// Default HuggingFace repo for Brain-JEPA weights.
+pub const BRAINJEPA_HF_REPO: &str = "eugenehp/BrainJEPA";
+pub const BRAINJEPA_WEIGHTS_FILE: &str = "brainjepa.safetensors";
+pub const BRAINJEPA_GRADIENT_FILE: &str = "gradient_mapping_450.csv";
+
+/// Find Brain-JEPA weights + gradient CSV in the HuggingFace disk cache.
+pub fn resolve_brainjepa_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
+    resolve_exg_weights(hf_repo, BRAINJEPA_WEIGHTS_FILE, BRAINJEPA_GRADIENT_FILE)
+}
+
+/// Find EXG model weights + config in the HuggingFace disk cache.
+pub fn resolve_exg_weights(hf_repo: &str, weights_file: &str, config_file: &str) -> Option<(PathBuf, PathBuf)> {
     let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
     let mut dirs: Vec<_> = std::fs::read_dir(&snaps)
         .ok()?
@@ -227,9 +249,31 @@ pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBu
     });
     for snap in dirs.into_iter().rev() {
         let w = snap.path().join(weights_file);
-        let c = snap.path().join(LUNA_CONFIG_FILE);
+        let c = snap.path().join(config_file);
         if validate_or_remove(&w) && c.exists() {
             return Some((w, c));
+        }
+    }
+    None
+}
+
+/// Find a single file in the HuggingFace disk cache for `hf_repo`.
+pub fn resolve_hf_file(hf_repo: &str, filename: &str) -> Option<PathBuf> {
+    let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
+    let mut dirs: Vec<_> = std::fs::read_dir(&snaps)
+        .ok()?
+        .filter_map(std::result::Result::ok)
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .collect();
+    dirs.sort_by_key(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH)
+    });
+    for snap in dirs.into_iter().rev() {
+        let path = snap.path().join(filename);
+        if path.exists() {
+            return Some(path);
         }
     }
     None
@@ -333,26 +377,30 @@ pub fn download_hf_weights_files(
     };
     let repo = api.model(hf_repo.to_string());
 
-    {
-        let mut st = status.lock_or_recover();
-        st.download_status_msg = Some(format!("Downloading {config_file}…"));
-    }
-    let config_path = match repo.get(config_file) {
-        Ok(p) => {
-            eprintln!("[embedder] ✓ {config_file} → {}", p.display());
-            p
-        }
-        Err(e) => {
-            eprintln!("[embedder] failed to download {config_file}: {e}");
+    let config_path = if config_file.is_empty() {
+        PathBuf::new()
+    } else {
+        {
             let mut st = status.lock_or_recover();
-            st.downloading_weights = false;
-            st.download_progress = 0.0;
-            st.download_status_msg = Some(format!("Download failed ({config_file}): {e}"));
-            return None;
+            st.download_status_msg = Some(format!("Downloading {config_file}…"));
+        }
+        match repo.get(config_file) {
+            Ok(p) => {
+                eprintln!("[embedder] ✓ {config_file} → {}", p.display());
+                p
+            }
+            Err(e) => {
+                eprintln!("[embedder] failed to download {config_file}: {e}");
+                let mut st = status.lock_or_recover();
+                st.downloading_weights = false;
+                st.download_progress = 0.0;
+                st.download_status_msg = Some(format!("Download failed ({config_file}): {e}"));
+                return None;
+            }
         }
     };
 
-    if cancel.load(Ordering::Relaxed) {
+    if !config_file.is_empty() && cancel.load(Ordering::Relaxed) {
         eprintln!("[embedder] download cancelled by user after config.json");
         let mut st = status.lock_or_recover();
         st.downloading_weights = false;
@@ -659,44 +707,6 @@ pub fn download_hf_weights_files(
     Some((weights_path, config_path))
 }
 
-// ── cubecl cache warm-up ──────────────────────────────────────────────────────
-
-/// Pre-create the cubecl GPU-kernel cache directory and configure the
-/// `GlobalConfig` so cubecl never tries to write to an inaccessible path.
-///
-/// Must be called **before** the first `WgpuDevice` access.
-///
-/// Note: This function is only available when the `cubecl` feature is enabled.
-#[cfg(feature = "cubecl")]
-pub fn configure_cubecl_cache(skill_dir: &Path) {
-    use cubecl_runtime::config::{cache::CacheConfig, GlobalConfig};
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    static CUBECL_CONFIGURED: AtomicBool = AtomicBool::new(false);
-
-    let cache_dir = skill_dir.join("cubecl_cache");
-    match std::fs::create_dir_all(&cache_dir) {
-        Ok(_) => eprintln!("[embedder] cubecl cache dir: {}", cache_dir.display()),
-        Err(e) => eprintln!("[embedder] warn: cubecl cache mkdir {}: {e}", cache_dir.display()),
-    }
-
-    if CUBECL_CONFIGURED
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_ok()
-    {
-        let mut cfg = GlobalConfig::default();
-        cfg.autotune.cache = CacheConfig::File(cache_dir);
-        GlobalConfig::set(cfg);
-    }
-}
-
-/// No-op stub for when the `cubecl` feature is disabled.
-#[cfg(not(feature = "cubecl"))]
-pub fn configure_cubecl_cache(_skill_dir: &Path) {
-    // CubeCL functionality is disabled in this build.
-    // This is used in CI/coverage builds where GPU drivers are unavailable.
-}
-
 // ── GPU panic flag ────────────────────────────────────────────────────────────
 
 /// Process-global flag: set to `true` after any GPU panic so respawned workers
@@ -748,6 +758,7 @@ pub struct EpochMetrics {
     pub sample_entropy: f32,
     pub pac_theta_gamma: f32,
     pub laterality_index: f32,
+    pub echt: f32,
     pub hr: f64,
     pub rmssd: f64,
     pub sdnn: f64,
@@ -776,6 +787,10 @@ pub struct EpochMetrics {
 
 impl EpochMetrics {
     /// Derive metrics from a `BandSnapshot` by averaging across all channels.
+    ///
+    /// Engagement and relaxation delegate to `skill_devices::compute_engagement`
+    /// / `compute_relaxation` — the single source of truth shared with the live
+    /// `latest_bands` path. Storing here is fine; *computing* here is not.
     pub fn from_snapshot(snap: &BandSnapshot) -> Self {
         let n = snap.channels.len() as f32;
         if n < 1.0 {
@@ -788,8 +803,6 @@ impl EpochMetrics {
         let mut rb = 0.0f32;
         let mut rg = 0.0f32;
         let mut rhg = 0.0f32;
-        let mut sum_relax = 0.0f32;
-        let mut sum_engage = 0.0f32;
 
         for ch in &snap.channels {
             rd += ch.rel_delta;
@@ -798,17 +811,6 @@ impl EpochMetrics {
             rb += ch.rel_beta;
             rg += ch.rel_gamma;
             rhg += ch.rel_high_gamma;
-            let a = ch.rel_alpha;
-            let b = ch.rel_beta;
-            let t = ch.rel_theta;
-            let d1 = a + t;
-            let d2 = b + t;
-            if d2 > 1e-6 {
-                sum_relax += a / d2;
-            }
-            if d1 > 1e-6 {
-                sum_engage += b / d1;
-            }
         }
         rd /= n;
         rt /= n;
@@ -832,8 +834,8 @@ impl EpochMetrics {
             rel_beta: rb,
             rel_gamma: rg,
             rel_high_gamma: rhg,
-            relaxation: Self::sigmoid100(sum_relax / n, 2.5, 1.0),
-            engagement: Self::sigmoid100(sum_engage / n, 2.0, 0.8),
+            relaxation: skill_devices::compute_relaxation(snap) as f32,
+            engagement: skill_devices::compute_engagement(snap) as f32,
             faa,
             tar: snap.tar,
             bar: snap.bar,
@@ -857,6 +859,7 @@ impl EpochMetrics {
             sample_entropy: snap.sample_entropy,
             pac_theta_gamma: snap.pac_theta_gamma,
             laterality_index: snap.laterality_index,
+            echt: snap.echt,
             hr: 0.0,
             rmssd: 0.0,
             sdnn: 0.0,
@@ -924,6 +927,7 @@ impl Default for EpochMetrics {
             sample_entropy: 0.0,
             pac_theta_gamma: 0.0,
             laterality_index: 0.0,
+            echt: 0.0,
             hr: 0.0,
             rmssd: 0.0,
             sdnn: 0.0,
@@ -1134,6 +1138,136 @@ mod tests {
         let back: EpochMetrics = serde_json::from_str(&json).unwrap();
         assert_eq!(back.mood, m.mood);
         assert_eq!(back.rel_delta, m.rel_delta);
+    }
+
+    /// Closes the single-source-of-truth loop: storage path
+    /// (`EpochMetrics::from_snapshot`) and live path
+    /// (`skill_devices::compute_engagement` / `compute_relaxation`) must
+    /// agree on the same `BandSnapshot`. Pre-refactor they diverged — this
+    /// test would have caught the stuck-engagement bug.
+    #[test]
+    fn epoch_metrics_match_canonical_compute() {
+        use skill_eeg::eeg_bands::{BandPowers, BandSnapshot};
+
+        let ch = BandPowers {
+            channel: "AF7".into(),
+            delta: 5.0,
+            theta: 3.0,
+            alpha: 4.0,
+            beta: 6.0,
+            gamma: 1.0,
+            high_gamma: 0.5,
+            rel_delta: 0.25,
+            rel_theta: 0.15,
+            rel_alpha: 0.20,
+            rel_beta: 0.30,
+            rel_gamma: 0.05,
+            rel_high_gamma: 0.05,
+            dominant: "beta".into(),
+            dominant_symbol: "β".into(),
+            dominant_color: "#22c55e".into(),
+        };
+        let mut snap = BandSnapshot {
+            timestamp: 0.0,
+            channels: vec![ch.clone(), ch.clone(), ch.clone(), ch],
+            faa: 0.0,
+            tar: 0.5,
+            bar: 0.4,
+            dtr: 1.2,
+            pse: 0.7,
+            apf: 10.0,
+            bps: -1.5,
+            snr: 12.0,
+            coherence: 0.5,
+            mu_suppression: 0.1,
+            mood: 60.0,
+            tbr: 0.8,
+            sef95: 22.0,
+            spectral_centroid: 15.0,
+            hjorth_activity: 0.1,
+            hjorth_mobility: 0.2,
+            hjorth_complexity: 0.3,
+            permutation_entropy: 0.6,
+            higuchi_fd: 1.5,
+            dfa_exponent: 0.7,
+            sample_entropy: 0.4,
+            pac_theta_gamma: 0.1,
+            laterality_index: 0.05,
+            echt: 0.5,
+            headache_index: 10.0,
+            migraine_index: 5.0,
+            consciousness_lzc: 50.0,
+            consciousness_wakefulness: 70.0,
+            consciousness_integration: 60.0,
+            hr: None,
+            rmssd: None,
+            sdnn: None,
+            pnn50: None,
+            lf_hf_ratio: None,
+            respiratory_rate: None,
+            spo2_estimate: None,
+            perfusion_index: None,
+            stress_index: None,
+            blink_count: None,
+            blink_rate: None,
+            head_pitch: None,
+            head_roll: None,
+            stillness: None,
+            nod_count: None,
+            shake_count: None,
+            meditation: None,
+            cognitive_load: None,
+            drowsiness: None,
+            engagement: None,
+            relaxation: None,
+            focus: None,
+            temperature_raw: None,
+            gpu_overall: None,
+            gpu_render: None,
+            gpu_tiler: None,
+            rel_delta: 0.25,
+            rel_theta: 0.15,
+            rel_alpha: 0.20,
+            rel_beta: 0.30,
+            rel_gamma: 0.05,
+        };
+
+        let metrics = EpochMetrics::from_snapshot(&snap);
+        let canonical_e = skill_devices::compute_engagement(&snap) as f32;
+        let canonical_r = skill_devices::compute_relaxation(&snap) as f32;
+
+        assert!(
+            (metrics.engagement - canonical_e).abs() < 0.001,
+            "EpochMetrics.engagement={} diverges from canonical={canonical_e}",
+            metrics.engagement,
+        );
+        assert!(
+            (metrics.relaxation - canonical_r).abs() < 0.001,
+            "EpochMetrics.relaxation={} diverges from canonical={canonical_r}",
+            metrics.relaxation,
+        );
+
+        // And confirm enrich_band_snapshot puts the same value on the wire format.
+        skill_devices::enrich_band_snapshot(
+            &mut snap,
+            &skill_devices::SnapshotContext {
+                ppg: None,
+                artifacts: None,
+                head_pose: None,
+                temperature_raw: 0,
+                gpu: None,
+            },
+        );
+        let on_snapshot_e = snap.engagement.unwrap();
+        let on_snapshot_r = snap.relaxation.unwrap();
+        assert!(
+            (on_snapshot_e as f32 - canonical_e).abs() < 0.05,
+            "snapshot.engagement={on_snapshot_e} diverges from canonical={canonical_e}",
+        );
+        assert!(
+            (on_snapshot_r as f32 - canonical_r).abs() < 0.05,
+            "snapshot.relaxation={on_snapshot_r} diverges from canonical={canonical_r}",
+        );
     }
 
     // ── validate_safetensors ─────────────────────────────────────────────

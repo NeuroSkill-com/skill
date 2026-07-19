@@ -824,6 +824,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "продуктивні %",
   "activity.totalReadingTime": "час читання",
   "activity.avgScrollDepth": "сер. глибина прокрутки",
+
+  "daemonActivity.title": "Фонова активність демона",
+  "daemonActivity.intro":
+    "Повторювані завдання, які демон виконує у фоні — що вони роблять, для чого потрібні та як часто запускаються. Вимкни непотрібні відстежувачі, щоб зменшити навантаження на процесор.",
+  "daemonActivity.loading": "Завантаження…",
+  "daemonActivity.running": "активний",
+  "daemonActivity.idle": "неактивний",
+  "daemonActivity.eventDriven": "за подіями",
+  "daemonActivity.whyPrefix": "Чому:",
+  "daemonActivity.costLow": "низьке навантаження",
+  "daemonActivity.costMedium": "середнє навантаження",
+  "daemonActivity.costHigh": "високе навантаження",
+  "daemonActivity.never": "ще не виконувався",
+  "daemonActivity.lastRanSecondsAgo": "{n} с тому",
+  "daemonActivity.lastRanMinutesAgo": "{n} хв тому",
+  "daemonActivity.lastRanHoursAgo": "{n} год тому",
+  "daemonActivity.tickDuration": "тривалість: {n} мс",
+  "daemonActivity.tickCount": "цикли: {n}",
 };
 
 export default settings;

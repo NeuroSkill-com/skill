@@ -48,6 +48,8 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "Stichproben-Entropie - Unregelmäßigkeit des Signals. Höher = unvorhersagbarer.",
   "tip.pacThetaGamma": "Phasen-Amplituden-Kopplung zwischen Theta und Gamma. Verknüpft mit Gedächtniskodierung.",
   "tip.lateralityIndex": "Links-Rechts-Leistungsasymmetrie. Positiv = rechtsdominant.",
+  "tip.echt":
+    "Endpunkt-korrigierte Hilbert-Transformation — Alpha-Band-Rhythmizität (0–1). Hoch = starke, phasenstabile Alpha-Oszillation. [Schreglmann 2021]",
   "tip.hr": "Herzfrequenz aus PPG-Intervallen zwischen Herzschlägen.",
   "tip.rmssd": "Quadratischer Mittelwert aufeinanderfolgender Differenzen. Wichtige parasympathische HRV-Metrik.",
   "tip.sdnn": "Standardabweichung der Schlag-zu-Schlag-Intervalle. Spiegelt die gesamte HRV wider.",
@@ -215,6 +217,12 @@ const ui: Record<string, string> = {
     "Automatische Updateprüfung ist deaktiviert. Nutze den Button oben zur manuellen Prüfung.",
   "updates.autostart": "Bei Anmeldung starten",
   "updates.autostartDesc": "Startet automatisch, wenn du dich an deinem Computer anmeldest.",
+  "updates.autoUpdate": "Updates automatisch installieren",
+  "updates.autoUpdateDesc":
+    "Neue Versionen im Hintergrund herunterladen und beim nächsten Neustart installieren. Deaktivieren, um den Zeitpunkt selbst zu wählen.",
+  "updates.autoUpdateOffNotice":
+    "Automatische Installation ist aus — auf „Installieren“ klicken, um herunterzuladen und zu aktualisieren.",
+  "updates.installNow": "Installieren",
   "updates.autoCheckDesc": "Nach Updates prüfen, sobald die App startet, einmal pro Tag.",
   "updates.footer": "Updates werden automatisch heruntergeladen. Starten Sie neu, wenn Sie bereit sind.",
 

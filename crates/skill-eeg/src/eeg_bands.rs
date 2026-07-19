@@ -42,14 +42,12 @@
 //! P_band = Σ_k factor × psd_raw[k] / Σ wᵢ²
 //! ```
 //!
-//! where `psd_raw[k] = (r[k]² + i[k]²) / n` is the output of
-//! `gpu_fft::psd::psd`.
+//! where `psd_raw[k] = (r[k]² + i[k]²) / n`.
 //!
 //! ## Batch GPU execution
 //!
-//! All 4 channels are submitted together as a `4 × 512` matrix in one
-//! `fft_batch` call — the GPU kernel covers all channels in a single 2-D
-//! workgroup dispatch with no per-channel overhead.
+//! All channels are submitted together as a `batch × n` matrix in one
+//! `fft_batch` call — the GPU kernel covers all channels in a single dispatch.
 //!
 //! ## Bands
 //!
@@ -66,10 +64,10 @@ use std::collections::VecDeque;
 use std::f32::consts::PI;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(not(feature = "gpu"))]
+#[cfg(not(feature = "rlx-fft"))]
 use crate::cpu_fft::{fft_batch, psd};
-#[cfg(feature = "gpu")]
-use gpu_fft::{fft_batch, psd::psd};
+#[cfg(feature = "rlx-fft")]
+use crate::rlx_fft::{fft_batch, psd};
 use serde::{Deserialize, Serialize};
 
 use crate::band_metrics::*;
@@ -208,6 +206,10 @@ pub struct BandSnapshot {
     /// Laterality Index — generalised L/R asymmetry across all bands.  [Homan 1987]
     pub laterality_index: f32,
 
+    /// Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1)
+    /// from causal-Morlet instantaneous phase.  [Schreglmann et al. 2021]
+    pub echt: f32,
+
     // ── Headache / Migraine EEG correlate indices (0–100) ───────────────────
     // Research biomarkers derived from published literature.
     // NOT clinical diagnostic tools — for informational/research purposes only.
@@ -289,6 +291,18 @@ pub struct BandSnapshot {
     /// Drowsiness score (0–100).  High TAR + alpha spindles.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drowsiness: Option<f64>,
+    /// Engagement score (0–100).  Per-channel β / (α + θ), per-channel `0.5`
+    /// fallback for low-signal channels, then sigmoid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engagement: Option<f64>,
+    /// Relaxation score (0–100).  Per-channel α / (β + θ), per-channel `0.5`
+    /// fallback for low-signal channels, then sigmoid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relaxation: Option<f64>,
+    /// Focus score (0–100).  Currently identical to `engagement`; kept as a
+    /// distinct field for UI semantics and future divergence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus: Option<f64>,
 
     // ── Device telemetry ─────────────────────────────────────────────────────
     /// Raw temperature ADC value from headset (Classic firmware only).
@@ -488,7 +502,7 @@ impl BandAnalyzer {
         // One-sided PSD (Heinzel et al. 2002 normalisation):
         //   S[k] = factor × |X[k]|² / (fs × Σwᵢ²)   [µV²/Hz]
         //
-        // With psd_raw[k] = |X[k]|² / n (from gpu_fft::psd::psd):
+        // With psd_raw[k] = |X[k]|² / n (output of `psd()`):
         //   S[k] = factor × n × psd_raw[k] / (fs × Σwᵢ²)
         //
         // Band power (µV²):
@@ -828,6 +842,7 @@ impl BandAnalyzer {
         let mut dfa_sum = 0.0f32;
         let mut se_sum = 0.0f32;
         let mut pac_sum = 0.0f32;
+        let mut echt_sum = 0.0f32;
         for ch_idx in 0..EEG_CHANNELS {
             let raw: Vec<f32> = self.window[ch_idx].iter().copied().collect();
             let (ha, hm, hc) = hjorth_params(&raw);
@@ -839,6 +854,7 @@ impl BandAnalyzer {
             dfa_sum += dfa_exponent(&raw);
             se_sum += sample_entropy_fn(&raw);
             pac_sum += pac_theta_gamma_fn(&raw, self.sample_rate);
+            echt_sum += echt_fn(&raw, self.sample_rate);
         }
         let hjorth_activity = ha_sum / safe_nch;
         let hjorth_mobility = hm_sum / safe_nch;
@@ -848,6 +864,7 @@ impl BandAnalyzer {
         let dfa_exponent_val = dfa_sum / safe_nch;
         let sample_entropy_val = se_sum / safe_nch;
         let pac_theta_gamma = pac_sum / safe_nch;
+        let echt = echt_sum / safe_nch;
 
         // ── Laterality Index ─────────────────────────────────────────────────
         let laterality_index = laterality_index_fn(&ch_powers);
@@ -977,6 +994,7 @@ impl BandAnalyzer {
             sample_entropy: sample_entropy_val,
             pac_theta_gamma,
             laterality_index,
+            echt,
             headache_index,
             migraine_index,
             consciousness_lzc,
@@ -1001,6 +1019,9 @@ impl BandAnalyzer {
             meditation: None,
             cognitive_load: None,
             drowsiness: None,
+            engagement: None,
+            relaxation: None,
+            focus: None,
             temperature_raw: None,
             gpu_overall: None,
             gpu_render: None,

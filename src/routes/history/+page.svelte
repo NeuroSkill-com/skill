@@ -1675,7 +1675,7 @@ useWindowTitle("window.title.history");
               <!-- Hour labels header -->
               <div class="relative h-5 bg-muted/30 dark:bg-white/[0.02] select-none flex">
                 {#each Array(24) as _, hr}
-                  <span class="flex-1 text-center text-[6.5px] leading-[20px] tabular-nums
+                  <span class="flex-1 text-center text-ui-2xs leading-[20px] tabular-nums
                                text-muted-foreground/40 border-r border-border/10 dark:border-white/[0.04] last:border-r-0
                                {hr % 6 === 0 ? 'font-semibold text-muted-foreground/60' : ''}">
                     {String(hr).padStart(2,"0")}
@@ -1700,7 +1700,7 @@ useWindowTitle("window.title.history");
                 {#if anyTs}
                   <div class="absolute top-0 left-0 pointer-events-none" style="height:720px;">
                     {#each [0,15,30,45] as min}
-                      <span class="absolute left-0.5 text-[5.5px] text-muted-foreground/25 tabular-nums"
+                      <span class="absolute left-0.5 text-ui-2xs text-muted-foreground/25 tabular-nums"
                             style="top:{(min / 60) * 100}%;">
                         :{String(min).padStart(2,"0")}
                       </span>
@@ -1715,7 +1715,7 @@ useWindowTitle("window.title.history");
                   {#if session.session_start_utc}
                     <div class="flex items-center gap-1">
                       <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{sessionColor(idx)}"></span>
-                      <span class="text-[0.46rem] text-muted-foreground/50 tabular-nums">
+                      <span class="text-ui-2xs text-muted-foreground/50 tabular-nums">
                         {fmtTimeShort(session.session_start_utc!)} → {fmtTimeShort(session.session_end_utc!)}
                       </span>
                     </div>
@@ -1944,6 +1944,25 @@ useWindowTitle("window.title.history");
                   {#if session.device_name}
                     <span class="text-ui-xs text-muted-foreground/40 truncate min-w-0">
                       {session.device_name}
+                    </span>
+                  {/if}
+
+                  {#if (session.chunk_count ?? 1) > 1}
+                    <span
+                      class="inline-flex items-center gap-1 text-ui-2xs px-1.5 py-0.5 rounded-sm
+                             bg-muted/30 text-muted-foreground/60 tabular-nums shrink-0"
+                      title={t("history.chunkCountTooltip", { n: session.chunk_count!, duration: dur })}
+                      aria-label={t("history.chunkCountTooltip", { n: session.chunk_count!, duration: dur })}
+                    >
+                      <!-- Stack icon: visually distinguishes the badge from labels and from the device name -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                           class="w-3 h-3 opacity-70" aria-hidden="true">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <path d="M3.27 6.96 12 12.01l8.73-5.05"/>
+                        <path d="M12 22.08V12"/>
+                      </svg>
+                      {t("history.chunkCount", { n: session.chunk_count! })}
                     </span>
                   {/if}
 
@@ -2318,7 +2337,7 @@ useWindowTitle("window.title.history");
         <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
                     shadow-xl px-2.5 py-1.5 text-popover-foreground whitespace-nowrap max-w-[220px]">
           <span class="block text-ui-sm font-medium leading-tight truncate">{labelTooltip.text}</span>
-          <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
+          <span class="block text-ui-2xs text-muted-foreground/60 tabular-nums mt-0.5">
             {labelTooltip.time}{#if labelTooltip.timeEnd} - {labelTooltip.timeEnd}{/if}
           </span>
         </div>

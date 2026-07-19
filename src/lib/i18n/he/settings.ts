@@ -790,6 +790,24 @@ const settings: Record<string, string> = {
   "activity.productivePct": "% פרודוקטיבי",
   "activity.totalReadingTime": "זמן קריאה",
   "activity.avgScrollDepth": "עומק גלילה ממוצע",
+
+  "daemonActivity.title": "פעילות רקע של ה-Daemon",
+  "daemonActivity.intro":
+    "משימות חוזרות שה-Daemon מריץ ברקע — מה הן עושות, לשם מה הן קיימות וכל כמה זמן הן רצות. כבה מעקבים שאינך משתמש בהם כדי להפחית עומס מעבד.",
+  "daemonActivity.loading": "בטעינה…",
+  "daemonActivity.running": "פעיל",
+  "daemonActivity.idle": "לא פעיל",
+  "daemonActivity.eventDriven": "מבוסס-אירועים",
+  "daemonActivity.whyPrefix": "למה:",
+  "daemonActivity.costLow": "עומס נמוך",
+  "daemonActivity.costMedium": "עומס בינוני",
+  "daemonActivity.costHigh": "עומס גבוה",
+  "daemonActivity.never": "עדיין לא רץ",
+  "daemonActivity.lastRanSecondsAgo": "לפני {n} שנ׳",
+  "daemonActivity.lastRanMinutesAgo": "לפני {n} דק׳",
+  "daemonActivity.lastRanHoursAgo": "לפני {n} שע׳",
+  "daemonActivity.tickDuration": "משך: {n} ms",
+  "daemonActivity.tickCount": "הפעלות: {n}",
 };
 
 export default settings;

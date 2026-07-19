@@ -6,21 +6,33 @@ license = "GPL-3.0-only"
 description = "Shared state types for skill-daemon — extracted for parallel compilation"
 
 [features]
+# Text embeddings run on the RLX runtime via `rlx-embed`
+# (RlxBertModel / RlxNomicModel — BGE / Nomic / E5 families). The tier
+# suffixes below add GPU backends; the base feature is the CPU baseline.
 default = ["llm"]
 llm = ["skill-llm/llm"]
+text-embeddings-rlx = ["dep:hf-hub", "dep:rlx", "dep:rlx-models", "dep:tokenizers", "rlx-models/embed", "rlx-models/bert", "rlx-models/nomic"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal"]
+text-embeddings-rlx-mlx   = ["text-embeddings-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx"]
+text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "rlx?/cuda", "rlx-models?/cuda"]
+text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "rlx?/rocm", "rlx-models?/rocm"]
+text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "rlx?/gpu", "rlx-models?/gpu"]
 
 [dependencies]
 anyhow     = { workspace = true }
 thiserror  = { workspace = true }
 base64     = { workspace = true }
 dirs       = "6"
-fastembed  = { version = "5.13.0", features = ["ort-download-binaries-native-tls"] }
+hf-hub     = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
 hex        = "0.4"
 rand       = "0.10"
+rlx        = { workspace = true, optional = true, features = ["cpu"] }
+rlx-models = { workspace = true, optional = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 sha2       = "0.10"
 tokio      = { version = "1", features = ["sync", "rt-multi-thread", "macros", "time"] }
+tokenizers = { version = "0.22", default-features = false, features = ["onig"], optional = true }
 tracing    = "0.1"
 
 skill-constants     = { path = "../skill-constants" }
@@ -29,7 +41,7 @@ skill-data          = { path = "../skill-data" }
 skill-devices       = { path = "../skill-devices" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-iroh          = { path = "../skill-iroh" }
-skill-label-index   = { path = "../skill-label-index" }
+skill-label-index   = { path = "../skill-label-index", features = ["turboquant-index"] }
 skill-llm           = { path = "../skill-llm" }
 skill-lsl           = { path = "../skill-lsl" }
 skill-settings      = { path = "../skill-settings" }

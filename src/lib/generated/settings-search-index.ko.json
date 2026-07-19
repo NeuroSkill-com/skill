@@ -73,6 +73,24 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "임베딩 런타임",
+    "desc": "텍스트 임베딩은 로컬 RLX 런타임에서 실행됩니다. 아래에서 연산 장치와 최대 시퀀스 길이를 선택하세요."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "라벨 검색 인덱스",
+    "desc": "라벨 의미 검색에 사용할 로컬 벡터 인덱스를 선택합니다. 둘 다 구축한 뒤 자신의 쿼리로 벤치마크하고, 데이터에 맞는 더 빠르거나 품질이 높은 옵션을 고르세요."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant 인덱스",
+    "desc": "압축된 TurboVec 인덱스. 메모리와 디스크 사용량이 적어 대량 라벨에 적합."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "임베딩 모델"
   },
@@ -305,6 +323,12 @@
     "key": "llm.mmproj.nThreads",
     "label": "인코더 스레드",
     "desc": "비전/오디오 인코더의 CPU 스레드."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "드래프트 토큰",
+    "desc": "디코딩 단계마다 투기적으로 생성할 토큰 수입니다. 값이 높을수록 처리량이 증가하지만 메모리를 더 많이 사용합니다. MTP 지원 모델이 필요합니다."
   },
   {
     "tab": "llm",
@@ -832,6 +856,12 @@
     "key": "updates.autostart",
     "label": "로그인 시 시작",
     "desc": "컴퓨터에 로그인할 때 자동으로 시작합니다."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "업데이트 자동 설치",
+    "desc": "백그라운드에서 새 버전을 다운로드하고 다음 재시작 시 설치합니다. 설치 시점을 직접 선택하려면 끄세요."
   },
   {
     "tab": "updates",

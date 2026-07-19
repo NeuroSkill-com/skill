@@ -182,7 +182,7 @@ onMount(refresh);
       onclick={onNew}
       title={t("chat.btn.newChat")}
       aria-label={t("chat.btn.newChat")}
-      class="p-1 rounded-md text-muted-foreground/60
+      class="p-1.5 rounded-md text-muted-foreground/60
              hover:text-foreground hover:bg-muted transition-colors cursor-pointer">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" class="w-3 h-3">

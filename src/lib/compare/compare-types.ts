@@ -92,6 +92,7 @@ export const advancedMetrics: MRow[] = [
   { key: "sample_entropy", label: "compare.sampleEntropy", unit: "", fmt: fmtF3 },
   { key: "pac_theta_gamma", label: "compare.pacThetaGamma", unit: "", fmt: fmtF3 },
   { key: "laterality_index", label: "compare.lateralityIndex", unit: "", fmt: fmtF3 },
+  { key: "echt", label: "compare.echt", unit: "", fmt: fmtF3 },
   { key: "hr", label: "compare.hr", unit: "bpm", fmt: fmtF1 },
   { key: "rmssd", label: "compare.rmssd", unit: "ms", fmt: fmtF1 },
   { key: "sdnn", label: "compare.sdnn", unit: "ms", fmt: fmtF1 },
@@ -126,6 +127,7 @@ export const HIGHER_IS_BETTER = new Set<keyof SessionMetrics>([
   "pnn50",
   "rmssd",
   "sdnn",
+  "echt",
 ]);
 
 /** Metrics where lower B value = improvement. */

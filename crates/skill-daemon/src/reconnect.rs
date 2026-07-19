@@ -95,6 +95,7 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            state.record_task_heartbeat("reconnect", 0);
 
             // Skip reconnect attempts in test mode.
             if state.test_mode.load(std::sync::atomic::Ordering::Relaxed) {

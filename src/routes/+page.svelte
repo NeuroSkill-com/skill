@@ -329,6 +329,7 @@ let dfaScore = $state(0); // DFA Exponent
 let seScore = $state(0); // Sample Entropy
 let pacScore = $state(0); // PAC (θ–γ)
 let latScore = $state(0); // Laterality Index
+let echtScore = $state(0); // ECHT alpha rhythmicity
 let hrScore = $state(0); // Heart Rate (bpm)
 let rmssdScore = $state(0); // RMSSD (ms)
 let sdnnScore = $state(0); // SDNN (ms)
@@ -427,6 +428,7 @@ function updateScores(snap: BandSnapshot) {
   if (snap.sample_entropy !== undefined) seScore = seScore + SCORE_TAU * (snap.sample_entropy - seScore);
   if (snap.pac_theta_gamma !== undefined) pacScore = pacScore + SCORE_TAU * (snap.pac_theta_gamma - pacScore);
   if (snap.laterality_index !== undefined) latScore = latScore + SCORE_TAU * (snap.laterality_index - latScore);
+  if (snap.echt !== undefined) echtScore = echtScore + SCORE_TAU * (snap.echt - echtScore);
   // PPG-derived
   if (snap.hr !== undefined && snap.hr > 0) hrScore = hrScore + SCORE_TAU * (snap.hr - hrScore);
   if (snap.rmssd !== undefined && snap.rmssd > 0) rmssdScore = rmssdScore + SCORE_TAU * (snap.rmssd - rmssdScore);
@@ -1737,7 +1739,7 @@ useWindowTitle("window.title.main");
                                rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
                 {/if}
                 {#if hasSecondary}
-                  <span class="ml-0.5 text-[0.44rem] font-bold tracking-widest uppercase px-1 py-0.5
+                  <span class="ml-0.5 text-ui-2xs font-bold tracking-widest uppercase px-1 py-0.5
                                rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
                   <span class="text-ui-2xs text-violet-500/60">+{secondarySessions.length}</span>
                 {/if}
@@ -1823,7 +1825,7 @@ useWindowTitle("window.title.main");
                                rounded bg-foreground/[0.06] dark:bg-white/[0.06] text-muted-foreground/60">{sourceLabel}</span>
                 {/if}
                 {#if hasSecondary}
-                  <span class="ml-1 text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5
+                  <span class="ml-1 text-ui-2xs font-bold tracking-widest uppercase px-1.5 py-0.5
                                rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{t("dashboard.primary")}</span>
                 {/if}
               </p>
@@ -2137,7 +2139,7 @@ useWindowTitle("window.title.main");
             {(status.battery ?? 0).toFixed(0)}%
           </span>
           {#if status.temperature_raw > 0}
-            <span class="text-[0.42rem] text-muted-foreground/50 tabular-nums" title={t("dashboard.temperature")}>
+            <span class="text-ui-2xs text-muted-foreground/50 tabular-nums" title={t("dashboard.temperature")}>
               🌡 {status.temperature_raw}
             </span>
           {/if}
@@ -2237,27 +2239,27 @@ useWindowTitle("window.title.main");
               <div class="text-ui-sm text-muted-foreground">fNIRS: {fnirsLabels.join(" · ")}</div>
               <div class="grid grid-cols-3 gap-1.5 mt-1">
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
-                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Oxy</div>
+                  <div class="text-ui-2xs uppercase tracking-wider text-muted-foreground/70">Oxy</div>
                   <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_oxygenation_pct ?? 0).toFixed(1)}%</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
-                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Workload</div>
+                  <div class="text-ui-2xs uppercase tracking-wider text-muted-foreground/70">Workload</div>
                   <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_workload ?? 0).toFixed(1)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
-                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Lat</div>
+                  <div class="text-ui-2xs uppercase tracking-wider text-muted-foreground/70">Lat</div>
                   <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_lateralization ?? 0).toFixed(1)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
-                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">ΔHbO</div>
+                  <div class="text-ui-2xs uppercase tracking-wider text-muted-foreground/70">ΔHbO</div>
                   <div class="text-ui-sm font-semibold text-foreground">{((((status.fnirs_hbo_left ?? 0) + (status.fnirs_hbo_right ?? 0)) / 2)).toFixed(3)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
-                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">ΔHbR</div>
+                  <div class="text-ui-2xs uppercase tracking-wider text-muted-foreground/70">ΔHbR</div>
                   <div class="text-ui-sm font-semibold text-foreground">{((((status.fnirs_hbr_left ?? 0) + (status.fnirs_hbr_right ?? 0)) / 2)).toFixed(3)}</div>
                 </div>
                 <div class="rounded-md border border-border/60 px-1.5 py-1">
-                  <div class="text-[0.45rem] uppercase tracking-wider text-muted-foreground/70">Conn</div>
+                  <div class="text-ui-2xs uppercase tracking-wider text-muted-foreground/70">Conn</div>
                   <div class="text-ui-sm font-semibold text-foreground">{(status.fnirs_connectivity ?? 0).toFixed(3)}</div>
                 </div>
               </div>
@@ -2292,6 +2294,7 @@ useWindowTitle("window.title.main");
               mood={moodScore} bps={bpsScore} snr={snrScore} coherence={coherenceScore} mu={muScore}
               tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
               pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
+              echt={echtScore}
               headache={headacheScore} migraine={migraineScore}
               showMu={status.has_central_electrodes} />
           </div>
@@ -2372,7 +2375,7 @@ useWindowTitle("window.title.main");
               {t("dashboard.imu")}
             </span>
             {#if hasImuData}
-              <span class="text-[0.45rem] text-sky-500 live-blink shrink-0" aria-hidden="true">●</span>
+              <span class="text-ui-2xs text-sky-500 live-blink shrink-0" aria-hidden="true">●</span>
             {/if}
           </button>
           {#if imuExpanded}
@@ -2399,7 +2402,7 @@ useWindowTitle("window.title.main");
                            group-hover:text-foreground transition-colors">
                 {t("dashboard.eegChannels")}
               </span>
-              <span class="text-[0.45rem] text-emerald-500 live-blink shrink-0" aria-hidden="true">●</span>
+              <span class="text-ui-2xs text-emerald-500 live-blink shrink-0" aria-hidden="true">●</span>
             </button>
             {#if eegChExpanded}
               <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 8} class:grid-cols-4={chLabels.length > 8}>
@@ -2444,7 +2447,7 @@ useWindowTitle("window.title.main");
           ] as [label, val]}
             <div class="flex-1 min-w-0 rounded-lg border border-border dark:border-white/[0.06]
                         bg-muted dark:bg-surface-2 px-2 py-1.5 flex flex-col gap-0.5">
-              <span class="text-[0.42rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">{label}</span>
+              <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground truncate">{label}</span>
               <span class="font-mono text-ui-sm text-muted-foreground truncate">{val}</span>
             </div>
           {/each}
@@ -2656,7 +2659,7 @@ useWindowTitle("window.title.main");
               <span class="text-ui-sm font-medium text-foreground truncate">
                 {sess.device_name}
               </span>
-              <span class="text-[0.46rem] font-bold tracking-widest uppercase px-1 py-0.5 rounded
+              <span class="text-ui-2xs font-bold tracking-widest uppercase px-1 py-0.5 rounded
                            bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0">
                 {sess.device_kind === "lsl" ? "LSL" : sess.device_kind === "lsl-iroh" ? "iroh" : sess.device_kind.toUpperCase()}
               </span>

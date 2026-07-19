@@ -7,6 +7,7 @@ node_modules
 .env.*
 !.env.example
 !.envrc
+rlx.path
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
@@ -30,7 +31,20 @@ AGENTS.md
 .gitrub_activity
 # Rust lock files — Cargo.lock is committed (application, not library)
 test-results/
-.llama-prebuilt/
 src-tauri/binaries/
 errors/
 logs/
+
+# Bundled TTS engine weights — staged by scripts/bundle-tts-weights.sh before packaging.
+# inflect-nano is committed (declared in tauri.conf.json bundle.resources so CI can build the app);
+# other engine bundles (e.g. tiny-tts) stay local-only.
+src-tauri/resources/tts/*
+!src-tauri/resources/tts/inflect-nano/
+# Re-include the bundle contents too, overriding the global **/*.safetensors ignore above.
+!src-tauri/resources/tts/inflect-nano/**
+
+# OCR weights bundled into skill-screenshots via include_bytes! (rlx-ocr, converted
+# offline from the ocrs rten checkpoints) so CI can build the app offline.
+# Override the global **/*.safetensors ignore above.
+!crates/skill-screenshots/assets/ocr-detection.safetensors
+!crates/skill-screenshots/assets/ocr-recognition.safetensors

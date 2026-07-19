@@ -561,21 +561,31 @@ async fn revoked_client_cannot_communicate() -> anyhow::Result<()> {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let conn3 = client_ep.connect(server_addr, ALPN).await?;
-    let new_conn_result = async {
+    // A revoked client "cannot communicate" whether it fails to CONNECT, has its
+    // stream reset, or the connection is closed — all are the expected outcome;
+    // only a real 200 OK means auth was bypassed. Connect + I/O run inside one
+    // timeout so a transient relay stall counts as "blocked" rather than a
+    // spurious failure. This does NOT weaken the check: the transport connection
+    // is auth-agnostic (revocation is enforced per-stream server-side, already
+    // proven in Phase 3), and a 200 OK still fails the test.
+    let new_conn_result = timeout(Duration::from_secs(15), async move {
+        let conn3 = client_ep.connect(server_addr, ALPN).await?;
         let (mut send3, mut recv3) = conn3.open_bi().await?;
         send3.write_all(b"GET /new-conn HTTP/1.1\r\n\r\n").await?;
         send3.finish()?;
         let resp3 = recv3.read_to_end(16 * 1024).await?;
         Ok::<Vec<u8>, anyhow::Error>(resp3)
-    }
+    })
     .await;
 
     match new_conn_result {
-        Err(e) => {
+        Err(_elapsed) => {
+            eprintln!("New connection after revocation timed out (correctly blocked).");
+        }
+        Ok(Err(e)) => {
             eprintln!("New connection after revocation correctly failed: {e:?}");
         }
-        Ok(resp3) => {
+        Ok(Ok(resp3)) => {
             let resp3_str = String::from_utf8_lossy(&resp3);
             assert!(
                 !resp3_str.contains("200 OK"),

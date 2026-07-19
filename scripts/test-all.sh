@@ -48,8 +48,8 @@ for arg in "$@"; do
       echo "  hooks     pre-commit + pre-push"
       exit 0
       ;;
-    fast)  SUITES+=(fmt lint clippy vitest rust ci types) ;;
-    all)   SUITES+=(fmt lint clippy deny vitest rust:all ci types widgets a11y i18n changelog smoke daemon e2e mlx-e2e) ;;
+    fast)  SUITES+=(fmt lint tiny-text clippy vitest rust ci types) ;;
+    all)   SUITES+=(fmt lint tiny-text clippy deny vitest rust:all ci types widgets a11y i18n changelog smoke daemon e2e mlx-e2e) ;;
     hooks) SUITES+=(pre-commit pre-push) ;;
     *)     SUITES+=("$arg") ;;
   esac
@@ -123,6 +123,12 @@ for suite in "${SUITES[@]}"; do
     lint)
       run_suite "biome check" npx biome check src/ scripts/ || { $STOP_ON_FAIL && break; }
       ;;
+    tiny-text)
+      # Bans arbitrary `text-[<11px]` classes that bypass the design
+      # system. See scripts/lint-tiny-text.mjs for the rule rationale
+      # and src/tests/visual-layout.spec.ts for the audit it derives from.
+      run_suite "tiny-text lint" node scripts/lint-tiny-text.mjs || { $STOP_ON_FAIL && break; }
+      ;;
     clippy)
       run_suite "rust version check" node scripts/check-rust-version.mjs --verbose || { $STOP_ON_FAIL && break; }
       run_suite "cargo clippy (workspace)" cargo clippy --locked --workspace --exclude skill -- -D warnings || { $STOP_ON_FAIL && break; }
@@ -154,11 +160,10 @@ for suite in "${SUITES[@]}"; do
       run_suite "Windows manifest" node scripts/check-windows-manifest.mjs || { $STOP_ON_FAIL && break; }
       ;;
     smoke)
-      if command -v tmux >/dev/null 2>&1 && [ -t 0 ]; then
-        run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
-      else
-        skip_suite "smoke test" "requires tmux + interactive terminal"
-      fi
+      # smoke-test.sh auto-selects headless mode when stdout isn't a TTY or
+      # CI=true, so it runs unattended in CI / piped shells. Interactive
+      # terminals get the tmux split-pane unless overridden by SMOKE_MODE.
+      run_suite "smoke test" bash scripts/smoke-test.sh || { $STOP_ON_FAIL && break; }
       ;;
     daemon)
       if ls src-tauri/target/*/release/bundle/dmg/*.dmg >/dev/null 2>&1 || \
@@ -185,10 +190,10 @@ for suite in "${SUITES[@]}"; do
       ;;
     mlx-e2e)
       if [[ "$(uname -s)" == "Darwin" ]]; then
-        run_suite "UMAP MLX E2E" cargo test -p skill-router --features mlx -- umap_e2e --nocapture --test-threads=1 || { $STOP_ON_FAIL && break; }
-        run_suite "FFT MLX E2E" cargo test -p skill-eeg --features mlx -- fft_e2e --nocapture || { $STOP_ON_FAIL && break; }
+        run_suite "UMAP GPU E2E" cargo test -p skill-router --features gpu -- umap_e2e --nocapture --test-threads=1 --include-ignored || { $STOP_ON_FAIL && break; }
+        run_suite "FFT Metal E2E" cargo test -p skill-eeg --features rlx-fft-metal -- --nocapture || { $STOP_ON_FAIL && break; }
       else
-        skip_suite "MLX E2E" "requires macOS with Apple Silicon"
+        skip_suite "GPU/Metal E2E" "requires macOS with Apple Silicon"
       fi
       ;;
     widgets)

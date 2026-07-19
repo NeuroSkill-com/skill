@@ -35,6 +35,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout RLX
+        uses: ./.github/actions/checkout-rlx
+
       - name: Validate Windows app manifest
         shell: bash
         run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
@@ -121,63 +124,11 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      # ── ONNX Runtime (official binaries) ───────────────────────────────────
-      # Use the official Microsoft release archive instead of relying on
-      # ort-sys CDN downloads. This makes Windows release builds deterministic
-      # and ensures onnxruntime.dll is available for packaging.
-      - name: Cache ONNX Runtime (Windows x64)
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.USERPROFILE }}\.cache\onnxruntime
-          key: windows-onnxruntime-1.23.2-x64
-
-      - name: Install ONNX Runtime (Windows x64) + export ORT env
-        shell: powershell
-        run: |
-          $OrtVersion = "1.23.2"
-          $OrtBase = Join-Path $env:USERPROFILE ".cache\onnxruntime"
-          $OrtRoot = Join-Path $OrtBase ("onnxruntime-win-x64-" + $OrtVersion)
-          $OrtDll = Join-Path $OrtRoot "lib\onnxruntime.dll"
-          $OrtLib = Join-Path $OrtRoot "lib\onnxruntime.lib"
-
-          if (-not ((Test-Path $OrtDll) -and (Test-Path $OrtLib))) {
-            New-Item -ItemType Directory -Force -Path $OrtBase | Out-Null
-            $ZipPath = Join-Path $env:RUNNER_TEMP "onnxruntime-win-x64.zip"
-            $Url = "https://github.com/microsoft/onnxruntime/releases/download/v$OrtVersion/onnxruntime-win-x64-$OrtVersion.zip"
-
-            $ok = $false
-            for ($i = 1; $i -le 8; $i++) {
-              try {
-                Invoke-WebRequest -Uri $Url -OutFile $ZipPath
-                $ok = $true
-                break
-              } catch {
-                if ($i -eq 8) { throw }
-                Start-Sleep -Seconds 2
-              }
-            }
-            if (-not $ok) {
-              Write-Error "Failed to download ONNX Runtime after retries"
-              exit 1
-            }
-
-            Remove-Item -Recurse -Force $OrtRoot -ErrorAction SilentlyContinue
-            Expand-Archive -Path $ZipPath -DestinationPath $OrtBase -Force
-          }
-
-          if (-not ((Test-Path $OrtDll) -and (Test-Path $OrtLib))) {
-            Write-Error "ONNX Runtime files missing: $OrtDll / $OrtLib"
-            exit 1
-          }
-
-          "ORT_LIB_LOCATION=$OrtRoot\lib" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "ORT_PREFER_DYNAMIC_LINK=1" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PATH=$OrtRoot\lib;$OrtRoot\bin;$env:PATH" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          Write-Host "[ok] ORT_LIB_LOCATION=$OrtRoot\lib"
+      # ── ONNX Runtime — not needed on Windows ──────────────────────────────
+      # KittenTTS (the only `ort` consumer) is gated to non-Windows targets in
+      # src-tauri / skill-tts Cargo.toml, so Windows builds don't link or ship
+      # onnxruntime.dll. Add the install/cache steps back here if a Windows
+      # TTS backend that needs ONNX Runtime is reintroduced.
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
       - name: Setup sccache
@@ -207,6 +158,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
       - name: Install JS dependencies
         run: npm ci
 
@@ -225,6 +179,10 @@ jobs:
       # toolchain.  Installing them in a single step via background jobs cuts
       # ~1-2 min of sequential wait time on cache-miss runs.
       - name: Cache Vulkan SDK
+        # Don't fail the job on transient cache-service errors (actions/cache@v5
+        # occasionally returns "failure" instead of "miss"). The install step
+        # below handles a missing SDK by downloading it on the spot.
+        continue-on-error: true
         uses: actions/cache@v5
         with:
           path: C:\VulkanSDK
@@ -332,9 +290,21 @@ jobs:
           $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "[ok] NSIS_DIR=$nsisDir"
 
-      - name: Download prebuilt llama libs (Windows, optional)
-        shell: bash
-        run: node scripts/ci.mjs download-llama windows x86_64-pc-windows-msvc vulkan
+      # ── OpenBLAS (upstream binary release) ────────────────────────────────────
+      # rlx-cpu emits `cargo:rustc-link-lib=openblas` on all non-macOS targets,
+      # so the Windows link step needs `openblas.lib` + `openblas.dll`. We
+      # download the upstream OpenBLAS Windows archive because vcpkg's port
+      # omits LAPACK and rlx-cpu's `blas` feature calls dgesv_/sgesv_.
+      # Cached so the download only happens once per script change.
+      - name: Cache OpenBLAS (upstream Windows binary)
+        uses: actions/cache@v5
+        with:
+          path: C:\OpenBLAS
+          key: windows-openblas-${{ hashFiles('scripts/install-openblas-windows.ps1') }}
+
+      - name: Install OpenBLAS + export OPENBLAS_DIR
+        shell: powershell
+        run: .\scripts\install-openblas-windows.ps1
 
       # ── Ensure VC++ Redistributable DLLs are available ───────────────────────
       # The binary uses dynamic CRT (/MD).  The NSIS installer bundles the CRT
@@ -457,10 +427,10 @@ jobs:
             exit 1
           }
 
-      # ── Standalone LLVM 19 for bindgen + lld-link ─────────────────────────────
+      # ── Standalone LLVM 19 for bindgen + lld-link ────��────────────────────────
       # VS2022's bundled clang-cl can't handle __builtin_ia32_* intrinsics in
-      # mmintrin.h, causing bindgen (llama-cpp-sys-4) to fail.  Standalone
-      # LLVM 19 fixes this and also provides lld-link for faster linking.
+      # mmintrin.h, causing bindgen to fail.  Standalone LLVM 19 fixes this
+      # and also provides lld-link for faster linking.
       #
       # Cache the full install so subsequent runs skip the ~500 MB download.
       - name: Cache LLVM 19
@@ -513,8 +483,6 @@ jobs:
       # --features custom-protocol: required — without it Tauri compiles in
       #   dev mode and loads UI from localhost:1420 instead of the embedded
       #   SvelteKit build output.
-      # --features llm-vulkan: enables Vulkan GPU offloading for LLM inference
-      #   (covers NVIDIA, AMD, Intel Arc without vendor-specific SDKs).
       - name: Compile (Rust)
         shell: bash
         env:
@@ -529,7 +497,7 @@ jobs:
           # app-locally so end users don't need a separate install.
           CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreadedDLL
           # Let sccache cache C/C++ compilations from cmake-based -sys crates
-          # (llama-cpp-sys-4, espeak-ng, etc.).  Without these, only rustc
+          # (espeak-ng, etc.).  Without these, only rustc
           # invocations go through sccache — the heavy cmake builds are
           # re-done from scratch every time.
           CMAKE_C_COMPILER_LAUNCHER:   sccache
@@ -546,37 +514,33 @@ jobs:
 
           # Build both packages in a single cargo invocation so feature
           # unification happens once and shared dependencies compile only once.
+          # NOTE: `|| return $?` is required — `set -e` is inhibited inside a
+          # function called via `if ! cmd`, so a failing cargo build would
+          # silently fall through and run_cmd would still return 0.
           run_cmd() {
-            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings
+            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings || return $?
           }
 
           if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::Windows release compile failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              find src-tauri/target -name "*llama_cpp_sys*" -exec rm -rf {} + 2>/dev/null || true
-              find src-tauri/target -name "*llama-cpp-sys*" -exec rm -rf {} + 2>/dev/null || true
-              run_cmd
-            else
-              exit 1
-            fi
+            exit 1
           fi
 
           sccache --show-stats || true
 
-      # Make sure NSIS packaging can always find onnxruntime.dll next to the
-      # built binary, independent of Cargo OUT_DIR layout details.
-      - name: Stage onnxruntime.dll for packaging
+      # rlx-cpu and turbovec resolve cblas_sgemm via openblas.dll at runtime.
+      # Bundle it next to skill.exe / skill_daemon.exe so the installed app
+      # works on machines without OpenBLAS preinstalled. The upstream 0.3.30
+      # DLL is statically linked against the MinGW runtime (depends only on
+      # KERNEL32.dll + msvcrt.dll), so no extra runtime DLLs need shipping.
+      - name: Stage openblas.dll for packaging
         shell: powershell
         run: |
-          if (-not $env:ORT_LIB_LOCATION) {
-            Write-Error "ORT_LIB_LOCATION is not set"
+          if (-not $env:OPENBLAS_DLL) {
+            Write-Error "OPENBLAS_DLL is not set (install-openblas-windows.ps1 must run before this step)"
             exit 1
           }
-
-          $Dll = Join-Path $env:ORT_LIB_LOCATION "onnxruntime.dll"
-          if (-not (Test-Path $Dll)) {
-            Write-Error "onnxruntime.dll not found at $Dll"
+          if (-not (Test-Path $env:OPENBLAS_DLL)) {
+            Write-Error "openblas.dll not found at $env:OPENBLAS_DLL"
             exit 1
           }
 
@@ -587,8 +551,8 @@ jobs:
 
           foreach ($dir in $releaseDirs) {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
-            Copy-Item $Dll (Join-Path $dir "onnxruntime.dll") -Force
-            Write-Host "[ok] Copied onnxruntime.dll to $dir"
+            Copy-Item $env:OPENBLAS_DLL (Join-Path $dir "openblas.dll") -Force
+            Write-Host "[ok] Copied openblas.dll to $dir"
           }
 
       # ── Upload cargo build timings ───────────────────────────────────────────
@@ -906,7 +870,7 @@ jobs:
 
       # ── Discord notification ──────────────────────────────────────────────────
       - name: Notify Discord of release
-        if: always() && steps.version_meta.outputs.dry_run != 'true'
+        if: always() && steps.version_meta.outputs.is_release == 'true'
         shell: bash
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

@@ -9,6 +9,13 @@ configs:
   Debug: debug
   Release: release
 
+# DEVELOPMENT_TEAM is injected at `xcodegen generate` time when APPLE_TEAM_ID is
+# set (CI / Xcode). Local ad-hoc builds leave it empty and override via xcodebuild.
+settingGroups:
+  widgetSigning:
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+    CODE_SIGN_STYLE: ${WIDGET_CODE_SIGN_STYLE:-Manual}
+
 targets:
   SkillWidgetsExtension:
     type: app-extension
@@ -18,13 +25,14 @@ targets:
         excludes:
           - "**/*.entitlements"
     settings:
+      groups:
+        - widgetSigning
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.neuroskill.skill.widgets
         PRODUCT_NAME: SkillWidgets
-        MARKETING_VERSION: "0.0.129"
+        MARKETING_VERSION: "0.0.131"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
-        CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         INFOPLIST_FILE: Sources/Info.plist
         GENERATE_INFOPLIST_FILE: false
@@ -52,17 +60,27 @@ targets:
           - "**/Info.plist"
           - "SkillWidgetBundle.swift"
     settings:
+      groups:
+        - widgetSigning
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.neuroskill.skill.widgets.tests
         PRODUCT_NAME: SkillWidgetsTests
         SWIFT_VERSION: "5.9"
-        CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: true
         TEST_HOST: ""
         BUNDLE_LOADER: ""
 
 schemes:
+  SkillWidgetsExtension:
+    build:
+      targets:
+        SkillWidgetsExtension: all
+    run:
+      askForAppToLaunch: false
+    archive:
+      config: Release
+
   SkillWidgetsTests:
     build:
       targets:

@@ -203,17 +203,51 @@ function afetch(url: string, opts: RequestInit = {}): Promise<Response> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * testWs(port) — Quick probe to check if a WebSocket server is listening.
- * Opens a connection, waits 1.5s for "open", then closes. Returns true/false.
+ * testWs(port) — Probe whether port speaks the Skill daemon protocol.
+ *
+ * A bare WebSocket handshake isn't enough: VS Code helpers, Vite HMR, and
+ * other dev tooling also accept WS upgrades and would pass that check.
+ *
+ * Discriminator: the Skill daemon's `/v1/events` handler sends a single
+ * `{ type: "DaemonStarted" }` envelope immediately upon WS upgrade, before
+ * entering its message-receive loop. Nothing else on the box speaks that
+ * frame, so it uniquely identifies the daemon without depending on
+ * command dispatch being quick (e.g. while ZUNA/Metal is initialising).
  */
 function testWs(p: number): Promise<boolean> {
   return new Promise((resolve) => {
+    const url = authToken
+      ? `ws://127.0.0.1:${p}/v1/events?token=${encodeURIComponent(authToken)}`
+      : `ws://127.0.0.1:${p}`;
+    let w: WebSocket;
     try {
-      const w = new WebSocket(`ws://127.0.0.1:${p}`);
-      const t = setTimeout(() => { try { w.close(); } catch {} resolve(false); }, 1500);
-      w.on("open", () => { clearTimeout(t); w.close(); resolve(true); });
-      w.on("error", () => { clearTimeout(t); resolve(false); });
-    } catch { resolve(false); }
+      w = new WebSocket(url);
+    } catch {
+      resolve(false);
+      return;
+    }
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      try { w.close(); } catch {}
+      resolve(ok);
+    };
+    const t = setTimeout(() => finish(false), 3000);
+    w.on("error", () => { clearTimeout(t); finish(false); });
+    w.on("message", (raw) => {
+      let data: any;
+      try { data = JSON.parse(raw.toString()); } catch { return; }
+      // First message after upgrade must be the daemon's welcome envelope.
+      if (data?.type === "DaemonStarted") {
+        clearTimeout(t);
+        finish(true);
+      } else {
+        // Any other shape — not the daemon.
+        clearTimeout(t);
+        finish(false);
+      }
+    });
   });
 }
 
@@ -312,13 +346,24 @@ function fmt(v: unknown): string {
 async function discover(): Promise<number> {
   if (PORT) return PORT;
 
-  // Retry discovery indefinitely until Ctrl-C.
-  // Each attempt tries mDNS (5s timeout) then lsof fallback.
+  // Bounded discovery for CI/headless callers. Set SKILL_DISCOVER_TIMEOUT_SECS
+  // to cap total wall time spent retrying mDNS + lsof. Unset = retry forever
+  // (the historical interactive behaviour — Ctrl-C to abort).
+  const timeoutEnv = process.env.SKILL_DISCOVER_TIMEOUT_SECS;
+  const deadlineMs = timeoutEnv ? Date.now() + Number(timeoutEnv) * 1000 : Number.POSITIVE_INFINITY;
+
   let attempt = 0;
   while (true) {
+    if (Date.now() > deadlineMs) {
+      throw new Error(
+        `discovery timed out after ${timeoutEnv}s — app did not register on mDNS or open a listening port`,
+      );
+    }
     attempt++;
     if (attempt === 1) {
-      info("discovering Skill port (retries until Ctrl-C)…");
+      info(timeoutEnv
+        ? `discovering Skill port (timeout ${timeoutEnv}s)…`
+        : "discovering Skill port (retries until Ctrl-C)…");
     } else {
       info(`discovery attempt #${attempt} — retrying in 3s…`);
       await new Promise(r => setTimeout(r, 3000));
@@ -346,10 +391,27 @@ async function discover(): Promise<number> {
     if (port) return port;
 
     // Strategy 2: lsof fallback (Unix)
+    //
+    // `pgrep -if 'skill'` is too loose — it matches any process whose
+    // command line contains "skill", which on macOS catches VS Code helpers
+    // running in `/Users/Shared/skill/...` workspaces, Code Helper IPC,
+    // node processes with the project path in argv, etc. Their listening
+    // ports also accept WebSocket upgrades, which used to cause testWs()
+    // to falsely identify them as the daemon and waste the whole 180s
+    // smoke-test budget on command timeouts.
+    //
+    // Match the daemon binary precisely instead: either `skill-daemon`
+    // (sidecar) or the Tauri main binary at `target/{debug,release}/skill`.
     try {
-      const ps = execSync("pgrep -if 'skill' 2>/dev/null || true", { encoding: "utf8" }).trim();
+      const ps = execSync(
+        "pgrep -ifl '(^|/)skill-daemon($|\\s)|target/(debug|release)/skill($|\\s)' 2>/dev/null || true",
+        { encoding: "utf8" },
+      ).trim();
       if (ps) {
-        const pids = ps.split("\n").map(s => s.trim()).filter(Boolean);
+        const pids = ps
+          .split("\n")
+          .map(line => line.trim().split(/\s+/)[0])
+          .filter(Boolean);
         for (const pid of pids) {
           try {
             const lsof = execSync(`lsof -iTCP -sTCP:LISTEN -nP -p ${pid} 2>/dev/null || true`, { encoding: "utf8" });
@@ -1343,7 +1405,7 @@ async function testHooksLog(): Promise<void> {
 //                         eeg_metrics }] }
 //
 // What the server does:
-//   Embeds `query` using the configured fastembed model, then searches the
+//   Embeds `query` using the rlx text embedder (nomic-embed-text-v1.5), then searches the
 //   in-memory HNSW label index for the k nearest neighbors.  Three index
 //   choices exist, selected by `mode`:
 //     "text"    — searches the label-text HNSW (built from labels.text column)
@@ -1364,7 +1426,7 @@ async function testHooksLog(): Promise<void> {
 async function testSearchLabels(): Promise<void> {
   heading("search_labels");
   info("Request: { command: 'search_labels', query: '...', k?, ef?, mode? }");
-  info("Searches the label HNSW index using a free-text query embedded by fastembed.");
+  info("Searches the label HNSW index using a free-text query embedded by the rlx text embedder.");
   info("mode: \"text\" (default) | \"context\" | \"both\"");
   info("Returns results sorted by cosine distance (lower = more similar).");
 
@@ -1376,7 +1438,7 @@ async function testSearchLabels(): Promise<void> {
 
     field("query",   r.query,   "echoed back from request");
     field("mode",    r.mode,    "search mode used (default: \"text\")");
-    field("model",   r.model,   "fastembed model code that embedded the query");
+    field("model",   r.model,   "embedding model that embedded the query");
     field("k",       r.k,       "neighbors requested");
     field("count",   r.count,   "results actually returned (≤ k)");
 
@@ -1496,7 +1558,7 @@ async function testSearchLabels(): Promise<void> {
 //
 // What the server does:
 //   Runs a 5-step cross-modal pipeline:
-//     1. Embed query text → text vector (fastembed).
+//     1. Embed query text → text vector (rlx, nomic-embed-text-v1.5).
 //     2. Search label text-HNSW → k_text semantically similar labels
 //        (layer 1: text_label nodes).
 //     3. For each text label, compute mean EEG embedding of its time window.
@@ -3026,7 +3088,7 @@ async function testScreenshotSearch(): Promise<void> {
   // ── search_screenshots — semantic mode (default) ──────────────────────────
   heading("search_screenshots — semantic");
   info("Request: { command: 'search_screenshots', query: '...', k?, mode? }");
-  info("Searches screenshot OCR text using a fastembed semantic embedding (default mode).");
+  info("Searches screenshot OCR text using an rlx semantic embedding (default mode).");
   try {
     const r = await send({ command: "search_screenshots", query: "code editor", k: 5 });
     if (r.ok === false) {
@@ -4915,13 +4977,11 @@ async function main(): Promise<void> {
   console.log(`${BOLD}║  Skill WebSocket + HTTP API — Smoke Test ║${RESET}`);
   console.log(`${BOLD}╚══════════════════════════════════════════╝${RESET}\n`);
 
-  // 1. Discover port
-  const port = await discover();
-  ok(`discovered port ${port}`);
-
-  httpBase = `http://127.0.0.1:${port}`;
-
-  // 1b. Load auth token
+  // 1a. Load auth token first so port discovery's testWs() probe can
+  // authenticate. Without this, the lsof fallback's `{"command":"status"}`
+  // probe gets dropped by the daemon's auth middleware → discovery falsely
+  // rejects the daemon's own port → wastes the smoke-test budget on
+  // unrelated processes whose WS upgrades happen to accept.
   authToken = process.env.SKILL_DAEMON_TOKEN || "";
   if (!authToken) {
     try {
@@ -4942,6 +5002,12 @@ async function main(): Promise<void> {
     } catch {}
   }
   authToken ? ok(`auth token loaded (${authToken.slice(0, 6)}…)`) : info("no auth token found — unauthenticated mode");
+
+  // 1b. Discover port
+  const port = await discover();
+  ok(`discovered port ${port}`);
+
+  httpBase = `http://127.0.0.1:${port}`;
 
   // 2. Establish transport
   if (FORCE_HTTP) {

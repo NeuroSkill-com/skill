@@ -4,14 +4,10 @@
 # Usage:
 #   bash scripts/assemble-macos-app.sh [target-triple]
 #
-# Default target: aarch64-apple-darwin
+# Default target: aarch64-apple-darwin (aliases: mac-neo, mac-arm64)
 #
-# This script replaces `cargo tauri bundle --bundles app` when the Tauri CLI
-# itself stack-overflows during the bundling phase (a known issue with large
-# projects that have 150+ Tauri commands).
-#
-# The resulting .app is ad-hoc signed and ready to run locally.
-# For distribution, re-sign with a Developer ID certificate.
+# Aliases like mac-neo resolve to aarch64-apple-darwin and set
+# SKILL_MAC_PROFILE=neo for MacBook Neo (A-series) tuning.
 
 set -euo pipefail
 
@@ -19,7 +15,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TAURI_DIR="$ROOT/src-tauri"
 
-TARGET="${1:-aarch64-apple-darwin}"
+# shellcheck source=lib/resolve-target-triple.sh
+source "$SCRIPT_DIR/lib/resolve-target-triple.sh"
+RAW_TARGET="${1:-aarch64-apple-darwin}"
+apply_target_profile_env "$RAW_TARGET"
+TARGET="$(resolve_target_triple "$RAW_TARGET")"
 BINARY="$TAURI_DIR/target/$TARGET/release/skill"
 
 if [[ ! -f "$BINARY" ]]; then
@@ -116,6 +116,68 @@ else
   echo "ERROR: missing daemon sidecar: $DAEMON_SRC" >&2
   echo "The daemon must be built before assembling the .app bundle." >&2
   exit 1
+fi
+
+# ── Copy skill-tty sidecar ────────────────────────────────────────────────
+# skill-tty is the PTY proxy that wraps the user's shell for terminal-session
+# recording. Splitting it into its own binary (and its own .app wrapper) means
+# blanket process-name kills against `skill-daemon` (Tauri sidecar reload,
+# kill-old-daemon-on-upgrade) no longer terminate active recorded shells.
+# It needs its own .app for parity with skill-daemon: independent CFBundleIdentifier
+# (so TCC permissions are tracked separately), Info.plist with LSUIElement so
+# Activity Monitor / Force Quit can identify it, and code signing.
+TTY_SRC="$TAURI_DIR/target/$TARGET/release/skill-tty"
+TTY_APP=""
+if [[ -f "$TTY_SRC" ]]; then
+  TTY_APP="$MACOS_DIR/skill-tty.app"
+  TTY_CONTENTS="$TTY_APP/Contents"
+  TTY_MACOS="$TTY_CONTENTS/MacOS"
+  TTY_RES="$TTY_CONTENTS/Resources"
+  mkdir -p "$TTY_MACOS" "$TTY_RES"
+
+  cp "$TTY_SRC" "$TTY_MACOS/skill-tty"
+  chmod +x "$TTY_MACOS/skill-tty"
+
+  # skill-tty has no heavy dylib deps (libc / dirs / chrono / zstd are all
+  # statically linked or system frameworks), so we don't need a Frameworks dir.
+
+  if [[ -f "$TAURI_DIR/icons/icon.icns" ]]; then
+    cp "$TAURI_DIR/icons/icon.icns" "$TTY_RES/icon.icns"
+  fi
+
+  cat > "$TTY_CONTENTS/Info.plist" << TTYPLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>skill-tty</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.neuroskill.skill-tty</string>
+  <key>CFBundleName</key>
+  <string>Skill TTY</string>
+  <key>CFBundleDisplayName</key>
+  <string>Skill TTY</string>
+  <key>CFBundleVersion</key>
+  <string>$VERSION</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$VERSION</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleIconFile</key>
+  <string>icon</string>
+  <key>LSBackgroundOnly</key>
+  <true/>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+TTYPLIST
+
+  echo "  ✓ skill-tty.app"
+else
+  echo "WARNING: missing skill-tty sidecar: $TTY_SRC" >&2
+  echo "Terminal session recording will fall back to skill-daemon's in-process shim." >&2
 fi
 
 # ── Info.plist ────────────────────────────────────────────────────────────
@@ -232,11 +294,83 @@ if [[ -n "$FRONTEND_DIR" && -d "$FRONTEND_DIR" ]]; then
   echo "  ✓ frontend ($JS_COUNT js, $CSS_COUNT css)"
 fi
 
+# ── WidgetKit extension (optional) ────────────────────────────────────────
+WIDGET_DIR="$ROOT/extensions/widgets"
+WIDGET_APPEX=""
+for candidate in \
+  "$WIDGET_DIR/.build/Build/Products/Release/SkillWidgets.appex" \
+  "$WIDGET_DIR/.build/Build/Products/Debug/SkillWidgets.appex"
+do
+  if [[ -d "$candidate" ]]; then
+    WIDGET_APPEX="$candidate"
+    break
+  fi
+done
 
-# ── Entitlements & codesign ───────────────────────────────────────────────
+if [[ -n "$WIDGET_APPEX" ]]; then
+  PLUGINS_DIR="$CONTENTS/PlugIns"
+  mkdir -p "$PLUGINS_DIR"
+  rm -rf "$PLUGINS_DIR/SkillWidgets.appex"
+  cp -R "$WIDGET_APPEX" "$PLUGINS_DIR/"
+  echo "  ✓ SkillWidgets.appex (from $(basename "$(dirname "$WIDGET_APPEX")"))"
+elif [[ -x "$WIDGET_DIR/build-widgets.sh" ]]; then
+  echo "  ⚠ SkillWidgets.appex not found — run: bash extensions/widgets/build-widgets.sh --release"
+fi
+
+
+# ── Entitlements & codesign (inside-out) ──────────────────────────────────
+# Apple recommends signing nested bundles individually before the outer one
+# rather than relying on `--deep`, which is deprecated and silently mis-signs
+# nested code in some cases. We sign skill-daemon.app and skill-tty.app first
+# (with the daemon's entitlements — the daemon needs Bluetooth/networking;
+# skill-tty inherits the same identity but doesn't need special entitlements,
+# we just want a valid signature so notarization passes).
 SIGN_ID="${APPLE_SIGNING_IDENTITY:--}"
 ENTITLEMENTS="$TAURI_DIR/entitlements.plist"
-SIGN_ARGS=(--force --deep --sign "$SIGN_ID" --options runtime)
+
+inner_sign_args=(--force --sign "$SIGN_ID" --options runtime --timestamp)
+if [[ -f "$ENTITLEMENTS" ]]; then
+  inner_sign_args+=(--entitlements "$ENTITLEMENTS")
+fi
+
+# Some flags are unsupported with the ad-hoc identity ("-").
+if [[ "$SIGN_ID" == "-" ]]; then
+  inner_sign_args=(--force --sign "-")
+fi
+
+if [[ -d "$DAEMON_APP" ]]; then
+  codesign "${inner_sign_args[@]}" "$DAEMON_APP"
+  echo "  ✓ codesigned skill-daemon.app"
+fi
+if [[ -d "$TTY_APP" ]]; then
+  codesign "${inner_sign_args[@]}" "$TTY_APP"
+  echo "  ✓ codesigned skill-tty.app"
+fi
+
+WIDGET_APPEX_BUNDLE="$APP_DIR/Contents/PlugIns/SkillWidgets.appex"
+if [[ -d "$WIDGET_APPEX_BUNDLE" ]]; then
+  if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && "$SIGN_ID" != "-" ]]; then
+    WIDGET_ENTITLEMENTS="$WIDGET_DIR/Sources/SkillWidgets.entitlements"
+  else
+    WIDGET_ENTITLEMENTS="$WIDGET_DIR/Sources/SkillWidgets.debug.entitlements"
+  fi
+  widget_sign=(--force --sign "$SIGN_ID")
+  if [[ "$SIGN_ID" != "-" ]]; then
+    widget_sign+=(--options runtime --timestamp=none)
+  fi
+  if [[ -f "$WIDGET_ENTITLEMENTS" ]]; then
+    widget_sign+=(--entitlements "$WIDGET_ENTITLEMENTS")
+  fi
+  codesign "${widget_sign[@]}" "$WIDGET_APPEX_BUNDLE"
+  echo "  ✓ codesigned SkillWidgets.appex"
+fi
+
+# Outer .app — same args as before, minus --deep (nested bundles are already
+# signed). Keep entitlements for the main app so its capabilities are honoured.
+SIGN_ARGS=(--force --sign "$SIGN_ID" --options runtime)
+if [[ "$SIGN_ID" != "-" ]]; then
+  SIGN_ARGS+=(--timestamp)
+fi
 if [[ -f "$ENTITLEMENTS" ]]; then
   SIGN_ARGS+=(--entitlements "$ENTITLEMENTS")
 fi
@@ -247,6 +381,15 @@ if [[ "$SIGN_ID" == "-" ]]; then
 else
   echo "  ✓ codesigned ($SIGN_ID)"
 fi
+
+# Verify the result so a botched sign fails the build instead of breaking
+# silently at notarization or first launch.
+if ! codesign --verify --deep --strict --verbose=2 "$APP_DIR" >/dev/null 2>&1; then
+  echo "ERROR: codesign --verify failed for $APP_DIR" >&2
+  codesign --verify --deep --strict --verbose=2 "$APP_DIR" >&2 || true
+  exit 1
+fi
+echo "  ✓ codesign --verify passed"
 
 echo ""
 echo "✓ $APP_DIR"

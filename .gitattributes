@@ -91,3 +91,11 @@ CMakeLists.txt text eol=lf
 *.md          diff=markdown
 *.sh          diff=bash
 *.ps1         diff=powershell
+
+# ── Vendored TTS model bundle ────────────────────────────────────────────────
+#
+# Store the committed Inflect-Nano bundle verbatim so its bytes match exactly
+# what scripts/bundle-tts-weights.sh stages and the app loads at runtime — no
+# line-ending conversion (the catch-all `* text=auto eol=lf` would otherwise
+# rewrite the dictionary/JSON files) and no diff noise.
+src-tauri/resources/tts/inflect-nano/** binary

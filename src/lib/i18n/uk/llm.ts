@@ -81,6 +81,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Мовні моделі",
   "llm.section.mmproj": "Мультимодальні проектори",
   "llm.section.inference": "Налаштування інференсу",
+  "llm.section.mtp": "Багатотокенне прогнозування",
   "llm.enabled": "Увімкнути LLM сервер",
   "llm.enabledDesc":
     "Запустити OpenAI-сумісний сервер інференсу на тому ж порту, що й WebSocket API. Потрібен Cargo feature llm і завантажена модель.",
@@ -272,6 +273,10 @@ const llm: Record<string, string> = {
     "Використовувати flash attention для швидшої та ефективнішої self-attention. Підтримується на Metal, CUDA та Vulkan.",
   "llm.inference.offloadKqv": "Вивантажити KQV на GPU",
   "llm.inference.offloadKqvDesc": "Вивантажити тензорні операції K/Q/V на GPU, навіть якщо не всі шари вивантажені.",
+
+  "llm.mtp.draftTokens": "Токени чернетки",
+  "llm.mtp.draftTokensDesc":
+    "Кількість токенів, що генеруються спекулятивно на кожному кроці декодування. Більші значення підвищують пропускну здатність, але потребують більше пам'яті. Потребує MTP-сумісну модель.",
 
   "llm.hfSearch.title": "Пошук моделей на HuggingFace",
   "llm.hfSearch.placeholder": "Шукати GGUF-моделі на HuggingFace…",
@@ -478,6 +483,52 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "Очікування періоду простою",
   "search.eegCoverage": "Покриття ЕЕГ",
   "search.eegCoverageLabel": "{embedded} з {total} ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "Відкладено — пам'ять системи {pct}% (ліміт {limit}%)",
+  "model.maxResidentMemory": "Макс. пам'ять системи",
+  "model.maxResidentMemoryDesc":
+    "Пропускати фонове вбудовування, коли пам'ять системи перевищує цю частку. 100% вимикає захист.",
+  "model.maxResidentMemoryDisabled": "вимк.",
+  "chat.tts.section": "Голосовий вивід",
+  "chat.tts.engineLabel": "Рушій мовлення",
+  "chat.tts.engineDesc": "Бекенд синтезу мовлення, який демон використовує для озвучення відповідей.",
+  "chat.tts.experimental":
+    "Ще не готово до використання: Orpheus потребує попередньо експортованого декодера SNAC; Kyutai-TTS поки не працює в rlx 0.2.9.",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS поки не працює в rlx 0.2.9 (upstream generate() — заглушка).",
+  "chat.tts.orpheusHint":
+    "Orpheus автоматично завантажує backbone. Експортуйте декодер SNAC один раз через scripts/export_snac_decoder.py (або встановіть ORPHEUS_SNAC_PATH).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano завантажується з одноразово експортованого пакета. Він автоматично входить до складу застосунку; для запуску в режимі розробки розмістіть його в ~/.skill/models/inflect-nano або задайте INFLECT_NANO_DIR.",
+  "chat.tts.modelLabel": "Модель голосу",
+  "chat.tts.modelDesc": "Репозиторій моделі для вибраного рушія.",
+  "chat.tts.voiceLabel": "Голос",
+  "chat.tts.voiceDesc": "Попередньо налаштований диктор для вибраного рушія.",
+  "chat.tts.voiceDefault": "За замовчуванням",
+  "chat.voice.section": "Голосове введення",
+  "chat.voice.enabled": "Показувати голосові елементи керування",
+  "chat.voice.enabledDesc": "Показувати мікрофон і вибір голосового режиму у вікні чату.",
+  "chat.voice.triggerLabel": "Тригер за замовчуванням",
+  "chat.voice.triggerDesc": "Як керується мікрофон для нового голосового сеансу.",
+  "chat.voice.triggerContinuous": "Безперервний",
+  "chat.voice.triggerPtt": "Натисни й говори",
+  "chat.voice.routingLabel": "Маршрутизація за замовчуванням",
+  "chat.voice.routingDesc": "Що відбувається із завершеною транскрипцією.",
+  "chat.voice.routingLoop": "Голосовий цикл",
+  "chat.voice.routingTranscribe": "Лише транскрипція",
+  "chat.voice.engineLabel": "Рушій розпізнавання",
+  "chat.voice.engineDesc": "Бекенд перетворення мовлення на текст для транскрибування вашого голосу.",
+  "chat.voice.modelLabel": "Модель розпізнавання",
+  "chat.voice.modelDesc": "Репозиторій моделі Whisper. Більші моделі точніші, але повільніші.",
+  "chat.voice.modelCustom": "Власна…",
+  "chat.voice.languageLabel": "Мова",
+  "chat.voice.languageDesc": 'Підказка мови для розпізнавання мовлення (напр. "en").',
+  "chat.voice.start": "Почати голосове введення",
+  "chat.voice.stop": "Зупинити голосове введення",
+  "chat.voice.pttHint": "Утримуйте, щоб говорити",
+  "chat.voice.statusLoading": "Завантаження…",
+  "chat.voice.statusListening": "Слухаю",
+  "chat.voice.statusSpeaking": "Говорю",
+  "chat.voice.dismissError": "Закрити голосову помилку",
 };
 
 export default llm;

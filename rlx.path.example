@@ -1,0 +1,5 @@
+# Copy to rlx.path (gitignored) to point scripts/ensure-rlx.sh at a non-default
+# local RLX checkout. ensure-rlx.sh registers a cargo `[patch]` override (in
+# ../.cargo/config.toml, outside the repo) so local builds resolve rlx from here;
+# CI/published builds always use crates.io. Default: /Users/Shared/rlx
+/Users/Shared/rlx

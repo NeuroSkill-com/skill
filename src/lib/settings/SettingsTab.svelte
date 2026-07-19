@@ -11,6 +11,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { onDestroy, onMount } from "svelte";
 
+import DaemonActivityPanel from "$lib/components/DaemonActivityPanel.svelte";
 import { Button } from "$lib/components/ui/button";
 import { CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
@@ -1018,4 +1019,6 @@ onDestroy(() => {
     </CardContent>
   </SettingsCard>
 </section>
+
+<DaemonActivityPanel />
 

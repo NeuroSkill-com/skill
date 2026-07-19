@@ -5,7 +5,7 @@
 //! This crate contains:
 //!
 //! - **config** — `NeuttsConfig`
-//! - **kitten** — KittenTTS backend (feature `tts-kitten`)
+//! - **kitten** — KittenTTS backend — native RLX inference via `rlx-kittentts` (feature `tts-kitten`)
 //! - **neutts** — NeuTTS backend (feature `tts-neutts`)
 //! - Core TTS logic: audio output, espeak init, backend routing, progress events
 
@@ -23,26 +23,35 @@ pub mod log;
 #[allow(unused_macros)]
 macro_rules! tts_log {
     ($tag:expr, $($arg:tt)*) => {
-        if $crate::log::log_enabled() {
-            $crate::log::write_log($tag, &format!($($arg)*));
-        }
+        ::skill_constants::subsystem_log!(
+            $crate::log::log_enabled,
+            $crate::log::write_log,
+            $tag,
+            $($arg)*
+        )
     };
 }
 
-#[cfg(feature = "tts-kitten")]
+#[cfg(tts_kitten_active)]
 pub mod kitten;
 
 #[cfg(feature = "tts-neutts")]
 pub mod neutts;
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(tts_engines_active)]
+pub mod engines;
+
+#[cfg(feature = "whisper-validate")]
+pub mod whisper_validate;
+
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 use anyhow::Context;
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts", tts_engines_active))]
 use std::num::NonZero;
 use std::path::PathBuf;
-#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(all(tts_kitten_active, feature = "tts-neutts"))]
 use std::sync::atomic::AtomicBool;
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 use std::sync::atomic::Ordering;
 use std::sync::OnceLock;
 
@@ -56,7 +65,18 @@ static SKILL_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// that the TTS subsystem writes files into.
 pub fn init_tts_dirs(dir: &std::path::Path) {
     let _ = SKILL_DIR.set(dir.to_path_buf());
-    for sub in &["models/neutts", "cache/neutts-wav", "cache/neutts-ref-codes"] {
+    for sub in &[
+        "models/kittentts",
+        "models/kittentts/hf-cache",
+        "models/neutts",
+        "models/orpheus/hf-cache",
+        "models/qwen3-tts/hf-cache",
+        "models/kyutai-tts",
+        "models/inflect-nano",
+        // "models/tiny-tts",  // DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX)
+        "cache/neutts-wav",
+        "cache/neutts-ref-codes",
+    ] {
         let _ = std::fs::create_dir_all(skill_dir().join(sub));
     }
 }
@@ -69,6 +89,29 @@ pub fn init_neutts_samples_dir(path: PathBuf) {
     neutts::set_samples_dir(path);
     #[cfg(not(feature = "tts-neutts"))]
     let _ = path;
+}
+
+// ─── Bundled resources (app-shipped model bundles) ────────────────────────────
+
+static TTS_RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Point the TTS subsystem at the app's bundled-resources directory (Tauri
+/// `resource_dir()`). Pre-exported single-speaker bundles (Inflect-Nano, TinyTTS)
+/// ship under `<resource_dir>/tts/<engine>/`. Called during Tauri setup; the
+/// spawned daemon inherits `SKILL_RESOURCE_DIR` (set alongside this), so
+/// [`tts_resource_dir`] also falls back to that env var for the daemon process.
+pub fn init_tts_resource_dir(dir: PathBuf) {
+    let _ = TTS_RESOURCE_DIR.set(dir);
+}
+
+/// The app's bundled-resources directory, if known — the static set by
+/// [`init_tts_resource_dir`] (Tauri process) or the `SKILL_RESOURCE_DIR` env var
+/// (daemon process, inherited from its parent).
+pub fn tts_resource_dir() -> Option<PathBuf> {
+    if let Some(p) = TTS_RESOURCE_DIR.get() {
+        return Some(p.clone());
+    }
+    std::env::var_os("SKILL_RESOURCE_DIR").map(PathBuf::from)
 }
 
 /// Return the resolved skill directory.
@@ -99,7 +142,7 @@ pub fn set_logging(enable: bool) {
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts", tts_engines_active))]
 pub use skill_constants::TTS_TAIL_SILENCE_SECS as TAIL_SILENCE_SECS;
 
 // ─── Progress event ───────────────────────────────────────────────────────────
@@ -115,7 +158,7 @@ pub struct TtsProgressEvent {
 
 pub use skill_constants::TTS_PROGRESS_EVENT;
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts", tts_engines_active))]
 impl TtsProgressEvent {
     pub fn step(step: u32, total: u32, label: String) -> Self {
         Self {
@@ -161,12 +204,12 @@ impl TtsProgressEvent {
 pub fn init_espeak_bundled_data_path(_resource_dir: &std::path::Path) {}
 
 /// No-op — espeak-ng data is now bundled in the Rust crate.
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
 pub fn init_espeak_data_path() {}
 
 // ─── Shared audio output ──────────────────────────────────────────────────────
 
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(any(tts_kitten_active, feature = "tts-neutts", tts_engines_active))]
 pub fn play_f32_audio(stream: &rodio::MixerDeviceSink, mut samples: Vec<f32>, sample_rate: u32) {
     use rodio::buffer::SamplesBuffer;
 
@@ -182,27 +225,61 @@ pub fn play_f32_audio(stream: &rodio::MixerDeviceSink, mut samples: Vec<f32>, sa
     player.sleep_until_end();
 }
 
+// ─── Active engine selection ────────────────────────────────────────────────────
+//
+// The daemon sets the selected engine (plus model + voice overrides) from
+// `settings.tts_engine` at startup and on change. `"kitten"` / `"neutts"` (and
+// the empty default) keep the legacy `use_neutts()` path; any other value routes
+// through the `engines` module. These accessors are always compiled so the daemon
+// can call them regardless of which TTS features are built in.
+
+static ACTIVE_ENGINE: OnceLock<std::sync::RwLock<(String, String, String)>> = OnceLock::new();
+
+fn engine_lock() -> &'static std::sync::RwLock<(String, String, String)> {
+    ACTIVE_ENGINE.get_or_init(|| std::sync::RwLock::new((String::new(), String::new(), String::new())))
+}
+
+/// Select the active TTS engine. `engine` is e.g. `"kitten"`, `"neutts"`,
+/// `"qwen3-tts"`; `model` and `voice` are engine-specific overrides (empty =
+/// engine default).
+pub fn set_active_engine(engine: String, model: String, voice: String) {
+    if let Ok(mut g) = engine_lock().write() {
+        *g = (engine, model, voice);
+    }
+}
+
+/// The active `(engine, model, voice)` selection.
+pub fn active_engine() -> (String, String, String) {
+    engine_lock().read().map(|g| g.clone()).unwrap_or_default()
+}
+
+/// `true` when a pluggable engine (not the legacy kitten/neutts path) is selected.
+pub fn uses_new_engine() -> bool {
+    let e = active_engine().0.trim().to_ascii_lowercase();
+    !e.is_empty() && e != "kitten" && e != "neutts"
+}
+
 // ─── Back-end routing ─────────────────────────────────────────────────────────
 
-#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(all(tts_kitten_active, feature = "tts-neutts"))]
 pub static NEUTTS_ENABLED: AtomicBool = AtomicBool::new(false);
 
-#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+#[cfg(all(tts_kitten_active, feature = "tts-neutts"))]
 pub fn use_neutts() -> bool {
     NEUTTS_ENABLED.load(Ordering::Relaxed)
 }
 
-#[cfg(all(feature = "tts-neutts", not(feature = "tts-kitten")))]
+#[cfg(all(feature = "tts-neutts", not(tts_kitten_active)))]
 pub fn use_neutts() -> bool {
     true
 }
 
-#[cfg(all(feature = "tts-kitten", not(feature = "tts-neutts")))]
+#[cfg(all(tts_kitten_active, not(feature = "tts-neutts")))]
 pub fn use_neutts() -> bool {
     false
 }
 
-#[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+#[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
 pub fn use_neutts() -> bool {
     false
 }
@@ -211,7 +288,7 @@ pub fn use_neutts() -> bool {
 
 /// Synchronously drop all TTS backends before process exit.
 pub fn tts_shutdown() {
-    #[cfg(feature = "tts-kitten")]
+    #[cfg(tts_kitten_active)]
     {
         let timeout = std::time::Duration::from_secs(8);
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
@@ -226,6 +303,15 @@ pub fn tts_shutdown() {
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
         if neutts::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
             tts_log!("neutts", "shutdown timed out \u{2014} forcing drop");
+        }
+    }
+
+    #[cfg(tts_engines_active)]
+    {
+        let timeout = std::time::Duration::from_secs(8);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
+        if engines::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
+            tts_log!("tts", "engines shutdown timed out \u{2014} forcing drop");
         }
     }
 }
@@ -253,8 +339,20 @@ pub struct NeuttsVoiceInfo {
 
 /// Speak `text` aloud using the active TTS backend.
 pub async fn tts_speak(text: String, voice: Option<String>) {
+    #[cfg(tts_engines_active)]
+    if uses_new_engine() {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let _ = engines::get_tx().send(engines::Cmd::Speak {
+            text,
+            voice: voice.unwrap_or_default(),
+            done: tx,
+        });
+        let _ = rx.await;
+        return;
+    }
+
     let voice_str = voice.unwrap_or_default();
-    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    #[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
     {
         let _ = (&text, &voice_str);
     }
@@ -276,7 +374,7 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
             let _ = rx.await;
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             let resolved_voice = if voice_str.is_empty() || voice_str == "default" {
                 kitten::get_voice()
@@ -296,6 +394,10 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
 
 /// Return all available voice names for the active backend.
 pub fn tts_list_voices() -> Vec<String> {
+    #[cfg(tts_engines_active)]
+    if uses_new_engine() {
+        return engines::voices();
+    }
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         return neutts::PRESET_NAMES
@@ -303,7 +405,7 @@ pub fn tts_list_voices() -> Vec<String> {
             .map(std::string::ToString::to_string)
             .collect();
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         return kitten::AVAILABLE_VOICES
             .get()
             .cloned()
@@ -354,6 +456,14 @@ pub fn tts_list_neutts_voices() -> Vec<NeuttsVoiceInfo> {
 
 /// Return the currently active voice name.
 pub fn tts_get_voice() -> String {
+    #[cfg(tts_engines_active)]
+    if uses_new_engine() {
+        let (_, _, voice) = active_engine();
+        if !voice.is_empty() {
+            return voice;
+        }
+        return engines::voices().into_iter().next().unwrap_or_default();
+    }
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
@@ -361,7 +471,7 @@ pub fn tts_get_voice() -> String {
             return preset;
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         return kitten::get_voice();
     }
     #[allow(unreachable_code)]
@@ -371,7 +481,13 @@ pub fn tts_get_voice() -> String {
 /// Set the active voice name.
 #[allow(clippy::needless_pass_by_value)] // consumed by neutts::set_voice_preset when feature is enabled
 pub fn tts_set_voice(voice: String) {
-    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    #[cfg(tts_engines_active)]
+    if uses_new_engine() {
+        let (engine, model, _) = active_engine();
+        set_active_engine(engine, model, voice);
+        return;
+    }
+    #[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
     let _ = &voice;
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
@@ -381,7 +497,7 @@ pub fn tts_set_voice(voice: String) {
             }
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             let voices = kitten::AVAILABLE_VOICES
                 .get()
@@ -397,6 +513,22 @@ pub fn tts_set_voice(voice: String) {
 /// Initialise the active TTS backend. Returns progress events via callback.
 #[allow(unused_variables)] // `emit` is used under tts-neutts / tts-kitten feature gates
 pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'static>(emit: F) -> anyhow::Result<()> {
+    #[cfg(tts_engines_active)]
+    if uses_new_engine() {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        engines::get_tx()
+            .send(engines::Cmd::Init { done: tx })
+            .map_err(|e| anyhow::anyhow!("tts engine init send: {e}"))?;
+        let result = match rx.await {
+            Ok(r) => r,
+            Err(e) => Err(anyhow::anyhow!("tts engine init recv: {e}")),
+        };
+        match &result {
+            Ok(_) => emit(TtsProgressEvent::ready(1)),
+            Err(msg) => emit(TtsProgressEvent::error(msg.to_string())),
+        }
+        return result;
+    }
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
@@ -438,7 +570,7 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
             return result;
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             if kitten::LOADED.load(Ordering::Relaxed) {
                 emit(TtsProgressEvent::ready(4));
@@ -449,10 +581,11 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
             kitten::get_tx()
                 .send(kitten::Cmd::Init {
                     cb: Box::new(move |p| {
-                        use kittentts::download::LoadProgress as KP;
                         let ev = match p {
-                            KP::Fetching { step, total, file } => TtsProgressEvent::step(step, total, file),
-                            KP::Loading => TtsProgressEvent::step(4, 4, "Loading model…".into()),
+                            kitten::LoadProgress::Fetching { step, total, file } => {
+                                TtsProgressEvent::step(step, total, file)
+                            }
+                            kitten::LoadProgress::Loading => TtsProgressEvent::step(4, 4, "Loading model…".into()),
                         };
                         emit_c(ev);
                     }),
@@ -473,6 +606,15 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
 
 /// Unload the active TTS backend.
 pub async fn tts_unload() -> anyhow::Result<()> {
+    #[cfg(tts_engines_active)]
+    if uses_new_engine() {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        engines::get_tx()
+            .send(engines::Cmd::Unload { done: tx })
+            .map_err(|e| anyhow::anyhow!("tts engine unload send: {e}"))?;
+        let _ = rx.await;
+        return Ok(());
+    }
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
@@ -484,7 +626,7 @@ pub async fn tts_unload() -> anyhow::Result<()> {
             return Ok(());
         }
     } else {
-        #[cfg(feature = "tts-kitten")]
+        #[cfg(tts_kitten_active)]
         {
             let (tx, rx) = tokio::sync::oneshot::channel();
             kitten::get_tx()

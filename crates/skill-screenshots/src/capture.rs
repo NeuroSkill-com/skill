@@ -25,8 +25,7 @@ use serde::Serialize;
 use crate::config::ScreenshotConfig;
 use crate::platform::capture_active_window;
 use skill_constants::{
-    HNSW_EF_CONSTRUCTION, HNSW_M, OCR_DETECTION_MODEL_FILE, OCR_DETECTION_MODEL_URL, OCR_RECOGNITION_MODEL_FILE,
-    OCR_RECOGNITION_MODEL_URL, SCREENSHOTS_DIR, SCREENSHOTS_HNSW, SCREENSHOTS_OCR_HNSW, SCREENSHOT_HNSW_SAVE_EVERY,
+    HNSW_EF_CONSTRUCTION, HNSW_M, SCREENSHOTS_DIR, SCREENSHOTS_HNSW, SCREENSHOTS_OCR_HNSW, SCREENSHOT_HNSW_SAVE_EVERY,
 };
 use skill_data::screenshot_store::{ReembedEstimate, ReembedResult, ScreenshotResult, ScreenshotRow, ScreenshotStore};
 
@@ -123,6 +122,24 @@ fn fresh_hnsw() -> LabeledIndex<Cosine, i64> {
         .build_labeled(Cosine)
 }
 
+/// Reset `hnsw` to a fresh index when its stored vector dimension no longer
+/// matches `emb_len` (e.g. the embedding model changed). No-op when the index
+/// is empty or already matches. `label` is used only for the log line.
+fn reset_hnsw_if_dim_mismatch(hnsw: &mut LabeledIndex<Cosine, i64>, emb_len: usize, label: &str) {
+    if hnsw.is_empty() {
+        return;
+    }
+    if let Some(dim) = hnsw.inner.dim() {
+        if dim != emb_len {
+            eprintln!(
+                "[screenshot] {label} HNSW dimension mismatch (index={dim}, new={emb_len}); \
+                 resetting index — run re-embed to backfill"
+            );
+            *hnsw = fresh_hnsw();
+        }
+    }
+}
+
 /// Generic load-or-rebuild for any HNSW index backed by an embedding-fetch closure.
 fn load_or_rebuild_hnsw_generic(
     skill_dir: &Path,
@@ -170,109 +187,14 @@ fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
     save_hnsw_to(idx, skill_dir, SCREENSHOTS_HNSW, "vision");
 }
 
-// ── fastembed image embedder ──────────────────────────────────────────────────
-
-/// Build execution providers based on the `use_gpu` config flag.
-///
-/// On macOS: CoreML (GPU/ANE) when `use_gpu=true`, CPU-only otherwise.
-/// On Windows: DirectML (GPU via DirectX 12, covers NVIDIA/AMD/Intel) → CPU.
-/// On Linux: CUDA (NVIDIA GPU) → CPU fallback.
-///
-/// Each provider's `build()` returns a registration request; if ORT was not
-/// compiled with that EP's feature flag the registration silently fails and
-/// the next provider in the list is tried, ultimately falling through to CPU.
-fn build_execution_providers(use_gpu: bool) -> Vec<ort::execution_providers::ExecutionProviderDispatch> {
-    if use_gpu {
-        #[cfg(target_os = "macos")]
-        {
-            eprintln!("[screenshot] using CoreML execution provider (GPU/ANE)");
-            vec![ort::ep::CoreML::default().build()]
-        }
-        #[cfg(target_os = "windows")]
-        {
-            // DirectML covers NVIDIA, AMD, and Intel GPUs via DirectX 12.
-            eprintln!("[screenshot] using DirectML → CPU execution providers");
-            vec![ort::ep::DirectML::default().build(), ort::ep::CPU::default().build()]
-        }
-        #[cfg(target_os = "linux")]
-        {
-            // CUDA for NVIDIA GPUs; falls through to CPU if unavailable.
-            eprintln!("[screenshot] using CUDA → CPU execution providers");
-            vec![ort::ep::CUDA::default().build(), ort::ep::CPU::default().build()]
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        {
-            eprintln!("[screenshot] using default execution provider");
-            vec![]
-        }
-    } else {
-        eprintln!("[screenshot] forcing CPU execution provider");
-        vec![ort::ep::CPU::default().build()]
-    }
-}
-
-/// Try to create a fastembed `ImageEmbedding` instance.  Public alias for Tauri commands.
-pub fn load_fastembed_image_pub(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
-    load_fastembed_image(config, skill_dir)
-}
-
-/// Try to create a fastembed `ImageEmbedding` instance.
-fn load_fastembed_image(config: &ScreenshotConfig, _skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
-    if config.embed_backend != "fastembed" {
-        return None;
-    }
-    let model = crate::config::fastembed_model_enum(config)?;
-    let cache = skill_data::util::hf_cache_root();
-    let eps = build_execution_providers(config.use_gpu);
-    match fastembed::ImageEmbedding::try_new(
-        fastembed::ImageInitOptions::new(model)
-            .with_cache_dir(cache)
-            .with_execution_providers(eps),
-    ) {
-        Ok(e) => {
-            eprintln!(
-                "[screenshot] fastembed image model loaded: {} (gpu={})",
-                config.fastembed_model, config.use_gpu
-            );
-            Some(e)
-        }
-        Err(e) => {
-            eprintln!("[screenshot] fastembed image model error: {e}");
-            None
-        }
-    }
-}
-
-/// Embed a single image (PNG bytes) using fastembed.  Public alias for Tauri commands.
-pub fn fastembed_embed_pub(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) -> Option<Vec<f32>> {
-    fastembed_embed(encoder, png_bytes)
-}
-
-/// Embed a single image (PNG bytes) using fastembed.
-fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) -> Option<Vec<f32>> {
-    match encoder.embed_bytes(&[png_bytes], None) {
-        Ok(mut vecs) if !vecs.is_empty() => Some(vecs.remove(0)),
-        Ok(_) => None,
-        Err(e) => {
-            eprintln!("[screenshot] embed error: {e}");
-            None
-        }
-    }
-}
-
-/// Embed a pre-decoded `DynamicImage` directly using fastembed — avoids the
-/// CPU-intensive PNG encode→decode round-trip that `embed_bytes` performs.
-#[allow(dead_code)]
-fn fastembed_embed_image(encoder: &mut fastembed::ImageEmbedding, img: DynamicImage) -> Option<Vec<f32>> {
-    match encoder.embed_images(vec![img]) {
-        Ok(mut vecs) if !vecs.is_empty() => Some(vecs.remove(0)),
-        Ok(_) => None,
-        Err(e) => {
-            eprintln!("[screenshot] embed_images error: {e}");
-            None
-        }
-    }
-}
+// ── Screenshot image embedding ──────────────────────────────────────────────
+//
+// Vision embeddings run on the RLX runtime. In the default ("rlx") backend the
+// screenshot's vision vector IS the embedding of its OCR text (nomic-embed-text
+// shares an aligned space with nomic-embed-vision, so query-by-image still
+// works — see `rlx_image::RlxImageEmbedder`). The `mmproj` / `llm-vlm` backends
+// embed the pixels directly through the local LLM. Both go through the shared
+// embedders in `context`/`rlx_image` — no fastembed/ONNX path remains.
 
 /// Encode a `DynamicImage` as JPEG bytes.  JPEG encoding is ~10× faster than
 /// PNG and is used for paths that need encoded bytes (LLM vision, OCR) where
@@ -320,63 +242,113 @@ fn download_ocr_model(url: &str, dest: &Path) -> bool {
     }
 }
 
-/// Load the ocrs OCR engine.  Downloads model files on first use.
-fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
+use rlx_models::ocr as rlx_ocr;
+
+/// Load the OCR engine via `rlx-ocr` (rlx-models' drop-in replacement
+/// for the legacy `ocrs` crate). Downloads model files on first use.
+// OCR weights are BUNDLED as safetensors (~12 MB total), converted offline from
+// the ocrs `.rten` checkpoints (text-detection-ssfbcj81 / text-rec-checkpoint-
+// s52qdbqt). Drops the runtime download + the `convert-rten`/rten-inference
+// stack; OCR works offline on first launch. To refresh: re-run
+// `rlx_ocr::weights::export_rten_to_safetensors` on new `.rten` files and replace
+// the asset.
+static OCR_DETECTION_SAFETENSORS: &[u8] = include_bytes!("../assets/ocr-detection.safetensors");
+static OCR_RECOGNITION_SAFETENSORS: &[u8] = include_bytes!("../assets/ocr-recognition.safetensors");
+
+fn load_ocr_engine(skill_dir: &Path) -> Option<rlx_ocr::OcrEngine> {
+    // The engine loads weights by path, so unpack the bundled bytes once.
     let ocr_dir = skill_dir.join("ocr_models");
-    let det_path = ocr_dir.join(OCR_DETECTION_MODEL_FILE);
-    let rec_path = ocr_dir.join(OCR_RECOGNITION_MODEL_FILE);
-
-    if !download_ocr_model(OCR_DETECTION_MODEL_URL, &det_path) {
+    let det_st = ocr_dir.join("ocr-detection.safetensors");
+    let rec_st = ocr_dir.join("ocr-recognition.safetensors");
+    if let Err(e) = materialize_bundled(&det_st, OCR_DETECTION_SAFETENSORS)
+        .and_then(|_| materialize_bundled(&rec_st, OCR_RECOGNITION_SAFETENSORS))
+    {
+        eprintln!("[screenshot-embed] OCR weights unpack failed: {e:#}");
         return None;
     }
-    if !download_ocr_model(OCR_RECOGNITION_MODEL_URL, &rec_path) {
-        return None;
-    }
 
-    let det_model = rten::Model::load_file(&det_path).ok()?;
-    let rec_model = rten::Model::load_file(&rec_path).ok()?;
-
-    ocrs::OcrEngine::new(ocrs::OcrEngineParams {
-        detection_model: Some(det_model),
-        recognition_model: Some(rec_model),
+    rlx_ocr::OcrEngine::new(rlx_ocr::OcrEngineParams {
+        detection_model: Some(det_st),
+        recognition_model: Some(rec_st),
+        device: ocr_device(),
         ..Default::default()
     })
+    .map_err(|e| eprintln!("[screenshot-embed] OCR engine init failed: {e:#}"))
     .ok()
 }
 
-/// Run OCR on an already-resized PNG image.  Returns the extracted text.
+/// Write bundled weight `bytes` to `path` unless an identically-sized file is
+/// already there (so the ~12 MB write happens once).
+fn materialize_bundled(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if std::fs::metadata(path)
+        .map(|m| m.len() == bytes.len() as u64)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, bytes)
+}
+
+/// Pick the OCR runtime device. An `OCR_DEVICE` env value (`metal`/`mlx`/`cuda`/
+/// `rocm`/`gpu`/`cpu`) wins if its backend is available; otherwise auto-detect
+/// the best compiled GPU backend, else CPU.
 ///
-/// On macOS: uses `skill-vision` crate (compiled ObjC, Vision framework,
-/// GPU / Neural Engine) — typically <50 ms.
+/// Detection is at *runtime* via `validate_device` (Ok only when the backend was
+/// compiled in) rather than `cfg!(feature = …)`: on macOS the daemon enables
+/// Metal through `[target.macos.dependencies]` with no skill feature flag, so a
+/// cfg check would miss it and leave OCR on CPU. All GPU backends reached parity
+/// + per-image multi-shape in rlx 0.2.x, so OCR runs wherever the rest of the
+/// screenshots pipeline does.
+fn ocr_device() -> rlx_runtime::Device {
+    use rlx_runtime::Device;
+    let ok = |d: Device| rlx_ocr::validate_device(d).is_ok();
+    if let Ok(s) = std::env::var("OCR_DEVICE") {
+        let d = match s.trim().to_ascii_lowercase().as_str() {
+            "metal" => Device::Metal,
+            "mlx" => Device::Mlx,
+            "cuda" => Device::Cuda,
+            "rocm" => Device::Rocm,
+            "gpu" | "wgpu" => Device::Gpu,
+            _ => Device::Cpu,
+        };
+        return if ok(d) { d } else { Device::Cpu };
+    }
+    [Device::Metal, Device::Mlx, Device::Cuda, Device::Rocm, Device::Gpu]
+        .into_iter()
+        .find(|&d| ok(d))
+        .unwrap_or(Device::Cpu)
+}
+
+/// Run OCR on an already-resized PNG image. Returns the extracted text.
 ///
-/// On other platforms (or if Apple Vision fails): uses `ocrs` (rten, CPU).
-fn run_ocr(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
-    // Try Apple Vision first on macOS (GPU/ANE, <50ms)
+/// On macOS: tries `skill-vision` (Apple Vision, GPU / Neural Engine, <50 ms).
+/// Falls back to `rlx-ocr` everywhere else.
+fn run_ocr(engine: &rlx_ocr::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
         if let Some(text) = skill_vision::recognize_text_from_png(png_bytes) {
             return Some(text);
         }
-        // Fall through to ocrs if Vision framework fails
     }
 
     run_ocr_rten(engine, png_bytes)
 }
 
-/// OCR via the `ocrs` crate (rten CPU inference).  Used on Linux/Windows
+/// OCR via `rlx-ocr` (rten-inference backend, CPU). Used on Linux/Windows
 /// and as a fallback on macOS if Vision framework is unavailable.
-fn run_ocr_rten(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
+fn run_ocr_rten(engine: &rlx_ocr::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     let img = image::load_from_memory(png_bytes).ok()?.into_rgb8();
     run_ocr_rten_rgb(engine, &img)
 }
 
 /// OCR from an already-decoded `DynamicImage` — avoids the encode→decode
 /// round-trip when the caller already has pixel data.
-fn run_ocr_from_image(engine: &ocrs::OcrEngine, img: &DynamicImage) -> Option<String> {
-    // Try Apple Vision first on macOS (GPU/ANE, <50ms)
+fn run_ocr_from_image(engine: &rlx_ocr::OcrEngine, img: &DynamicImage) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        // Apple Vision needs encoded bytes — JPEG is ~10× faster than PNG
         if let Some(jpg) = encode_jpeg(img, 85) {
             if let Some(text) = skill_vision::recognize_text_from_png(&jpg) {
                 return Some(text);
@@ -389,9 +361,9 @@ fn run_ocr_from_image(engine: &ocrs::OcrEngine, img: &DynamicImage) -> Option<St
 }
 
 /// Core OCR on an already-decoded RGB8 image buffer.
-fn run_ocr_rten_rgb(engine: &ocrs::OcrEngine, img: &image::RgbImage) -> Option<String> {
+fn run_ocr_rten_rgb(engine: &rlx_ocr::OcrEngine, img: &image::RgbImage) -> Option<String> {
     let (w, h) = img.dimensions();
-    let source = ocrs::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
+    let source = rlx_ocr::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
     let input = engine.prepare_input(source).ok()?;
     let text = engine.get_text(&input).ok()?;
     let text = text.trim().to_string();
@@ -817,6 +789,42 @@ pub fn run_screenshot_worker(
     }
 }
 
+/// Device string for the RLX image embedder, derived from the screenshot
+/// config. Apple Silicon: Metal is the fastest backend for nomic-vision —
+/// benchmarked ~110 img/s vs MLX ~49 and CPU ~25 (see bench_image_embed).
+#[cfg(feature = "text-embeddings-rlx")]
+fn rlx_image_device(cfg: &ScreenshotConfig) -> String {
+    if cfg.use_gpu && cfg!(target_os = "macos") {
+        "metal".into()
+    } else {
+        "cpu".into()
+    }
+}
+
+/// Lazily load (once) and return the RLX vision embedder
+/// (nomic-embed-vision-v1.5). Its output shares an aligned 768-d space with
+/// nomic-embed-text, so text queries (`search_query:`) match these vectors
+/// cross-modally. Returns `None` if the model can't be loaded.
+#[cfg(feature = "text-embeddings-rlx")]
+fn ensure_image_embedder<'a>(
+    cache: &'a mut Option<crate::rlx_image::RlxImageEmbedder>,
+    device: &str,
+) -> Option<&'a crate::rlx_image::RlxImageEmbedder> {
+    if cache.is_none() {
+        match crate::rlx_image::RlxImageEmbedder::from_repo(device) {
+            Ok(e) => {
+                eprintln!("[screenshot-embed] rlx image embedder (nomic-embed-vision-v1.5) loaded on {device}");
+                *cache = Some(e);
+            }
+            Err(e) => {
+                eprintln!("[screenshot-embed] rlx image embedder load failed: {e:#}");
+                return None;
+            }
+        }
+    }
+    cache.as_ref()
+}
+
 /// Embedding thread — processes jobs from the capture thread.
 /// Runs vision embedding + OCR text embedding on GPU (when available)
 /// and backfills results into SQLite + HNSW.
@@ -854,6 +862,13 @@ fn run_embed_thread(
     // No local TextEmbedding instance needed — saves ~130 MB of RAM.
     eprintln!("[screenshot-embed] OCR text embedding: using shared app-wide embedder via ctx.embed_text()");
 
+    // RLX image embedder (nomic-embed-vision-v1.5) — lazily loaded on first
+    // use. Shares the aligned 768-d space with nomic-embed-text.
+    #[cfg(feature = "text-embeddings-rlx")]
+    let mut image_embedder: Option<crate::rlx_image::RlxImageEmbedder> = None;
+    #[cfg(feature = "text-embeddings-rlx")]
+    let image_device = rlx_image_device(&initial_config);
+
     let mut inserts_since_save: usize = 0;
     let mut ocr_inserts_since_save: usize = 0;
 
@@ -870,22 +885,28 @@ fn run_embed_thread(
     if should_backfill {
         let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
 
-        // Backfill: OCR + text-embed for both vision and OCR HNSW.
-        // In fastembed mode the image embedding IS the text embedding of
-        // its OCR content, so we process OCR-less rows and embedding-less
-        // rows together.
+        // Backfill: vision HNSW gets the rlx nomic-vision *image* embedding;
+        // OCR HNSW gets the nomic-text embedding of the OCR'd content. Both
+        // live in the same aligned 768-d space.
         let ocr_rows = store.rows_without_ocr();
         let embed_rows = store.rows_without_embedding();
+        // Rows that already have OCR text but no OCR embedding (e.g. after an
+        // embedding-scheme migration) — re-embed the existing text, no re-OCR.
+        let ocr_embed_rows = store.rows_without_ocr_embedding();
         let needs_ocr: std::collections::HashSet<i64> = ocr_rows.iter().map(|r| r.id).collect();
         let needs_embed: std::collections::HashSet<i64> = embed_rows.iter().map(|r| r.id).collect();
+        let needs_ocr_embed: std::collections::HashSet<i64> = ocr_embed_rows.iter().map(|r| r.id).collect();
 
         // Merge into a deduplicated list with filenames
         let mut all_rows: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
-        for r in ocr_rows.iter().chain(embed_rows.iter()) {
+        for r in ocr_rows.iter().chain(embed_rows.iter()).chain(ocr_embed_rows.iter()) {
             all_rows.entry(r.id).or_insert_with(|| r.filename.clone());
         }
 
-        if !all_rows.is_empty() && ocr_engine.is_some() {
+        // Don't gate the whole backfill on the OCR engine: vision and OCR-text
+        // re-embed rows don't need it (only fresh OCR does, which is handled
+        // per-row below). So a failed OCR-engine load can't block re-embedding.
+        if !all_rows.is_empty() {
             eprintln!(
                 "[screenshot-embed] backfill: {} screenshots need OCR/embedding",
                 all_rows.len()
@@ -914,16 +935,28 @@ fn run_embed_thread(
                         .unwrap_or_default()
                 };
 
-                if ocr_text.is_empty() {
-                    continue;
-                }
+                let ts = store.get_timestamp(row_id).unwrap_or(0);
 
-                // Embed the OCR text
-                if let Some(emb) = ctx.embed_text(&ocr_text) {
-                    let ts = store.get_timestamp(row_id).unwrap_or(0);
-
-                    // Update vision HNSW (image embedding = OCR text embedding)
-                    if needs_embed.contains(&row_id) {
+                // Vision HNSW: embed the actual image via rlx nomic-vision
+                // (falls back to OCR-text-as-vision when rlx isn't compiled in).
+                if needs_embed.contains(&row_id) {
+                    #[cfg(feature = "text-embeddings-rlx")]
+                    let (vision_emb, vision_backend, vision_model) = (
+                        ensure_image_embedder(&mut image_embedder, &image_device).and_then(|e| e.embed_bytes(&raw)),
+                        "rlx".to_string(),
+                        "nomic-ai/nomic-embed-vision-v1.5".to_string(),
+                    );
+                    #[cfg(not(feature = "text-embeddings-rlx"))]
+                    let (vision_emb, vision_backend, vision_model) = (
+                        if ocr_text.is_empty() {
+                            None
+                        } else {
+                            ctx.embed_text(&ocr_text)
+                        },
+                        initial_config.embed_backend.clone(),
+                        initial_config.model_id(),
+                    );
+                    if let Some(emb) = vision_emb {
                         let id = hnsw.len() as u64;
                         hnsw.insert(emb.clone(), ts);
                         inserts_since_save += 1;
@@ -931,21 +964,29 @@ fn run_embed_thread(
                             row_id,
                             &emb,
                             Some(id),
-                            &initial_config.embed_backend,
-                            &initial_config.model_id(),
+                            &vision_backend,
+                            &vision_model,
                             initial_config.image_size,
                         );
                     }
+                }
 
-                    // Update OCR HNSW
-                    if needs_ocr.contains(&row_id) {
+                // OCR HNSW: embed the OCR text (text search over screenshot
+                // content) — for freshly-OCR'd rows and re-embed-only rows.
+                if needs_ocr.contains(&row_id) || needs_ocr_embed.contains(&row_id) {
+                    let ocr_emb = if ocr_text.is_empty() {
+                        None
+                    } else {
+                        ctx.embed_text(&ocr_text)
+                    };
+                    if let Some(emb) = ocr_emb {
                         let id = ocr_hnsw.len() as u64;
                         ocr_hnsw.insert(emb.clone(), ts);
                         ocr_inserts_since_save += 1;
                         store.update_ocr(row_id, &ocr_text, Some(&emb), Some(id));
+                    } else {
+                        store.update_ocr(row_id, &ocr_text, None, None);
                     }
-                } else if needs_ocr.contains(&row_id) {
-                    store.update_ocr(row_id, &ocr_text, None, None);
                 }
             }
             if inserts_since_save > 0 {
@@ -1076,7 +1117,7 @@ fn run_embed_thread(
             .ocr_us
             .store(t_ocr.elapsed().as_micros() as u64, Ordering::Relaxed);
 
-        // ── Embed OCR text (used for both vision and OCR HNSW in fastembed mode) ──
+        // ── Embed OCR text → OCR HNSW (text search over screenshot content) ──
         let t0 = Instant::now();
         let ocr_embedding = if !ocr_text.is_empty() {
             ctx.embed_text(&ocr_text)
@@ -1084,14 +1125,31 @@ fn run_embed_thread(
             None
         };
 
-        // ── Vision embedding ──
-        // In "fastembed" mode the image embedding IS the text embedding of
-        // its OCR content (nomic-embed-text-v1.5), so image and text queries
-        // live in the same vector space.
+        // ── Vision embedding → vision HNSW ──
+        // The default "rlx" backend embeds the actual image via
+        // nomic-embed-vision-v1.5, which shares an aligned 768-d space with
+        // nomic-embed-text — so text queries (search_query:) match images
+        // cross-modally. "mmproj"/"llm-vlm" embed pixels via the local LLM.
         let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
-            "fastembed" => {
-                let mid = config.model_id();
-                (ocr_embedding.clone(), "fastembed".to_string(), mid)
+            "rlx" | "fastembed" => {
+                #[cfg(feature = "text-embeddings-rlx")]
+                {
+                    match job.resized_img.as_ref().and_then(|img| {
+                        ensure_image_embedder(&mut image_embedder, &image_device).and_then(|e| e.embed_image(img))
+                    }) {
+                        Some(v) => (
+                            Some(v),
+                            "rlx".to_string(),
+                            "nomic-ai/nomic-embed-vision-v1.5".to_string(),
+                        ),
+                        None => (None, String::new(), String::new()),
+                    }
+                }
+                #[cfg(not(feature = "text-embeddings-rlx"))]
+                {
+                    // No RLX vision compiled in — fall back to OCR-text-as-vision.
+                    (ocr_embedding.clone(), "rlx".to_string(), config.model_id())
+                }
             }
             "mmproj" | "llm-vlm" => {
                 let encoded = job.resized_img.as_ref().map(encoded_bytes_lazy).unwrap_or_default();
@@ -1117,21 +1175,9 @@ fn run_embed_thread(
 
         // ── Store vision embedding in HNSW ──
         if let Some(ref emb) = embedding {
-            // If the model changed and produces a different embedding
-            // dimension, the existing HNSW is incompatible.  Reset to a fresh
-            // index so we don't panic on mismatched dimensions.
-            if !hnsw.is_empty() {
-                if let Some(dim) = hnsw.inner.dim() {
-                    if dim != emb.len() {
-                        eprintln!(
-                            "[screenshot] vision HNSW dimension mismatch (index={dim}, new={}); \
-                             resetting index — run re-embed to backfill",
-                            emb.len()
-                        );
-                        hnsw = fresh_hnsw();
-                    }
-                }
-            }
+            // If the model changed and produces a different embedding dimension,
+            // the existing HNSW is incompatible — reset rather than panic.
+            reset_hnsw_if_dim_mismatch(&mut hnsw, emb.len(), "vision");
             let id = hnsw.len() as u64;
             hnsw.insert(emb.clone(), job.ts_i64);
             inserts_since_save += 1;
@@ -1145,19 +1191,7 @@ fn run_embed_thread(
         // ── OCR text + OCR HNSW backfill ──
         if !ocr_text.is_empty() {
             if let Some(ref emb) = ocr_embedding {
-                // Guard against dimension mismatch if text embedding model changed.
-                if !ocr_hnsw.is_empty() {
-                    if let Some(dim) = ocr_hnsw.inner.dim() {
-                        if dim != emb.len() {
-                            eprintln!(
-                                "[screenshot] OCR HNSW dimension mismatch (index={dim}, new={}); \
-                                 resetting index — run re-embed to backfill",
-                                emb.len()
-                            );
-                            ocr_hnsw = fresh_hnsw();
-                        }
-                    }
-                }
+                reset_hnsw_if_dim_mismatch(&mut ocr_hnsw, emb.len(), "OCR");
                 let id = ocr_hnsw.len() as u64;
                 ocr_hnsw.insert(emb.clone(), job.ts_i64);
                 ocr_inserts_since_save += 1;

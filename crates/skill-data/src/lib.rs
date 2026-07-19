@@ -39,3 +39,6 @@ pub mod util;
 pub mod validation_store;
 
 pub use error::{SessionError, StoreError};
+// Timestamp utilities re-exported for convenience — prefer these over
+// hand-rolling `ts * 1000` arithmetic at call sites.
+pub use util::{epoch_ts_to_unix, unix_to_ts, yyyymmddhhmmss_utc, DualTimestampRange};

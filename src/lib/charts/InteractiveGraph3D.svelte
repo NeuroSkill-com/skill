@@ -1097,7 +1097,7 @@ function fmtTs(unix: number) {
 <div class="flex flex-col gap-2 px-4 pt-2 pb-3 border-t border-border dark:border-white/[0.06]">
 
   <!-- Kind / edge chips row -->
-  <div class="flex items-center gap-3 flex-wrap text-[0.42rem] text-muted-foreground/60">
+  <div class="flex items-center gap-3 flex-wrap text-ui-2xs text-muted-foreground/60">
     {#each LEGEND_BASE as l}
       <div class="flex items-center gap-1">
         <span class="inline-block w-2 h-2 rounded-full shrink-0" style="background:{l.color}"></span>
@@ -1127,7 +1127,7 @@ function fmtTs(unix: number) {
         <span>Screenshot link</span>
       </div>
     {/if}
-    <span class="ml-auto text-[0.38rem] italic opacity-40 select-none">
+    <span class="ml-auto text-ui-2xs italic opacity-40 select-none">
       hover · click to highlight · click again to clear
     </span>
   </div>
@@ -1135,7 +1135,7 @@ function fmtTs(unix: number) {
   <!-- Jet time-scale chart -->
   {#if eegDots.length > 0}
     <div class="flex flex-col gap-0.5">
-      <span class="text-[0.42rem] font-semibold uppercase tracking-widest text-muted-foreground/40 select-none">
+      <span class="text-ui-2xs font-semibold uppercase tracking-widest text-muted-foreground/40 select-none">
         EEG node time scale
       </span>
       <svg width="100%" viewBox="0 0 500 56" preserveAspectRatio="xMidYMid meet"
@@ -1163,13 +1163,13 @@ function fmtTs(unix: number) {
           </text>
         {/each}
       </svg>
-      <span class="text-[0.38rem] text-muted-foreground/35 tabular-nums select-none">
+      <span class="text-ui-2xs text-muted-foreground/35 tabular-nums select-none">
         {eegDots.length} EEG point{eegDots.length !== 1 ? "s" : ""} ·
         {fmtTs(eegTimeMin)} → {fmtTs(eegTimeMax)}
       </span>
     </div>
   {:else}
-    <div class="text-[0.4rem] text-muted-foreground/25 italic select-none">
+    <div class="text-ui-2xs text-muted-foreground/25 italic select-none">
       EEG nodes colored by session time (turbo gradient)
     </div>
   {/if}

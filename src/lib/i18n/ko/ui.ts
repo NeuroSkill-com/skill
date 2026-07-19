@@ -36,6 +36,8 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "표본 엔트로피 — 신호의 불규칙성. 높을수록 예측 불가능.",
   "tip.pacThetaGamma": "세타 위상과 감마 진폭 간 위상-진폭 커플링. 기억 부호화와 연관됩니다.",
   "tip.lateralityIndex": "모든 대역에 걸친 좌우 파워 비대칭. 양수 = 우측 우세.",
+  "tip.echt":
+    "끝점 보정 힐베르트 변환 — 알파 대역 리듬성 (0–1). 높음 = 강하고 위상이 안정된 알파 진동. [Schreglmann 2021]",
   "tip.hr": "PPG 심박 간격에서 유래한 심박수.",
   "tip.rmssd": "연속 심박 간격 차이의 제곱평균제곱근. 핵심 부교감 HRV 지표.",
   "tip.sdnn": "박동 간 간격의 표준편차. 전체 HRV를 반영합니다.",
@@ -112,6 +114,11 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "자동 업데이트 확인이 비활성화되었습니다. 위의 버튼으로 수동 확인하세요.",
   "updates.autostart": "로그인 시 시작",
   "updates.autostartDesc": "컴퓨터에 로그인할 때 자동으로 시작합니다.",
+  "updates.autoUpdate": "업데이트 자동 설치",
+  "updates.autoUpdateDesc":
+    "백그라운드에서 새 버전을 다운로드하고 다음 재시작 시 설치합니다. 설치 시점을 직접 선택하려면 끄세요.",
+  "updates.autoUpdateOffNotice": "자동 설치가 꺼져 있습니다 — 다운로드 및 업데이트하려면 설치를 클릭하세요.",
+  "updates.installNow": "설치",
   "updates.footer": "업데이트는 자동으로 다운로드됩니다. 적용 준비가 되면 재시작하세요.",
 
   "whatsNew.title": "새로운 기능",

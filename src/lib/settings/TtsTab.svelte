@@ -17,6 +17,7 @@ import { ToggleRow } from "$lib/components/ui/toggle-row";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import TtsTestWidget from "$lib/help/TtsTestWidget.svelte";
 import { t } from "$lib/i18n/index.svelte";
+import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -217,6 +218,35 @@ const PRESET_VOICES: PresetVoice[] = [
   { id: "mateo", labelKey: "ttsTab.voiceMateo", lang: "es", flag: "🇪🇸", gender: "♂" },
 ];
 
+// ── Engine registry ─────────────────────────────────────────────────────────
+// Single source of truth is the daemon's `tts_engine` setting (get/set_tts_engine),
+// mirrored here so the Voice tab and the LLM tab offer the same engines.
+// (tiny-tts is disabled for now — rlx-tiny-tts reshape bug on Metal + MLX.)
+const TTS_ENGINES: { id: string; label: string }[] = [
+  { id: "kitten", label: "KittenTTS" },
+  { id: "neutts", label: "NeuTTS" },
+  { id: "qwen3-tts", label: "Qwen3-TTS" },
+  { id: "orpheus", label: "Orpheus" },
+  { id: "kyutai-tts", label: "Kyutai-TTS" },
+  { id: "inflect-nano", label: "Inflect-Nano" },
+];
+
+const MODELS_BY_ENGINE: Record<string, string[]> = {
+  "qwen3-tts": ["Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"],
+};
+const DEFAULT_MODEL_BY_ENGINE: Record<string, string> = {
+  "qwen3-tts": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+};
+const DEFAULT_VOICE_BY_ENGINE: Record<string, string> = {
+  "qwen3-tts": "vivian",
+  orpheus: "tara",
+};
+/** Fallback preset voices when the daemon hasn't returned `voices` yet. */
+const VOICES_BY_ENGINE: Record<string, string[]> = {
+  "qwen3-tts": ["vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee"],
+  orpheus: ["tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"],
+};
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 // Engine status
@@ -246,6 +276,8 @@ let neuttsConfig = $state<NeuttsConfig>({
 });
 let kittenVoices = $state<string[]>(["Jasper"]);
 let kittenVoice = $state("Jasper");
+// Canonical engine selection (mirrors daemon `tts_engine`; see $lib/llm/tts).
+let ttsCfg = $state<TtsEngineConfig>(loadTtsEngine());
 let ttsPreload = $state(true);
 let logConfig = $state<LogConfig>({
   embedder: true,
@@ -268,10 +300,70 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ── Derived helpers ────────────────────────────────────────────────────────
 
-const activeBackend = $derived(neuttsConfig.enabled ? "neutts" : "kitten");
+/** Which engine's config panel to show — driven by the canonical selection. */
+const activeBackend = $derived(ttsCfg.engine || "kitten");
+const isNewEngine = $derived(activeBackend !== "kitten" && activeBackend !== "neutts");
+const engineLabel = $derived(TTS_ENGINES.find((e) => e.id === activeBackend)?.label ?? activeBackend);
+const knownModels = $derived(MODELS_BY_ENGINE[activeBackend] ?? []);
+const hasModelPicker = $derived(knownModels.length > 0);
+const knownVoices = $derived(ttsCfg.voices?.length ? ttsCfg.voices : (VOICES_BY_ENGINE[activeBackend] ?? []));
+const hasVoicePicker = $derived(knownVoices.length > 0);
+const needsBundleExport = $derived(activeBackend === "inflect-nano");
 
 function selectedModel(): BackboneModel | undefined {
   return BACKBONE_MODELS.find((m) => m.repo === neuttsConfig.backbone_repo);
+}
+
+/** Select a TTS engine: persist via `set_tts_engine` and keep the legacy
+ *  kitten/neutts routing flag (`NEUTTS_ENABLED`) in sync so `use_neutts()` picks
+ *  the right legacy backend. New engines route via the pluggable framework. */
+async function selectEngine(id: string) {
+  if (id === ttsCfg.engine) return;
+
+  // NEUTTS_ENABLED is what use_neutts() checks for the kitten↔neutts split.
+  const wantNeutts = id === "neutts";
+  if (neuttsConfig.enabled !== wantNeutts) {
+    neuttsConfig = { ...neuttsConfig, enabled: wantNeutts };
+    try {
+      await daemonInvoke("set_neutts_config", { config: neuttsConfig });
+    } catch (e) {}
+  }
+
+  // Reset model/voice to the new engine's defaults (mirrors the LLM tab).
+  const models = MODELS_BY_ENGINE[id] ?? [];
+  const model = models.includes(ttsCfg.model) ? ttsCfg.model : (DEFAULT_MODEL_BY_ENGINE[id] ?? "");
+  const fallbackVoices = VOICES_BY_ENGINE[id] ?? [];
+  const defaultVoice = DEFAULT_VOICE_BY_ENGINE[id] ?? "";
+  const voice = defaultVoice && fallbackVoices.includes(defaultVoice) ? defaultVoice : "";
+  ttsCfg = { ...ttsCfg, engine: id, model, voice, voices: fallbackVoices.length ? fallbackVoices : undefined };
+  saveTtsEngine(ttsCfg); // set_tts_engine → applies the router live + persists
+
+  // Refresh the daemon-provided voice list for the newly-active engine. This
+  // round-trip also ensures set_tts_engine has landed before we (re)load below.
+  try {
+    ttsCfg = await fetchTtsEngine();
+  } catch (e) {}
+
+  // Notify other views (e.g. chat voice controls) of the switch.
+  try {
+    await emit("tts-engine-changed", { engine: ttsCfg.engine, enabled: neuttsConfig.enabled });
+  } catch (e) {}
+
+  // Drive a progress-emitting load so the status card reaches ready/error.
+  // set_tts_engine warms the engine but discards its progress; the Tauri
+  // `tts_init` command is what emits `tts-progress` for this UI. Without it the
+  // card would hang on "loading" for every engine.
+  enginePhase = "loading";
+  loadStep = 0;
+  loadLabel = "";
+  errorMsg = "";
+  invoke("tts_init").catch((_e) => {});
+}
+
+/** Update engine model/voice overrides (new-engine config panel). */
+function updateTtsCfg(patch: Partial<TtsEngineConfig>) {
+  ttsCfg = { ...ttsCfg, ...patch };
+  saveTtsEngine(ttsCfg);
 }
 
 // ── Event listener ─────────────────────────────────────────────────────────
@@ -284,6 +376,9 @@ onMount(async () => {
   } catch (e) {}
   try {
     neuttsConfig = await daemonInvoke<NeuttsConfig>("get_neutts_config");
+  } catch (e) {}
+  try {
+    ttsCfg = await fetchTtsEngine();
   } catch (e) {}
   try {
     ttsPreload = await daemonInvoke<boolean>("get_tts_preload");
@@ -343,17 +438,6 @@ async function unload() {
   await invoke("tts_unload").catch((_e) => {});
 }
 
-// ── Backend switch ─────────────────────────────────────────────────────────
-
-async function switchBackend(toNeutts: boolean) {
-  if (neuttsConfig.enabled === toNeutts) return;
-  neuttsConfig = { ...neuttsConfig, enabled: toNeutts };
-  neuttsDirty = true;
-  enginePhase = "idle";
-  loadStep = 0;
-  await saveNeutts();
-}
-
 // ── KittenTTS voice ────────────────────────────────────────────────────────
 
 async function setKittenVoice(v: string) {
@@ -407,41 +491,41 @@ async function toggleTtsLog() {
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="flex flex-col gap-5 px-4 py-4 pb-8">
 
-  <!-- ── 1. Backend selector ───────────────────────────────────────────────── -->
+  <!-- ── 1. Engine selector ────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">
     <SectionHeader>{t("ttsTab.backendSection")}</SectionHeader>
 
-    <div class="grid grid-cols-2 gap-2">
-      <!-- KittenTTS card -->
-      <button
-        onclick={() => switchBackend(false)}
-        class="relative flex flex-col gap-1 rounded-xl border px-3.5 py-3 text-left transition-all
-               {activeBackend === 'kitten'
-                 ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 shadow-sm'
-                 : 'border-border dark:border-white/[0.06] bg-surface-1 hover:border-indigo-300 dark:hover:border-indigo-700'}">
-        {#if activeBackend === "kitten"}
-          <span class="absolute top-2 right-2.5 w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-        {/if}
-        <span class="text-ui-md font-semibold text-foreground">{t("ttsTab.backendKitten")}</span>
-        <span class="text-ui-xs text-muted-foreground/70 leading-relaxed">{t("ttsTab.backendKittenTag")}</span>
-        <span class="text-ui-sm text-muted-foreground/50 leading-relaxed mt-0.5">{t("ttsTab.backendKittenDesc")}</span>
-      </button>
+    <SettingsCard>
+      <CardContent class="flex flex-col gap-2 px-4 py-3.5">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          {#each TTS_ENGINES as opt}
+            <button
+              onclick={() => selectEngine(opt.id)}
+              class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
+                     {activeBackend === opt.id
+                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
+                       : 'border-border dark:border-white/[0.08] bg-muted dark:bg-surface-2 text-muted-foreground hover:text-foreground'}">
+              {opt.label}
+            </button>
+          {/each}
+        </div>
 
-      <!-- NeuTTS card -->
-      <button
-        onclick={() => switchBackend(true)}
-        class="relative flex flex-col gap-1 rounded-xl border px-3.5 py-3 text-left transition-all
-               {activeBackend === 'neutts'
-                 ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 shadow-sm'
-                 : 'border-border dark:border-white/[0.06] bg-surface-1 hover:border-indigo-300 dark:hover:border-indigo-700'}">
-        {#if activeBackend === "neutts"}
-          <span class="absolute top-2 right-2.5 w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+        {#if activeBackend === "kitten"}
+          <span class="text-ui-sm text-muted-foreground/60 leading-relaxed">{t("ttsTab.backendKittenDesc")}</span>
+        {:else if activeBackend === "neutts"}
+          <span class="text-ui-sm text-muted-foreground/60 leading-relaxed">{t("ttsTab.backendNeuttsDesc")}</span>
         {/if}
-        <span class="text-ui-md font-semibold text-foreground">{t("ttsTab.backendNeutts")}</span>
-        <span class="text-ui-xs text-muted-foreground/70 leading-relaxed">{t("ttsTab.backendNeuttsTag")}</span>
-        <span class="text-ui-sm text-muted-foreground/50 leading-relaxed mt-0.5">{t("ttsTab.backendNeuttsDesc")}</span>
-      </button>
-    </div>
+        {#if activeBackend === "kyutai-tts"}
+          <p class="text-ui-sm text-amber-600 dark:text-amber-400">{t("chat.tts.kyutaiExperimental")}</p>
+        {/if}
+        {#if activeBackend === "orpheus"}
+          <p class="text-ui-sm text-muted-foreground">{t("chat.tts.orpheusHint")}</p>
+        {/if}
+        {#if needsBundleExport}
+          <p class="text-ui-sm text-amber-600 dark:text-amber-400">{t("chat.tts.bundleExportHint")}</p>
+        {/if}
+      </CardContent>
+    </SettingsCard>
   </section>
 
   <!-- ── 2. Engine status ───────────────────────────────────────────────────── -->
@@ -746,6 +830,56 @@ async function toggleTtsLog() {
               {/key}
             </button>
           </div>
+
+        </CardContent>
+      </SettingsCard>
+    </section>
+  {/if}
+
+  <!-- ── 3c. Pluggable engine config (Qwen3-TTS / Orpheus / Kyutai / Inflect) ── -->
+  {#if isNewEngine}
+    <section class="flex flex-col gap-2">
+      <SectionHeader>{engineLabel}</SectionHeader>
+
+      <SettingsCard>
+        <CardContent class="flex flex-col gap-3 px-4 py-3.5">
+
+          {#if hasModelPicker}
+            <div class="flex flex-col gap-1.5">
+              <span class="text-ui-base font-semibold text-foreground">{t("chat.tts.modelLabel")}</span>
+              <select
+                aria-label={t("chat.tts.modelLabel")}
+                value={ttsCfg.model}
+                onchange={(e) => updateTtsCfg({ model: (e.currentTarget as HTMLSelectElement).value })}
+                class="w-full rounded-lg border border-border dark:border-white/[0.08]
+                       bg-muted dark:bg-surface-2 px-2.5 py-1.5 text-ui-base
+                       text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                {#each knownModels as m}
+                  <option value={m}>{m}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+
+          {#if hasVoicePicker}
+            <div class="flex flex-col gap-1.5">
+              <span class="text-ui-base font-semibold text-foreground">{t("chat.tts.voiceLabel")}</span>
+              <select
+                aria-label={t("chat.tts.voiceLabel")}
+                value={ttsCfg.voice}
+                onchange={(e) => updateTtsCfg({ voice: (e.currentTarget as HTMLSelectElement).value })}
+                class="w-full rounded-lg border border-border dark:border-white/[0.08]
+                       bg-muted dark:bg-surface-2 px-2.5 py-1.5 text-ui-base
+                       text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <option value="">{t("chat.tts.voiceDefault")}</option>
+                {#each knownVoices as v}
+                  <option value={v}>{v}</option>
+                {/each}
+              </select>
+            </div>
+          {:else}
+            <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">{t("chat.tts.voiceDesc")}</p>
+          {/if}
 
         </CardContent>
       </SettingsCard>

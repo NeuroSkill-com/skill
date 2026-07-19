@@ -2837,7 +2837,7 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ### `llm`
 
-Control the built-in on-device LLM inference server (OpenAI-compatible, powered by llama.cpp).
+Control the built-in on-device LLM inference server (OpenAI-compatible, powered by the RLX runtime).
 All subcommands route to the WebSocket/HTTP API — no GPU dependency for status/catalog/logs queries.
 
 #### Subcommands
@@ -3376,8 +3376,8 @@ separate HNSW indices for similarity search.
 
 **Capabilities:**
 - **Capture:** macOS (CoreGraphics FFI), Linux (X11/Wayland), Windows (GDI)
-- **Vision embedding:** CLIP model via ONNX Runtime (GPU or CPU)
-- **OCR:** on-device via `ocrs` crate (Linux/Windows) or Apple Vision (macOS)
+- **Vision embedding:** Nomic Embed Vision v1.5 via the rlx runtime (GPU or CPU)
+- **OCR:** on-device via `rlx-ocr` (Linux/Windows) or Apple Vision (macOS)
 - **Search:** dual HNSW architecture — visual similarity and OCR text similarity
 - **Configuration:** interval, image size, quality, embedding backend, OCR engine,
   GPU/CPU toggle — all in Settings → Screenshots

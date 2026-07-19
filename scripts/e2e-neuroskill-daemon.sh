@@ -160,7 +160,7 @@ has "$LSL" "SkillVirtualEEG" && pass "virtual stream discovered" || fail "LSL di
 # Enable screenshot capture for screenshots-around test
 info "enabling screenshot capture (interval=3s)..."
 apost "/v1/settings/screenshot/config" \
-  '{"enabled":true,"interval_secs":3,"image_size":768,"quality":60,"session_only":false,"embed_backend":"fastembed","fastembed_model":"clip-vit-b-32","ocr_enabled":true,"ocr_engine":"apple-vision","use_gpu":true,"gif_enabled":false,"gif_frame_count":15,"gif_frame_delay_ms":100,"gif_motion_threshold":0.05,"gif_max_size_kb":2048}' >/dev/null 2>&1
+  '{"enabled":true,"interval_secs":3,"image_size":768,"quality":60,"session_only":false,"embed_backend":"rlx","fastembed_model":"nomic-embed-vision-v1.5","ocr_enabled":true,"ocr_engine":"apple-vision","use_gpu":true,"gif_enabled":false,"gif_frame_count":15,"gif_frame_delay_ms":100,"gif_motion_threshold":0.05,"gif_max_size_kb":2048}' >/dev/null 2>&1
 
 # Record session A (already started by daemon --virtual) for 15s
 info "recording session A for 15 seconds..."

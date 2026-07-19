@@ -9,6 +9,37 @@ const search: Record<string, string> = {
   "embeddings.model": "Modèle d'embedding",
   "embeddings.modelApplied": "Modèle d'embeddings appliqué",
   "embeddings.modelFailed": "Échec de l'application du modèle",
+  "embeddings.backend": "Runtime d'embeddings",
+  "embeddings.backendDesc":
+    "Les embeddings texte s'exécutent sur le runtime RLX local. Choisissez ci-dessous le périphérique de calcul et la longueur de séquence maximale.",
+  "embeddings.indexBackend": "Index de recherche des labels",
+  "embeddings.indexBackendDesc":
+    "Choisissez l'index vectoriel local qui alimente la recherche sémantique de labels. Construisez les deux, comparez avec votre propre requête, puis choisissez l'option la plus rapide ou la plus qualitative pour vos données.",
+  "embeddings.indexBackend.hnsw": "HNSW",
+  "embeddings.indexBackend.hnswDesc": "Valeur par défaut actuelle. Fort rappel, graphe plus volumineux en mémoire.",
+  "embeddings.indexBackend.turboquant": "Index TurboQuant",
+  "embeddings.indexBackend.turboquantDesc":
+    "Index TurboVec compressé. Utilise moins de mémoire et d'espace disque, adapté aux grands ensembles de labels.",
+  "embeddings.indexCurrent": "Backend de recherche actuel : {backend}",
+  "embeddings.indexBackendApplied": "Backend d'index des labels appliqué",
+  "embeddings.indexBackendFailed": "Échec du changement de backend d'index des labels",
+  "embeddings.indexRebuild": "Reconstruire les index",
+  "embeddings.indexRebuilding": "Reconstruction…",
+  "embeddings.indexRebuilt": "Index des labels reconstruits",
+  "embeddings.indexRebuildFailed": "Échec de la reconstruction des index des labels",
+  "embeddings.indexBenchmark": "Comparatif",
+  "embeddings.indexBenchmarking": "Benchmark en cours…",
+  "embeddings.indexBenchmarkPlaceholder": "Requête de benchmark, p. ex. session de codage concentrée",
+  "embeddings.indexBenchmarkFailed": "Échec du benchmark",
+  "embeddings.indexBenchmarkClose": "TurboQuant correspond étroitement à HNSW",
+  "embeddings.indexBenchmarkDiverged": "TurboQuant diffère de HNSW",
+  "embeddings.indexBenchmarkDelta": "delta de distance cosinus moy. {avg}, max {max}",
+  "embeddings.indexBenchmarkNoResults": "Aucun résultat",
+  "embeddings.indexUnavailable": "Index indisponible. Reconstruisez d'abord les index.",
+  "embeddings.rlxDevice": "Périphérique RLX",
+  "embeddings.rlxMaxSeq": "Séquence max.",
+  "embeddings.rlxHint":
+    "RLX télécharge tokenizer.json et model.safetensors depuis Hugging Face, puis effectue le pooling et la normalisation localement.",
   "embeddings.info":
     "Les embeddings sont générés pour le texte et le contexte de chaque étiquette. Lors de la première utilisation, les poids du modèle sont téléchargés une fois et mis en cache localement. Les modèles plus petits (≤384d) sont rapides ; les plus grands produisent des représentations plus riches.",
   "embeddings.sharedNote":
@@ -304,6 +335,10 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "Captures près des correspondances",
 
   "search.maxTokens": "Jetons",
+
+  "embeddings.indexMemory": "Empreinte sur disque",
+  "embeddings.indexMemoryRow": "{backend} : {total} ({text} texte · {context} contexte · {eeg} EEG)",
+  "embeddings.indexMemoryTotal": "Total : {total}",
 };
 
 export default search;

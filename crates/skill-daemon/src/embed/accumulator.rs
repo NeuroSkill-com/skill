@@ -36,6 +36,7 @@ pub struct EpochAccumulator {
     device_channels: usize,
     hop_samples: usize,
     native_epoch_samples: usize,
+    max_buf_samples: usize,
     device_name: Option<String>,
     channel_names: Vec<String>,
     sample_rate: f32,
@@ -62,6 +63,7 @@ impl EpochAccumulator {
             device_channels: device_channels.min(EEG_CHANNELS),
             hop_samples: hop,
             native_epoch_samples: native_epoch,
+            max_buf_samples: native_epoch * 4,
             device_name: None,
             channel_names,
             sample_rate,
@@ -100,6 +102,20 @@ impl EpochAccumulator {
 
         self.bufs[electrode].extend(samples.iter().copied());
         self.since_last[electrode] += samples.len();
+
+        // Per-channel cap: when other electrodes stall, this channel would
+        // otherwise grow without bound (the drain step requires min_buf across
+        // all channels). Drop oldest down to one epoch's worth.
+        if self.bufs[electrode].len() > self.max_buf_samples {
+            let drop = self.bufs[electrode].len() - self.native_epoch_samples;
+            self.bufs[electrode].drain(..drop);
+            self.since_last[electrode] = self.since_last[electrode].min(self.native_epoch_samples);
+            info!(
+                channel = electrode,
+                dropped = drop,
+                "epoch buf overflow — channel imbalance, dropping oldest samples"
+            );
+        }
 
         let n_ch = self.device_channels;
         let native_epoch = self.native_epoch_samples;

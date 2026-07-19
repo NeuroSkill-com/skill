@@ -73,6 +73,24 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "埋め込みランタイム",
+    "desc": "テキスト埋め込みはローカルの RLX ランタイムで実行されます。以下で計算デバイスと最大シーケンス長を選択してください。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "ラベル検索インデックス",
+    "desc": "ラベル意味検索に使うローカルベクトルインデックスを選びます。両方構築し、自分のクエリでベンチマークして、データに合った高速または高品質な方を選んでください。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant インデックス",
+    "desc": "圧縮 TurboVec インデックス。メモリとディスク使用量が少なく、大量ラベル向け。"
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "埋め込みモデル"
   },
@@ -305,6 +323,12 @@
     "key": "llm.mmproj.nThreads",
     "label": "エンコーダースレッド",
     "desc": "ビジョン/オーディオエンコーダー用のCPUスレッド数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "ドラフトトークン数",
+    "desc": "デコードステップごとに投機的に生成するトークン数。値が大きいほどスループットが向上しますが、メモリをより多く消費します。MTP対応モデルが必要です。"
   },
   {
     "tab": "llm",
@@ -832,6 +856,12 @@
     "key": "updates.autostart",
     "label": "ログイン時に起動",
     "desc": "コンピューターにログインしたときに自動的に起動します。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "アップデートを自動的にインストール",
+    "desc": "新しいバージョンをバックグラウンドでダウンロードし、次回の再起動時にインストールします。タイミングを自分で選ぶには無効にしてください。"
   },
   {
     "tab": "updates",

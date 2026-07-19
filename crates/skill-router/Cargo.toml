@@ -4,12 +4,40 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "WebSocket/HTTP command routing, UMAP projection, embedding loaders, EEG metric rounding — extracted workspace crate"
+build = "build.rs"
 
 [features]
-default = ["gpu"]
-gpu = ["dep:burn-cubecl", "dep:cubecl", "fast-umap/gpu"]
-mlx = ["dep:burn-mlx", "fast-umap/mlx"]
-cpu = ["burn/ndarray"]
+# `default` is intentionally empty: skill-router builds a CPU-only UMAP path
+# with no rlx-runtime accelerator and pulls in no GPU SDK. Consumers opt into
+# exactly the backend(s) their platform supports — macOS uses `metal` / `mlx`
+# (or the `gpu-apple` bundle); Linux/Windows use `cuda`, `rocm`, or `wgpu`.
+# No backend implies another, so e.g. a macOS build never drags in CUDA.
+default = []
+
+# Internal umbrella: switches the source onto the rlx-runtime device-resolution
+# path and always brings CPU dispatch as the fallback. Every backend feature
+# below enables it; it is not meant to be turned on directly.
+accel = ["dep:rlx-runtime", "rlx-runtime/cpu"]
+
+# ── RLX backend selection (each independent — no cross-bundling) ──────────────
+cpu   = ["accel"]
+metal = ["accel", "rlx-umap/metal", "rlx-runtime/metal"]
+mlx   = ["accel", "rlx-umap/mlx",   "rlx-runtime/mlx"]
+cuda  = ["accel", "rlx-umap/cuda",  "rlx-runtime/cuda"]
+rocm  = ["accel", "rlx-umap/rocm",  "rlx-runtime/rocm"]
+wgpu  = ["accel", "rlx-umap/gpu",   "rlx-runtime/gpu"]
+
+# ── Convenience bundles ──────────────────────────────────────────────────────
+gpu-apple = ["metal", "mlx"]   # all Apple GPU backends (macOS)
+gpu       = ["wgpu"]           # back-compat alias: portable wgpu GPU (NO cuda)
+
+# Local-only profiling (not for CI / release). Use with the `umap_hotpath`
+# example, e.g. on macOS:
+#   cargo run -p skill-router --release --example umap_hotpath \
+#     --features='metal,hotpath'
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
+hotpath-cpu = ["dep:hotpath", "hotpath/hotpath-cpu"]
+hotpath-alloc = ["dep:hotpath", "hotpath/hotpath-alloc"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -20,13 +48,12 @@ skill-settings  = { path = "../skill-settings" }
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 rusqlite = { workspace = true }
-fast-umap       = { version = "1.6.0", default-features = false }
-burn            = { version = "0.20.1", default-features = false, features = ["ndarray"] }
-burn-cubecl     = { version = "0.20.1", optional = true }
-burn-mlx        = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20", optional = true }
-cubecl          = { version = "0.9.0", features = ["wgpu"], optional = true }
-crossbeam-channel = "0.5.15"
-half            = { version = "2.4", features = ["num-traits"] }
+rlx-umap        = { workspace = true, features = ["full"] }
+rlx-runtime     = { workspace = true, features = ["cpu"], optional = true }
+hotpath         = { version = "0.16", optional = true }
+
+[dev-dependencies]
+rlx-runtime     = { workspace = true, features = ["cpu"] }
 
 [lints]
 workspace = true

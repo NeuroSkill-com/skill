@@ -102,6 +102,22 @@
       "paper": "https://arxiv.org/abs/2510.21585",
       "doi": "10.48550/arXiv.2510.21585"
     },
+    "brainjepa": {
+      "name": "Brain-JEPA",
+      "description": "Brain-JEPA fMRI foundation model (ViT-Base, 768-dim embeddings). Joint embedding predictive architecture on parcellated fMRI (450 ROIs × temporal patches). Gradient positional encoding from cortical geometry. NeurIPS 2024 Spotlight.",
+      "repo": "eugenehp/BrainJEPA",
+      "tags": [
+        "fmri",
+        "embedding",
+        "medium"
+      ],
+      "weights_file": "brainjepa.safetensors",
+      "config_file": "gradient_mapping_450.csv",
+      "params_m": 86,
+      "embed_dim": 768,
+      "paper": "https://github.com/hzlab/Brain-JEPA",
+      "doi": null
+    },
     "opentslm": {
       "name": "OpenTSLM",
       "description": "Time-Series Language Model for reasoning over multivariate medical data. Trainable TransformerCNN encoder (128-dim) + frozen LLM backbone (Qwen3 GGUF via llama.cpp). 5-stage curriculum: wearable MCQ, captioning, HAR chain-of-thought, sleep-stage EEG CoT, ECG arrhythmia CoT. Processes accelerometer, gyroscope, EEG, and ECG.",
@@ -331,6 +347,122 @@
         }
       }
     },
+    "eegdino-small": {
+      "name": "EEG-DINO Small",
+      "description": "EEG-DINO foundation model (4.6M params, d_model=200). Hierarchical self-distillation on 9 000+ hours of EEG. RLX inference via eegdino-rs.",
+      "repo": "eugenehp/eegdino",
+      "tags": [
+        "eeg",
+        "embedding",
+        "small"
+      ],
+      "weights_file": "eeg_dino_small.safetensors",
+      "config_file": null,
+      "params_m": 4.6,
+      "embed_dim": 200,
+      "paper": "https://arxiv.org/abs/2503.06669",
+      "doi": null
+    },
+    "eegdino-medium": {
+      "name": "EEG-DINO Medium",
+      "description": "EEG-DINO foundation model (33M params, d_model=512). Medium variant for higher-quality embeddings.",
+      "repo": "eugenehp/eegdino",
+      "tags": [
+        "eeg",
+        "embedding",
+        "medium"
+      ],
+      "weights_file": "eeg_dino_medium.safetensors",
+      "config_file": null,
+      "params_m": 33,
+      "embed_dim": 512,
+      "paper": "https://arxiv.org/abs/2503.06669",
+      "doi": null
+    },
+    "eegdino-large": {
+      "name": "EEG-DINO Large",
+      "description": "EEG-DINO foundation model (201M params, d_model=1024). Largest variant; needs substantial VRAM on GPU backends.",
+      "repo": "eugenehp/eegdino",
+      "tags": [
+        "eeg",
+        "embedding",
+        "large"
+      ],
+      "weights_file": "eeg_dino_large.safetensors",
+      "config_file": null,
+      "params_m": 201,
+      "embed_dim": 1024,
+      "paper": "https://arxiv.org/abs/2503.06669",
+      "doi": null
+    },
+    "lumamba-recon": {
+      "name": "LuMamba (Reconstruction)",
+      "description": "PulpBio's LuMamba (Latent Unified Mamba) — topology-agnostic EEG foundation model (4.1M params, 384-dim). Reuses LUNA's cross-attention channel unification then runs a stack of bidirectional Mamba (FEMBA) blocks in linear time. Reconstruction-only pretrained encoder. RLX inference via lumamba.",
+      "repo": "PulpBio/LuMamba",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic",
+        "tiny"
+      ],
+      "weights_file": "LuMamba_ReconstructionOnly.safetensors",
+      "config_file": "config.json",
+      "params_m": 4.1,
+      "embed_dim": 384,
+      "paper": "https://github.com/pulp-bio/BioFoundation",
+      "doi": null
+    },
+    "lumamba-lejepa-recon-128": {
+      "name": "LuMamba (LeJEPA+Recon 128)",
+      "description": "LuMamba tiny variant pretrained on a balanced mixture of masked-patch reconstruction and the LeJEPA loss (128 projection slices). Topology-agnostic EEG foundation model (4.1M params, 384-dim).",
+      "repo": "PulpBio/LuMamba",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic",
+        "tiny"
+      ],
+      "weights_file": "LuMamba_LeJEPA_reconstruction_128slices.safetensors",
+      "config_file": "config.json",
+      "params_m": 4.1,
+      "embed_dim": 384,
+      "paper": "https://github.com/pulp-bio/BioFoundation",
+      "doi": null
+    },
+    "lumamba-lejepa-recon-300": {
+      "name": "LuMamba (LeJEPA+Recon 300)",
+      "description": "LuMamba tiny variant pretrained on a balanced mixture of masked-patch reconstruction and the LeJEPA loss (300 projection slices). Topology-agnostic EEG foundation model (4.1M params, 384-dim).",
+      "repo": "PulpBio/LuMamba",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic",
+        "tiny"
+      ],
+      "weights_file": "LuMamba_LeJEPA_reconstruction_300slices.safetensors",
+      "config_file": "config.json",
+      "params_m": 4.1,
+      "embed_dim": 384,
+      "paper": "https://github.com/pulp-bio/BioFoundation",
+      "doi": null
+    },
+    "lumamba-lejepa-128": {
+      "name": "LuMamba (LeJEPA only)",
+      "description": "LuMamba tiny variant pretrained with the LeJEPA loss only (128 projection slices), encouraging an isotropic Gaussian embedding distribution. Topology-agnostic EEG foundation model (4.1M params, 384-dim).",
+      "repo": "PulpBio/LuMamba",
+      "tags": [
+        "eeg",
+        "embedding",
+        "topology-agnostic",
+        "tiny"
+      ],
+      "weights_file": "LuMamba_LeJEPAOnly_128slices.safetensors",
+      "config_file": "config.json",
+      "params_m": 4.1,
+      "embed_dim": 384,
+      "paper": "https://github.com/pulp-bio/BioFoundation",
+      "doi": null
+    },
     "neurorvq": {
       "name": "NeuroRVQ",
       "description": "NeuroRVQ biosignal tokenizer — residual vector quantization for EEG, ECG, and EMG. 4-branch encoder with patch-based FFT + RVQ codebooks. Modality-specific weights for tokenization and foundation model encoding. Burn 0.20 backend.",
@@ -504,6 +636,12 @@
       "description": "REVE large — ~400M params, 1250-dim embeddings"
     },
     {
+      "family": "brainjepa",
+      "filename": "brainjepa.safetensors",
+      "size_mb": 709,
+      "description": "Brain-JEPA ViT-Base — 450 ROI fMRI foundation model, 768-dim embeddings"
+    },
+    {
       "family": "cbramod",
       "filename": "model.safetensors",
       "size_mb": 16,
@@ -608,6 +746,50 @@
       "size_mb": 20,
       "description": "OpenTSLM — ~5M trainable params, 128-dim encoder + frozen Qwen3 LLM backbone",
       "recommended": true
+    },
+    {
+      "family": "eegdino-small",
+      "filename": "eeg_dino_small.safetensors",
+      "size_mb": 17,
+      "description": "EEG-DINO Small — 4.6M params, d_model=200, RLX inference",
+      "recommended": true
+    },
+    {
+      "family": "eegdino-medium",
+      "filename": "eeg_dino_medium.safetensors",
+      "size_mb": 129,
+      "description": "EEG-DINO Medium — 33M params, d_model=512"
+    },
+    {
+      "family": "eegdino-large",
+      "filename": "eeg_dino_large.safetensors",
+      "size_mb": 770,
+      "description": "EEG-DINO Large — 201M params, d_model=1024"
+    },
+    {
+      "family": "lumamba-recon",
+      "filename": "LuMamba_ReconstructionOnly.safetensors",
+      "size_mb": 16,
+      "description": "LuMamba (Reconstruction) — 4.1M params, 384-dim, bidirectional Mamba encoder",
+      "recommended": true
+    },
+    {
+      "family": "lumamba-lejepa-recon-128",
+      "filename": "LuMamba_LeJEPA_reconstruction_128slices.safetensors",
+      "size_mb": 16,
+      "description": "LuMamba (LeJEPA+Reconstruction, 128 slices) — 4.1M params, 384-dim"
+    },
+    {
+      "family": "lumamba-lejepa-recon-300",
+      "filename": "LuMamba_LeJEPA_reconstruction_300slices.safetensors",
+      "size_mb": 16,
+      "description": "LuMamba (LeJEPA+Reconstruction, 300 slices) — 4.1M params, 384-dim"
+    },
+    {
+      "family": "lumamba-lejepa-128",
+      "filename": "LuMamba_LeJEPAOnly_128slices.safetensors",
+      "size_mb": 16,
+      "description": "LuMamba (LeJEPA only, 128 slices) — 4.1M params, 384-dim"
     },
     {
       "family": "neurorvq",

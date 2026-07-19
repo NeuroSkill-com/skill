@@ -87,6 +87,11 @@ const llm: Record<string, string> = {
   "model.idleReembedProcessing": "Processing {day} ({done}/{total})",
   "model.idleReembedWaiting": "Starts after {remaining}s idle",
   "model.idleReembedIdle": "Waiting for idle period",
+  "model.idleReembedMemoryThrottled": "Deferred — system memory at {pct}% (limit {limit}%)",
+  "model.maxResidentMemory": "Max system memory",
+  "model.maxResidentMemoryDesc":
+    "Skip background embedding when system memory exceeds this share of total. 100% disables the guard.",
+  "model.maxResidentMemoryDisabled": "off",
 
   "search.eegCoverage": "EEG Coverage",
   "search.eegCoverageLabel": "{embedded}/{total} ({pct}%)",
@@ -95,6 +100,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Language Models",
   "llm.section.mmproj": "Multimodal Projectors",
   "llm.section.inference": "Inference Settings",
+  "llm.section.mtp": "Multi-Token Prediction",
   "llm.enabled": "Enable LLM server",
   "llm.enabledDesc":
     "Run an OpenAI-compatible inference server on the same port as the WebSocket API. Requires the llm Cargo feature and a downloaded model.",
@@ -292,6 +298,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqvDesc":
     "Offload K/Q/V tensor operations to the GPU even when not all transformer layers are GPU-offloaded. Recommended for hybrid CPU+GPU setups.",
 
+  "llm.mtp.draftTokens": "Draft tokens",
+  "llm.mtp.draftTokensDesc":
+    "Number of tokens to speculatively draft per decode step. Higher values increase throughput but require more memory. Requires an MTP-enabled model.",
+
   "chat.status.running": "Running",
   "chat.status.loading": "Loading model…",
   "chat.status.stopped": "Server stopped",
@@ -458,6 +468,47 @@ const llm: Record<string, string> = {
   "chat.prompts.cat.education": "Education",
   "chat.prompts.cat.focus": "Focus & Performance",
   "chat.prompts.cat.analysis": "Analysis",
+
+  "chat.tts.section": "Voice output",
+  "chat.tts.engineLabel": "Speech engine",
+  "chat.tts.engineDesc": "Text-to-speech backend the daemon uses to speak replies.",
+  "chat.tts.experimental": "Orpheus needs a one-time SNAC export. Kyutai-TTS is experimental (CPU, ~4 GB download).",
+  "chat.tts.kyutaiExperimental":
+    "Kyutai-TTS downloads kyutai/tts-1.6b-en_fr on first use (~4 GB). CPU eager path; GPU is opt-in via SKILL_TTS_DEVICE.",
+  "chat.tts.orpheusHint":
+    "Orpheus downloads the backbone automatically. Export SNAC once (scripts/export_snac_decoder.py or ORPHEUS_SNAC_PATH). Metal uses F16 when available; set SKILL_TTS_DEVICE=cpu if speech sounds garbled.",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano loads from a one-time exported bundle. It ships inside the app automatically; for a dev run, place it in ~/.skill/models/inflect-nano or set INFLECT_NANO_DIR.",
+  "chat.tts.modelLabel": "Voice model",
+  "chat.tts.modelDesc": "Model repository for the selected engine.",
+  "chat.tts.voiceLabel": "Voice",
+  "chat.tts.voiceDesc": "Preset speaker for the selected engine.",
+  "chat.tts.voiceDefault": "Default",
+  "chat.voice.section": "Voice input",
+  "chat.voice.enabled": "Show voice controls",
+  "chat.voice.enabledDesc": "Display the microphone and voice-mode picker in the chat window.",
+  "chat.voice.triggerLabel": "Default trigger",
+  "chat.voice.triggerDesc": "How the microphone is gated for a new voice session.",
+  "chat.voice.triggerContinuous": "Continuous",
+  "chat.voice.triggerPtt": "Push-to-talk",
+  "chat.voice.routingLabel": "Default routing",
+  "chat.voice.routingDesc": "What happens to a finalized transcript.",
+  "chat.voice.routingLoop": "Voice loop",
+  "chat.voice.routingTranscribe": "Transcribe only",
+  "chat.voice.engineLabel": "Recognition engine",
+  "chat.voice.engineDesc": "Speech-to-text backend used to transcribe your voice.",
+  "chat.voice.modelLabel": "Recognition model",
+  "chat.voice.modelDesc": "Whisper model repository. Larger models are more accurate but slower.",
+  "chat.voice.modelCustom": "Custom…",
+  "chat.voice.languageLabel": "Language",
+  "chat.voice.languageDesc": 'Speech-recognition language hint (e.g. "en").',
+  "chat.voice.start": "Start voice input",
+  "chat.voice.stop": "Stop voice input",
+  "chat.voice.pttHint": "Hold to talk",
+  "chat.voice.statusLoading": "Loading…",
+  "chat.voice.statusListening": "Listening",
+  "chat.voice.statusSpeaking": "Speaking",
+  "chat.voice.dismissError": "Dismiss voice error",
 
   "llm.hfSearch.title": "Search HuggingFace Models",
   "llm.hfSearch.placeholder": "Search GGUF models on HuggingFace…",

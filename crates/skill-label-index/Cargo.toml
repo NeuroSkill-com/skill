@@ -4,6 +4,13 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "Cross-modal label HNSW indices (text, context, EEG) — extracted workspace crate"
+build = "build.rs"
+
+[features]
+# HNSW is the runtime default and needs no BLAS. Enable `turboquant-index` for the
+# TurboQuant backend (OpenBLAS on Linux, Accelerate on macOS).
+default = []
+turboquant-index = ["dep:turbovec", "dep:accelerate-src"]
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
@@ -12,9 +19,13 @@ skill-data      = { path = "../skill-data" }
 fast-hnsw  = "1.0.1"
 rusqlite = { workspace = true }
 serde      = { version = "1", features = ["derive"] }
+turbovec   = { version = "0.4.1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accelerate-src = { version = "0.3", optional = true }
 
 [lints]
 workspace = true

@@ -43,6 +43,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "העברת KQV ל-GPU",
   "llm.inference.offloadKqvDesc": "העברת פעולות טנזור K/Q/V ל-GPU גם כאשר לא כל השכבות מועברות.",
 
+  "llm.mtp.draftTokens": "אסימוני טיוטה",
+  "llm.mtp.draftTokensDesc":
+    "מספר האסימונים שנוצרים בצורה ספקולטיבית בכל שלב פענוח. ערכים גבוהים יותר מגבירים את התפוקה אך דורשים יותר זיכרון. מחייב מודל עם תמיכה ב-MTP.",
+
   "llm.hfSearch.title": "חיפוש מודלים ב-HuggingFace",
   "llm.hfSearch.placeholder": "חיפוש מודלי GGUF ב-HuggingFace…",
   "llm.hfSearch.searchBtn": "חיפוש",
@@ -138,6 +142,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "מודלי שפה",
   "llm.section.mmproj": "מקרנים מולטימודליים",
   "llm.section.inference": "הגדרות אינפרנס",
+  "llm.section.mtp": "חיזוי רב-אסימון",
   "llm.enabled": "הפעל שרת LLM",
   "llm.enabledDesc":
     "הפעל שרת אינפרנס תואם OpenAI על אותו פורט של WebSocket API. דורש את פיצ׳ר llm ב-Cargo ומודל שהורד.",
@@ -467,6 +472,51 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "ממתין לתקופת חוסר פעילות",
   "search.eegCoverage": "כיסוי EEG",
   "search.eegCoverageLabel": "{embedded} מתוך {total} ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "נדחה — שימוש בזיכרון המערכת ב-{pct}% (מגבלה {limit}%)",
+  "model.maxResidentMemory": "זיכרון מערכת מרבי",
+  "model.maxResidentMemoryDesc": "דלג על הטמעה ברקע כאשר זיכרון המערכת חורג מאחוז זה. 100% מבטל את ההגנה.",
+  "model.maxResidentMemoryDisabled": "כבוי",
+  "chat.tts.section": "פלט קולי",
+  "chat.tts.engineLabel": "מנוע דיבור",
+  "chat.tts.engineDesc": "מנוע טקסט-לדיבור שבו ה-daemon משתמש כדי להקריא תשובות.",
+  "chat.tts.experimental":
+    "עדיין לא מוכן לשימוש: Orpheus דורש מפענח SNAC שיוצא מראש; Kyutai-TTS עדיין אינו פעיל ב-rlx 0.2.9.",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS עדיין אינו פעיל ב-rlx 0.2.9 (generate() במקור הוא stub).",
+  "chat.tts.orpheusHint":
+    "Orpheus מוריד את ה-backbone אוטומטית. ייצאו את מפענח SNAC פעם אחת עם scripts/export_snac_decoder.py (או הגדירו ORPHEUS_SNAC_PATH).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano נטען מחבילה שיוצאה פעם אחת. הוא כלול באפליקציה אוטומטית; להרצת פיתוח הניחו אותו ב-~/.skill/models/inflect-nano או הגדירו INFLECT_NANO_DIR.",
+  "chat.tts.modelLabel": "מודל קול",
+  "chat.tts.modelDesc": "מאגר המודל עבור המנוע שנבחר.",
+  "chat.tts.voiceLabel": "קול",
+  "chat.tts.voiceDesc": "דובר מוגדר מראש עבור המנוע שנבחר.",
+  "chat.tts.voiceDefault": "ברירת מחדל",
+  "chat.voice.section": "קלט קולי",
+  "chat.voice.enabled": "הצג פקדי קול",
+  "chat.voice.enabledDesc": "הצג את המיקרופון ובורר מצב הקול בחלון הצ'אט.",
+  "chat.voice.triggerLabel": "מצב הפעלה ברירת מחדל",
+  "chat.voice.triggerDesc": "כיצד המיקרופון נשלט עבור הפעלת קול חדשה.",
+  "chat.voice.triggerContinuous": "רציף",
+  "chat.voice.triggerPtt": "לחץ כדי לדבר",
+  "chat.voice.routingLabel": "ניתוב ברירת מחדל",
+  "chat.voice.routingDesc": "מה קורה עם תמלול שהושלם.",
+  "chat.voice.routingLoop": "לולאת קול",
+  "chat.voice.routingTranscribe": "תמלול בלבד",
+  "chat.voice.engineLabel": "מנוע זיהוי",
+  "chat.voice.engineDesc": "מנוע המרת דיבור לטקסט המשמש לתמלול הקול שלך.",
+  "chat.voice.modelLabel": "מודל זיהוי",
+  "chat.voice.modelDesc": "מאגר מודל Whisper. מודלים גדולים יותר מדויקים יותר אך איטיים יותר.",
+  "chat.voice.modelCustom": "מותאם אישית…",
+  "chat.voice.languageLabel": "שפה",
+  "chat.voice.languageDesc": 'רמז שפה לזיהוי דיבור (לדוגמה "en").',
+  "chat.voice.start": "התחל קלט קולי",
+  "chat.voice.stop": "עצור קלט קולי",
+  "chat.voice.pttHint": "החזק כדי לדבר",
+  "chat.voice.statusLoading": "טוען…",
+  "chat.voice.statusListening": "מקשיב",
+  "chat.voice.statusSpeaking": "מדבר",
+  "chat.voice.dismissError": "התעלם משגיאת קול",
 };
 
 export default llm;

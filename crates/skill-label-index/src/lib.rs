@@ -9,10 +9,10 @@
 //! Two independent indices are maintained:
 //!
 //! * **Text index** (`label_text_index.hnsw`): one node per label that has a
-//!   `text_embedding` in `labels.sqlite`.  Vectors live in the fastembed
-//!   embedding space (e.g. 384-dim for bge-small-en-v1.5).
+//!   `text_embedding` in `labels.sqlite`.  Vectors live in the rlx-embed
+//!   embedding space (e.g. 768-dim for nomic-embed-text-v1.5).
 //!
-//!   Query with: a fastembed vector from a free-text search string.
+//!   Query with: an rlx-embed vector from a free-text search string.
 //!
 //! * **EEG index** (`label_eeg_index.hnsw`): one node per label whose EEG
 //!   time window (`eeg_start … eeg_end`) overlaps with at least one recorded
@@ -24,6 +24,9 @@
 //! Both indices store `label_id: i64` as the HNSW payload so results can be
 //! joined back to `labels.sqlite` for full hydration.
 
+#[cfg(all(target_os = "macos", feature = "turboquant-index"))]
+extern crate accelerate_src;
+
 use std::{path::Path, sync::Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex, Builder};
@@ -32,7 +35,8 @@ use serde::Serialize;
 
 use skill_commands::NeighborMetrics;
 use skill_constants::{
-    HNSW_EF_CONSTRUCTION, HNSW_M, LABELS_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE, LABEL_TEXT_INDEX_FILE,
+    HNSW_EF_CONSTRUCTION, HNSW_M, LABELS_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_CONTEXT_TURBOVEC_INDEX_FILE,
+    LABEL_EEG_INDEX_FILE, LABEL_EEG_TURBOVEC_INDEX_FILE, LABEL_TEXT_INDEX_FILE, LABEL_TEXT_TURBOVEC_INDEX_FILE,
     SQLITE_FILE,
 };
 use skill_data::util::MutexExt;
@@ -41,7 +45,31 @@ use skill_data::util::MutexExt;
 const TEXT_INDEX_FILE: &str = LABEL_TEXT_INDEX_FILE;
 const CONTEXT_INDEX_FILE: &str = LABEL_CONTEXT_INDEX_FILE;
 const EEG_INDEX_FILE: &str = LABEL_EEG_INDEX_FILE;
+const TEXT_TURBOVEC_INDEX_FILE: &str = LABEL_TEXT_TURBOVEC_INDEX_FILE;
+const CONTEXT_TURBOVEC_INDEX_FILE: &str = LABEL_CONTEXT_TURBOVEC_INDEX_FILE;
+const EEG_TURBOVEC_INDEX_FILE: &str = LABEL_EEG_TURBOVEC_INDEX_FILE;
 const HNSW_EF: usize = HNSW_EF_CONSTRUCTION;
+#[cfg(feature = "turboquant-index")]
+const TURBOVEC_BIT_WIDTH: usize = 4;
+
+/// Whether to build/load/update TurboVec indices.
+///
+/// HNSW-only users never touch OpenBLAS. TurboVec is maintained when it is the
+/// preferred search backend, or when on-disk TurboVec files already exist (e.g.
+/// after switching back from a benchmark or a prior TurboQuant session).
+#[cfg(feature = "turboquant-index")]
+fn maintain_turbovec_indices(state: &LabelIndexState, skill_dir: &Path) -> bool {
+    if state.preferred_backend() == LabelIndexBackend::TurboVec {
+        return true;
+    }
+    [
+        TEXT_TURBOVEC_INDEX_FILE,
+        CONTEXT_TURBOVEC_INDEX_FILE,
+        EEG_TURBOVEC_INDEX_FILE,
+    ]
+    .iter()
+    .any(|name| skill_dir.join(name).exists())
+}
 
 fn fresh_index() -> LabeledIndex<Cosine, i64> {
     Builder::new().m(HNSW_M).ef_construction(HNSW_EF).build_labeled(Cosine)
@@ -129,12 +157,125 @@ fn safe_search<'a>(
     idx.search(query, k, ef.max(k))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelIndexBackend {
+    Hnsw,
+    TurboVec,
+}
+
+impl LabelIndexBackend {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "hnsw" | "fast-hnsw" | "fast_hnsw" => Some(Self::Hnsw),
+            "turboquant" | "turbo-quant" | "turbo_quant" | "turbovec" | "turbo_vec" | "tv" => Some(Self::TurboVec),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hnsw => "hnsw",
+            Self::TurboVec => "turboquant",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct BackendCounts {
+    pub text_nodes: usize,
+    pub context_nodes: usize,
+    pub eeg_nodes: usize,
+}
+
+/// Per-component on-disk size of a single index backend.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct BackendFootprint {
+    pub text_bytes: u64,
+    pub context_bytes: u64,
+    pub eeg_bytes: u64,
+}
+
+impl BackendFootprint {
+    pub fn total(&self) -> u64 {
+        self.text_bytes
+            .saturating_add(self.context_bytes)
+            .saturating_add(self.eeg_bytes)
+    }
+}
+
+/// Disk footprint of every label-index file under `skill_dir`.
+///
+/// Sizes are bytes on disk for the persisted index files; this is also the
+/// approximate mmap footprint for the TurboVec backend (which loads via mmap)
+/// and an upper bound on the resident heap for HNSW (which fully deserializes).
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct LabelIndexMemory {
+    pub hnsw: BackendFootprint,
+    pub turbovec: BackendFootprint,
+    pub total_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LabelSearchBenchmark {
+    pub backend: &'static str,
+    pub available: bool,
+    pub elapsed_us: u128,
+    pub results: Vec<LabelNeighbor>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LabelSearchBenchmarkComparison {
+    pub top_match: bool,
+    pub overlap_count: usize,
+    pub overlap_ratio: f32,
+    pub avg_distance_delta: f32,
+    pub max_distance_delta: f32,
+    pub close: bool,
+    pub min_overlap_ratio: f32,
+    pub max_allowed_distance_delta: f32,
+}
+
+#[cfg(feature = "turboquant-index")]
+type TurboIndex = turbovec::IdMapIndex;
+
+#[cfg(feature = "turboquant-index")]
+fn turbovec_supported_dim(dim: usize) -> bool {
+    dim >= 8 && dim % 8 == 0
+}
+
+#[cfg(feature = "turboquant-index")]
+fn load_turbovec(path: &Path, label: &str) -> Option<TurboIndex> {
+    if !path.exists() {
+        return None;
+    }
+    match TurboIndex::load(path) {
+        Ok(idx) => {
+            idx.prepare();
+            eprintln!("[label_idx] loaded {label} TurboVec from {}", path.display());
+            Some(idx)
+        }
+        Err(e) => {
+            eprintln!("[label_idx] {label} TurboVec load failed ({e}), using HNSW fallback");
+            None
+        }
+    }
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 pub struct LabelIndexState {
     pub text: Mutex<Option<LabeledIndex<Cosine, i64>>>,
     pub context: Mutex<Option<LabeledIndex<Cosine, i64>>>,
     pub eeg: Mutex<Option<LabeledIndex<Cosine, i64>>>,
+    preferred_backend: Mutex<LabelIndexBackend>,
+    #[cfg(feature = "turboquant-index")]
+    text_turbovec: Mutex<Option<TurboIndex>>,
+    #[cfg(feature = "turboquant-index")]
+    context_turbovec: Mutex<Option<TurboIndex>>,
+    #[cfg(feature = "turboquant-index")]
+    eeg_turbovec: Mutex<Option<TurboIndex>>,
+    turbovec_counts: Mutex<BackendCounts>,
 }
 
 impl Default for LabelIndexState {
@@ -143,6 +284,18 @@ impl Default for LabelIndexState {
             text: Mutex::new(None),
             context: Mutex::new(None),
             eeg: Mutex::new(None),
+            preferred_backend: Mutex::new(LabelIndexBackend::Hnsw),
+            #[cfg(feature = "turboquant-index")]
+            text_turbovec: Mutex::new(None),
+            #[cfg(feature = "turboquant-index")]
+            context_turbovec: Mutex::new(None),
+            #[cfg(feature = "turboquant-index")]
+            eeg_turbovec: Mutex::new(None),
+            turbovec_counts: Mutex::new(BackendCounts {
+                text_nodes: 0,
+                context_nodes: 0,
+                eeg_nodes: 0,
+            }),
         }
     }
 }
@@ -150,6 +303,48 @@ impl Default for LabelIndexState {
 impl LabelIndexState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_preferred_backend(&self, backend: LabelIndexBackend) {
+        *self.preferred_backend.lock_or_recover() = backend;
+    }
+
+    pub fn preferred_backend(&self) -> LabelIndexBackend {
+        *self.preferred_backend.lock_or_recover()
+    }
+
+    pub fn hnsw_counts(&self) -> BackendCounts {
+        BackendCounts {
+            text_nodes: self.text.lock_or_recover().as_ref().map_or(0, |i| i.len()),
+            context_nodes: self.context.lock_or_recover().as_ref().map_or(0, |i| i.len()),
+            eeg_nodes: self.eeg.lock_or_recover().as_ref().map_or(0, |i| i.len()),
+        }
+    }
+
+    pub fn turbovec_counts(&self) -> BackendCounts {
+        self.turbovec_counts.lock_or_recover().clone()
+    }
+
+    /// Inspect on-disk footprint of every label-index file under `skill_dir`.
+    /// Cheap (three stat calls per backend); safe to call from request paths.
+    pub fn memory_footprint(&self, skill_dir: &Path) -> LabelIndexMemory {
+        let file_size = |p: &Path| -> u64 { std::fs::metadata(p).map(|m| m.len()).unwrap_or(0) };
+        let hnsw = BackendFootprint {
+            text_bytes: file_size(&skill_dir.join(TEXT_INDEX_FILE)),
+            context_bytes: file_size(&skill_dir.join(CONTEXT_INDEX_FILE)),
+            eeg_bytes: file_size(&skill_dir.join(EEG_INDEX_FILE)),
+        };
+        let turbovec = BackendFootprint {
+            text_bytes: file_size(&skill_dir.join(TEXT_TURBOVEC_INDEX_FILE)),
+            context_bytes: file_size(&skill_dir.join(CONTEXT_TURBOVEC_INDEX_FILE)),
+            eeg_bytes: file_size(&skill_dir.join(EEG_TURBOVEC_INDEX_FILE)),
+        };
+        let total_bytes = hnsw.total().saturating_add(turbovec.total());
+        LabelIndexMemory {
+            hnsw,
+            turbovec,
+            total_bytes,
+        }
     }
 
     /// Load (or create) all three indices from `skill_dir`.  Called on startup.
@@ -160,6 +355,15 @@ impl LabelIndexState {
         *self.text.lock_or_recover() = Some(load_or_fresh(&text_path));
         *self.context.lock_or_recover() = Some(load_or_fresh(&context_path));
         *self.eeg.lock_or_recover() = Some(load_or_fresh(&eeg_path));
+
+        #[cfg(feature = "turboquant-index")]
+        if maintain_turbovec_indices(self, skill_dir) {
+            *self.text_turbovec.lock_or_recover() = load_turbovec(&skill_dir.join(TEXT_TURBOVEC_INDEX_FILE), "text");
+            *self.context_turbovec.lock_or_recover() =
+                load_turbovec(&skill_dir.join(CONTEXT_TURBOVEC_INDEX_FILE), "context");
+            *self.eeg_turbovec.lock_or_recover() = load_turbovec(&skill_dir.join(EEG_TURBOVEC_INDEX_FILE), "eeg");
+            refresh_turbovec_counts_from_db(skill_dir, self);
+        }
     }
 }
 
@@ -174,7 +378,7 @@ pub struct LabelNeighbor {
     pub eeg_start: u64,
     pub eeg_end: u64,
     pub created_at: u64,
-    /// fastembed model code that produced `text_embedding` / `context_embedding`.
+    /// Embedding model code that produced `text_embedding` / `context_embedding`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embedding_model: Option<String>,
     /// Cosine distance in the queried space (0 = identical, 2 = opposite).
@@ -503,6 +707,178 @@ fn hydrate(row: LabelRow, distance: f32, skill_dir: &Path) -> LabelNeighbor {
     }
 }
 
+fn hydrate_hits(hits: Vec<(i64, f32)>, labels_db: &Path, skill_dir: &Path) -> Vec<LabelNeighbor> {
+    hits.into_iter()
+        .filter_map(|(label_id, distance)| {
+            let row = fetch_label_by_id(labels_db, label_id)?;
+            Some(hydrate(row, distance, skill_dir))
+        })
+        .collect()
+}
+
+fn hnsw_search_hits(idx: &LabeledIndex<Cosine, i64>, query: &[f32], k: usize, ef: usize) -> Vec<(i64, f32)> {
+    safe_search(idx, query, k, ef)
+        .into_iter()
+        .map(|hit| (*hit.payload, hit.distance))
+        .collect()
+}
+
+#[cfg(feature = "turboquant-index")]
+fn turbovec_score_to_distance(score: f32) -> f32 {
+    (1.0 - score).clamp(0.0, 2.0)
+}
+
+#[cfg(feature = "turboquant-index")]
+fn turbovec_search_hits(idx: &TurboIndex, query: &[f32], k: usize) -> Option<Vec<(i64, f32)>> {
+    if query.is_empty() || k == 0 {
+        return Some(vec![]);
+    }
+    if idx.dim_opt()? != query.len() {
+        eprintln!(
+            "[label_idx] TurboVec search skipped: query dim {} != index dim {}",
+            query.len(),
+            idx.dim()
+        );
+        return Some(vec![]);
+    }
+    let (scores, ids) = idx.search(query, k);
+    Some(
+        ids.into_iter()
+            .zip(scores)
+            .map(|(id, score)| (id as i64, turbovec_score_to_distance(score)))
+            .collect(),
+    )
+}
+
+#[cfg(feature = "turboquant-index")]
+fn build_turbovec_from_embeddings(
+    rows: impl Iterator<Item = (i64, Vec<f32>)>,
+    expected_dim: Option<usize>,
+    tag: &str,
+) -> (Option<TurboIndex>, usize) {
+    let Some(dim) = expected_dim else { return (None, 0) };
+    if !turbovec_supported_dim(dim) {
+        eprintln!("[label_idx] {tag} TurboVec disabled: dim {dim} must be >= 8 and a multiple of 8");
+        return (None, 0);
+    }
+
+    let mut flat = Vec::new();
+    let mut ids = Vec::new();
+    for (label_id, emb) in rows {
+        if label_id < 0 || emb.len() != dim {
+            continue;
+        }
+        flat.extend_from_slice(&emb);
+        ids.push(label_id as u64);
+    }
+    if ids.is_empty() {
+        return (None, 0);
+    }
+
+    let mut idx = TurboIndex::new(dim, TURBOVEC_BIT_WIDTH);
+    idx.add_with_ids(&flat, &ids);
+    idx.prepare();
+    let len = ids.len();
+    (Some(idx), len)
+}
+
+#[cfg(feature = "turboquant-index")]
+fn save_turbovec(idx: &TurboIndex, path: &Path, tag: &str) {
+    if let Err(e) = idx.write(path) {
+        eprintln!("[label_idx] {tag} TurboVec save: {e}");
+    }
+}
+
+#[cfg(feature = "turboquant-index")]
+fn refresh_turbovec_counts_from_db(skill_dir: &Path, state: &LabelIndexState) {
+    let labels_db = skill_dir.join(LABELS_FILE);
+    if !labels_db.exists() {
+        *state.turbovec_counts.lock_or_recover() = BackendCounts {
+            text_nodes: 0,
+            context_nodes: 0,
+            eeg_nodes: 0,
+        };
+        return;
+    }
+
+    let rows = read_label_rows(&labels_db);
+    let text_dim = state
+        .text_turbovec
+        .lock_or_recover()
+        .as_ref()
+        .and_then(|idx| idx.dim_opt());
+    let context_dim = state
+        .context_turbovec
+        .lock_or_recover()
+        .as_ref()
+        .and_then(|idx| idx.dim_opt());
+    let eeg_dim = state
+        .eeg_turbovec
+        .lock_or_recover()
+        .as_ref()
+        .and_then(|idx| idx.dim_opt());
+
+    let text_nodes = text_dim.map_or(0, |dim| {
+        rows.iter()
+            .filter(|r| r.id >= 0 && r.text_embedding.as_ref().is_some_and(|e| e.len() == dim))
+            .count()
+    });
+    let context_nodes = context_dim.map_or(0, |dim| {
+        rows.iter()
+            .filter(|r| r.id >= 0 && r.context_embedding.as_ref().is_some_and(|e| e.len() == dim))
+            .count()
+    });
+    let eeg_nodes = eeg_dim.map_or(0, |_| 0);
+    *state.turbovec_counts.lock_or_recover() = BackendCounts {
+        text_nodes,
+        context_nodes,
+        eeg_nodes,
+    };
+}
+
+#[cfg(feature = "turboquant-index")]
+fn try_insert_turbovec(
+    slot: &Mutex<Option<TurboIndex>>,
+    len_slot: &mut usize,
+    emb: &[f32],
+    label_id: i64,
+    save_path: &Path,
+    tag: &str,
+) -> bool {
+    if emb.is_empty() {
+        return true;
+    }
+    if label_id < 0 || !turbovec_supported_dim(emb.len()) {
+        return false;
+    }
+
+    let mut guard = slot.lock_or_recover();
+    if guard.is_none() {
+        *guard = Some(TurboIndex::new(emb.len(), TURBOVEC_BIT_WIDTH));
+    }
+
+    let Some(idx) = guard.as_mut() else { return false };
+    if let Some(dim) = idx.dim_opt() {
+        if dim != emb.len() {
+            eprintln!(
+                "[label_idx] {tag} TurboVec dim mismatch for label {label_id}: {} != index {dim}",
+                emb.len()
+            );
+            return false;
+        }
+    }
+    let id = label_id as u64;
+    if idx.contains(id) {
+        idx.remove(id);
+    } else {
+        *len_slot += 1;
+    }
+    idx.add_with_ids(emb, &[id]);
+    idx.prepare();
+    save_turbovec(idx, save_path, tag);
+    true
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// (Re-)build both HNSW indices from the current state of `labels.sqlite`.
@@ -536,6 +912,33 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
     let mut text_dim: Option<usize> = dominant_text_dim;
     let mut ctx_dim: Option<usize> = dominant_ctx_dim;
     let mut eeg_dim: Option<usize> = None;
+    #[cfg(feature = "turboquant-index")]
+    let mut eeg_turbovec_rows: Vec<(i64, Vec<f32>)> = Vec::new();
+
+    #[cfg(feature = "turboquant-index")]
+    let build_turbo = maintain_turbovec_indices(state, skill_dir);
+    #[cfg(feature = "turboquant-index")]
+    let (text_turbovec, text_turbovec_nodes) = if build_turbo {
+        build_turbovec_from_embeddings(
+            rows.iter()
+                .filter_map(|r| r.text_embedding.as_ref().map(|emb| (r.id, emb.clone()))),
+            dominant_text_dim,
+            "text",
+        )
+    } else {
+        (None, 0)
+    };
+    #[cfg(feature = "turboquant-index")]
+    let (context_turbovec, context_turbovec_nodes) = if build_turbo {
+        build_turbovec_from_embeddings(
+            rows.iter()
+                .filter_map(|r| r.context_embedding.as_ref().map(|emb| (r.id, emb.clone()))),
+            dominant_ctx_dim,
+            "context",
+        )
+    } else {
+        (None, 0)
+    };
 
     for row in rows {
         // ── text HNSW ─────────────────────────────────────────────────────────
@@ -550,6 +953,10 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
 
         // ── EEG HNSW ──────────────────────────────────────────────────────────
         if let Some(mean_emb) = mean_eeg_for_window(skill_dir, row.eeg_start, row.eeg_end) {
+            #[cfg(feature = "turboquant-index")]
+            if build_turbo {
+                eeg_turbovec_rows.push((row.id, mean_emb.clone()));
+            }
             if !safe_insert(&mut eeg_idx, mean_emb, row.id, &mut eeg_dim) {
                 eeg_skipped += 1;
             }
@@ -582,10 +989,40 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
         eprintln!("[label_idx] eeg save: {e}");
     }
 
+    #[cfg(feature = "turboquant-index")]
+    let (eeg_turbovec, eeg_turbovec_nodes) = if build_turbo {
+        build_turbovec_from_embeddings(eeg_turbovec_rows.into_iter(), eeg_dim, "eeg")
+    } else {
+        (None, 0)
+    };
+    #[cfg(feature = "turboquant-index")]
+    if build_turbo {
+        if let Some(ref idx) = text_turbovec {
+            save_turbovec(idx, &skill_dir.join(TEXT_TURBOVEC_INDEX_FILE), "text");
+        }
+        if let Some(ref idx) = context_turbovec {
+            save_turbovec(idx, &skill_dir.join(CONTEXT_TURBOVEC_INDEX_FILE), "context");
+        }
+        if let Some(ref idx) = eeg_turbovec {
+            save_turbovec(idx, &skill_dir.join(EEG_TURBOVEC_INDEX_FILE), "eeg");
+        }
+    }
+
     // Update in-memory state.
     *state.text.lock_or_recover() = Some(text_idx);
     *state.context.lock_or_recover() = Some(context_idx);
     *state.eeg.lock_or_recover() = Some(eeg_idx);
+    #[cfg(feature = "turboquant-index")]
+    {
+        *state.text_turbovec.lock_or_recover() = text_turbovec;
+        *state.context_turbovec.lock_or_recover() = context_turbovec;
+        *state.eeg_turbovec.lock_or_recover() = eeg_turbovec;
+        *state.turbovec_counts.lock_or_recover() = BackendCounts {
+            text_nodes: text_turbovec_nodes,
+            context_nodes: context_turbovec_nodes,
+            eeg_nodes: eeg_turbovec_nodes,
+        };
+    }
 
     eprintln!(
         "[label_idx] rebuilt: {text_nodes} text, {context_nodes} context, {eeg_nodes} eeg ({eeg_skipped} skipped)"
@@ -657,6 +1094,20 @@ pub fn insert_label(
                 needs_rebuild = true;
             }
         }
+        #[cfg(feature = "turboquant-index")]
+        if maintain_turbovec_indices(state, skill_dir) && turbovec_supported_dim(text_embedding.len()) {
+            let mut counts = state.turbovec_counts.lock_or_recover();
+            if !try_insert_turbovec(
+                &state.text_turbovec,
+                &mut counts.text_nodes,
+                text_embedding,
+                label_id,
+                &skill_dir.join(TEXT_TURBOVEC_INDEX_FILE),
+                "text",
+            ) {
+                needs_rebuild = true;
+            }
+        }
     }
 
     // ── Context HNSW ──────────────────────────────────────────────────────────
@@ -673,6 +1124,20 @@ pub fn insert_label(
                 needs_rebuild = true;
             }
         }
+        #[cfg(feature = "turboquant-index")]
+        if maintain_turbovec_indices(state, skill_dir) && turbovec_supported_dim(context_embedding.len()) {
+            let mut counts = state.turbovec_counts.lock_or_recover();
+            if !try_insert_turbovec(
+                &state.context_turbovec,
+                &mut counts.context_nodes,
+                context_embedding,
+                label_id,
+                &skill_dir.join(CONTEXT_TURBOVEC_INDEX_FILE),
+                "context",
+            ) {
+                needs_rebuild = true;
+            }
+        }
     }
 
     // ── EEG HNSW ──────────────────────────────────────────────────────────────
@@ -680,6 +1145,20 @@ pub fn insert_label(
         let mut guard = state.eeg.lock_or_recover();
         if let Some(ref mut idx) = *guard {
             if !try_insert(idx, &mean_emb, label_id, &skill_dir.join(EEG_INDEX_FILE), "eeg") {
+                needs_rebuild = true;
+            }
+        }
+        #[cfg(feature = "turboquant-index")]
+        if maintain_turbovec_indices(state, skill_dir) && turbovec_supported_dim(mean_emb.len()) {
+            let mut counts = state.turbovec_counts.lock_or_recover();
+            if !try_insert_turbovec(
+                &state.eeg_turbovec,
+                &mut counts.eeg_nodes,
+                &mean_emb,
+                label_id,
+                &skill_dir.join(EEG_TURBOVEC_INDEX_FILE),
+                "eeg",
+            ) {
                 needs_rebuild = true;
             }
         }
@@ -705,17 +1184,24 @@ pub fn search_by_text_vec(
     skill_dir: &Path,
     state: &LabelIndexState,
 ) -> Vec<LabelNeighbor> {
-    let labels_db = skill_dir.join(LABELS_FILE);
-    let guard = state.text.lock_or_recover();
-    let Some(ref idx) = *guard else { return vec![] };
-
-    safe_search(idx, query, k, ef)
-        .into_iter()
-        .filter_map(|hit| {
-            let row = fetch_label_by_id(&labels_db, *hit.payload)?;
-            Some(hydrate(row, hit.distance, skill_dir))
-        })
-        .collect()
+    match state.preferred_backend() {
+        LabelIndexBackend::TurboVec => {
+            #[cfg(feature = "turboquant-index")]
+            {
+                let labels_db = skill_dir.join(LABELS_FILE);
+                if let Some(hits) = state
+                    .text_turbovec
+                    .lock_or_recover()
+                    .as_ref()
+                    .and_then(|idx| turbovec_search_hits(idx, query, k))
+                {
+                    return hydrate_hits(hits, &labels_db, skill_dir);
+                }
+            }
+            search_text_hnsw(query, k, ef, skill_dir, state)
+        }
+        LabelIndexBackend::Hnsw => search_text_hnsw(query, k, ef, skill_dir, state),
+    }
 }
 
 /// Search the **context** HNSW with a pre-computed text embedding vector.
@@ -727,17 +1213,24 @@ pub fn search_by_context_vec(
     skill_dir: &Path,
     state: &LabelIndexState,
 ) -> Vec<LabelNeighbor> {
-    let labels_db = skill_dir.join(LABELS_FILE);
-    let guard = state.context.lock_or_recover();
-    let Some(ref idx) = *guard else { return vec![] };
-
-    safe_search(idx, query, k, ef)
-        .into_iter()
-        .filter_map(|hit| {
-            let row = fetch_label_by_id(&labels_db, *hit.payload)?;
-            Some(hydrate(row, hit.distance, skill_dir))
-        })
-        .collect()
+    match state.preferred_backend() {
+        LabelIndexBackend::TurboVec => {
+            #[cfg(feature = "turboquant-index")]
+            {
+                let labels_db = skill_dir.join(LABELS_FILE);
+                if let Some(hits) = state
+                    .context_turbovec
+                    .lock_or_recover()
+                    .as_ref()
+                    .and_then(|idx| turbovec_search_hits(idx, query, k))
+                {
+                    return hydrate_hits(hits, &labels_db, skill_dir);
+                }
+            }
+            search_context_hnsw(query, k, ef, skill_dir, state)
+        }
+        LabelIndexBackend::Hnsw => search_context_hnsw(query, k, ef, skill_dir, state),
+    }
 }
 
 /// Search the **EEG** HNSW with an EEG embedding vector.
@@ -749,17 +1242,219 @@ pub fn search_by_eeg_vec(
     skill_dir: &Path,
     state: &LabelIndexState,
 ) -> Vec<LabelNeighbor> {
+    match state.preferred_backend() {
+        LabelIndexBackend::TurboVec => {
+            #[cfg(feature = "turboquant-index")]
+            {
+                let labels_db = skill_dir.join(LABELS_FILE);
+                if let Some(hits) = state
+                    .eeg_turbovec
+                    .lock_or_recover()
+                    .as_ref()
+                    .and_then(|idx| turbovec_search_hits(idx, query, k))
+                {
+                    return hydrate_hits(hits, &labels_db, skill_dir);
+                }
+            }
+            search_eeg_hnsw(query, k, ef, skill_dir, state)
+        }
+        LabelIndexBackend::Hnsw => search_eeg_hnsw(query, k, ef, skill_dir, state),
+    }
+}
+
+fn search_text_hnsw(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+) -> Vec<LabelNeighbor> {
+    let labels_db = skill_dir.join(LABELS_FILE);
+    let guard = state.text.lock_or_recover();
+    let Some(ref idx) = *guard else { return vec![] };
+    hydrate_hits(hnsw_search_hits(idx, query, k, ef), &labels_db, skill_dir)
+}
+
+fn search_context_hnsw(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+) -> Vec<LabelNeighbor> {
+    let labels_db = skill_dir.join(LABELS_FILE);
+    let guard = state.context.lock_or_recover();
+    let Some(ref idx) = *guard else { return vec![] };
+    hydrate_hits(hnsw_search_hits(idx, query, k, ef), &labels_db, skill_dir)
+}
+
+fn search_eeg_hnsw(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+) -> Vec<LabelNeighbor> {
     let labels_db = skill_dir.join(LABELS_FILE);
     let guard = state.eeg.lock_or_recover();
     let Some(ref idx) = *guard else { return vec![] };
+    hydrate_hits(hnsw_search_hits(idx, query, k, ef), &labels_db, skill_dir)
+}
 
-    safe_search(idx, query, k, ef)
-        .into_iter()
-        .filter_map(|hit| {
-            let row = fetch_label_by_id(&labels_db, *hit.payload)?;
-            Some(hydrate(row, hit.distance, skill_dir))
-        })
-        .collect()
+pub fn benchmark_text_vec(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+) -> Vec<LabelSearchBenchmark> {
+    benchmark_vec(query, k, ef, skill_dir, state, "text")
+}
+
+pub fn benchmark_context_vec(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+) -> Vec<LabelSearchBenchmark> {
+    benchmark_vec(query, k, ef, skill_dir, state, "context")
+}
+
+pub fn benchmark_eeg_vec(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+) -> Vec<LabelSearchBenchmark> {
+    benchmark_vec(query, k, ef, skill_dir, state, "eeg")
+}
+
+pub fn compare_benchmarks(benchmarks: &[LabelSearchBenchmark]) -> Option<LabelSearchBenchmarkComparison> {
+    const MIN_OVERLAP_RATIO: f32 = 0.60;
+    const MAX_DISTANCE_DELTA: f32 = 0.05;
+
+    let hnsw = benchmarks.iter().find(|b| b.backend == "hnsw" && b.available)?;
+    let turbo = benchmarks.iter().find(|b| b.backend == "turboquant" && b.available)?;
+    if hnsw.results.is_empty() || turbo.results.is_empty() {
+        return Some(LabelSearchBenchmarkComparison {
+            top_match: false,
+            overlap_count: 0,
+            overlap_ratio: 0.0,
+            avg_distance_delta: 0.0,
+            max_distance_delta: 0.0,
+            close: false,
+            min_overlap_ratio: MIN_OVERLAP_RATIO,
+            max_allowed_distance_delta: MAX_DISTANCE_DELTA,
+        });
+    }
+
+    let top_match = hnsw.results[0].label_id == turbo.results[0].label_id;
+    let hnsw_by_id: std::collections::HashMap<i64, f32> =
+        hnsw.results.iter().map(|r| (r.label_id, r.distance)).collect();
+
+    let mut overlap_count = 0usize;
+    let mut delta_sum = 0.0f32;
+    let mut max_distance_delta = 0.0f32;
+    for result in &turbo.results {
+        let Some(hnsw_distance) = hnsw_by_id.get(&result.label_id) else {
+            continue;
+        };
+        overlap_count += 1;
+        let delta = (hnsw_distance - result.distance).abs();
+        delta_sum += delta;
+        max_distance_delta = max_distance_delta.max(delta);
+    }
+
+    let denom = hnsw.results.len().max(turbo.results.len()).max(1) as f32;
+    let overlap_ratio = overlap_count as f32 / denom;
+    let avg_distance_delta = if overlap_count == 0 {
+        0.0
+    } else {
+        delta_sum / overlap_count as f32
+    };
+    let close = top_match && overlap_ratio >= MIN_OVERLAP_RATIO && max_distance_delta <= MAX_DISTANCE_DELTA;
+
+    Some(LabelSearchBenchmarkComparison {
+        top_match,
+        overlap_count,
+        overlap_ratio,
+        avg_distance_delta,
+        max_distance_delta,
+        close,
+        min_overlap_ratio: MIN_OVERLAP_RATIO,
+        max_allowed_distance_delta: MAX_DISTANCE_DELTA,
+    })
+}
+
+fn benchmark_vec(
+    query: &[f32],
+    k: usize,
+    ef: usize,
+    skill_dir: &Path,
+    state: &LabelIndexState,
+    mode: &str,
+) -> Vec<LabelSearchBenchmark> {
+    let labels_db = skill_dir.join(LABELS_FILE);
+    let mut out = Vec::with_capacity(2);
+
+    let hnsw_start = std::time::Instant::now();
+    let hnsw_hits = match mode {
+        "context" => state
+            .context
+            .lock_or_recover()
+            .as_ref()
+            .map(|idx| hnsw_search_hits(idx, query, k, ef)),
+        "eeg" => state
+            .eeg
+            .lock_or_recover()
+            .as_ref()
+            .map(|idx| hnsw_search_hits(idx, query, k, ef)),
+        _ => state
+            .text
+            .lock_or_recover()
+            .as_ref()
+            .map(|idx| hnsw_search_hits(idx, query, k, ef)),
+    };
+    let hnsw_elapsed = hnsw_start.elapsed().as_micros();
+    out.push(LabelSearchBenchmark {
+        backend: "hnsw",
+        available: hnsw_hits.is_some(),
+        elapsed_us: hnsw_elapsed,
+        results: hnsw_hits.map_or_else(Vec::new, |hits| hydrate_hits(hits, &labels_db, skill_dir)),
+    });
+
+    let turbo_start = std::time::Instant::now();
+    #[cfg(feature = "turboquant-index")]
+    let turbo_hits = match mode {
+        "context" => state
+            .context_turbovec
+            .lock_or_recover()
+            .as_ref()
+            .and_then(|idx| turbovec_search_hits(idx, query, k)),
+        "eeg" => state
+            .eeg_turbovec
+            .lock_or_recover()
+            .as_ref()
+            .and_then(|idx| turbovec_search_hits(idx, query, k)),
+        _ => state
+            .text_turbovec
+            .lock_or_recover()
+            .as_ref()
+            .and_then(|idx| turbovec_search_hits(idx, query, k)),
+    };
+    #[cfg(not(feature = "turboquant-index"))]
+    let turbo_hits: Option<Vec<(i64, f32)>> = None;
+    let turbo_elapsed = turbo_start.elapsed().as_micros();
+    out.push(LabelSearchBenchmark {
+        backend: "turboquant",
+        available: turbo_hits.is_some(),
+        elapsed_us: turbo_elapsed,
+        results: turbo_hits.map_or_else(Vec::new, |hits| hydrate_hits(hits, &labels_db, skill_dir)),
+    });
+
+    out
 }
 
 #[cfg(test)]
@@ -792,6 +1487,40 @@ mod tests {
         assert!(state.text.lock().unwrap().is_some());
         assert!(state.context.lock().unwrap().is_some());
         assert!(state.eeg.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn memory_footprint_empty_dir_is_zero() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        let mem = state.memory_footprint(dir.path());
+        assert_eq!(mem.total_bytes, 0);
+        assert_eq!(mem.hnsw.total(), 0);
+        assert_eq!(mem.turbovec.total(), 0);
+    }
+
+    #[test]
+    fn memory_footprint_reports_existing_file_sizes() {
+        let dir = tempdir().unwrap();
+        // Write fake index files of known sizes (memory_footprint only stats — the
+        // contents don't have to be valid index payloads).
+        std::fs::write(dir.path().join(TEXT_INDEX_FILE), vec![0u8; 1024]).unwrap();
+        std::fs::write(dir.path().join(CONTEXT_INDEX_FILE), vec![0u8; 2048]).unwrap();
+        std::fs::write(dir.path().join(EEG_INDEX_FILE), vec![0u8; 4096]).unwrap();
+        std::fs::write(dir.path().join(TEXT_TURBOVEC_INDEX_FILE), vec![0u8; 512]).unwrap();
+        // Leave context_turbovec / eeg_turbovec absent — they should report 0.
+
+        let state = LabelIndexState::new();
+        let mem = state.memory_footprint(dir.path());
+        assert_eq!(mem.hnsw.text_bytes, 1024);
+        assert_eq!(mem.hnsw.context_bytes, 2048);
+        assert_eq!(mem.hnsw.eeg_bytes, 4096);
+        assert_eq!(mem.hnsw.total(), 7168);
+        assert_eq!(mem.turbovec.text_bytes, 512);
+        assert_eq!(mem.turbovec.context_bytes, 0);
+        assert_eq!(mem.turbovec.eeg_bytes, 0);
+        assert_eq!(mem.turbovec.total(), 512);
+        assert_eq!(mem.total_bytes, 7680);
     }
 
     fn create_labels_db(dir: &std::path::Path) -> rusqlite::Connection {
@@ -1190,5 +1919,53 @@ mod tests {
         let state = LabelIndexState::new();
         let stats = rebuild(dir.path(), &state);
         assert_eq!(stats.text_nodes, 0); // no text_embedding column filled
+    }
+
+    #[cfg(feature = "turboquant-index")]
+    #[test]
+    fn turbovec_rebuild_reload_and_benchmark() {
+        let dir = tempdir().unwrap();
+        let conn = create_labels_db(dir.path());
+        let to_blob = |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|f| f.to_le_bytes()).collect() };
+        let emb_a = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let emb_b = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let ctx_a = [0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let ctx_b = [0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, context_embedding, embedding_model)
+             VALUES (1, 0, 0, 0, 0, 'alpha', 'ctx alpha', 1, ?1, ?2, 'model')",
+            rusqlite::params![to_blob(&emb_a), to_blob(&ctx_a)],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, context_embedding, embedding_model)
+             VALUES (2, 0, 0, 0, 0, 'beta', 'ctx beta', 2, ?1, ?2, 'model')",
+            rusqlite::params![to_blob(&emb_b), to_blob(&ctx_b)],
+        )
+        .unwrap();
+
+        let state = LabelIndexState::new();
+        state.set_preferred_backend(LabelIndexBackend::TurboVec);
+        let stats = rebuild(dir.path(), &state);
+        assert_eq!(stats.text_nodes, 2);
+        assert_eq!(state.turbovec_counts().text_nodes, 2);
+        assert_eq!(state.turbovec_counts().context_nodes, 2);
+        assert!(dir.path().join(TEXT_TURBOVEC_INDEX_FILE).exists());
+        assert!(dir.path().join(CONTEXT_TURBOVEC_INDEX_FILE).exists());
+
+        let results = search_by_text_vec(&emb_a, 2, HNSW_EF, dir.path(), &state);
+        assert_eq!(results[0].label_id, 1);
+
+        let bench = benchmark_text_vec(&emb_a, 2, HNSW_EF, dir.path(), &state);
+        assert_eq!(bench.len(), 2);
+        assert!(bench.iter().any(|b| b.backend == "hnsw" && b.available));
+        assert!(bench.iter().any(|b| b.backend == "turboquant" && b.available));
+
+        let reloaded = LabelIndexState::new();
+        reloaded.load(dir.path());
+        reloaded.set_preferred_backend(LabelIndexBackend::TurboVec);
+        let reloaded_results = search_by_context_vec(&ctx_b, 2, HNSW_EF, dir.path(), &reloaded);
+        assert_eq!(reloaded_results[0].label_id, 2);
     }
 }

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# rlx — switch skill's rlx / rlx-models source between your LOCAL sibling
+# checkouts (../rlx, ../rlx-models) and the DEPLOYED crates.io release.
+#
+#   scripts/rlx              show the active source        (same as `status`)
+#   scripts/rlx local        build against ../rlx + ../rlx-models   (aliases: on, dev)
+#   scripts/rlx deployed     build against crates.io =0.2.11        (aliases: off, crates)
+#   scripts/rlx toggle       flip between the two
+#
+# Thin wrapper around scripts/ensure-rlx.sh, which does the cargo [patch] +
+# Cargo.lock skip-worktree bookkeeping so the committed registry-pinned lock
+# stays CI-safe. Runs from any working directory.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONFIG="$(cd "${REPO_ROOT}/.." && pwd)/.cargo/config.toml"
+MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
+
+if [[ -t 1 ]]; then G=$'\033[1;32m'; B=$'\033[1;34m'; DIM=$'\033[2m'; R=$'\033[0m'; else G=""; B=""; DIM=""; R=""; fi
+
+is_local() { [[ -f "${CONFIG}" ]] && grep -qF "${MARK}" "${CONFIG}"; }
+
+pinned() { awk -F'"' '/^rlx[[:space:]]*=[[:space:]]*\{[[:space:]]*version/ { print $2; exit }' "${REPO_ROOT}/Cargo.toml"; }
+
+status() {
+  if is_local; then
+    local n root
+    n="$(grep -c ' = { path = ' "${CONFIG}" 2>/dev/null || echo 0)"
+    root="$(awk -F'"' '/^rlx = \{ path =/ { print $2; exit }' "${CONFIG}" 2>/dev/null)"
+    printf '%srlx: LOCAL%s  → %s\n' "${G}" "${R}" "${root%/crates/rlx}"
+    printf '%s     %s crates patched via %s%s\n' "${DIM}" "${n}" "${CONFIG}" "${R}"
+    printf '%s     Cargo.lock skip-worktree (committed registry lock protected)%s\n' "${DIM}" "${R}"
+  else
+    printf '%srlx: DEPLOYED%s  → crates.io %s\n' "${B}" "${R}" "$(pinned)"
+    printf '%s     no local override; committed Cargo.lock in use%s\n' "${DIM}" "${R}"
+  fi
+}
+
+usage() {
+  cat >&2 <<EOF
+rlx — switch skill between local and deployed rlx / rlx-models
+
+  scripts/rlx [status]     show the active source (default)
+  scripts/rlx local        build against ../rlx + ../rlx-models   (aliases: on, dev)
+  scripts/rlx deployed     build against crates.io                (aliases: off, crates)
+  scripts/rlx toggle       flip between the two
+  scripts/rlx refresh      re-scan ../rlx for added/removed crates (aliases: re)
+EOF
+}
+
+case "${1:-status}" in
+  status|st)                            status ;;
+  local|on|dev|up)                      bash "${SCRIPT_DIR}/ensure-rlx.sh"     >/dev/null; status ;;
+  deployed|off|crates|published|prod)   bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null; status ;;
+  refresh|re)                           RLX_REFRESH=1 bash "${SCRIPT_DIR}/ensure-rlx.sh" >/dev/null; status ;;
+  toggle)
+    if is_local; then bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null
+    else              bash "${SCRIPT_DIR}/ensure-rlx.sh"     >/dev/null; fi
+    status ;;
+  -h|--help|help)                       usage ;;
+  *) printf 'rlx: unknown command %s\n\n' "$1" >&2; usage; exit 2 ;;
+esac

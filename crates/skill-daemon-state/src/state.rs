@@ -45,6 +45,18 @@ pub struct IdleReembedStatus {
     pub done: u64,
     /// Current day directory being processed (e.g. "20260415").
     pub current_day: String,
+    /// Whether the loop is deferring work because system memory usage exceeds
+    /// `ReembedConfig::max_resident_memory_percent`. UI surfaces this so the
+    /// user knows why a run that "should" be active isn't.
+    pub memory_throttled: bool,
+    /// Last sampled system memory usage percent (used / total). 0 when unread.
+    pub memory_percent: u8,
+    /// Seconds remaining on the "no-progress" backoff. 0 when no backoff is
+    /// active. UI surfaces this so the user knows why the loop appears idle
+    /// even though epochs still need embedding.
+    pub backoff_secs_remaining: u64,
+    /// Human-readable reason for the current backoff (empty when none).
+    pub backoff_reason: String,
 }
 
 /// Shared application state threaded through all axum handlers.
@@ -158,6 +170,35 @@ pub struct AppState {
     /// in `~/.skill/validation.sqlite`; this struct only holds ephemeral state
     /// that should reset on daemon restart.
     pub validation_runtime: Arc<Mutex<skill_data::validation_store::ValidationRuntime>>,
+    /// Heartbeat registry for daemon background tasks.
+    ///
+    /// Keyed by the static task id used in `/v1/activity` (e.g. "device-scanner",
+    /// "idle-reembed"). Each tick a task records `last_tick_unix_ms` and
+    /// `last_duration_ms`, so the activity panel can show "last ran 2s ago"
+    /// without per-tick logging or polling. Adding the key here is also what
+    /// makes a new background loop visible to the manifest — preventing the
+    /// drift we'd otherwise get when someone adds a worker but forgets to
+    /// edit the `/v1/activity` route.
+    pub task_heartbeats: Arc<Mutex<HashMap<&'static str, TaskHeartbeat>>>,
+}
+
+/// Per-task heartbeat record. Updated by background workers; read by
+/// `/v1/activity` and the `activity-state` WebSocket broadcast.
+#[derive(Clone, Default, Debug, serde::Serialize)]
+pub struct TaskHeartbeat {
+    /// Unix-ms timestamp of the most recent tick. `0` until the first tick.
+    pub last_tick_unix_ms: u64,
+    /// Duration of the most recent tick in ms. Useful for spotting tasks
+    /// that are quietly slow (long serial-port enumerations, embed batches).
+    pub last_duration_ms: u64,
+    /// Number of ticks recorded since daemon start.
+    pub tick_count: u64,
+    /// Last time we broadcast an `activity-state` WS event for this task.
+    /// Internal — used to enforce `min_broadcast_interval_ms` and *not*
+    /// serialised to the API (renames in JSON would be a no-op anyway since
+    /// callers don't need this).
+    #[serde(skip)]
+    pub last_broadcast_unix_ms: u64,
 }
 
 /// Observable state of the daemon-driven calibration session.
@@ -265,13 +306,23 @@ impl AppState {
             exg_download_cancel: Arc::new(AtomicBool::new(false)),
             idle_reembed_cancel: Arc::new(AtomicBool::new(false)),
             idle_reembed_state: Arc::new(Mutex::new(IdleReembedStatus::default())),
-            label_index: Arc::new(LabelIndexState::new()),
+            label_index: {
+                let idx = LabelIndexState::new();
+                if let Some(backend) = skill_label_index::LabelIndexBackend::parse(&settings.label_index_backend) {
+                    idx.set_preferred_backend(backend);
+                }
+                Arc::new(idx)
+            },
             reconnect: Arc::new(Mutex::new(ReconnectState::default())),
             text_embedder: {
                 let te = SharedTextEmbedder::new();
                 if !settings.text_embedding_model.is_empty() {
                     te.set_model_code(&settings.text_embedding_model);
                 }
+                if !settings.text_embedding_rlx_device.is_empty() {
+                    te.set_rlx_device(&settings.text_embedding_rlx_device);
+                }
+                te.set_rlx_max_seq(settings.text_embedding_rlx_max_seq);
                 te
             },
             iroh_logs_enabled: Arc::new(AtomicBool::new(settings.iroh_logs)),
@@ -282,6 +333,55 @@ impl AppState {
             calibration_phase: Arc::new(Mutex::new(CalibrationPhaseSnapshot::default())),
             pairing_codes: Arc::new(Mutex::new(HashMap::new())),
             validation_runtime: Arc::new(Mutex::new(skill_data::validation_store::ValidationRuntime::default())),
+            task_heartbeats: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Record a heartbeat for a background task. Call once per tick after
+    /// the work for that tick completes. `duration_ms` is how long this tick
+    /// took; pass 0 if not measured.
+    ///
+    /// Also broadcasts an `activity-state` WebSocket event, throttled to at
+    /// most one event per task every `MIN_BROADCAST_INTERVAL_MS` (default 5s)
+    /// — so a 1s loop emits ~once every 5s and a future 100ms loop wouldn't
+    /// flood the bus. The 1st tick always broadcasts so the UI gets immediate
+    /// feedback when a task wakes up.
+    pub fn record_task_heartbeat(&self, task_id: &'static str, duration_ms: u64) {
+        const MIN_BROADCAST_INTERVAL_MS: u64 = 5_000;
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let mut should_broadcast = false;
+        let mut tick_count = 1u64;
+        if let Ok(mut map) = self.task_heartbeats.lock() {
+            let entry = map.entry(task_id).or_default();
+            entry.last_tick_unix_ms = now_ms;
+            entry.last_duration_ms = duration_ms;
+            entry.tick_count = entry.tick_count.saturating_add(1);
+            tick_count = entry.tick_count;
+
+            // Always emit on the very first tick, then time-throttle.
+            if entry.last_broadcast_unix_ms == 0
+                || now_ms.saturating_sub(entry.last_broadcast_unix_ms) >= MIN_BROADCAST_INTERVAL_MS
+            {
+                entry.last_broadcast_unix_ms = now_ms;
+                should_broadcast = true;
+            }
+        }
+
+        if should_broadcast {
+            self.broadcast(
+                "activity-state",
+                serde_json::json!({
+                    "task_id": task_id,
+                    "last_tick_unix_ms": now_ms,
+                    "last_duration_ms": duration_ms,
+                    "tick_count": tick_count,
+                }),
+            );
         }
     }
 }

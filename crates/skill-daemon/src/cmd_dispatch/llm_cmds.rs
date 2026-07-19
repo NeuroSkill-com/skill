@@ -145,6 +145,7 @@ pub(super) async fn cmd_llm_add_model(state: &AppState, msg: &Value) -> Result<V
             cat.entries.push(skill_llm::catalog::LlmModelEntry {
                 repo: repo.clone(),
                 filename: filename.clone(),
+                remote_filename: None,
                 quant: infer_quant(&filename),
                 size_gb: size_gb.unwrap_or(0.0),
                 description: "External model".to_string(),
@@ -162,6 +163,7 @@ pub(super) async fn cmd_llm_add_model(state: &AppState, msg: &Value) -> Result<V
                 family_desc: String::new(),
                 tags: vec!["external".to_string()],
                 is_mmproj,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 0.0,
@@ -207,18 +209,9 @@ pub(super) async fn cmd_llm_select_mmproj(state: &AppState, msg: &Value) -> Resu
 
 pub(super) async fn cmd_llm_set_autoload_mmproj(state: &AppState, msg: &Value) -> Result<Value, String> {
     let enabled = bool_field(msg, "enabled").ok_or("missing enabled")?;
-    let skill_dir = skill_dir(state);
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.llm.autoload_mmproj = enabled;
-    let path = skill_settings::settings_path(&skill_dir);
-    match serde_json::to_string_pretty(&settings) {
-        Ok(json) => {
-            if let Err(e) = std::fs::write(&path, json) {
-                return Err(format!("failed to save LLM settings: {e}"));
-            }
-        }
-        Err(e) => return Err(format!("failed to serialize settings: {e}")),
-    }
+    crate::routes::settings_io::patch_user_settings_sync(state, move |s| {
+        s.llm.autoload_mmproj = enabled;
+    });
     Ok(json!({ "value": enabled }))
 }
 

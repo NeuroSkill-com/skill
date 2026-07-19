@@ -183,111 +183,13 @@ fn resolve_daemon_bin_path() -> String {
     }
 }
 
-fn daemon_rollback_bin_path() -> Result<PathBuf, String> {
-    let base =
-        dirs::config_dir().ok_or_else(|| "unable to resolve config directory".to_string())?;
-    let mut p = base.join("skill").join("daemon").join("bin");
-    let name = if cfg!(target_os = "windows") {
-        "skill-daemon.rollback.exe"
-    } else {
-        "skill-daemon.rollback"
-    };
-    p.push(name);
-    Ok(p)
-}
-
-/// Path to the file that records the app version of the last daemon launch.
-fn last_app_version_path() -> PathBuf {
-    let mut p = dirs::config_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-    p.push("skill");
-    p.push("daemon");
-    p.push("last_app_version");
-    p
-}
-
 /// The current app version baked in at compile time.
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Returns `true` when the stored version differs from the current app version,
-/// meaning the daemon binary has likely been replaced by a fresh install.
-fn app_version_changed() -> bool {
-    let marker = last_app_version_path();
-    let previous = std::fs::read_to_string(&marker).unwrap_or_default();
-    previous.trim() != APP_VERSION
-}
-
-/// Check whether the running daemon was started by a different app version.
-/// If so, kill the old daemon and unload its service so the caller can spawn
-/// the new one bundled with this app.  Returns `true` if a restart was forced.
-fn upgrade_daemon_if_app_version_changed() -> bool {
-    if !app_version_changed() {
-        return false;
-    }
-
-    let marker = last_app_version_path();
-    let previous = std::fs::read_to_string(&marker).unwrap_or_default();
-    eprintln!(
-        "[daemon] app version changed ({} → {}) — replacing daemon",
-        if previous.trim().is_empty() {
-            "<none>"
-        } else {
-            previous.trim()
-        },
-        APP_VERSION
-    );
-    restart_daemon_process_best_effort();
-    // Give the OS a moment to release the port.
-    std::thread::sleep(Duration::from_millis(500));
-    true
-}
-
-/// Record the current app version so future launches can detect upgrades.
-fn stamp_app_version() {
-    let marker = last_app_version_path();
-    if let Some(parent) = marker.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(&marker, APP_VERSION);
-}
-
-fn update_daemon_rollback_snapshot_best_effort() {
-    let src = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| resolve_daemon_bin_path());
-    let src_path = PathBuf::from(&src);
-    if !src_path.exists() {
-        return;
-    }
-
-    let Ok(dst_path) = daemon_rollback_bin_path() else {
-        return;
-    };
-
-    if src_path == dst_path {
-        return;
-    }
-
-    if let (Ok(src_meta), Ok(dst_meta)) =
-        (std::fs::metadata(&src_path), std::fs::metadata(&dst_path))
-    {
-        // Skip copy when the source binary hasn't changed (same size AND same mtime).
-        let same_size = src_meta.len() == dst_meta.len();
-        let same_mtime =
-            src_meta.modified().ok() == dst_meta.modified().ok() && src_meta.modified().is_ok();
-        if same_size && same_mtime {
-            return;
-        }
-    }
-
-    if let Some(parent) = dst_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if std::fs::copy(&src_path, &dst_path).is_ok() {
-        #[cfg(not(target_os = "windows"))]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&dst_path, std::fs::Permissions::from_mode(0o755));
-        }
-        eprintln!("[daemon] updated rollback snapshot: {}", dst_path.display());
-    }
+/// Path to the rollback (last-known-good) daemon binary. Delegates to the
+/// upgrade module so paths stay in one place.
+fn daemon_rollback_bin_path() -> Result<PathBuf, String> {
+    Ok(crate::daemon_upgrade::rollback_bin_path())
 }
 
 /// Ask the running daemon to install itself as a persistent OS service
@@ -378,7 +280,7 @@ fn ensure_daemon_running_blocking() {
             "[daemon] port {} is occupied but daemon is unresponsive — killing occupant",
             addr.port()
         );
-        kill_port_occupant(addr.port());
+        crate::daemon_upgrade::kill_port_owner(addr.port());
         // Give the OS a moment to release the port.
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -1299,231 +1201,216 @@ fn wait_for_protocol_compatibility(timeout: Duration) -> Result<bool, String> {
     Err(last_err.unwrap_or_else(|| "timed out waiting for daemon version".to_string()))
 }
 
-/// Kill whatever process is listening on `port` (best-effort).
-/// Uses `lsof` on macOS/Linux and `netstat` on Windows to find the PID.
-fn kill_port_occupant(port: u16) {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        if let Ok(output) = std::process::Command::new("lsof")
-            .args(["-t", "-i", &format!("tcp:{port}")])
-            .output()
-        {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            for pid in pids.split_whitespace() {
-                eprintln!("[daemon] killing PID {pid} occupying port {port}");
-                let _ = std::process::Command::new("kill")
-                    .args(["-9", pid])
-                    .output();
-            }
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(output) = std::process::Command::new("netstat")
-            .args(["-ano", "-p", "TCP"])
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            let needle = format!(":{port}");
-            for line in text.lines() {
-                if line.contains(&needle) && line.contains("LISTENING") {
-                    if let Some(pid) = line.split_whitespace().last() {
-                        eprintln!("[daemon] killing PID {pid} occupying port {port}");
-                        let _ = std::process::Command::new("taskkill")
-                            .args(["/PID", pid, "/F"])
-                            .output();
-                    }
-                }
-            }
-        }
+/// Kill the running daemon by pidfile, escalating SIGTERM → SIGKILL, then
+/// fall back to killing whoever is bound to the daemon port. Used by
+/// [`force_restart_daemon`]; the upgrade state machine drives the same
+/// helpers directly.
+fn restart_daemon_process_best_effort() {
+    crate::daemon_upgrade::unload_os_service_best_effort();
+    let _ = crate::daemon_upgrade::kill_pidfile_daemon();
+    let port = daemon_port();
+    if !crate::daemon_upgrade::wait_for_port_free(port, Duration::from_secs(2)) {
+        crate::daemon_upgrade::kill_port_owner(port);
     }
 }
 
-fn restart_daemon_process_best_effort() {
-    // Unload the OS-level keep-alive service first, otherwise launchd /
-    // systemd will immediately respawn the daemon after we kill it.
-    unload_daemon_service_best_effort();
-
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/IM", "skill-daemon.exe", "/F"])
-            .output();
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        let _ = std::process::Command::new("pkill")
-            .args(["-f", "skill-daemon"])
-            .output();
-    }
-
-    // Belt-and-suspenders: also kill by port in case the process name
-    // doesn't match (e.g. renamed binary, wrapper script).
-    let port: u16 = std::env::var("SKILL_DAEMON_ADDR")
+fn daemon_port() -> u16 {
+    std::env::var("SKILL_DAEMON_ADDR")
         .ok()
         .and_then(|a| a.parse::<std::net::SocketAddr>().ok())
         .map(|a| a.port())
-        .unwrap_or(18444);
-    kill_port_occupant(port);
+        .unwrap_or(18444)
 }
 
-/// Unload the daemon's OS-level keep-alive service so that killing the
-/// process doesn't cause an immediate respawn.  User-space only — no root.
-fn unload_daemon_service_best_effort() {
-    #[cfg(target_os = "macos")]
+fn daemon_socket_addr() -> std::net::SocketAddr {
+    std::env::var("SKILL_DAEMON_ADDR")
+        .ok()
+        .and_then(|a| a.parse().ok())
+        .unwrap_or_else(|| std::net::SocketAddr::from(([127, 0, 0, 1], 18444)))
+}
+
+/// Spawn the daemon binary at `bin` and wait until it answers a `/version`
+/// request or `timeout` elapses. Returns `Ok(true)` on protocol compatibility.
+fn spawn_and_health_check(bin: &std::path::Path, timeout: Duration) -> Result<bool, String> {
+    let mut cmd = std::process::Command::new(bin);
+    cmd.env(
+        "SKILL_DAEMON_ADDR",
+        std::env::var("SKILL_DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:18444".to_string()),
+    )
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::inherit());
+    #[cfg(target_os = "windows")]
     {
-        let plist = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("Library/LaunchAgents/com.skill.daemon.plist");
-        if plist.exists() {
-            eprintln!("[daemon] unloading LaunchAgent before kill");
-            let _ = std::process::Command::new("launchctl")
-                .args(["unload", "-w"])
-                .arg(&plist)
-                .output();
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.spawn().map_err(|e| format!("spawn failed: {e}"))?;
+
+    let addr = daemon_socket_addr();
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
+            // Port is bound — now verify protocol.
+            return wait_for_protocol_compatibility(Duration::from_secs(5));
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    Err("health check timed out".into())
+}
+
+/// One full stop→start→verify pass for a candidate daemon binary.
+fn try_install_and_start(bin: &std::path::Path) -> Result<(), String> {
+    use crate::daemon_upgrade::*;
+    log_event("stop", "begin", Some(&bin.display().to_string()));
+    unload_os_service_best_effort();
+    let _ = kill_pidfile_daemon();
+    let port = daemon_port();
+    if !wait_for_port_free(port, Duration::from_secs(5)) {
+        log_event("stop", "port_still_bound", Some(&port.to_string()));
+        kill_port_owner(port);
+        if !wait_for_port_free(port, Duration::from_secs(2)) {
+            return Err(format!("port {port} still bound after kill"));
         }
     }
-
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("systemctl")
-            .args(["--user", "stop", "skill-daemon.service"])
-            .output();
+    log_event("start", "spawn", Some(&bin.display().to_string()));
+    match spawn_and_health_check(bin, Duration::from_secs(10))? {
+        true => {
+            log_event("verify", "ok", None);
+            Ok(())
+        }
+        false => Err("protocol mismatch".into()),
     }
 }
 
 pub(crate) fn ensure_daemon_runtime_ready() {
-    // On fresh install / upgrade, kill the old daemon so we launch the new one.
-    upgrade_daemon_if_app_version_changed();
+    use crate::daemon_upgrade::*;
+    let bundled = std::env::var("SKILL_DAEMON_BIN").unwrap_or_else(|_| resolve_daemon_bin_path());
+    let bundled_path = PathBuf::from(&bundled);
+    let bundled_hash = sha256_file(&bundled_path);
 
-    // Block until the daemon is reachable (or spawn fails).
-    ensure_daemon_running_blocking();
+    let mut state = load_state();
 
-    let mut compatible = false;
-
-    // First attempt: check protocol compatibility.
-    match wait_for_protocol_compatibility(Duration::from_secs(5)) {
-        Ok(true) => {
-            compatible = true;
+    // Fast path: hash matches, last phase was Ready, daemon already healthy.
+    if let Some(h) = &bundled_hash {
+        if state.phase == Phase::Ready
+            && state.installed_hash.as_deref() == Some(h.as_str())
+            && wait_for_protocol_compatibility(Duration::from_millis(800)) == Ok(true)
+        {
+            log_event("ready", "no_change", Some(h));
+            ensure_daemon_background_service();
+            return;
         }
-        not_ok => {
-            match &not_ok {
-                Ok(false) => eprintln!("[daemon] protocol mismatch — attempting restart"),
-                Err(e) => eprintln!("[daemon] protocol check failed: {e} — attempting restart"),
-                _ => unreachable!(),
+    }
+
+    log_event(
+        "upgrade",
+        "begin",
+        Some(&format!(
+            "version={APP_VERSION} bundled_hash={} installed_hash={}",
+            bundled_hash.as_deref().unwrap_or("?"),
+            state.installed_hash.as_deref().unwrap_or("?")
+        )),
+    );
+    state.phase = Phase::Upgrading;
+    state.attempt_count = 0;
+    state.last_error = None;
+    save_state(&mut state);
+
+    let mut succeeded = false;
+    while state.attempt_count < MAX_ATTEMPTS_PUB {
+        state.attempt_count += 1;
+        save_state(&mut state);
+        match try_install_and_start(&bundled_path) {
+            Ok(()) => {
+                succeeded = true;
+                break;
             }
-            // Kill and respawn the daemon, then re-check.
-            restart_daemon_process_best_effort();
-            std::thread::sleep(Duration::from_millis(300));
-            ensure_daemon_running_blocking();
-            if let Ok(true) = wait_for_protocol_compatibility(Duration::from_secs(5)) {
-                compatible = true;
-                eprintln!("[daemon] protocol compatibility restored after restart");
+            Err(e) => {
+                log_event("upgrade", "attempt_failed", Some(&e));
+                state.last_error = Some(e);
+                save_state(&mut state);
             }
         }
     }
 
-    // Rollback: try the last-known-good daemon binary.
-    if !compatible {
-        if let Ok(rollback_bin) = daemon_rollback_bin_path() {
-            if rollback_bin.exists() {
-                eprintln!(
-                    "[daemon] attempting rollback daemon: {}",
-                    rollback_bin.display()
-                );
-                restart_daemon_process_best_effort();
-                std::thread::sleep(Duration::from_millis(300));
-
-                let prev = std::env::var("SKILL_DAEMON_BIN").ok();
-                std::env::set_var("SKILL_DAEMON_BIN", rollback_bin.display().to_string());
-                ensure_daemon_running_blocking();
-                if let Some(v) = prev {
-                    std::env::set_var("SKILL_DAEMON_BIN", v);
+    if succeeded {
+        // Refresh rollback only if hash differs (atomic copy).
+        if let Some(h) = &bundled_hash {
+            if state.rollback_hash.as_deref() != Some(h.as_str()) {
+                let dst = rollback_bin_path();
+                if let Err(e) = copy_atomic(&bundled_path, &dst) {
+                    log_event("rollback_snapshot", "copy_failed", Some(&e.to_string()));
                 } else {
-                    std::env::remove_var("SKILL_DAEMON_BIN");
+                    state.rollback_hash = bundled_hash.clone();
+                    state.rollback_version = Some(APP_VERSION.to_string());
+                    log_event(
+                        "rollback_snapshot",
+                        "updated",
+                        Some(&dst.display().to_string()),
+                    );
                 }
-
-                match wait_for_protocol_compatibility(Duration::from_secs(5)) {
-                    Ok(true) => {
-                        compatible = true;
-                        eprintln!("[daemon] rollback daemon restored compatibility");
-                    }
-                    Ok(false) => eprintln!("[daemon] rollback daemon still incompatible — continuing degraded"),
-                    Err(e) => eprintln!("[daemon] rollback daemon failed readiness check: {e} — continuing degraded"),
-                }
-            } else {
-                eprintln!(
-                    "[daemon] no rollback daemon snapshot found at {}",
-                    rollback_bin.display()
-                );
             }
         }
+        state.installed_hash = bundled_hash;
+        state.installed_version = Some(APP_VERSION.to_string());
+        state.phase = Phase::Ready;
+        state.attempt_count = 0;
+        state.last_error = None;
+        save_state(&mut state);
+        log_event("upgrade", "succeeded", state.installed_hash.as_deref());
+        // Force fresh OS-service registration so the LaunchAgent / systemd unit /
+        // Windows service points at the just-installed binary path. Idempotent.
+        force_reinstall_os_service();
+        return;
     }
 
-    if compatible {
-        update_daemon_rollback_snapshot_best_effort();
-        stamp_app_version();
+    // ── Rollback ─────────────────────────────────────────────────────────────
+    state.phase = Phase::RollingBack;
+    save_state(&mut state);
+    let rollback = rollback_bin_path();
+    if rollback.exists() {
+        log_event("rollback", "attempt", Some(&rollback.display().to_string()));
+        match try_install_and_start(&rollback) {
+            Ok(()) => {
+                state.installed_hash = state.rollback_hash.clone();
+                state.installed_version = state.rollback_version.clone();
+                state.phase = Phase::Ready;
+                state.attempt_count = 0;
+                state.last_error = None;
+                save_state(&mut state);
+                log_event("rollback", "succeeded", None);
+                force_reinstall_os_service();
+                return;
+            }
+            Err(e) => {
+                log_event("rollback", "failed", Some(&e));
+                state.last_error = Some(e);
+            }
+        }
+    } else {
+        log_event("rollback", "no_snapshot", None);
     }
 
+    state.phase = Phase::Failed;
+    save_state(&mut state);
+    log_event("upgrade", "failed_terminal", state.last_error.as_deref());
+    // Still try to register service so a manual restart by the user picks up.
     ensure_daemon_background_service();
 }
 
-#[cfg(test)]
-fn ensure_daemon_runtime_ready_with_hooks<
-    FEnsure,
-    FWait,
-    FRestart,
-    FRollbackExists,
-    FRollbackLaunch,
-    FSnapshot,
-    FService,
->(
-    mut ensure_running: FEnsure,
-    mut wait: FWait,
-    mut restart: FRestart,
-    rollback_exists: FRollbackExists,
-    mut launch_rollback: FRollbackLaunch,
-    mut snapshot: FSnapshot,
-    mut service: FService,
-) -> bool
-where
-    FEnsure: FnMut(),
-    FWait: FnMut() -> Result<bool, String>,
-    FRestart: FnMut(),
-    FRollbackExists: Fn() -> bool,
-    FRollbackLaunch: FnMut(),
-    FSnapshot: FnMut(),
-    FService: FnMut(),
-{
-    ensure_running();
+/// Maximum number of stop→start attempts before falling back to rollback.
+const MAX_ATTEMPTS_PUB: u32 = 2;
 
-    let mut compatible = false;
-    match wait() {
-        Ok(true) => compatible = true,
-        Ok(false) | Err(_) => {
-            restart();
-            ensure_running();
-            if let Ok(true) = wait() {
-                compatible = true;
-            }
-        }
+/// Force the daemon to re-register its OS service. Idempotent; on success
+/// the LaunchAgent / systemd unit / Windows service points at the daemon
+/// binary that just answered our health check.
+fn force_reinstall_os_service() {
+    use crate::daemon_upgrade::log_event;
+    match install_daemon_service() {
+        Ok(_) => log_event("service", "reinstalled", None),
+        Err(e) => log_event("service", "reinstall_failed", Some(&e)),
     }
-
-    if !compatible && rollback_exists() {
-        restart();
-        launch_rollback();
-        if let Ok(true) = wait() {
-            compatible = true;
-        }
-    }
-
-    if compatible {
-        snapshot();
-    }
-    service();
-    compatible
 }
 
 pub(crate) fn ensure_daemon_background_service() {
@@ -1585,6 +1472,12 @@ fn load_daemon_token() -> Result<String, String> {
 }
 
 fn token_path() -> Result<PathBuf, String> {
+    // Honor the same SKILL_DAEMON_CONFIG_ROOT escape hatch as
+    // daemon_upgrade::config_root, so e2e tests can pin every daemon-related
+    // path under one tmpdir without touching $HOME / $XDG_CONFIG_HOME.
+    if let Ok(root) = std::env::var("SKILL_DAEMON_CONFIG_ROOT") {
+        return Ok(PathBuf::from(root).join("auth.token"));
+    }
     let base =
         dirs::config_dir().ok_or_else(|| "unable to resolve config directory".to_string())?;
     Ok(base.join("skill").join("daemon").join("auth.token"))
@@ -1654,6 +1547,86 @@ async fn daemon_post_async(
     tokio::task::spawn_blocking(move || daemon_post(path, &body))
         .await
         .map_err(|e| e.to_string())?
+}
+
+// ── Voice input (ASR + VAD) proxies ─────────────────────────────────────────
+//
+// Thin pass-throughs to the daemon. The chat window picks the mode per session
+// (omitted fields fall back to the `settings.asr` defaults); transcript and
+// status events arrive on the `/v1/events` websocket as `"asr"` events.
+
+/// Start a voice session. `trigger`: `"continuous"` | `"push_to_talk"`.
+/// `routing`: `"voice_loop"` | `"transcribe_only"`.
+#[tauri::command]
+pub async fn asr_start(
+    trigger: Option<String>,
+    routing: Option<String>,
+    language: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::Map::new();
+    if let Some(t) = trigger {
+        body.insert("trigger".into(), serde_json::Value::String(t));
+    }
+    if let Some(r) = routing {
+        body.insert("routing".into(), serde_json::Value::String(r));
+    }
+    if let Some(l) = language {
+        body.insert("language".into(), serde_json::Value::String(l));
+    }
+    daemon_post_async("/v1/asr/start", serde_json::Value::Object(body)).await
+}
+
+/// Stop the active voice session.
+#[tauri::command]
+pub async fn asr_stop() -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/asr/stop", serde_json::json!({})).await
+}
+
+/// Current engine status (running, mode, push-to-talk state).
+#[tauri::command]
+pub async fn asr_status() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/asr/status").await
+}
+
+/// Push-to-talk gate: `true` on key-down, `false` on key-up.
+#[tauri::command]
+pub async fn asr_set_ptt(active: bool) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/asr/ptt", serde_json::json!({ "active": active })).await
+}
+
+/// Barge-in gate for frontend-side TTS: bracket the UI's own playback with
+/// `true`/`false` so the daemon mic doesn't transcribe the spoken reply (used
+/// when the daemon has no TTS backend and the UI speaks the reply itself).
+#[tauri::command]
+pub async fn asr_set_speaking(active: bool) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/asr/speaking", serde_json::json!({ "active": active })).await
+}
+
+/// Read persisted `settings.asr` (voice defaults + engine/model) from the daemon.
+#[tauri::command]
+pub async fn get_asr_settings() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/settings/asr").await
+}
+
+/// Write `settings.asr` back to settings.json via the daemon. `config` is the
+/// full `AsrConfig` object (enabled, default_trigger, default_routing, language,
+/// engine, model).
+#[tauri::command]
+pub async fn set_asr_settings(config: serde_json::Value) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/settings/asr", config).await
+}
+
+/// Read the persisted TTS engine selection (engine + model/voice overrides).
+#[tauri::command]
+pub async fn get_tts_engine() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/settings/tts-engine").await
+}
+
+/// Select the TTS engine via the daemon (applies live + persists to settings.json).
+/// `config` is `{ engine, model, voice }`.
+#[tauri::command]
+pub async fn set_tts_engine(config: serde_json::Value) -> Result<serde_json::Value, String> {
+    daemon_post_async("/v1/settings/tts-engine", config).await
 }
 
 // ── EXG model proxies ───────────────────────────────────────────────────────
@@ -2505,142 +2478,6 @@ mod tests {
     }
 
     #[test]
-    fn runtime_ready_attempts_rollback_after_restart_mismatch() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([
-            Ok(false), // initial check: mismatch
-            Ok(false), // after restart: still mismatch
-            Ok(true),  // after rollback launch: compatible
-        ]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || true,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(compatible);
-        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
-        assert_eq!(restart_count, 2, "restart path + rollback path");
-        assert_eq!(
-            rollback_launch_count, 1,
-            "rollback should be launched exactly once"
-        );
-        assert_eq!(
-            snapshot_count, 1,
-            "compatible runtime should refresh rollback snapshot"
-        );
-        assert_eq!(
-            service_count, 1,
-            "background service repair should always run"
-        );
-    }
-
-    #[test]
-    fn runtime_ready_degraded_when_wait_errors_and_no_rollback() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([
-            Err("unreachable".to_string()),
-            Err("still unreachable".to_string()),
-        ]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || false,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(!compatible);
-        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
-        assert_eq!(restart_count, 1, "error triggers a restart attempt");
-        assert_eq!(rollback_launch_count, 0);
-        assert_eq!(snapshot_count, 0, "no snapshot refresh on degraded startup");
-        assert_eq!(service_count, 1);
-    }
-
-    #[test]
-    fn runtime_ready_happy_path_no_restart_or_rollback() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([Ok(true)]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || true,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(compatible);
-        assert_eq!(ensure_count, 1);
-        assert_eq!(restart_count, 0);
-        assert_eq!(rollback_launch_count, 0);
-        assert_eq!(snapshot_count, 1);
-        assert_eq!(service_count, 1);
-    }
-
-    #[test]
-    fn runtime_ready_recovers_after_single_restart_without_rollback() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([Ok(false), Ok(true)]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || true,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(compatible);
-        assert_eq!(ensure_count, 2);
-        assert_eq!(restart_count, 1);
-        assert_eq!(rollback_launch_count, 0);
-        assert_eq!(snapshot_count, 1);
-        assert_eq!(service_count, 1);
-    }
-
-    #[test]
     fn service_autoinstall_disabled_by_env_is_noop() {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
         std::env::set_var("SKILL_DAEMON_SERVICE_AUTOINSTALL", "0");
@@ -2649,173 +2486,6 @@ mod tests {
         ensure_daemon_background_service();
 
         std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
-    }
-
-    #[test]
-    fn rollback_snapshot_copies_current_daemon_bin() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        let fake_bin = td.path().join(if cfg!(target_os = "windows") {
-            "skill-daemon.exe"
-        } else {
-            "skill-daemon"
-        });
-        std::fs::write(&fake_bin, b"daemon-binary").unwrap();
-        std::env::set_var("SKILL_DAEMON_BIN", &fake_bin);
-
-        update_daemon_rollback_snapshot_best_effort();
-
-        let rollback = daemon_rollback_bin_path().unwrap();
-        assert!(rollback.exists(), "rollback snapshot should exist");
-
-        let src = std::fs::read(&fake_bin).unwrap();
-        let dst = std::fs::read(&rollback).unwrap();
-        assert_eq!(src, dst);
-
-        std::env::remove_var("SKILL_DAEMON_BIN");
-    }
-
-    #[test]
-    fn runtime_ready_fails_when_rollback_also_incompatible() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([
-            Ok(false), // initial mismatch
-            Ok(false), // after restart mismatch
-            Ok(false), // rollback also mismatch
-        ]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || true,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(!compatible);
-        assert_eq!(ensure_count, 2);
-        assert_eq!(restart_count, 2);
-        assert_eq!(rollback_launch_count, 1);
-        assert_eq!(
-            snapshot_count, 0,
-            "no snapshot update on incompatible runtime"
-        );
-        assert_eq!(service_count, 1);
-    }
-
-    #[test]
-    fn rollback_snapshot_noop_when_source_missing() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        let fake_missing = td.path().join(if cfg!(target_os = "windows") {
-            "missing-daemon.exe"
-        } else {
-            "missing-daemon"
-        });
-        std::env::set_var("SKILL_DAEMON_BIN", &fake_missing);
-
-        let rollback = daemon_rollback_bin_path().unwrap();
-        if rollback.exists() {
-            let _ = std::fs::remove_file(&rollback);
-        }
-
-        update_daemon_rollback_snapshot_best_effort();
-
-        assert!(
-            !rollback.exists(),
-            "rollback snapshot should not be created when source binary is missing"
-        );
-
-        std::env::remove_var("SKILL_DAEMON_BIN");
-    }
-
-    #[test]
-    fn runtime_ready_recovers_after_initial_probe_error() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([
-            Err("initial probe failed".to_string()),
-            Ok(true), // post-restart probe succeeds
-        ]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || true,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(compatible);
-        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
-        assert_eq!(restart_count, 1, "error triggers a restart attempt");
-        assert_eq!(
-            rollback_launch_count, 0,
-            "no rollback needed — restart fixed it"
-        );
-        assert_eq!(snapshot_count, 1);
-        assert_eq!(service_count, 1);
-    }
-
-    #[test]
-    fn runtime_ready_uses_rollback_when_restart_fails_after_probe_error() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([
-            Err("initial probe failed".to_string()),
-            Err("restart probe also failed".to_string()),
-            Ok(true), // rollback probe succeeds
-        ]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || true,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(compatible);
-        assert_eq!(ensure_count, 2, "initial ensure + post-restart ensure");
-        assert_eq!(restart_count, 2, "error-path restart + rollback restart");
-        assert_eq!(rollback_launch_count, 1);
-        assert_eq!(snapshot_count, 1);
-        assert_eq!(service_count, 1);
     }
 
     #[test]
@@ -2846,6 +2516,8 @@ mod tests {
 
     #[test]
     fn daemon_required_env_parsing() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
         std::env::remove_var("SKILL_DAEMON_REQUIRED");
         assert!(!daemon_required_env());
 
@@ -2859,39 +2531,6 @@ mod tests {
         assert!(!daemon_required_env());
 
         std::env::remove_var("SKILL_DAEMON_REQUIRED");
-    }
-
-    #[test]
-    fn runtime_ready_degraded_after_restart_error_without_rollback() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let mut waits = std::collections::VecDeque::from([
-            Ok(false), // initial mismatch
-            Err("restart probe failed".to_string()),
-        ]);
-
-        let mut ensure_count = 0usize;
-        let mut restart_count = 0usize;
-        let mut rollback_launch_count = 0usize;
-        let mut snapshot_count = 0usize;
-        let mut service_count = 0usize;
-
-        let compatible = ensure_daemon_runtime_ready_with_hooks(
-            || ensure_count += 1,
-            || waits.pop_front().unwrap_or(Err("no wait result".into())),
-            || restart_count += 1,
-            || false,
-            || rollback_launch_count += 1,
-            || snapshot_count += 1,
-            || service_count += 1,
-        );
-
-        assert!(!compatible);
-        assert_eq!(ensure_count, 2);
-        assert_eq!(restart_count, 1);
-        assert_eq!(rollback_launch_count, 0);
-        assert_eq!(snapshot_count, 0);
-        assert_eq!(service_count, 1);
     }
 
     #[test]
@@ -3141,60 +2780,6 @@ mod tests {
         assert_eq!(bs.protocol_version, Some(PROTOCOL_VERSION));
 
         server.join().unwrap();
-    }
-
-    #[test]
-    fn rollback_snapshot_overwrites_when_source_changes() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        let fake_bin = td.path().join(if cfg!(target_os = "windows") {
-            "skill-daemon.exe"
-        } else {
-            "skill-daemon"
-        });
-        std::fs::write(&fake_bin, b"daemon-v1").unwrap();
-        std::env::set_var("SKILL_DAEMON_BIN", &fake_bin);
-
-        // First copy
-        update_daemon_rollback_snapshot_best_effort();
-        let rollback = daemon_rollback_bin_path().unwrap();
-        assert_eq!(std::fs::read(&rollback).unwrap(), b"daemon-v1");
-
-        // Update source binary (different size triggers re-copy)
-        std::fs::write(&fake_bin, b"daemon-v2-longer").unwrap();
-        update_daemon_rollback_snapshot_best_effort();
-        assert_eq!(std::fs::read(&rollback).unwrap(), b"daemon-v2-longer");
-
-        std::env::remove_var("SKILL_DAEMON_BIN");
-    }
-
-    #[test]
-    fn rollback_snapshot_skips_when_src_equals_dst() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        // Point SKILL_DAEMON_BIN to the rollback path itself
-        let rollback = daemon_rollback_bin_path().unwrap();
-        if let Some(parent) = rollback.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
-        std::fs::write(&rollback, b"self-binary").unwrap();
-        std::env::set_var("SKILL_DAEMON_BIN", &rollback);
-
-        // Should be a no-op (src == dst)
-        update_daemon_rollback_snapshot_best_effort();
-        assert_eq!(std::fs::read(&rollback).unwrap(), b"self-binary");
-
-        std::env::remove_var("SKILL_DAEMON_BIN");
     }
 
     #[test]
@@ -4464,10 +4049,10 @@ mod async_contract_tests {
         server.join().unwrap();
     }
 
-    // ── App-version upgrade detection tests ────────────────────────────
+    // ── Upgrade state machine smoke tests ───────────────────────────────
 
     #[test]
-    fn stamp_app_version_creates_marker_file() {
+    fn upgrade_state_round_trip() {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
@@ -4475,106 +4060,26 @@ mod async_contract_tests {
         std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
         std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
 
-        let marker = last_app_version_path();
-        assert!(!marker.exists(), "marker should not exist before stamp");
+        let mut s = crate::daemon_upgrade::load_state();
+        assert!(matches!(s.phase, crate::daemon_upgrade::Phase::Ready));
+        s.installed_hash = Some("abc".into());
+        s.phase = crate::daemon_upgrade::Phase::Upgrading;
+        crate::daemon_upgrade::save_state(&mut s);
 
-        stamp_app_version();
-
-        assert!(marker.exists(), "marker should exist after stamp");
-        let contents = std::fs::read_to_string(&marker).unwrap();
-        assert_eq!(contents, APP_VERSION);
+        let s2 = crate::daemon_upgrade::load_state();
+        assert_eq!(s2.installed_hash.as_deref(), Some("abc"));
+        assert!(matches!(s2.phase, crate::daemon_upgrade::Phase::Upgrading));
     }
 
     #[test]
-    fn app_version_changed_returns_true_when_no_marker() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
+    fn upgrade_sha256_file_matches_known_value() {
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        assert!(
-            app_version_changed(),
-            "should detect change when marker file is absent"
+        let p = td.path().join("hello.bin");
+        std::fs::write(&p, b"hello").unwrap();
+        // sha256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+        assert_eq!(
+            crate::daemon_upgrade::sha256_file(&p).as_deref(),
+            Some("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
         );
-    }
-
-    #[test]
-    fn app_version_changed_returns_false_after_stamp() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        stamp_app_version();
-        assert!(
-            !app_version_changed(),
-            "should not detect change right after stamping"
-        );
-    }
-
-    #[test]
-    fn app_version_changed_returns_true_when_marker_differs() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        let marker = last_app_version_path();
-        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
-        std::fs::write(&marker, "0.0.1-old").unwrap();
-
-        assert!(
-            app_version_changed(),
-            "should detect change when marker contains a different version"
-        );
-    }
-
-    #[test]
-    fn app_version_changed_ignores_trailing_whitespace() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        let marker = last_app_version_path();
-        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
-        std::fs::write(&marker, format!("{}\n  ", APP_VERSION)).unwrap();
-
-        assert!(
-            !app_version_changed(),
-            "should treat version with trailing whitespace as matching"
-        );
-    }
-
-    #[test]
-    fn stamp_overwrites_previous_version() {
-        let _guard = daemon_cmds_test_lock().lock().unwrap();
-
-        let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
-
-        let marker = last_app_version_path();
-        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
-        std::fs::write(&marker, "0.0.1-old").unwrap();
-
-        assert!(app_version_changed());
-
-        stamp_app_version();
-
-        assert!(
-            !app_version_changed(),
-            "stamp should overwrite old version so change is no longer detected"
-        );
-        assert_eq!(std::fs::read_to_string(&marker).unwrap(), APP_VERSION);
     }
 }

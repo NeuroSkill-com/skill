@@ -380,7 +380,7 @@ function qualityBg(val: number): string {
                  : 'text-muted-foreground border-border dark:border-white/[0.06] hover:text-foreground hover:border-foreground/30'}"
       >
         {tab.label}
-        <span class="text-[0.46rem] opacity-60 tabular-nums">{tab.count()}</span>
+        <span class="text-ui-2xs opacity-60 tabular-nums">{tab.count()}</span>
       </button>
     {/each}
   </div>
@@ -409,11 +409,11 @@ function qualityBg(val: number): string {
         <!-- Channel name -->
         <span class="text-ui-md font-bold font-mono" style="color:{qualityColor(q)}">{name}</span>
         <!-- Quality label -->
-        <span class="text-[0.45rem] font-semibold uppercase tracking-wider" style="color:{qualityColor(q)}; opacity:0.8">
+        <span class="text-ui-2xs font-semibold uppercase tracking-wider" style="color:{qualityColor(q)}; opacity:0.8">
           {labelToText(label)}
         </span>
         <!-- Position -->
-        <span class="text-[0.4rem] text-muted-foreground/50">{musePositionLabels[idx]}</span>
+        <span class="text-ui-2xs text-muted-foreground/50">{musePositionLabels[idx]}</span>
       </button>
     {/each}
   </div>
@@ -487,7 +487,7 @@ function qualityBg(val: number): string {
 
     <!-- Region legend -->
     <div class="absolute bottom-2 left-2 right-2 flex flex-wrap justify-center gap-x-2 gap-y-0.5
-                text-[0.45rem] text-muted-foreground/50 bg-background/70 backdrop-blur-sm
+                text-ui-2xs text-muted-foreground/50 bg-background/70 backdrop-blur-sm
                 rounded-md px-2 py-1 border border-border/40 pointer-events-none">
       {#each Object.entries(regionColors) as [region, color]}
         {#if region !== "reference"}
@@ -500,7 +500,7 @@ function qualityBg(val: number): string {
     </div>
 
     <!-- Hint -->
-    <div class="absolute top-2 left-2 text-[0.45rem] text-muted-foreground/40
+    <div class="absolute top-2 left-2 text-ui-2xs text-muted-foreground/40
                 bg-background/60 backdrop-blur-sm rounded-md px-1.5 py-0.5 border border-border/30 pointer-events-none">
       Drag to rotate · Click electrode
     </div>
@@ -515,9 +515,9 @@ function qualityBg(val: number): string {
         <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:{regionColors[el.region]}"></span>
         <span class="text-ui-lg font-bold font-mono">{el.name}</span>
         {#if el.muse}
-          <Badge variant="outline" class="text-[0.44rem] px-1 py-0 rounded-full bg-indigo-500/10 text-indigo-500 border-indigo-500/20">Muse</Badge>
+          <Badge variant="outline" class="text-ui-2xs px-1 py-0 rounded-full bg-indigo-500/10 text-indigo-500 border-indigo-500/20">Muse</Badge>
         {/if}
-        <Badge variant="outline" class="text-[0.44rem] px-1 py-0 rounded-full">{regionLabels[el.region]}</Badge>
+        <Badge variant="outline" class="text-ui-2xs px-1 py-0 rounded-full">{regionLabels[el.region]}</Badge>
         {#if el.muse && effectiveQuality}
           {@const chIdx = museChannels.indexOf(el.name)}
           {#if chIdx >= 0}

@@ -13,7 +13,7 @@
 
 [workspace]
 resolver = "2"
-exclude = ["patches/muda-0.17.2"]
+exclude = []
 members = [
     "src-tauri",
     "crates/skill-autostart",
@@ -43,7 +43,10 @@ members = [
     "crates/skill-skills",
     "crates/skill-tools",
     "crates/skill-tray",
+    "crates/skill-neutts",
     "crates/skill-tts",
+    "crates/skill-asr",
+    "crates/skill-tty",
     "crates/skill-vision",
     "crates/iroh_test_client",
     "crates/iroh-example-client",
@@ -53,12 +56,6 @@ members = [
     "crates/skill-daemon",
 ]
 
-# ── Patch: Apple-Silicon Metal fix for cubek-matmul ───────────────────────────
-#
-# cubek-matmul 0.1.1 panics on Apple Silicon when the SimpleCyclicCmma tile
-# (40 KB) exceeds Metal's 32 KB shared-memory limit.  The patched fork extends
-# the 'auto' fallback chain:  SimpleCyclicCmma → SimpleUnit → Naive.
-#
 # btleplug: improved macOS BLE scanning behaviour.
 # NOTE: upstream branch has a typo ("imrpoved" → "improved"); tracked for rename.
 #
@@ -66,10 +63,11 @@ members = [
 # from member Cargo.toml files.
 
 [patch.crates-io]
-cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
-# Fix muda ZeroWidth panic in to_png() on macOS (upstream bug in 0.17.2)
-muda            = { path = "patches/muda-0.17.2" }
+# rlx / rlx-models: resolved from crates.io (=0.2.13, pinned in [workspace.dependencies]).
+# ../rlx and ../rlx-models are LOCAL-DEV ONLY — never patched here so CI/published
+# builds use the registry. For local work against sibling checkouts, run
+# `bash scripts/ensure-rlx.sh` (writes a cargo `[patch]` override outside the repo).
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
 glib            = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
@@ -78,17 +76,9 @@ gobject-sys     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 gio             = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 gio-sys         = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
 glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
-# Fix rand 0.7.3 vulnerability (GHSA-2qph-qpvm-2qf7) pulled in by selectors → phf_codegen → phf_generator
-phf_generator   = { path = "patches/phf_generator-0.8.0" }
-# burn-mlx on crates.io (0.1.2) targets burn 0.16; the git main branch supports
-# burn 0.20 which we use.  This patch also covers fast-umap's transitive dep.
-burn-mlx        = { git = "https://github.com/eidola-ai/burn-mlx", branch = "burn-0-20" }
-# emotiv: using crates.io 0.0.12 (no patch needed — restore path dep when developing locally)
-# zuna-rs: using crates.io 0.1.3 (no patch needed — restore path dep when developing locally)
-
-
-
-
+# tribev2: using crates.io 0.1.0 (no patch needed — restore path dep when developing locally)
+# eegdino 0.2.0: device_label missing OneApi/Hexagon arms for rlx 0.2.10
+eegdino          = { path = "patches/eegdino-0.2.0" }
 
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #
@@ -115,6 +105,39 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # to unpack a .nsis.zip built with standard Deflate (method 8).
 zip = { version = "7", features = ["deflate"] }
 
+# RLX — published on crates.io (features set per crate).
+#   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR
+#   rlx-models — https://github.com/MIT-RLX/rlx-models — model loaders / runners
+# These pins are what CI and release builds use. For local development against
+# sibling ../rlx / ../rlx-models checkouts, run `bash scripts/ensure-rlx.sh` — it
+# registers a cargo `[patch]` override OUTSIDE the repo (and skip-worktrees the
+# lock), so you build against your local rlx without editing Cargo.toml or
+# committing a path-based Cargo.lock (never commit `../` paths here).
+rlx          = { version = "=0.2.13", default-features = false }
+rlx-models   = { version = "=0.2.13", default-features = false }
+rlx-minicpm5 = { version = "=0.2.13", default-features = false }
+rlx-minimax  = { version = "=0.2.13", default-features = false }
+rlx-nemotron = { version = "=0.2.13", default-features = false }
+rlx-gemma    = { version = "=0.2.13", default-features = false }
+rlx-neutts   = { version = "=0.2.13", default-features = false }
+rlx-runtime   = { version = "=0.2.13", default-features = false }
+rlx-umap      = { version = "=0.2.13", default-features = false }
+rlx-kittentts = { version = "=0.2.13", default-features = false }
+rlx-inflect-nano = { version = "=0.2.13", default-features = false }
+rlx-tiny-tts  = { version = "=0.2.13", default-features = false }
+rlx-whisper   = { version = "=0.2.13", default-features = false }
+rlx-vad       = { version = "=0.2.13", default-features = false }
+rlx-qwen3-asr = { version = "=0.2.13", default-features = false }
+rlx-qwen3-tts = { version = "=0.2.13", default-features = false }
+rlx-kyutai-tts = { version = "=0.2.13", default-features = false }
+rlx-orpheus   = { version = "=0.2.13", default-features = false }
+rlx-voxtral   = { version = "=0.2.13", default-features = false }
+# Bonsai-27B (prism-ml/Bonsai-27B-gguf) is a qwen35-arch GGUF: it routes through
+# rlx-models' auto_runner → rlx-qwen35 Qwen35Runner (packed Q1_0), same as the
+# other Bonsai catalog families — no direct rlx-bonsai/rlx-qwen35 dep needed.
+# rlx-ocr keeps its default features (rlx + tensor-ops); consumers add `convert-rten`.
+rlx-ocr       = { version = "=0.2.13" }
+
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #
 # Consistent lint policy across every crate.  Individual crates inherit these
@@ -125,6 +148,16 @@ zip = { version = "7", features = ["deflate"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
+# skill-daemon gates two EEG encoders (reve, brainjepa) that are pending RLX
+# migration — their `reve-rs` / `brainjepa` deps aren't published yet, so the
+# features stay commented out in skill-daemon/Cargo.toml while the
+# `#[cfg(feature = "embed-reve" / "embed-brainjepa")]` guards remain in src.
+# Declare those cfg values as known so `unexpected_cfgs` stays quiet without
+# making the half-wired features selectable (an empty stub feature would break
+# `--all-features`). Drop a value here once its real feature lands.
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("embed-reve", "embed-brainjepa"))',
+] }
 
 [workspace.lints.clippy]
 # Phase 1 hardening: make critical runtime-safety lints hard errors.
@@ -154,19 +187,15 @@ items_after_test_module = "allow"
 module_inception = "allow"
 assertions_on_constants = "allow"
 unnecessary_cast = "allow"
+# doc_lazy_continuation — clippy 1.95 made this a default warn and it fires on
+# dozens of pre-existing doc comments across the workspace (a wrapped line under
+# a `-`/`*`/`+`/`N.` list item that isn't re-indented). It is a doc-rendering
+# nit, not a correctness issue; allow it so the strict `-D warnings` push hook
+# passes without churning every crate's docs. (Specific-lint allow overrides the
+# `warnings` group even under `-D warnings`.)
+doc_lazy_continuation = "allow"
 
 # ── Build profiles ────────────────────────────────────────────────────────────
-#
-# Rust's incremental compilation on macOS uses "thin archives" for rlibs.
-# When a compilation unit inside candle-core produces a zero-length .o file
-# (any module that is entirely cfg-gated away at the chosen feature set), the
-# thin-archive builder tries to mmap it and panics:
-#   "failed to map object file: memory map must have a non-zero length"
-# Disabling incremental for just candle-core avoids the thin-archive code path
-# without penalising the rest of the workspace.
-# Tracked upstream: https://github.com/rust-lang/rust/issues/129443
-[profile.dev.package.candle-core]
-incremental = false
 
 [profile.dev]
 codegen-units = 8
@@ -185,17 +214,24 @@ debug = 0
 # codegen-units = 1 + fat LTO, but compiles significantly faster.
 # ── Test profile ──────────────────────────────────────────────────────────────
 #
-# llama-cpp-sys-4 wraps the llama.cpp C++ library.  Without optimisations,
-# CPU inference runs at a fraction of native speed, making the LLM E2E test
-# painfully slow (~1-2 tok/s instead of 20+ tok/s).  Optimising just this
-# -sys crate (and its transitive C++ build) has no measurable impact on
-# incremental test compile times since it is already built by cmake.
-[profile.test.package.llama-cpp-sys-4]
-opt-level = 3
-
-[profile.test.package.llama-cpp-4]
-opt-level = 3
-
 [profile.release]
 lto           = "thin"
 codegen-units = 8
+
+# ── Size-optimised release profile (opt-in) ────────────────────────────────
+# Builds a noticeably smaller binary than `release` at the cost of much
+# longer link time. Used by the release-min CI builds and the size-comparison
+# matrix. Use with `cargo build --profile release-min ...`.
+#
+# Wins (measured on skill-daemon llm-rlx-metal):
+#   * lto = "fat"          — cross-crate dead-code elimination (~5-10%)
+#   * codegen-units = 1    — wider monomorphisation merging (~2-5%)
+#   * strip = "symbols"    — drops local + debuginfo + symtab (~3-8%)
+# Combined: typically 10-20% smaller than `release`.
+#
+# Not the default because the link step grows from ~3 min to ~10+ min on M4.
+[profile.release-min]
+inherits      = "release"
+lto           = "fat"
+codegen-units = 1
+strip         = "symbols"

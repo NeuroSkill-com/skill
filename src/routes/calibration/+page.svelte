@@ -481,7 +481,7 @@ useWindowTitle("window.title.calibration");
                    : 'text-muted-foreground border-border dark:border-white/[0.06] hover:text-foreground hover:border-foreground/30'}"
         >
           {etab.label}
-          <span class="text-[0.45rem] opacity-60 tabular-nums">{etab.count}</span>
+          <span class="text-ui-2xs opacity-60 tabular-nums">{etab.count}</span>
         </button>
       {/each}
       {#if !museConnected}
@@ -506,11 +506,11 @@ useWindowTitle("window.title.calibration");
             </div>
             <span class="text-ui-sm font-bold font-mono"
                   style="color:{elecQualityColor(label)}">{name}</span>
-            <span class="text-[0.42rem] font-semibold uppercase tracking-wider"
+            <span class="text-ui-2xs font-semibold uppercase tracking-wider"
                   style="color:{elecQualityColor(label)}; opacity:0.8">
               {elecQualityText(label)}
             </span>
-            <span class="text-[0.38rem] text-muted-foreground/50">{MUSE_POSITIONS[idx]}</span>
+            <span class="text-ui-2xs text-muted-foreground/50">{MUSE_POSITIONS[idx]}</span>
           </div>
         {/each}
       </div>
@@ -530,7 +530,7 @@ useWindowTitle("window.title.calibration");
                       style="background:{elecQualityColor(label)}"></span>
                 <span class="text-ui-xs font-mono font-bold"
                       style="color:{elecQualityColor(label)}">{name}</span>
-                <span class="text-[0.44rem] text-muted-foreground/60">
+                <span class="text-ui-2xs text-muted-foreground/60">
                   {elecQualityText(label)}
                 </span>
               </div>

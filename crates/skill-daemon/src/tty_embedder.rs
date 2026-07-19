@@ -3,7 +3,7 @@
 //! created by the session finalizer.
 //!
 //! Pulls rows where `embedding IS NULL` in batches of 32, runs them through
-//! `state.text_embedder` (fastembed), int8-quantises each vector (cuts
+//! `state.text_embedder` (rlx-embed), int8-quantises each vector (cuts
 //! storage 4× vs f32, <2% recall loss for cosine), writes back to SQLite.
 //!
 //! No new HNSW yet — semantic search at query time scans the full set,
@@ -18,15 +18,17 @@ use tracing::{debug, warn};
 /// Run the worker every 30 s. Tunable; finalizer runs every 60 s and
 /// embedding catches up between ticks.
 const TICK: Duration = Duration::from_secs(30);
-/// Batch size — fastembed throughput peaks around 32–64 on CPU, more on GPU.
+/// Batch size — embedding throughput peaks around 32–64 on CPU, more on GPU.
 const BATCH: usize = 32;
 
 pub fn spawn(state: AppState) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(TICK).await;
+            let tick_start = std::time::Instant::now();
             let s = state.clone();
             let _ = tokio::task::spawn_blocking(move || run_once(&s)).await;
+            state.record_task_heartbeat("tty-embedder", tick_start.elapsed().as_millis() as u64);
         }
     });
 }
@@ -46,7 +48,7 @@ fn run_once(state: &AppState) {
     }
 
     // Skip empty / whitespace-only rows by writing a sentinel zero-vector so
-    // we don't keep retrying them. fastembed errors on empty input.
+    // we don't keep retrying them. The embedder errors on empty input.
     let mut work: Vec<(i64, String)> = Vec::with_capacity(pending.len());
     for (id, text) in pending {
         if text.trim().is_empty() {
@@ -60,7 +62,7 @@ fn run_once(state: &AppState) {
     }
 
     let texts: Vec<&str> = work.iter().map(|(_, t)| t.as_str()).collect();
-    let vectors = match state.text_embedder.embed_batch(texts) {
+    let vectors = match state.text_embedder.embed_documents(texts) {
         Some(v) => v,
         None => {
             warn!("embedder unavailable; skipping batch of {}", work.len());

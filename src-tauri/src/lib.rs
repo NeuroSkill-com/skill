@@ -79,12 +79,14 @@ mod tray;
 
 mod about;
 mod active_window;
+mod auto_update;
 mod shortcut_cmds;
 mod update_channel;
 
 mod window_cmds;
 
 mod daemon_cmds;
+mod daemon_upgrade;
 mod label_cmds;
 mod settings_cmds;
 
@@ -108,15 +110,18 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 use about::{get_about_info, open_about_window};
+use auto_update::{get_auto_update_enabled, set_auto_update_enabled};
 use daemon_cmds::{
-    cancel_session, cancel_weights_download, daemon_install_service, daemon_uninstall_service,
-    estimate_reembed, force_restart_daemon, get_daemon_bootstrap, get_daemon_service_status,
+    asr_set_ptt, asr_set_speaking, asr_start, asr_status, asr_stop, cancel_session,
+    cancel_weights_download, daemon_install_service, daemon_uninstall_service, estimate_reembed,
+    force_restart_daemon, get_asr_settings, get_daemon_bootstrap, get_daemon_service_status,
     get_daemon_status, get_daemon_token_path, get_eeg_model_config, get_eeg_model_status,
-    get_exg_catalog, lsl_discover, lsl_get_config, lsl_get_idle_timeout, lsl_iroh_start,
-    lsl_iroh_status, lsl_iroh_stop, lsl_pair_stream, lsl_set_auto_connect, lsl_set_idle_timeout,
-    lsl_unpair_stream, lsl_virtual_source_running, lsl_virtual_source_start,
-    lsl_virtual_source_start_configured, lsl_virtual_source_stop, set_eeg_model_config,
-    start_daemon_dev, start_session, switch_session, trigger_reembed, trigger_weights_download,
+    get_exg_catalog, get_tts_engine, lsl_discover, lsl_get_config, lsl_get_idle_timeout,
+    lsl_iroh_start, lsl_iroh_status, lsl_iroh_stop, lsl_pair_stream, lsl_set_auto_connect,
+    lsl_set_idle_timeout, lsl_unpair_stream, lsl_virtual_source_running, lsl_virtual_source_start,
+    lsl_virtual_source_start_configured, lsl_virtual_source_stop, set_asr_settings,
+    set_eeg_model_config, set_tts_engine, start_daemon_dev, start_session, switch_session,
+    trigger_reembed, trigger_weights_download,
 };
 use history_cmds::{
     list_session_days, list_sessions_for_day, open_history_window, stream_sessions,
@@ -311,11 +316,22 @@ pub fn run() {
             set_update_channel,
             channel_check_for_update,
             channel_download_and_install,
+            get_auto_update_enabled,
+            set_auto_update_enabled,
             pick_ref_wav_file,
             get_recent_active_windows,
             get_recent_input_activity,
             get_input_buckets,
             test_location,
+            asr_start,
+            asr_stop,
+            asr_status,
+            asr_set_ptt,
+            asr_set_speaking,
+            get_asr_settings,
+            set_asr_settings,
+            get_tts_engine,
+            set_tts_engine,
             get_exg_catalog,
             get_eeg_model_config,
             get_eeg_model_status,

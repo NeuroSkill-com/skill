@@ -192,7 +192,11 @@ pub fn list_sessions_for_local_day(
         tb.cmp(&ta)
     });
 
-    merged
+    // Second pass: a session that crosses UTC midnight has its chunks
+    // split across two day dirs. Each per-dir collapse only sees its own
+    // half, leaving two adjacent entries here. Re-collapse so the local-
+    // day listing shows one logical session.
+    crate::collapse_adjacent_chunks_pub(merged)
 }
 
 /// List ALL sessions across ALL days, newest first.

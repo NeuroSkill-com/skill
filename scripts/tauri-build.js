@@ -19,6 +19,13 @@ import { createConnection } from "node:net";
 import { arch, cpus, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  applyMacProfileEnv,
+  defaultMacBuildTarget,
+  resolveEnvTargets,
+  resolveTargetTriple,
+  rewriteTargetArgs,
+} from "./lib/target-triples.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -213,7 +220,7 @@ function removeBundleArg(args, parsedBundleArg) {
 const [subcommand = "", ...rawSubArgs] = process.argv.slice(2);
 
 let tuiPaneRole = null;
-const subArgs = [];
+let subArgs = [];
 for (const arg of rawSubArgs) {
   if (arg === "--__tui-pane-role=daemon") {
     tuiPaneRole = "daemon";
@@ -275,6 +282,9 @@ if (!needsSetup) {
 
 runMarkdownRendererGuard();
 
+// Resolve TAURI_TARGET / CARGO_BUILD_TARGET aliases (e.g. mac-neo → aarch64-apple-darwin).
+resolveEnvTargets(process.env);
+
 // ── Parse --target from subArgs ───────────────────────────────────────────────
 let explicitTarget = null;
 for (let i = 0; i < subArgs.length; i++) {
@@ -286,6 +296,17 @@ for (let i = 0; i < subArgs.length; i++) {
     explicitTarget = subArgs[i].slice("--target=".length);
     break;
   }
+}
+
+if (explicitTarget) {
+  const resolved = resolveTargetTriple(explicitTarget);
+  explicitTarget = resolved.triple;
+  applyMacProfileEnv(resolved.profile);
+  subArgs = rewriteTargetArgs(subArgs, resolved.triple);
+} else if (process.env.TAURI_TARGET) {
+  explicitTarget = process.env.TAURI_TARGET;
+} else if (process.env.CARGO_BUILD_TARGET) {
+  explicitTarget = process.env.CARGO_BUILD_TARGET;
 }
 
 const isMingwTarget = explicitTarget?.endsWith("-windows-gnu") ?? false;
@@ -338,7 +359,19 @@ if (isMingwTarget) {
 } else if (isMac) {
   // Release builds target Apple Silicon; dev builds use the host triple.
   if (subcommand === "build" && !explicitTarget) {
-    platformFlags = ["--target", "aarch64-apple-darwin", "--no-sign"];
+    platformFlags = ["--target", defaultMacBuildTarget(), "--no-sign"];
+  }
+
+  // Homebrew cmake/sccache are not on the default PATH when cargo invokes
+  // build scripts. The cmake-0.1.x crate respects CMAKE as the binary path.
+  // Kept out of .cargo/config.toml because [env] is unconditional and would
+  // leak these macOS paths to Windows / Linux runners (cmake-rs panics with
+  // "is `cmake` not installed?" / os error 3).
+  if (!process.env.CMAKE && existsSync("/opt/homebrew/bin/cmake")) {
+    process.env.CMAKE = "/opt/homebrew/bin/cmake";
+  }
+  if (!process.env.SCCACHE_PATH && existsSync("/opt/homebrew/bin/sccache")) {
+    process.env.SCCACHE_PATH = "/opt/homebrew/bin/sccache";
   }
 
   // ── macOS: skip Tauri bundling for default local builds ──────────────────
@@ -731,7 +764,7 @@ const canRetryBundlesSequentially = isLinux && subcommand === "build" && bundleA
 // assemble the .app bundle manually from the already-built release binary,
 // Info.plist, icons, entitlements, and resources.
 function assembleMacOsApp() {
-  const triple = explicitTarget || "aarch64-apple-darwin";
+  const triple = explicitTarget || defaultMacBuildTarget();
   const binaryPath = resolve(root, "src-tauri/target", triple, "release/skill");
   if (!existsSync(binaryPath)) {
     return false;
@@ -957,11 +990,32 @@ if (subcommand === "dev") {
   }
 }
 
+// Dev: point the daemon at the staged bundled resources (src-tauri/resources)
+// so pluggable TTS engines (e.g. Inflect-Nano) find their weights the same way
+// the packaged .app does — via SKILL_RESOURCE_DIR → <res>/tts/<engine>. In a
+// packaged build the Tauri app sets this to Contents/Resources; in `tauri dev`
+// the daemon is a plain child of this script, so set it here. Stage the weights
+// first with `bash scripts/bundle-tts-weights.sh` (no-op / hint if missing).
+if (subcommand === "dev" && !process.env.SKILL_RESOURCE_DIR) {
+  const devResourceDir = resolve(root, "src-tauri", "resources");
+  if (existsSync(devResourceDir)) {
+    process.env.SKILL_RESOURCE_DIR = devResourceDir;
+    if (!existsSync(resolve(devResourceDir, "tts", "inflect-nano", "config.json"))) {
+      console.log("ℹ Inflect-Nano weights not staged — run `bash scripts/bundle-tts-weights.sh` to enable it in dev.");
+    }
+  }
+}
+
 let daemonChild = null;
 if (subcommand === "dev" && !tuiTauriPane) {
-  console.log("\n🔧 Building skill-daemon…");
+  console.log("\n🔧 Building skill-daemon + skill-tty…");
   try {
+    // skill-tty is the sibling PTY proxy; build it alongside the daemon so
+    // dev shells exec into a separate process (and aren't killed when Tauri
+    // hot-reloads the daemon). Windows doesn't use the PTY proxy.
     const daemonBuildArgs = ["build", "-p", "skill-daemon"];
+    const isWin = process.platform === "win32" || (explicitTarget || "").includes("windows");
+    if (!isWin) daemonBuildArgs.push("-p", "skill-tty");
     if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
     execFileSync("cargo", daemonBuildArgs, { cwd: root, stdio: "inherit", env: process.env });
 
@@ -1061,8 +1115,8 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-// ── macOS: build WidgetKit extension ──────────────────────────────────────────
-if (isMac && (subcommand === "dev" || subcommand === "build")) {
+// ── macOS: build WidgetKit extension (local validation only; CI uses ci.mjs) ─
+if (isMac && (subcommand === "dev" || subcommand === "build") && process.env.GITHUB_ACTIONS !== "true") {
   const widgetScript = resolve(root, "extensions", "widgets", "build-widgets.sh");
   if (existsSync(widgetScript)) {
     const isRelease = subcommand === "build" && !rawSubArgs.includes("--debug");

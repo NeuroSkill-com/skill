@@ -229,9 +229,9 @@ fn main() {
             encode_webp(&resized).len()
         }));
 
-        // ── PNG decode (fastembed old overhead) ──
+        // ── PNG decode (legacy ONNX-pipeline overhead) ──
         let png_bytes = encode_png(&resized);
-        results.push(bench("PNG decode (fastembed overhead)", warmup, iters, || {
+        results.push(bench("PNG decode (legacy overhead)", warmup, iters, || {
             let img = image::load_from_memory(&png_bytes).unwrap();
             img.as_bytes().len()
         }));
@@ -266,6 +266,6 @@ fn main() {
     println!("  - JPEG encode is ~10x faster than PNG");
     println!("  - DynamicImage clone is near-instant (memcpy)");
     println!("  - Old pipeline paid PNG encode + decode every capture");
-    println!("  - New pipeline: zero encoding for fastembed path");
+    println!("  - New pipeline: zero encoding for the embedding path");
     println!("==========================================================");
 }

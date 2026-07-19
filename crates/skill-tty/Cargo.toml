@@ -1,0 +1,19 @@
+[package]
+name = "skill-tty"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "PTY proxy for transparent terminal session recording. Split out of skill-daemon so process-name kills (Tauri sidecar reload, kill-old-daemon-on-upgrade) do not sweep up active terminal sessions."
+
+[[bin]]
+name = "skill-tty"
+path = "src/main.rs"
+
+[dependencies]
+anyhow  = { workspace = true }
+libc    = "0.2"
+dirs    = "6"
+chrono  = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[lints]
+workspace = true

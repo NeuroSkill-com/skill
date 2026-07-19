@@ -12,8 +12,9 @@
 //   prepare-changelog VER OUT [RANGE]  Generate release notes markdown
 //   update-latest-json ...   Merge platform entry into Tauri updater manifest
 //   discord-notify ...       Send Discord webhook notification
-//   download-llama PLAT TGT FEAT  Download + validate prebuilt llama libs
 //   import-apple-cert        Import .p12 into temporary keychain (macOS)
+//   setup-widget-signing     Prepare WidgetKit automatic signing (macOS CI)
+//   build-widgets            Build SkillWidgets.appex with CI signing (macOS)
 //   validate-notarization    Check Apple notarization credentials (macOS)
 //   validate-apple-signing-identity   Assert APPLE_SIGNING_IDENTITY is a Developer ID Application cert
 //   free-disk-space          Remove unused toolchains on Linux runners
@@ -25,11 +26,7 @@ import { execSync, spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync, statSync } from "fs";
 import { basename, join, dirname } from "path";
 import { tmpdir } from "os";
-import { createWriteStream } from "fs";
-import https from "https";
-import http from "http";
-
-const LLAMA_PREBUILT_TAG = "0.2.46";
+import { createHash } from "crypto";
 
 // ── Globals ──────────────────────────────────────────────────────────────────
 
@@ -95,29 +92,6 @@ function run(cmd, opts = {}) {
     throw err;
   }
   return result;
-}
-
-function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const follow = (u) => {
-      const proto = u.startsWith("https") ? https : http;
-      proto.get(u, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          follow(res.headers.location);
-          return;
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode} for ${u}`));
-          return;
-        }
-        const ws = createWriteStream(dest);
-        res.pipe(ws);
-        ws.on("finish", () => ws.close(resolve));
-        ws.on("error", reject);
-      }).on("error", reject);
-    };
-    follow(url);
-  });
 }
 
 function parseArgs(argv, spec) {
@@ -323,7 +297,70 @@ function ensureRcLatestRelease() {
   ], { check: true });
 }
 
-function cmdDiscordNotify(args) {
+/**
+ * Reconcile the Homebrew cask (Casks/neuroskill.rb) to a released build.
+ *
+ * Usage:
+ *   node scripts/ci.mjs update-cask [--version <ver>] [--sha256 <hex>]
+ *                                   [--dmg <path>] [--cask <path>] [--repo <owner/name>]
+ *
+ * Resolution:
+ *   version : --version, else the latest *stable* (non-prerelease) GitHub release.
+ *   sha256  : --sha256, else computed from --dmg, else the release asset's digest
+ *             fetched via `gh api` (no download of the ~100 MB DMG).
+ *
+ * Only the `version` and `sha256` lines are rewritten — every other stanza
+ * (depends_on, zap, url template, …) is preserved. Idempotent: a no-op when the
+ * cask already matches, so the reconcile workflow only opens a PR on real drift.
+ */
+function cmdUpdateCask(args) {
+  const repo = args.repo || process.env.GITHUB_REPOSITORY || "NeuroSkill-com/skill";
+  const caskPath = args.cask || "Casks/neuroskill.rb";
+
+  // 1. Resolve the target version — explicit, or the latest non-prerelease release.
+  let version = args.version;
+  if (version) {
+    version = version.replace(/^v/, "");
+  } else {
+    const r = run(["gh", "api", `repos/${repo}/releases/latest`, "-q", ".tag_name"], { capture: true, check: true });
+    version = (r.stdout || "").trim().replace(/^v/, "");
+    if (!version) throw new Error("could not resolve the latest stable release");
+  }
+  const dmgName = `NeuroSkill_${version}_aarch64.dmg`;
+
+  // 2. Resolve the sha256 — explicit, from a local DMG, or the release asset digest.
+  let sha256 = args.sha256;
+  if (!sha256 && args.dmg) {
+    sha256 = createHash("sha256").update(readFileSync(args.dmg)).digest("hex");
+  }
+  if (!sha256) {
+    const q = `.assets[] | select(.name=="${dmgName}") | .digest`;
+    const r = run(["gh", "api", `repos/${repo}/releases/tags/v${version}`, "-q", q], { capture: true, check: true });
+    const digest = (r.stdout || "").trim();
+    if (!digest) throw new Error(`release v${version} has no asset named ${dmgName}`);
+    sha256 = digest.replace(/^sha256:/, "");
+  }
+  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`invalid sha256: ${sha256}`);
+
+  // 3. Rewrite the version + sha256 lines, preserving everything else.
+  const before = readFileSync(caskPath, "utf8");
+  if (!/^\s*version\s+"/m.test(before) || !/^\s*sha256\s+"/m.test(before)) {
+    throw new Error(`${caskPath} is missing a version or sha256 stanza`);
+  }
+  const after = before
+    .replace(/^(\s*version\s+)"[^"]*"/m, `$1"${version}"`)
+    .replace(/^(\s*sha256\s+)"[^"]*"/m, `$1"${sha256}"`);
+
+  if (after === before) {
+    console.log(`Cask already current: version ${version}, sha256 ${sha256.slice(0, 12)}…`);
+    return;
+  }
+
+  writeFileSync(caskPath, after);
+  console.log(`Updated ${caskPath} → version ${version}, sha256 ${sha256.slice(0, 12)}…`);
+}
+
+async function cmdDiscordNotify(args) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) {
     console.log("⚠ DISCORD_WEBHOOK_URL not set, skipping.");
@@ -332,8 +369,11 @@ function cmdDiscordNotify(args) {
 
   let commit = "";
   try {
-    const r = run(["git", "log", "-1", "--format=%s"], { capture: true });
-    commit = (r.stdout || "").trim().slice(0, 200);
+    // Full message (subject + body). Cap for the Discord embed field
+    // (limit 1024) and add an ellipsis when truncated.
+    const r = run(["git", "log", "-1", "--format=%B"], { capture: true });
+    const full = (r.stdout || "").trim();
+    commit = full.length > 500 ? `${full.slice(0, 500)}…` : full;
   } catch {}
 
   const { status, title, version, tag, platform } = args;
@@ -359,63 +399,16 @@ function cmdDiscordNotify(args) {
   });
 
   try {
-    const r = spawnSync("curl", ["-sf", "-X", "POST", webhook, "-H", "Content-Type: application/json", "-d", payload], { stdio: "pipe", encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`curl exited ${r.status}`);
+    // Use built-in fetch (Node 18+) to avoid platform-specific curl quoting issues.
+    const r = await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
   } catch {
     console.log("⚠ Discord notification failed (non-fatal).");
   }
-}
-
-async function cmdDownloadLlama(args) {
-  const [plat, target, feature] = args._;
-  const url = `https://github.com/eugenehp/llama-cpp-rs/releases/download/${LLAMA_PREBUILT_TAG}/llama-prebuilt-${plat}-${target}-${feature}-static.tar.gz`;
-  const tmp = process.env.RUNNER_TEMP || tmpdir();
-  const archive = join(tmp, `llama-prebuilt-${plat}.tar.gz`);
-  const dest = join(tmp, `llama-prebuilt-${plat}`);
-  mkdirSync(dest, { recursive: true });
-
-  console.log(`Downloading prebuilt llama ${LLAMA_PREBUILT_TAG}: ${url}`);
-  try {
-    await downloadFile(url, archive);
-  } catch (e) {
-    console.log(`[warn] prebuilt llama artifact unavailable (${e.message}); fallback to source build`);
-    return;
-  }
-
-  run(["tar", "-xzf", archive, "-C", dest], { check: true });
-
-  // Find root
-  let root = dest;
-  if (!["lib", "lib64", "bin"].some((d) => existsSync(join(root, d)))) {
-    const sub = readdirSync(dest).filter((f) => statSync(join(dest, f)).isDirectory());
-    root = sub.length ? join(dest, sub[0]) : "";
-  }
-  if (!root || !existsSync(root)) {
-    console.log("[warn] prebuilt llama archive layout invalid; fallback to source build");
-    return;
-  }
-
-  // Check for libs
-  const exts = { macos: [".a", ".dylib"], linux: [".a", ".so"], windows: [".lib", ".dll"] }[plat] || [".a", ".so", ".lib"];
-  const hasLibs = findFiles(root).some((f) => exts.some((e) => f.endsWith(e)));
-  if (!hasLibs) {
-    console.log("[warn] prebuilt llama archive contains no libs; fallback to source build");
-    return;
-  }
-
-  // Validate metadata
-  const metaPath = join(root, "metadata.json");
-  if (existsSync(metaPath)) {
-    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
-    if (meta.target !== target || !(meta.features || "").includes(feature)) {
-      console.log(`[warn] prebuilt metadata mismatch (target=${meta.target} features=${meta.features}); fallback to source build`);
-      return;
-    }
-  }
-
-  ghEnv("LLAMA_PREBUILT_DIR", root);
-  ghEnv("LLAMA_PREBUILT_SHARED", "0");
-  console.log(`[ok] LLAMA_PREBUILT_DIR=${root}`);
 }
 
 function findFiles(dir) {
@@ -479,6 +472,54 @@ function cmdImportAppleCert() {
   run(["security", "list-keychains", "-d", "user", "-s", keychain, "login.keychain"], { check: true });
 
   console.log(`✓ Apple Developer certificate imported into ${keychain}`);
+}
+
+/** Prepare WidgetKit automatic signing on GitHub Actions runners. */
+function cmdSetupWidgetSigning() {
+  const teamId = process.env.APPLE_TEAM_ID;
+  if (!teamId) {
+    warning("APPLE_TEAM_ID not set — skipping widget signing setup");
+    return;
+  }
+
+  ghEnv("WIDGET_CODE_SIGN_STYLE", "Automatic");
+
+  // Optional: App Store Connect API key for -allowProvisioningUpdates.
+  const ascKeyId = process.env.APPLE_ASC_KEY_ID;
+  const ascIssuer = process.env.APPLE_ASC_KEY_ISSUER_ID;
+  const ascKeyB64 = process.env.APPLE_ASC_KEY_BASE64;
+  if (ascKeyId && ascIssuer && ascKeyB64) {
+    const keyDir = join(process.env.HOME, ".private_keys");
+    mkdirSync(keyDir, { recursive: true });
+    const keyPath = join(keyDir, `AuthKey_${ascKeyId}.p8`);
+    writeFileSync(keyPath, Buffer.from(ascKeyB64, "base64"), { mode: 0o600 });
+    ghEnv("AUTH_KEY_PATH", keyPath);
+    ghEnv("AUTH_KEY_ID", ascKeyId);
+    ghEnv("AUTH_KEY_ISSUER_ID", ascIssuer);
+    console.log(`✓ App Store Connect API key installed for widget provisioning (${ascKeyId})`);
+  } else {
+    console.log("ℹ No APPLE_ASC_KEY_* secrets — relying on portal profiles + -allowProvisioningUpdates");
+  }
+
+  // Optional: pre-downloaded macOS provisioning profile (base64 .provisionprofile).
+  const profileB64 = process.env.APPLE_WIDGET_PROVISIONING_PROFILE_BASE64;
+  if (profileB64) {
+    const profileDir = join(process.env.HOME, "Library/MobileDevice/Provisioning Profiles");
+    mkdirSync(profileDir, { recursive: true });
+    const profilePath = join(profileDir, "SkillWidgetsWidgetExtension.provisionprofile");
+    writeFileSync(profilePath, Buffer.from(profileB64, "base64"));
+    console.log(`✓ Widget provisioning profile installed (${profilePath})`);
+  }
+
+  console.log(`✓ Widget signing ready (team ${teamId}, automatic)`);
+}
+
+function cmdBuildWidgets() {
+  const widgetScript = join("extensions", "widgets", "build-widgets.sh");
+  if (!existsSync(widgetScript)) {
+    throw new Error(`Missing ${widgetScript}`);
+  }
+  run(["bash", widgetScript, "--release", "--ci"], { check: true });
 }
 
 function cmdValidateNotarization() {
@@ -557,11 +598,15 @@ function cmdSelfTest() {
   const commandMap = {
     "resolve-version": cmdResolveVersion, "verify-secrets": cmdVerifySecrets,
     "prepare-changelog": cmdPrepareChangelog, "update-latest-json": cmdUpdateLatestJson,
-    "discord-notify": cmdDiscordNotify, "download-llama": cmdDownloadLlama,
-    "import-apple-cert": cmdImportAppleCert, "validate-notarization": cmdValidateNotarization,
+    "discord-notify": cmdDiscordNotify,
+    "import-apple-cert": cmdImportAppleCert,
+    "setup-widget-signing": cmdSetupWidgetSigning,
+    "build-widgets": cmdBuildWidgets,
+    "validate-notarization": cmdValidateNotarization,
     "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
     "free-disk-space": cmdFreeDiskSpace, "install-protoc-windows": cmdInstallProtocWindows,
     "self-test": cmdSelfTest, "dry-run-release": cmdDryRunRelease,
+    "update-cask": cmdUpdateCask,
   };
 
   for (const [name, fn] of Object.entries(commandMap)) {
@@ -655,14 +700,16 @@ const COMMANDS = {
   "prepare-changelog": cmdPrepareChangelog,
   "update-latest-json": (a) => cmdUpdateLatestJson(a),
   "discord-notify": (a) => cmdDiscordNotify(a),
-  "download-llama": (a) => cmdDownloadLlama(a),
   "import-apple-cert": cmdImportAppleCert,
+  "setup-widget-signing": cmdSetupWidgetSigning,
+  "build-widgets": cmdBuildWidgets,
   "validate-notarization": cmdValidateNotarization,
   "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
   "free-disk-space": cmdFreeDiskSpace,
   "install-protoc-windows": cmdInstallProtocWindows,
   "self-test": cmdSelfTest,
   "dry-run-release": (a) => cmdDryRunRelease(a),
+  "update-cask": cmdUpdateCask,
 };
 
 async function main() {
@@ -688,6 +735,7 @@ async function main() {
     "--mirror-to-rc-latest": true,
     "--status": "status", "--title": "title", "--release-url": "release-url",
     "--run-url": "run-url", "--target": "target", "--skip-compile": true,
+    "--sha256": "sha256", "--dmg": "dmg", "--cask": "cask", "--repo": "repo",
   });
 
   log("starting");

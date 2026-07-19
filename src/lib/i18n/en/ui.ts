@@ -40,6 +40,8 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "Sample Entropy — irregularity of the signal. Higher = less predictable.",
   "tip.pacThetaGamma": "Phase-Amplitude Coupling between theta phase and gamma amplitude. Linked to memory encoding.",
   "tip.lateralityIndex": "Left–right power asymmetry across all bands. Positive = right-dominant.",
+  "tip.echt":
+    "Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1). High = strong, phase-stable alpha oscillation. [Schreglmann 2021]",
   "tip.hr": "Heart rate derived from PPG inter-beat intervals.",
   "tip.rmssd": "Root Mean Square of Successive Differences between heartbeats. Key parasympathetic HRV metric.",
   "tip.sdnn": "Standard deviation of beat-to-beat intervals. Reflects overall HRV.",
@@ -119,6 +121,11 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "Automatic update checks are disabled. Use the button above to check manually.",
   "updates.autostart": "Launch at Login",
   "updates.autostartDesc": "Start automatically when you log in to your computer.",
+  "updates.autoUpdate": "Install updates automatically",
+  "updates.autoUpdateDesc":
+    "Download new versions in the background and install them on the next restart. Turn off to choose when to install.",
+  "updates.autoUpdateOffNotice": "Automatic install is off — click Install to download and update.",
+  "updates.installNow": "Install",
   "updates.receivePrereleases": "Receive pre-releases",
   "updates.receivePrereleasesDesc":
     "Opt into release candidates ahead of stable releases. Both manual and background update checks honor this setting live.",

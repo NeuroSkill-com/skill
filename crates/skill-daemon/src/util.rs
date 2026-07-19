@@ -3,6 +3,44 @@ pub(crate) use skill_daemon_state::util::*;
 
 use crate::state::AppState;
 
+/// Locate the sibling `skill-tty` binary relative to the running daemon.
+///
+/// Layouts we have to handle:
+///   1. Dev / Linux deb-rpm / portable Linux / Windows: flat sibling
+///        <dir>/skill-tty[.exe]
+///   2. macOS production .app: each binary lives in its own .app bundle
+///      under the outer app's MacOS dir, e.g.
+///      <outer>/MacOS/skill-daemon.app/Contents/MacOS/skill-daemon
+///      <outer>/MacOS/skill-tty.app/Contents/MacOS/skill-tty
+///      so we walk up four parents from the daemon binary to reach
+///      `<outer>/MacOS/`, then descend into `skill-tty.app`.
+///
+/// Returns `None` if no sibling can be found (older builds without skill-tty);
+/// callers should fall back to the in-process PTY shim in that case.
+pub(crate) fn resolve_skill_tty_path() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+
+    // Flat sibling (dev, Linux, Windows).
+    for name in ["skill-tty", "skill-tty.exe"] {
+        let cand = dir.join(name);
+        if cand.is_file() {
+            return Some(cand);
+        }
+    }
+
+    // macOS .app sibling: dir is .../skill-daemon.app/Contents/MacOS/, walk
+    // up to the outer MacOS dir that holds both .app wrappers.
+    if let Some(outer_macos) = dir.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+        let cand = outer_macos.join("skill-tty.app/Contents/MacOS/skill-tty");
+        if cand.is_file() {
+            return Some(cand);
+        }
+    }
+
+    None
+}
+
 /// Spawn the appropriate session runner for the given target device.
 /// Cancels any existing session first.
 pub(crate) fn spawn_session_for_target(state: &AppState, target: Option<&str>) {

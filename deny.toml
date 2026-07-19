@@ -25,6 +25,25 @@ ignore = [
     { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
     # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
     # Pulled transitively; not directly used by workspace code paths that call IterMut.
+    #
+    # anyhow's RUSTSEC-2026-0190 (downcast_mut unsoundness) is fixed by upgrading
+    # to anyhow >=1.0.103 (done in Cargo.lock), so it is NOT ignored here.
+    #
+    # quick-xml 0.30/0.37/0.39 — DoS advisories, fixed in >=0.41.0. Pinned by
+    # tauri/plist (build-time codegen + macOS Info.plist parsing); reaching 0.41
+    # needs a Tauri major bump. Inputs are trusted local config/plist, not
+    # attacker-controlled network XML.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
+    # DISABLED with rlx-tiny-tts (reshape bug on Metal + MLX). The onnx → protoc
+    # codegen chain (protobuf 1.x, tempdir → remove_dir_all) only entered the
+    # graph via rlx-tiny-tts; with that engine commented out no crate matches
+    # these advisories, so cargo-deny warns `advisory-not-detected`. Re-enable
+    # both lines together with rlx-tiny-tts in crates/skill-tts/Cargo.toml.
+    #   protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2 (build-only, never shipped)
+    # { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    #   remove_dir_all 0.5.3 — TOCTOU, fixed in >=0.8.0 (build-only, via tempdir 0.3.7)
+    # { id = "RUSTSEC-2023-0018", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
 ]
 
 # ── Licenses ──────────────────────────────────────────────────────────────────
@@ -33,8 +52,9 @@ ignore = [
 [licenses]
 # Third-party crates in this workspace include several with missing/legacy
 # license metadata. Keep SPDX allow-list enforcement, but avoid noisy
-# warnings for unmatched allow entries.
+# warnings for unmatched allow entries and feature-gated optional deps.
 unused-allowed-license = "allow"
+unused-license-exception = "allow"
 allow = [
     "MIT",
     "Apache-2.0",
@@ -63,6 +83,7 @@ exceptions = [
     # Our own crates use GPL-3.0-only (Cargo.toml) / GPL-3.0 (deprecated SPDX alias)
     { allow = ["GPL-3.0-only"], crate = "skill" },
     { allow = ["GPL-3.0-only"], crate = "brainmaster" },
+    { allow = ["GPL-3.0-only"], crate = "skill-asr" },
     { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
     { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
     { allow = ["GPL-3.0-only"], crate = "skill-commands" },
@@ -89,7 +110,9 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-skills" },
     { allow = ["GPL-3.0-only"], crate = "skill-tools" },
     { allow = ["GPL-3.0-only"], crate = "skill-tray" },
+    { allow = ["GPL-3.0-only"], crate = "skill-neutts" },
     { allow = ["GPL-3.0-only"], crate = "skill-tts" },
+    { allow = ["GPL-3.0-only"], crate = "skill-tty" },
     { allow = ["GPL-3.0-only"], crate = "skill-vision" },
     # Third-party GPL crates pulled in by device drivers.
     # mw75 uses the deprecated "GPL-3.0" SPDX identifier (no license file),
@@ -99,16 +122,103 @@ exceptions = [
     { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dicts" },
+    { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dict-en" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-dict-ru" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng-data-phonemes" },
     { allow = ["GPL-3.0-only"], crate = "skill-location" },
     { allow = ["GPL-3.0-only"], crate = "skill-iroh" },
     { allow = ["GPL-3.0-only"], crate = "skill-lsl" },
-    { allow = ["GPL-3.0-only"], crate = "sleepfm" },
     { allow = ["GPL-3.0-only"], crate = "iroh-example-client" },
     { allow = ["GPL-3.0-only"], crate = "iroh_test_client" },
     { allow = ["GPL-3.0-only"], crate = "rlsl" },
     { allow = ["GPL-3.0-only"], crate = "rlsl-iroh" },
+    # RLX inference runtime — all crates are GPL-3.0-only.
+    { allow = ["GPL-3.0-only"], crate = "rlx" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-autodiff" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-bert" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-bonsai" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-cli" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-clinicalbert" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-cohere" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-compile" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-cpu" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-cuda" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-diamond" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-dinov2" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-driver" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-embed" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-fft" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-flow" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-flux2" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-fusion" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-gemma" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-gpu-host" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-gpu-kernels" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-gguf" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-granite" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-ir" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-kittentts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-lfm" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-llada2" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-llama-base" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-llama32" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-locateanything" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-macros" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-metal" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-minicpm5" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-minimax" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-mistral" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-mlx" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-mlx-sys" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-models" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-models-core" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-nemotron" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-neutts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-nomic" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-ocr" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-omnicoder" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-onnx-import" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-opt" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-phi" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-qwen3" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-qwen3-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-qwen35" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-rocm" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-runtime" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-sam" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-sam-ir" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-sam2" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-sam3" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-ssm" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-tensor" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-text" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-umap" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-unfuse" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-vad" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-vision" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-vjepa2" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-voxtral" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-voxtral-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-wav2vec2-bert" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-wgpu" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-whisper" },
+    # RLX 0.2.11 additions (backends, TTS/ASR model crates).
+    { allow = ["GPL-3.0-only"], crate = "rlx-coreml" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-distributed" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-inflect-nano" },
+    # rlx-assets: shared weights/assets crate under rlx-models-core. Present in a
+    # local ../rlx-models checkout (not the published crates.io graph), so this
+    # exception keeps the local pre-push `cargo deny` green; unused (harmless) in CI.
+    { allow = ["GPL-3.0-only"], crate = "rlx-assets" },
+    # rlx-tiny-tts disabled (reshape bug on Metal + MLX) — out of the graph, so
+    # its exception is unused; re-enable with the engine in skill-tts/Cargo.toml.
+    # { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-kyutai-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-mimi" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-orpheus" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-qwen3-asr" },
+    # EEG encoder (Mamba-family) pulled by skill-exg, GPL-3.0-only.
+    { allow = ["GPL-3.0-only"], crate = "lumamba" },
 ]
 
 [[licenses.clarify]]
@@ -202,15 +312,12 @@ skip = [
     { crate = "base64@0.21.7" },
     { crate = "bitflags@1.3.2" },
     { crate = "winreg@0.55.0" },
-    { crate = "winreg@0.56.0" },
-    { crate = "wry@0.54.4" },
-    { crate = "wry@0.55.0" },
     { crate = "zip@2.4.2" },
     { crate = "zip@4.6.1" },
     { crate = "zip@7.2.0" },
     { crate = "winnow@0.5.40" },
     { crate = "winnow@0.7.15" },
-    { crate = "winnow@1.0.2" },
+    { crate = "winnow@1.0.3" },
     { crate = "windows_aarch64_gnullvm@0.42.2" },
     { crate = "windows_aarch64_gnullvm@0.48.5" },
     { crate = "windows_aarch64_gnullvm@0.52.6" },
@@ -249,7 +356,6 @@ unknown-registry = "deny"
 unknown-git      = "warn"
 allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
-    "https://github.com/eugenehp/cubek.git",
     "https://github.com/eugenehp/btleplug.git",
     "https://github.com/eugenehp/gtk-rs-core.git",
 ]

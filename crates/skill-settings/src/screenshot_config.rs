@@ -23,8 +23,13 @@ pub fn default_screenshot_session_only() -> bool {
     true
 }
 pub fn default_screenshot_embed_backend() -> String {
-    "fastembed".into()
+    // Vision embeddings run on the RLX runtime. In this mode a screenshot's
+    // vision vector is the embedding of its OCR text (nomic text/vision share
+    // an aligned space). Alternatives: "mmproj" / "llm-vlm" (embed pixels via
+    // the local LLM). Legacy "fastembed" configs are treated as "rlx".
+    "rlx".into()
 }
+/// Legacy field default (fastembed is gone; retained for settings back-compat).
 pub fn default_screenshot_fastembed_model() -> String {
     "nomic-embed-vision-v1.5".into()
 }
@@ -171,11 +176,9 @@ impl ScreenshotConfig {
 
     pub fn model_id(&self) -> String {
         match self.embed_backend.as_str() {
-            "fastembed" => match self.fastembed_model.as_str() {
-                "clip-vit-b-32" => "Qdrant/clip-ViT-B-32-vision".into(),
-                "nomic-embed-vision-v1.5" => "nomic-ai/nomic-embed-text-v1.5".into(),
-                other => other.into(),
-            },
+            // RLX vision = OCR text embedding (nomic text/vision aligned space).
+            // "fastembed" kept as an alias for older settings.
+            "rlx" | "fastembed" => "nomic-ai/nomic-embed-text-v1.5".into(),
             "mmproj" => "mmproj".into(),
             "llm-vlm" => "llm-vlm".into(),
             other => other.into(),
@@ -183,14 +186,8 @@ impl ScreenshotConfig {
     }
 
     pub fn recommended_image_size(&self) -> u32 {
-        match self.embed_backend.as_str() {
-            "fastembed" => match self.fastembed_model.as_str() {
-                "nomic-embed-vision-v1.5" => 768,
-                _ => 768,
-            },
-            "mmproj" | "llm-vlm" => 768,
-            _ => 768,
-        }
+        // All current backends operate on 768×768 inputs.
+        768
     }
 }
 
@@ -206,7 +203,7 @@ mod tests {
         assert_eq!(cfg.image_size, 768);
         assert_eq!(cfg.quality, 60);
         assert!(cfg.session_only);
-        assert_eq!(cfg.embed_backend, "fastembed");
+        assert_eq!(cfg.embed_backend, "rlx");
         assert!(cfg.ocr_enabled);
         assert!(cfg.use_gpu);
         assert!(!cfg.gif_enabled);
@@ -241,16 +238,16 @@ mod tests {
     }
 
     #[test]
-    fn model_id_fastembed_nomic() {
+    fn model_id_rlx_default() {
         let cfg = ScreenshotConfig::default();
         assert_eq!(cfg.model_id(), "nomic-ai/nomic-embed-text-v1.5");
     }
 
     #[test]
-    fn model_id_fastembed_clip() {
+    fn model_id_legacy_fastembed_maps_to_rlx() {
         let mut cfg = ScreenshotConfig::default();
-        cfg.fastembed_model = "clip-vit-b-32".into();
-        assert_eq!(cfg.model_id(), "Qdrant/clip-ViT-B-32-vision");
+        cfg.embed_backend = "fastembed".into();
+        assert_eq!(cfg.model_id(), "nomic-ai/nomic-embed-text-v1.5");
     }
 
     #[test]
@@ -272,13 +269,6 @@ mod tests {
         let mut cfg = ScreenshotConfig::default();
         cfg.embed_backend = "custom-backend".into();
         assert_eq!(cfg.model_id(), "custom-backend");
-    }
-
-    #[test]
-    fn model_id_custom_fastembed_model_passthrough() {
-        let mut cfg = ScreenshotConfig::default();
-        cfg.fastembed_model = "custom-model".into();
-        assert_eq!(cfg.model_id(), "custom-model");
     }
 
     #[test]

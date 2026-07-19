@@ -2,7 +2,7 @@
 //! Unit tests for the screenshot context and config types.
 
 use serde_json::Value;
-use skill_screenshots::config::{fastembed_model_enum, ScreenshotConfig};
+use skill_screenshots::config::ScreenshotConfig;
 use skill_screenshots::context::{ActiveWindowInfo, ScreenshotContext};
 
 /// Minimal mock context for testing.
@@ -37,27 +37,6 @@ fn mock_context_default_config() {
     let win = ctx.active_window();
     assert!(win.app_name.is_empty());
     assert!(win.window_title.is_empty());
-}
-
-#[test]
-fn fastembed_model_clip() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.fastembed_model = "clip-vit-b-32".into();
-    assert!(fastembed_model_enum(&cfg).is_some());
-}
-
-#[test]
-fn fastembed_model_nomic() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.fastembed_model = "nomic-embed-vision-v1.5".into();
-    assert!(fastembed_model_enum(&cfg).is_some());
-}
-
-#[test]
-fn fastembed_model_unknown_returns_none() {
-    let mut cfg = ScreenshotConfig::default();
-    cfg.fastembed_model = "unknown-model".into();
-    assert!(fastembed_model_enum(&cfg).is_none());
 }
 
 #[test]

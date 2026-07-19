@@ -73,6 +73,24 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "Embedding-Laufzeit",
+    "desc": "Text-Embeddings laufen über die lokale RLX-Laufzeit. Wählen Sie unten das Rechengerät und die maximale Sequenzlänge."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "Label-Suchindex",
+    "desc": "Wählen Sie, welcher lokale Vektorindex die semantische Labelsuche antreibt. Erstellen Sie beide, benchmarken Sie mit Ihrer eigenen Abfrage und wählen Sie dann die schnellere oder qualitativ bessere Option für Ihre Daten."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant-Index",
+    "desc": "Komprimierter TurboVec-Index. Geringerer Speicher- und Plattenverbrauch, gut für große Label-Sammlungen."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Einbettungsmodell"
   },
@@ -305,6 +323,12 @@
     "key": "llm.mmproj.nThreads",
     "label": "Encoder-Threads",
     "desc": "CPU-Threads für den Bild-/Audio-Encoder."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "Entwurfstoken",
+    "desc": "Anzahl der spekulativ generierten Token pro Dekodierungsschritt. Höhere Werte steigern den Durchsatz, benötigen aber mehr Speicher. Erfordert ein MTP-fähiges Modell."
   },
   {
     "tab": "llm",
@@ -832,6 +856,12 @@
     "key": "updates.autostart",
     "label": "Bei Anmeldung starten",
     "desc": "Startet automatisch, wenn du dich an deinem Computer anmeldest."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "Updates automatisch installieren",
+    "desc": "Neue Versionen im Hintergrund herunterladen und beim nächsten Neustart installieren. Deaktivieren, um den Zeitpunkt selbst zu wählen."
   },
   {
     "tab": "updates",

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+pub mod activity_status;
 pub mod analysis;
 pub mod api;
+pub mod asr;
 pub mod brain;
+pub mod core;
 pub mod history;
 pub(crate) mod iroh;
 pub mod labels;
@@ -10,6 +13,7 @@ pub mod settings;
 pub(crate) mod settings_calibration;
 pub(crate) mod settings_device;
 pub(crate) mod settings_exg;
+pub(crate) mod settings_handlers;
 pub(crate) mod settings_hooks_activity;
 pub(crate) mod settings_io;
 pub(crate) mod settings_llm;

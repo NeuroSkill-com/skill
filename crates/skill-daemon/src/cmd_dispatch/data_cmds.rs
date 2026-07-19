@@ -439,6 +439,13 @@ pub(super) async fn cmd_sleep(state: &AppState, msg: &Value) -> Result<Value, St
 
 pub(super) async fn cmd_interactive_search(state: &AppState, msg: &Value) -> Result<Value, String> {
     let query = str_field(msg, "query").ok_or("missing query")?;
+    // Empty/whitespace query would match every label via `text LIKE '%%'`,
+    // then loop search_embeddings_in_range per label across all daily DBs —
+    // tens of seconds of work that callers never actually want. Smoke test
+    // expects this to error out fast.
+    if query.trim().is_empty() {
+        return Err("empty query".into());
+    }
     let k_text = u64_field(msg, "k_text").unwrap_or(5) as usize;
     let k_eeg = u64_field(msg, "k_eeg").unwrap_or(5) as usize;
     let k_labels = u64_field(msg, "k_labels").unwrap_or(3) as usize;
@@ -584,19 +591,11 @@ pub(super) async fn cmd_hooks_set(state: &AppState, msg: &Value) -> Result<Value
     if let Ok(mut g) = state.hooks.lock() {
         *g = hooks.clone();
     }
-    let skill_dir = skill_dir(state);
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.hooks = hooks;
-    let path = skill_settings::settings_path(&skill_dir);
-    match serde_json::to_string_pretty(&settings) {
-        Ok(json) => {
-            if let Err(e) = std::fs::write(&path, json) {
-                return Err(format!("failed to save hooks: {e}"));
-            }
-        }
-        Err(e) => return Err(format!("failed to serialize settings: {e}")),
-    }
-    Ok(json!({ "hooks": settings.hooks }))
+    crate::routes::settings_io::patch_user_settings_sync(state, move |s| {
+        s.hooks = hooks;
+    });
+    let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
+    Ok(json!({ "hooks": hooks }))
 }
 
 pub(super) async fn cmd_hooks_suggest(state: &AppState, msg: &Value) -> Result<Value, String> {

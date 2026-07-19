@@ -73,6 +73,24 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "Runtime de embeddings",
+    "desc": "Los embeddings de texto se ejecutan en el runtime local de RLX. Elige el dispositivo de cómputo y la longitud máxima de secuencia a continuación."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "Índice de búsqueda de etiquetas",
+    "desc": "Elige qué índice vectorial local impulsa la búsqueda semántica de etiquetas. Crea ambos, compara con tu propia consulta y luego elige la opción más rápida o de mayor calidad para tus datos."
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "Índice TurboQuant",
+    "desc": "Índice TurboVec comprimido. Menor uso de memoria y disco, bueno para conjuntos grandes de etiquetas."
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "Modelo de incrustación"
   },
@@ -305,6 +323,12 @@
     "key": "llm.mmproj.nThreads",
     "label": "Hilos del codificador",
     "desc": "Hilos de CPU para el codificador de visión/audio."
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "Tokens de borrador",
+    "desc": "Número de tokens generados especulativamente por paso de decodificación. Valores más altos aumentan el rendimiento pero requieren más memoria. Requiere un modelo con MTP habilitado."
   },
   {
     "tab": "llm",
@@ -832,6 +856,12 @@
     "key": "updates.autostart",
     "label": "Iniciar sesión",
     "desc": "Se inicia automáticamente cuando inicia sesión en su computadora."
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "Instalar actualizaciones automáticamente",
+    "desc": "Descarga las nuevas versiones en segundo plano e instálalas al reiniciar. Desactiva esta opción para elegir cuándo instalar."
   },
   {
     "tab": "updates",

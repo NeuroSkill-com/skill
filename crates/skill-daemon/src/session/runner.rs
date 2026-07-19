@@ -37,6 +37,29 @@ pub(crate) async fn run_adapter_session(
     let idle_sleep = tokio::time::sleep(IDLE_TIMEOUT);
     tokio::pin!(idle_sleep);
 
+    // Session rollover: bound the blast radius of a daemon crash to ≤ N
+    // minutes of data, and keep individual files small enough for readers.
+    // Configurable via `session_rollover_minutes` (0 = disabled). The
+    // value is re-read from settings every time the timer fires so the
+    // user can change the interval (or disable rollover entirely) mid-
+    // session without restarting the recording.
+    fn read_rollover_duration(skill_dir: &std::path::Path) -> (u64, std::time::Duration) {
+        let secs = u64::from(skill_settings::load_settings(skill_dir).session_rollover_minutes).saturating_mul(60);
+        // When disabled, use a finite-but-effectively-infinite duration.
+        // The select arm gates on `secs > 0` so the sleep is never read,
+        // but the Sleep future still exists and its deadline must not
+        // overflow tokio's internal Instant arithmetic — so cap at ~10y.
+        let dur = if secs == 0 {
+            std::time::Duration::from_secs(60 * 60 * 24 * 365 * 10)
+        } else {
+            std::time::Duration::from_secs(secs)
+        };
+        (secs, dur)
+    }
+    let (mut rollover_secs, mut rollover_duration) = read_rollover_duration(&skill_dir);
+    let rollover_sleep = tokio::time::sleep(rollover_duration);
+    tokio::pin!(rollover_sleep);
+
     loop {
         tokio::select! {
             biased;
@@ -54,6 +77,26 @@ pub(crate) async fn run_adapter_session(
                 if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                 broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({"reason": "idle_timeout"}));
                 break;
+            }
+            () = &mut rollover_sleep, if rollover_secs > 0 && pipeline.is_some() => {
+                // Hot-reload settings BEFORE firing so a user disabling
+                // rollover (or extending the interval) gets honoured
+                // immediately — without this re-read, the already-armed
+                // sleep would still fire one more time after the change.
+                let (new_secs, new_dur) = read_rollover_duration(&skill_dir);
+                rollover_secs = new_secs;
+                rollover_duration = new_dur;
+
+                if rollover_secs > 0 {
+                    if let Some(ref mut pipe) = pipeline {
+                        if let Err(e) = pipe.roll(&skill_dir) {
+                            error!(%e, "session rollover failed; continuing on existing writer");
+                        } else if let Ok(mut s) = state.status.lock() {
+                            s.csv_path = Some(pipe.csv_path.display().to_string());
+                        }
+                    }
+                }
+                rollover_sleep.as_mut().reset(tokio::time::Instant::now() + rollover_duration);
             }
             ev = adapter.next_event() => {
                 // Reset idle timer on every event.
@@ -123,10 +166,15 @@ pub(crate) async fn run_adapter_session(
                                 p.firmware_version = info.firmware_version.clone();
                                 p.device_kind = device_kind.to_string();
                                 p.fnirs_channel_names = current_desc.fnirs_channel_names.clone();
+                                // Drop a partial sidecar before any samples
+                                // flow so a crash here leaves a readable
+                                // session entry for list_sessions_for_day.
+                                p.write_partial_sidecar();
                                 if let Ok(mut s) = state.status.lock() {
                                     s.csv_path = Some(p.csv_path.display().to_string());
                                 }
                                 pipeline = Some(p);
+                                rollover_sleep.as_mut().reset(tokio::time::Instant::now() + rollover_duration);
                             }
                             Err(e) => error!(%e, "pipeline open failed"),
                         }
@@ -1899,5 +1947,341 @@ mod tests {
             .count()
             .saturating_sub(1); // minus header
         assert_eq!(csv_rows, expected_imu_frames as usize, "IMU CSV row count mismatch");
+    }
+
+    // ── Rollover: long-running session produces multiple chunk files ──────────
+
+    fn write_settings_with_rollover(skill_dir: &std::path::Path, minutes: u32) {
+        let mut s = skill_settings::UserSettings::default();
+        s.session_rollover_minutes = minutes;
+        let p = skill_settings::settings_path(skill_dir);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+    }
+
+    /// Locate the single `YYYYMMDD/` day directory under `root`.
+    fn find_day_dir(root: &std::path::Path) -> Option<std::path::PathBuf> {
+        std::fs::read_dir(root).ok()?.flatten().find_map(|e| {
+            let p = e.path();
+            let name = p.file_name()?.to_str()?.to_string();
+            if p.is_dir() && name.len() == 8 && name.chars().all(|c| c.is_ascii_digit()) {
+                Some(p)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// With `session_rollover_minutes = 1`, a session that runs ≥ 60 fake-time
+    /// seconds should produce at least two raw EEG CSV chunks. `start_paused`
+    /// makes tokio auto-advance virtual time across `tokio::time::sleep` calls
+    /// so the test runs in real-milliseconds.
+    #[tokio::test(start_paused = true)]
+    async fn session_rolls_over_after_configured_interval() {
+        let dir = TempDir::new().unwrap();
+        write_settings_with_rollover(dir.path(), 1);
+        let state = test_state(dir.path());
+
+        // Each adapter event carries a 2 s fake-time delay → 40 events ≈ 80 s,
+        // well past the 60 s rollover threshold.
+        let mut adapter = MockAdapter::new(eeg_desc("muse", 4, 256.0)).with_delay(Duration::from_secs(2));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-Roll".to_string(),
+            id: "mock:roll".to_string(),
+            firmware_version: Some("1.0.0".to_string()),
+            ..Default::default()
+        }));
+        for i in 0..40 {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        run(state, adapter).await;
+
+        // Count raw EEG chunk CSVs (excluding suffixed companions).
+        let chunks: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_")
+                    && s.ends_with(".csv")
+                    && !s.contains("_imu")
+                    && !s.contains("_ppg")
+                    && !s.contains("_metrics")
+                    && !s.contains("_fnirs")
+            })
+            .collect();
+
+        assert!(
+            chunks.len() >= 2,
+            "expected ≥2 EEG chunk CSVs after rollover, got {}: {:?}",
+            chunks.len(),
+            chunks
+        );
+
+        // Each chunk has its own sidecar JSON, both readable and well-formed.
+        for chunk in &chunks {
+            let sidecar = chunk.with_extension("json");
+            assert!(sidecar.exists(), "missing sidecar for {chunk:?}");
+            let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&sidecar).unwrap()).unwrap();
+            assert_eq!(v["device_name"], "Muse-Roll");
+        }
+
+        // ── E2E: real consumer code paths must accept rolled-over chunks ──
+        //
+        // Build env can't link the bin (native GPU/BLAS lib mismatch),
+        // so instead of going over HTTP we drive the same in-process Rust
+        // readers the HTTP routes call. This is the layer where rollover
+        // could break behaviour — HTTP is just transport.
+
+        let day_dir = find_day_dir(dir.path()).expect("session day dir created");
+        let day = day_dir.file_name().unwrap().to_str().unwrap().to_string();
+
+        // 1. History listing — used by /v1/history/sessions and the frontend
+        //    history page. Same-device adjacent chunks are now collapsed
+        //    into one logical entry whose `chunk_count` reflects the roll
+        //    count. With this test pushing N chunks of "Muse-Roll", expect
+        //    a single merged entry covering all of them.
+        let entries = skill_history::list_sessions_for_day(&day, dir.path(), None);
+        assert_eq!(
+            entries.len(),
+            1,
+            "{} same-device chunks must collapse into 1 logical entry",
+            chunks.len()
+        );
+        let merged = &entries[0];
+        assert_eq!(
+            u32::try_from(chunks.len()).unwrap(),
+            merged.chunk_count,
+            "merged entry's chunk_count must match the on-disk chunk count"
+        );
+        assert_eq!(merged.device_name.as_deref(), Some("Muse-Roll"));
+        assert!(
+            std::path::Path::new(&merged.csv_path).exists(),
+            "canonical csv_path resolves: {}",
+            merged.csv_path
+        );
+        assert!(merged.session_start_utc.is_some(), "session_start_utc populated");
+        assert!(
+            merged.firmware_version.as_deref() == Some("1.0.0"),
+            "firmware_version threaded through to merged entry"
+        );
+        let chunk_paths = merged.chunks.as_ref().expect("chunks list present on merged entry");
+        assert_eq!(chunk_paths.len(), chunks.len(), "every chunk path preserved");
+        for p in chunk_paths {
+            assert!(std::path::Path::new(p).exists(), "every chunk path resolves: {p}");
+        }
+
+        // 2. Per-day SQLite (search index) is created for the day, not per
+        //    session — so embeddings written by a chunk land in the same
+        //    file as embeddings from sibling chunks. Embedding is skipped
+        //    in #[cfg(test)], but the file should still get opened by
+        //    EpochStore on first epoch flush.
+        let sqlite_path = day_dir.join(skill_constants::SQLITE_FILE);
+        if sqlite_path.exists() {
+            // Day SQLite is a single file across chunks — the rollover
+            // does NOT create a new SQLite. Verify by counting hits and
+            // confirming there is exactly one file.
+            let count = std::fs::read_dir(&day_dir)
+                .unwrap()
+                .flatten()
+                .filter(|e| e.file_name() == sqlite_path.file_name().unwrap())
+                .count();
+            assert_eq!(count, 1, "exactly one per-day SQLite, regardless of chunks");
+        }
+    }
+
+    /// With `session_rollover_minutes = 0`, rollover is disabled — even a
+    /// long-running session must produce exactly one chunk.
+    #[tokio::test(start_paused = true)]
+    async fn rollover_disabled_keeps_single_chunk() {
+        let dir = TempDir::new().unwrap();
+        write_settings_with_rollover(dir.path(), 0);
+        let state = test_state(dir.path());
+
+        let mut adapter = MockAdapter::new(eeg_desc("muse", 4, 256.0)).with_delay(Duration::from_secs(2));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-NoRoll".to_string(),
+            id: "mock:noroll".to_string(),
+            ..Default::default()
+        }));
+        for i in 0..40 {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        run(state, adapter).await;
+
+        let chunks: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_")
+                    && s.ends_with(".csv")
+                    && !s.contains("_imu")
+                    && !s.contains("_ppg")
+                    && !s.contains("_metrics")
+                    && !s.contains("_fnirs")
+            })
+            .collect();
+
+        assert_eq!(
+            chunks.len(),
+            1,
+            "expected exactly 1 chunk with rollover disabled, got {chunks:?}"
+        );
+    }
+
+    /// A `Disconnected` event arriving exactly at the rollover boundary
+    /// must not panic, deadlock, or leave the daemon in a stuck state.
+    /// The biased `select!` order is `cancel > idle > rollover > event`,
+    /// so when the rollover_sleep and the next adapter event are both
+    /// ready in the same poll, rollover fires first and the disconnect
+    /// is processed on the next iteration. Either ordering must produce
+    /// a clean shutdown with the existing chunk(s) finalised.
+    #[tokio::test(start_paused = true)]
+    async fn rollover_and_disconnect_race_clean_shutdown() {
+        let dir = TempDir::new().unwrap();
+        write_settings_with_rollover(dir.path(), 1);
+        let state = test_state(dir.path());
+
+        // Adapter pushes events at exactly 1s/event so by event #60 we
+        // are at fake-time 60s, the rollover boundary. The 60th event
+        // is `Disconnected` — racing with rollover_sleep's fire.
+        let mut adapter = MockAdapter::new(eeg_desc("muse", 4, 256.0)).with_delay(Duration::from_secs(1));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-Race".to_string(),
+            id: "mock:race".to_string(),
+            ..Default::default()
+        }));
+        for i in 0..58 {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        // Event 59 brings us to fake-time ≈ 60s, the rollover instant.
+        adapter.push(DeviceEvent::Disconnected);
+
+        let state_check = state.clone();
+        run(state, adapter).await;
+
+        // Daemon must end up disconnected, not stuck.
+        assert_eq!(state_check.status.lock().unwrap().state, "disconnected");
+
+        // At least one chunk must exist and have a sidecar — proves the
+        // pipeline finalised cleanly even under the race.
+        let chunks: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_")
+                    && s.ends_with(".csv")
+                    && !s.contains("_imu")
+                    && !s.contains("_ppg")
+                    && !s.contains("_metrics")
+                    && !s.contains("_fnirs")
+            })
+            .collect();
+        assert!(!chunks.is_empty(), "at least one chunk written before disconnect");
+        for c in &chunks {
+            let sidecar = c.with_extension("json");
+            assert!(
+                sidecar.exists(),
+                "every chunk must have a sidecar (partial or full): {c:?}"
+            );
+        }
+    }
+
+    /// Mid-session, the user disables rollover by writing
+    /// `session_rollover_minutes = 0` to settings.json. The first roll
+    /// (already armed) fires on schedule, then re-reads settings and
+    /// stops scheduling further rolls. So a long run produces exactly
+    /// 2 chunks: the initial one + the one from the first roll, with
+    /// no further rolls after the setting flips to 0.
+    #[tokio::test(start_paused = true)]
+    async fn rollover_setting_hot_reloads_to_disabled() {
+        let dir = TempDir::new().unwrap();
+        write_settings_with_rollover(dir.path(), 1);
+        let state = test_state(dir.path());
+
+        // Adapter pushes an event every 2 fake-seconds for ~5 minutes
+        // of fake time (well past 2 rollover boundaries at minutes=1).
+        let mut adapter = MockAdapter::new(eeg_desc("muse", 4, 256.0)).with_delay(Duration::from_secs(2));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "Muse-HotReload".to_string(),
+            id: "mock:hotreload".to_string(),
+            firmware_version: Some("hr-1".to_string()),
+            ..Default::default()
+        }));
+        // Half of the events use rollover=1min; we'll switch to 0
+        // (disabled) once the runner has had a chance to do its first
+        // roll. At 2s/event, ~30 events ≈ 60s = first roll boundary.
+        for i in 0..150 {
+            // After ~70s of fake time (35 events), flip the setting.
+            if i == 35 {
+                adapter.push(DeviceEvent::Eeg(EegFrame {
+                    channels: vec![1.0, 2.0, 3.0, 4.0],
+                    timestamp_s: i as f64 / 256.0,
+                }));
+                // Stash a marker event — we'll inject the settings
+                // flip in a parallel task because the adapter queue
+                // is drained inside the daemon.
+                continue;
+            }
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+
+        // Spawn a parallel task that flips the rollover setting to 0
+        // after enough fake time has elapsed for one roll to have
+        // happened. Real-time sleep here is a small grace period; the
+        // tokio runtime auto-advances fake time across the adapter's
+        // 2s sleeps so this fires after the first roll.
+        let dir_path = dir.path().to_path_buf();
+        let flipper = tokio::spawn(async move {
+            // Wait for ~70s of fake time. The settings flip is on the
+            // real filesystem so it doesn't depend on tokio's clock.
+            tokio::time::sleep(Duration::from_secs(70)).await;
+            write_settings_with_rollover(&dir_path, 0);
+        });
+
+        run(state, adapter).await;
+        let _ = flipper.await;
+
+        let chunks: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_")
+                    && s.ends_with(".csv")
+                    && !s.contains("_imu")
+                    && !s.contains("_ppg")
+                    && !s.contains("_metrics")
+                    && !s.contains("_fnirs")
+            })
+            .collect();
+
+        // With hot-reload disabled, we'd see 4–5 chunks (one per minute
+        // of fake time). With hot-reload working, we see exactly 2:
+        // the initial chunk + the one created at t=60s (first roll).
+        // After t=70s the setting flips to 0; no further rolls fire.
+        assert_eq!(
+            chunks.len(),
+            2,
+            "hot-reload to disabled must stop rollover after the next fire, got {} chunks",
+            chunks.len()
+        );
     }
 }

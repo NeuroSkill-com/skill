@@ -56,6 +56,21 @@ $Conf = Get-Content (Join-Path $TauriDir "tauri.conf.json") -Raw | ConvertFrom-J
 $ProductName = $Conf.productName
 $ProductDisplayName = if ($ProductName.EndsWith("™")) { $ProductName } else { "$ProductName™" }
 $Version = $Conf.version
+
+# NSIS's VIProductVersion requires strict 4-segment numeric format X.X.X.X
+# (Win32 VS_FIXEDFILEINFO). User-facing ProductVersion/FileVersion strings
+# accept any text, but VIProductVersion does not — it rejects "-rc.N" suffixes.
+# Map the SemVer string to a numeric 4-tuple:
+#   "0.0.130"        -> "0.0.130.0"
+#   "0.0.130-rc.2"   -> "0.0.130.2"   (use RC number as fourth segment)
+#   "0.0.130-beta.7" -> "0.0.130.7"
+if ($Version -match '^(\d+\.\d+\.\d+)(?:-[A-Za-z]+\.(\d+))?') {
+    $vibase  = $Matches[1]
+    $vibuild = if ($Matches[2]) { $Matches[2] } else { "0" }
+    $VIVersion = "$vibase.$vibuild"
+} else {
+    $VIVersion = "0.0.0.0"
+}
 $Identifier = $Conf.identifier
 $BinaryName = "skill.exe"
 $TargetReleaseDir = Join-Path $TauriDir "target/$Target/release"
@@ -176,28 +191,34 @@ try {
         Write-Host "  [ok] icon.ico"
     }
 
-    # ── Bundle ONNX Runtime DLL ──────────────────────────────────────────────
-    # ort-sys downloads onnxruntime.dll into Cargo's OUT_DIR at build time.
-    # The binary links against it dynamically; without bundling it the
-    # installer will deploy a broken binary that fails to start on users'
-    # machines.  Windows finds DLLs in the same directory as the .exe, so
-    # placing it in $INSTDIR alongside skill.exe is sufficient — no PATH
-    # change or rpath patch needed.
-    $OrtDll = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "onnxruntime.dll" `
-                -ErrorAction SilentlyContinue |
-                Where-Object { $_.FullName -like "*\build\*" -or $_.FullName -like "*ort-sys*" } |
-                Select-Object -First 1
-    if (-not $OrtDll) {
-        # Broader fallback: any onnxruntime.dll anywhere under the release target
-        $OrtDll = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "onnxruntime.dll" `
-                    -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-    }
-    if ($OrtDll) {
-        Copy-Item $OrtDll.FullName (Join-Path $Staging "onnxruntime.dll") -Force
-        Write-Host "  [ok] onnxruntime.dll (from $($OrtDll.FullName))"
+    # ── ONNX Runtime — not bundled on Windows ────────────────────────────────
+    # KittenTTS (the only `ort` consumer) is gated off for Windows in
+    # src-tauri/Cargo.toml + crates/skill-tts/Cargo.toml, so there is no
+    # onnxruntime.dll to ship. If a Windows TTS backend that needs ORT is
+    # reintroduced, restore the bundling block.
+
+    # ── Bundle OpenBLAS DLL ──────────────────────────────────────────────────
+    # rlx-cpu's `blas` default feature links against openblas; turbovec on
+    # Linux/macOS does the same. The upstream OpenBLAS 0.3.30 Windows DLL
+    # is statically linked against the MinGW runtime so no extra DLLs are
+    # needed alongside it.
+    $OpenBlasDll = $null
+    if ($env:OPENBLAS_DLL -and (Test-Path $env:OPENBLAS_DLL)) {
+        $OpenBlasDll = Get-Item $env:OPENBLAS_DLL
     } else {
-        Write-Warning "  onnxruntime.dll not found in build output — binary may fail to start"
+        $OpenBlasDll = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "openblas.dll" `
+                         -ErrorAction SilentlyContinue |
+                         Select-Object -First 1
+    }
+    if (-not $OpenBlasDll -and $env:OPENBLAS_DIR) {
+        $alt = Join-Path $env:OPENBLAS_DIR "bin\openblas.dll"
+        if (Test-Path $alt) { $OpenBlasDll = Get-Item $alt }
+    }
+    if ($OpenBlasDll) {
+        Copy-Item $OpenBlasDll.FullName (Join-Path $Staging "openblas.dll") -Force
+        Write-Host "  [ok] openblas.dll (from $($OpenBlasDll.FullName))"
+    } else {
+        Write-Warning "  openblas.dll not found — turboquant / rlx-cpu BLAS paths will fail at runtime"
     }
 
     # ── Bundle VC++ CRT DLLs (app-local deployment) ─────────────────────────
@@ -433,9 +454,9 @@ print('  [ok] installer images generated')
             $installFiles += "  File `"$doc`""
         }
     }
-    # Bundle ONNX Runtime DLL if present (downloaded by ort-sys at build time)
-    if (Test-Path (Join-Path $Staging "onnxruntime.dll")) {
-        $installFiles += '  File "onnxruntime.dll"'
+    # Bundle OpenBLAS DLL if present (rlx-cpu / turbovec runtime dependency)
+    if (Test-Path (Join-Path $Staging "openblas.dll")) {
+        $installFiles += '  File "openblas.dll"'
     }
 
     # Bundle VC++ CRT DLLs (app-local deployment)
@@ -449,7 +470,7 @@ print('  [ok] installer images generated')
     $uninstallFiles += '  Delete "$INSTDIR\skill.exe"'
     $uninstallFiles += '  Delete "$INSTDIR\skill-daemon.exe"'
     $uninstallFiles += '  Delete "$INSTDIR\icon.ico"'
-    $uninstallFiles += '  Delete "$INSTDIR\onnxruntime.dll"'
+    $uninstallFiles += '  Delete "$INSTDIR\openblas.dll"'
     foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE")) {
         $uninstallFiles += "  Delete `"`$INSTDIR\$doc`""
     }
@@ -531,7 +552,7 @@ $imageDirectives
 !insertmacro MUI_LANGUAGE "English"
 
 ; ── Version info ────────────────────────────────────────────────────────
-VIProductVersion "$Version.0"
+VIProductVersion "$VIVersion"
 VIAddVersionKey "ProductName" "$ProductDisplayName"
 VIAddVersionKey "ProductVersion" "$Version"
 VIAddVersionKey "FileVersion" "$Version"

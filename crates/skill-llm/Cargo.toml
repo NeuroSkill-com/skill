@@ -7,12 +7,30 @@ description = "LLM inference engine for NeuroSkill — extracted workspace crate
 
 [features]
 default    = []
-llm        = ["dep:llama-cpp-4", "axum/multipart", "llm-mtmd"]
-llm-metal  = ["llm", "llama-cpp-4?/metal"]
-llm-cuda   = ["llm", "llama-cpp-4?/cuda"]
-llm-vulkan = ["llm", "llama-cpp-4?/vulkan"]
-llm-mtmd   = ["llm", "llama-cpp-4?/mtmd"]
-llm-native = ["llm", "llama-cpp-4?/native"]
+
+# ── Backend feature flags ─────────────────────────────────────────────────────
+# `llm` is a marker auto-enabled by any backend — it gates the shared
+# engine scaffolding (state, protocol, handlers, tool orchestration).
+#
+# Per-platform RLX backend variants (mirror rlx's own naming):
+#   macOS:        llm-rlx-metal | llm-rlx-mlx                 (also brings BLAS Accelerate)
+#   Linux:        llm-rlx-cuda  | llm-rlx-rocm | llm-rlx-wgpu | llm-rlx-cpu
+#   Windows:      llm-rlx-cuda  | llm-rlx-wgpu | llm-rlx-cpu
+# `llm-rlx-cpu` is the portable fallback (no GPU dependency; relies on
+# rlx-cpu's scalar gemm or system BLAS if linked separately).
+llm                = []
+# Base rlx feature pulls cpu dispatch so the runtime always has at least
+# one usable target. GPU-flavor features add their backend on top.
+# `rlx-models/runner` gates the `run` module (LmRunner, Qwen3Runner, auto_*,
+# ChatTemplate/ChatMessage). rlx-models 0.2.9+ made model families opt-in, so
+# this must be enabled explicitly now (was default in 0.2.5).
+llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "rlx-models?/runner", "dep:rlx-minicpm5", "dep:rlx-minimax", "dep:rlx-nemotron", "dep:rlx-gemma", "dep:image", "rlx?/cpu"]
+llm-rlx-cpu   = ["llm-rlx"]
+llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal", "rlx-minicpm5?/metal", "rlx-minimax?/metal", "rlx-nemotron?/metal", "rlx-gemma?/metal"]
+llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx", "rlx-minicpm5?/mlx", "rlx-minimax?/mlx", "rlx-nemotron?/mlx", "rlx-gemma?/mlx"]
+llm-rlx-cuda  = ["llm-rlx", "rlx?/cuda", "rlx-models?/cuda", "rlx-minicpm5?/cuda", "rlx-minimax?/cuda", "rlx-nemotron?/cuda", "rlx-gemma?/cuda"]
+llm-rlx-rocm  = ["llm-rlx", "rlx?/rocm", "rlx-models?/rocm", "rlx-minicpm5?/rocm", "rlx-minimax?/rocm", "rlx-nemotron?/rocm", "rlx-gemma?/rocm"]
+llm-rlx-wgpu  = ["llm-rlx", "rlx?/gpu", "rlx-models?/gpu", "rlx-minicpm5?/gpu", "rlx-minimax?/gpu", "rlx-nemotron?/gpu", "rlx-gemma?/gpu"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -33,16 +51,15 @@ either     = "1"
 hf-hub     = "0.5"
 skill-tools  = { path = "../skill-tools", default-features = false }
 skill-skills = { path = "../skill-skills" }
+rlx        = { workspace = true, optional = true, features = ["cpu", "gguf"] }
+rlx-models = { workspace = true, optional = true }
+rlx-minicpm5 = { workspace = true, optional = true, features = ["tokenizer"] }
+rlx-minimax  = { workspace = true, optional = true }
+rlx-nemotron = { workspace = true, optional = true }
+rlx-gemma    = { workspace = true, optional = true, features = ["tokenizer"] }
+image      = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"], optional = true }
 
 [build-dependencies]
-
-llama-cpp-4 = { version = "0.2.50", optional = true, default-features = false, features = ["ggml", "native"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-4 = { version = "0.2.50", optional = true, default-features = false, features = ["ggml", "metal", "native", "mtmd"] }
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-4 = { version = "0.2.50", optional = true, default-features = false, features = ["ggml", "vulkan", "native", "mtmd"] }
 
 [dev-dependencies]
 tempfile = "3"

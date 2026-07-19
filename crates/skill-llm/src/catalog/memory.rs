@@ -123,6 +123,7 @@ mod tests {
         let entry = LlmModelEntry {
             repo: "test/repo".into(),
             filename: "model.gguf".into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 4.0,
             description: String::new(),
@@ -131,6 +132,7 @@ mod tests {
             family_desc: String::new(),
             tags: vec![],
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             params_b: 0.0, // no metadata
@@ -150,6 +152,7 @@ mod tests {
         let entry = LlmModelEntry {
             repo: "test/repo".into(),
             filename: "model.gguf".into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 4.0,
             description: String::new(),
@@ -158,6 +161,7 @@ mod tests {
             family_desc: String::new(),
             tags: vec![],
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             params_b: 7.0,

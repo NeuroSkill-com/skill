@@ -7,7 +7,37 @@ use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use serde_json::json;
 use tokio::sync::mpsc;
 
-use super::actor::run_actor;
+// Pick the actor entry point: rlx_actor when compiled in, otherwise a
+// stub that immediately emits an error so `init()` stays callable without
+// feature gates at every call site.
+#[cfg(feature = "llm-rlx")]
+use super::rlx_actor::run_actor;
+
+#[cfg(not(feature = "llm-rlx"))]
+#[allow(clippy::too_many_arguments)]
+fn run_actor(
+    _rx: tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
+    _config: crate::config::LlmConfig,
+    _model_path: std::path::PathBuf,
+    _mmproj_path: Option<std::path::PathBuf>,
+    app: std::sync::Arc<dyn crate::event::LlmEventEmitter>,
+    log_buf: LlmLogBuffer,
+    _log_path: Option<std::path::PathBuf>,
+    _ready_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    _n_ctx_flag: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    _vision_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    push_log(
+        &app,
+        &log_buf,
+        "error",
+        "skill-llm built without a backend feature (enable llm-rlx)",
+    );
+    app.emit_event(
+        "llm:status",
+        serde_json::json!({"status":"stopped","error":"no LLM backend compiled in"}),
+    );
+}
 use super::logging::{push_log, LlmLogBuffer};
 use super::protocol::InferRequest;
 use super::state::LlmServerState;
@@ -121,6 +151,7 @@ pub fn init(
         config.params_b = entry.params_b;
         config.quant = entry.quant.clone();
         config.max_context_length = entry.max_context_length;
+        config.mtp_capable = entry.mtp;
 
         if config.ctx_size.is_none() {
             let recommended = crate::catalog::recommend_ctx_size(entry);

@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "Screenshot capture + vision embedding for NeuroSkill"
+build = "build.rs"
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
@@ -18,37 +19,61 @@ image           = { version = "0.25", default-features = false, features = ["png
 gif             = "0.14"
 fast-hnsw          = "1.0.1"
 crossbeam-channel  = "0.5"
-ocrs            = "0.12.1"
-rten            = "0.24.0"
 chrono          = { version = "0.4", default-features = false, features = ["clock", "std"] }
 ureq            = { version = "3", features = ["native-tls"] }
+hf-hub          = { version = "0.5", default-features = false, features = ["ureq"], optional = true }
+rlx             = { workspace = true, optional = true, features = ["cpu"] }
+# `rlx-models` provides the `ocr` submodule (rlx-ocr drop-in replacement
+# for the legacy `ocrs` crate). Always-on so OCR can use the rlx runtime
+# stack without an extra feature flag.
+rlx-models      = { workspace = true, features = ["embed", "ocr"] }
+# rlx-ocr's native RLX backend loads safetensors directly. We BUNDLE the
+# converted detection+recognition safetensors (see `assets/`, `capture.rs`), so
+# no `convert-rten` (and no rten-inference stack) and no runtime download.
+rlx-ocr         = { workspace = true }
+# rlx-runtime is already pulled transitively by rlx-ocr; make it a direct dep so
+# we can name `rlx_runtime::Device` (rlx-ocr doesn't re-export it) to pick the
+# OCR backend, and so OCR has a CPU backend even when text-embeddings is off.
+rlx-runtime     = { workspace = true, features = ["cpu"] }
 
 [[bin]]
 name = "image_encode_bench"
 path = "src/bin/image_encode_bench.rs"
 
-[target.'cfg(target_os = "macos")'.dependencies.ort]
-version = "=2.0.0-rc.11"
-default-features = false
-features = ["coreml"]
-
-[target.'cfg(not(target_os = "macos"))'.dependencies.ort]
-version = "=2.0.0-rc.11"
-default-features = false
-features = ["download-binaries", "tls-native"]
+[[bin]]
+name = "bench_image_embed"
+path = "src/bin/bench_image_embed.rs"
+required-features = ["text-embeddings-rlx"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 skill-vision = { path = "../skill-vision" }
-fastembed = { version = "5.11.0", features = ["metal"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 
 [features]
-default = ["capture"]
+# text-embeddings-rlx — RlxVisionModel from rlx-embed (NomicEmbedVisionV15).
+# When it's off the capture pipeline still works (no embeddings emitted).
+# OCR (rlx-ocr) stays compiled in regardless.
+default = ["capture", "text-embeddings-rlx"]
 capture = ["xcap"]
+text-embeddings-rlx = ["dep:rlx", "dep:hf-hub"]
+text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models/metal"]
+text-embeddings-rlx-mlx   = ["text-embeddings-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models/mlx"]
+text-embeddings-rlx-cuda  = ["text-embeddings-rlx", "rlx?/cuda", "rlx-models/cuda"]
+text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "rlx?/rocm", "rlx-models/rocm"]
+text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "rlx?/gpu", "rlx-models/gpu"]
+# OCR backends — run rlx-ocr detection+recognition on a GPU (Metal/MLX/wgpu/CUDA/
+# ROCm) now that all backends are at parity + multi-shape works. Independent of
+# text-embeddings: OCR is always compiled; these just add the GPU backend. With
+# none of them, OCR runs on CPU. The runtime device is picked in `capture.rs`
+# (`ocr_device()` honours the compiled backend + the `OCR_DEVICE` env override).
+ocr-metal = ["rlx-ocr/metal"]
+ocr-mlx   = ["rlx-ocr/mlx"]
+ocr-cuda  = ["rlx-ocr/cuda"]
+ocr-rocm  = ["rlx-ocr/rocm"]
+ocr-wgpu  = ["rlx-ocr/gpu"]
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-fastembed = { version = "5.11.0", features = ["ort-download-binaries-native-tls"] }
 xcap = { version = "0.9", default-features = false, optional = true }
 
 [lints]

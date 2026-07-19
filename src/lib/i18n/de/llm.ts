@@ -81,6 +81,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Sprachmodelle",
   "llm.section.mmproj": "Multimodale Projektoren",
   "llm.section.inference": "Inferenzeinstellungen",
+  "llm.section.mtp": "Multi-Token-Vorhersage",
   "llm.enabled": "LLM-Server aktivieren",
   "llm.enabledDesc":
     "Führen Sie einen OpenAI-kompatiblen Inferenzserver auf demselben Port aus wie die WebSocket-API. Erfordert die llm Cargo-Funktion und ein heruntergeladenes Modell.",
@@ -277,6 +278,11 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "KQV auf GPU auslagern",
   "llm.inference.offloadKqvDesc":
     "K/Q/V-Tensoroperationen auf die GPU auslagern, auch wenn nicht alle Schichten GPU-offloaded sind.",
+
+  "llm.mtp.draftTokens": "Entwurfstoken",
+  "llm.mtp.draftTokensDesc":
+    "Anzahl der spekulativ generierten Token pro Dekodierungsschritt. Höhere Werte steigern den Durchsatz, benötigen aber mehr Speicher. Erfordert ein MTP-fähiges Modell.",
+
   "llm.hfSearch.title": "HuggingFace-Modelle durchsuchen",
   "llm.hfSearch.placeholder": "GGUF-Modelle auf HuggingFace suchen…",
   "llm.hfSearch.searchBtn": "Suchen",
@@ -482,6 +488,53 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "Warte auf Leerlaufzeit",
   "search.eegCoverage": "EEG-Abdeckung",
   "search.eegCoverageLabel": "{embedded} von {total} ({pct} %)",
+
+  "model.idleReembedMemoryThrottled": "Verschoben — Systemspeicher bei {pct}% (Limit {limit}%)",
+  "model.maxResidentMemory": "Maximaler Systemspeicher",
+  "model.maxResidentMemoryDesc":
+    "Hintergrund-Embedding überspringen, wenn der Systemspeicher diesen Anteil überschreitet. 100% deaktiviert die Begrenzung.",
+  "model.maxResidentMemoryDisabled": "aus",
+
+  "chat.tts.section": "Sprachausgabe",
+  "chat.tts.engineLabel": "Sprach-Engine",
+  "chat.tts.engineDesc": "Text-zu-Sprache-Backend, mit dem der Daemon Antworten vorliest.",
+  "chat.tts.experimental":
+    "Noch nicht einsatzbereit: Orpheus benötigt einen vorab exportierten SNAC-Decoder; Kyutai-TTS funktioniert in rlx 0.2.9 noch nicht.",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS funktioniert in rlx 0.2.9 noch nicht (upstream generate() ist ein Stub).",
+  "chat.tts.orpheusHint":
+    "Orpheus lädt das Backbone automatisch herunter. SNAC-Decoder einmal mit scripts/export_snac_decoder.py exportieren (oder ORPHEUS_SNAC_PATH setzen).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano lädt aus einem einmalig exportierten Bundle. Es ist automatisch in der App enthalten; für einen Dev-Lauf lege es unter ~/.skill/models/inflect-nano ab oder setze INFLECT_NANO_DIR.",
+  "chat.tts.modelLabel": "Stimmenmodell",
+  "chat.tts.modelDesc": "Modell-Repository für die gewählte Engine.",
+  "chat.tts.voiceLabel": "Stimme",
+  "chat.tts.voiceDesc": "Voreingestellte Sprecherstimme für die gewählte Engine.",
+  "chat.tts.voiceDefault": "Standard",
+  "chat.voice.section": "Spracheingabe",
+  "chat.voice.enabled": "Sprachsteuerung anzeigen",
+  "chat.voice.enabledDesc": "Mikrofon und Sprachmodus-Auswahl im Chatfenster anzeigen.",
+  "chat.voice.triggerLabel": "Standard-Auslöser",
+  "chat.voice.triggerDesc": "Wie das Mikrofon für eine neue Sprachsitzung gesteuert wird.",
+  "chat.voice.triggerContinuous": "Kontinuierlich",
+  "chat.voice.triggerPtt": "Push-to-Talk",
+  "chat.voice.routingLabel": "Standard-Routing",
+  "chat.voice.routingDesc": "Was mit einem fertigen Transkript geschieht.",
+  "chat.voice.routingLoop": "Sprachschleife",
+  "chat.voice.routingTranscribe": "Nur transkribieren",
+  "chat.voice.engineLabel": "Erkennungs-Engine",
+  "chat.voice.engineDesc": "Sprache-zu-Text-Backend zum Transkribieren deiner Stimme.",
+  "chat.voice.modelLabel": "Erkennungsmodell",
+  "chat.voice.modelDesc": "Whisper-Modell-Repository. Größere Modelle sind genauer, aber langsamer.",
+  "chat.voice.modelCustom": "Benutzerdefiniert…",
+  "chat.voice.languageLabel": "Sprache",
+  "chat.voice.languageDesc": 'Sprachhinweis für die Spracherkennung (z. B. "en").',
+  "chat.voice.start": "Spracheingabe starten",
+  "chat.voice.stop": "Spracheingabe stoppen",
+  "chat.voice.pttHint": "Zum Sprechen halten",
+  "chat.voice.statusLoading": "Wird geladen…",
+  "chat.voice.statusListening": "Höre zu",
+  "chat.voice.statusSpeaking": "Spricht",
+  "chat.voice.dismissError": "Sprachfehler ausblenden",
 };
 
 export default llm;

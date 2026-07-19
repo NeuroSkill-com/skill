@@ -15,7 +15,7 @@
 # Tier 2 (~53 s clean):  + skill-data, skill-settings, skill-history, etc.
 #                         (adds parquet, rusqlite, keyring)
 # Tier 3 (~65 s clean):  + skill-screenshots, skill-devices
-#                         (adds fastembed, candle, rten, aws-lc-sys)
+#                         (adds rlx / rlx-models, aws-lc-sys)
 # Tier 4 (manual/CI):    + skill-llm E2E (downloads a model, ~15 s cached)
 #
 # With warm incremental cache, tier 1 runs in ~1 s.
@@ -95,6 +95,7 @@ if [[ $TIER -ge 2 ]]; then
     -p skill-router
     -p skill-autostart
     -p skill-tts
+    -p skill-asr
     -p skill-label-index
     -p skill-skills
     -p skill-commands

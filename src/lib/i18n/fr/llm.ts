@@ -83,6 +83,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "Modèles de langage",
   "llm.section.mmproj": "Projecteurs multimodaux",
   "llm.section.inference": "Paramètres d'inférence",
+  "llm.section.mtp": "Prédiction multi-token",
   "llm.enabled": "Activer le serveur LLM",
   "llm.enabledDesc":
     "Exécutez un serveur d'inférence compatible OpenAI sur le même port que l'API WebSocket. Nécessite la fonctionnalité llm Cargo et un modèle téléchargé.",
@@ -281,6 +282,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "Décharger KQV sur GPU",
   "llm.inference.offloadKqvDesc":
     "Décharger les opérations tensorielles K/Q/V sur le GPU même si toutes les couches ne sont pas sur GPU.",
+
+  "llm.mtp.draftTokens": "Tokens brouillon",
+  "llm.mtp.draftTokensDesc":
+    "Nombre de tokens générés spéculativement par étape de décodage. Des valeurs plus élevées augmentent le débit mais nécessitent plus de mémoire. Nécessite un modèle compatible MTP.",
 
   "llm.hfSearch.title": "Rechercher des modèles HuggingFace",
   "llm.hfSearch.placeholder": "Rechercher des modèles GGUF sur HuggingFace…",
@@ -487,6 +492,53 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "En attente de période d'inactivité",
   "search.eegCoverage": "Couverture EEG",
   "search.eegCoverageLabel": "{embedded} sur {total} ({pct} %)",
+
+  "model.idleReembedMemoryThrottled": "Reporté — mémoire système à {pct}% (limite {limit}%)",
+  "model.maxResidentMemory": "Mémoire système maximale",
+  "model.maxResidentMemoryDesc":
+    "Suspendre l'embedding en arrière-plan lorsque la mémoire système dépasse ce pourcentage. 100% désactive la protection.",
+  "model.maxResidentMemoryDisabled": "désactivé",
+  "chat.tts.section": "Sortie vocale",
+  "chat.tts.engineLabel": "Moteur vocal",
+  "chat.tts.engineDesc": "Moteur de synthèse vocale utilisé par le démon pour lire les réponses.",
+  "chat.tts.experimental":
+    "Pas encore prêt à l'emploi : Orpheus nécessite un décodeur SNAC pré-exporté ; Kyutai-TTS n'est pas encore fonctionnel dans rlx 0.2.9.",
+  "chat.tts.kyutaiExperimental":
+    "Kyutai-TTS n'est pas encore fonctionnel dans rlx 0.2.9 (generate() upstream est un stub).",
+  "chat.tts.orpheusHint":
+    "Orpheus télécharge le backbone automatiquement. Exportez le décodeur SNAC une fois avec scripts/export_snac_decoder.py (ou définissez ORPHEUS_SNAC_PATH).",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano se charge depuis un bundle exporté une seule fois. Il est inclus automatiquement dans l’app ; pour un lancement en dev, placez-le dans ~/.skill/models/inflect-nano ou définissez INFLECT_NANO_DIR.",
+  "chat.tts.modelLabel": "Modèle vocal",
+  "chat.tts.modelDesc": "Dépôt du modèle pour le moteur sélectionné.",
+  "chat.tts.voiceLabel": "Voix",
+  "chat.tts.voiceDesc": "Voix prédéfinie pour le moteur sélectionné.",
+  "chat.tts.voiceDefault": "Par défaut",
+  "chat.voice.section": "Saisie vocale",
+  "chat.voice.enabled": "Afficher les commandes vocales",
+  "chat.voice.enabledDesc": "Afficher le micro et le sélecteur de mode vocal dans la fenêtre de chat.",
+  "chat.voice.triggerLabel": "Déclenchement par défaut",
+  "chat.voice.triggerDesc": "Comment le micro est contrôlé pour une nouvelle session vocale.",
+  "chat.voice.triggerContinuous": "Continu",
+  "chat.voice.triggerPtt": "Appuyer pour parler",
+  "chat.voice.routingLabel": "Routage par défaut",
+  "chat.voice.routingDesc": "Ce qui se passe avec une transcription finalisée.",
+  "chat.voice.routingLoop": "Boucle vocale",
+  "chat.voice.routingTranscribe": "Transcrire uniquement",
+  "chat.voice.engineLabel": "Moteur de reconnaissance",
+  "chat.voice.engineDesc": "Backend de reconnaissance vocale utilisé pour transcrire votre voix.",
+  "chat.voice.modelLabel": "Modèle de reconnaissance",
+  "chat.voice.modelDesc": "Dépôt du modèle Whisper. Les modèles plus grands sont plus précis mais plus lents.",
+  "chat.voice.modelCustom": "Personnalisé…",
+  "chat.voice.languageLabel": "Langue",
+  "chat.voice.languageDesc": 'Indice de langue pour la reconnaissance vocale (p. ex. "en").',
+  "chat.voice.start": "Démarrer la saisie vocale",
+  "chat.voice.stop": "Arrêter la saisie vocale",
+  "chat.voice.pttHint": "Maintenir pour parler",
+  "chat.voice.statusLoading": "Chargement…",
+  "chat.voice.statusListening": "À l'écoute",
+  "chat.voice.statusSpeaking": "Parle",
+  "chat.voice.dismissError": "Ignorer l'erreur vocale",
 };
 
 export default llm;

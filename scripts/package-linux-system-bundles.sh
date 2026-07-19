@@ -67,6 +67,7 @@ if ! command -v rpmbuild >/dev/null 2>&1; then
 fi
 
 version="$(node -p "JSON.parse(require('fs').readFileSync('$ROOT_DIR/package.json','utf8')).version")"
+rpm_version="${version//-/\~}"
 binary_path="$ROOT_DIR/src-tauri/target/$target/release/skill"
 resources_dir="$ROOT_DIR/src-tauri/resources"
 
@@ -119,6 +120,21 @@ if [[ -f "$daemon_path" ]]; then
   echo "✓ Bundled skill-daemon sidecar"
 else
   echo "⚠ skill-daemon not found at $daemon_path" >&2
+fi
+
+# ── Bundle skill-tty sidecar ─────────────────────────────────────────────────
+# The PTY proxy that wraps the user's shell for terminal-session recording.
+# Lives next to skill-daemon so the shell hook (and the daemon's tty exec-shim)
+# can find it via current_exe()'s parent directory. Splitting it out means
+# blanket process-name kills of skill-daemon don't sweep up active recorded
+# shells.
+tty_path="$ROOT_DIR/src-tauri/target/$target/release/skill-tty"
+if [[ -f "$tty_path" ]]; then
+  cp "$tty_path" "$stage_root/opt/neuroskill/skill-tty"
+  chmod +x "$stage_root/opt/neuroskill/skill-tty"
+  echo "✓ Bundled skill-tty sidecar"
+else
+  echo "⚠ skill-tty not found at $tty_path" >&2
 fi
 
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────
@@ -199,7 +215,7 @@ tar -czf "$rpm_top/SOURCES/neuroskill-root.tar.gz" -C "$work_root" "$(basename "
 
 cat > "$rpm_top/SPECS/neuroskill.spec" <<EOF
 Name:           neuroskill
-Version:        $version
+Version:        $rpm_version
 Release:        1
 Summary:        Neurofeedback and local AI assistant
 License:        GPL-3.0-only
@@ -225,7 +241,7 @@ cp -a . %{buildroot}/
 /usr/share/pixmaps/neuroskill.png
 
 %changelog
-* $(date '+%a %b %d %Y') NeuroSkill CI <ci@neuroskill.com> - $version-1
+* $(date '+%a %b %d %Y') NeuroSkill CI <ci@neuroskill.com> - $rpm_version-1
 - CI system-tool Linux package build
 EOF
 

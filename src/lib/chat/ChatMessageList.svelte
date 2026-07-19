@@ -119,7 +119,7 @@ function copyMessage(msg: Message) {
           <p class="text-ui-md text-muted-foreground max-w-xs leading-relaxed">
             {t("chat.empty.stoppedHint")}
           </p>
-          <div class="flex gap-2 mt-1">
+          <div class="flex flex-wrap justify-center gap-2 mt-1">
             <button
               onclick={onStartServer}
               class="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700

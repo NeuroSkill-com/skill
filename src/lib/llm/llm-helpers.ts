@@ -19,6 +19,7 @@ export interface LlmModelEntry {
   family_desc: string;
   tags: string[];
   is_mmproj: boolean;
+  mtp: boolean;
   recommended: boolean;
   advanced: boolean;
   params_b: number;

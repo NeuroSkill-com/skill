@@ -4,7 +4,7 @@
 use axum::{extract::State, Json};
 use serde::Deserialize;
 
-use crate::state::AppState;
+use crate::{routes::settings_io::patch_user_settings_sync, state::AppState};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct LslAutoConnectRequest {
@@ -33,19 +33,18 @@ pub(crate) struct LslIdleTimeoutRequest {
 }
 
 fn persist_lsl_settings(state: &AppState) {
-    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let mut settings = skill_settings::load_settings(&skill_dir);
-    settings.lsl_auto_connect = state.lsl_auto_connect.lock().map(|g| *g).unwrap_or(false);
-    settings.lsl_paired_streams = state.lsl_paired_streams.lock().map(|g| g.clone()).unwrap_or_default();
-    settings.lsl_idle_timeout_secs = state
+    let auto_connect = state.lsl_auto_connect.lock().map(|g| *g).unwrap_or(false);
+    let paired_streams = state.lsl_paired_streams.lock().map(|g| g.clone()).unwrap_or_default();
+    let idle_secs = state
         .lsl_idle_timeout_secs
         .lock()
         .map(|g| *g)
         .unwrap_or(skill_settings::default_lsl_idle_timeout_secs());
-    let path = skill_settings::settings_path(&skill_dir);
-    if let Ok(json) = serde_json::to_string_pretty(&settings) {
-        let _ = std::fs::write(path, json);
-    }
+    patch_user_settings_sync(state, move |s| {
+        s.lsl_auto_connect = auto_connect;
+        s.lsl_paired_streams = paired_streams;
+        s.lsl_idle_timeout_secs = idle_secs;
+    });
 }
 
 pub(crate) async fn get_lsl_config(State(state): State<AppState>) -> Json<serde_json::Value> {

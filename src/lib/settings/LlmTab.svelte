@@ -14,11 +14,14 @@ import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
+import LlmAsrSection from "$lib/llm/LlmAsrSection.svelte";
 import LlmHfSearchSection from "$lib/llm/LlmHfSearchSection.svelte";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
+import LlmMtpSection from "$lib/llm/LlmMtpSection.svelte";
 import LlmServerLogSection from "$lib/llm/LlmServerLogSection.svelte";
 import LlmServerSection from "$lib/llm/LlmServerSection.svelte";
+import LlmTtsSection from "$lib/llm/LlmTtsSection.svelte";
 import type { LlmCatalog } from "$lib/llm/llm-helpers";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -57,6 +60,7 @@ interface LlmConfig {
   enabled: boolean;
   autostart: boolean;
   model_path: string | null;
+  runtime: "llama_cpp" | "rlx";
   n_gpu_layers: number;
   ctx_size: number | null;
   n_batch: number | null;
@@ -76,6 +80,7 @@ interface LlmConfig {
   cache_type_k: string;
   cache_type_v: string;
   attn_rot_disabled: boolean;
+  mtp_draft_count: number;
 }
 
 interface ModelHardwareFit {
@@ -98,6 +103,7 @@ let config = $state<LlmConfig>({
   enabled: false,
   autostart: false,
   model_path: null,
+  runtime: "llama_cpp",
   n_gpu_layers: 4294967295,
   ctx_size: null,
   n_batch: null,
@@ -132,6 +138,7 @@ let config = $state<LlmConfig>({
   cache_type_k: "f16",
   cache_type_v: "f16",
   attn_rot_disabled: false,
+  mtp_draft_count: 0,
 });
 
 let configSaving = $state(false);
@@ -406,6 +413,18 @@ onDestroy(() => {
 />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- MTP (Multi-Token Prediction) settings — only shown for MTP-capable models  -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+{#if activeEntry?.mtp}
+<LlmMtpSection
+  mtpDraftCount={config.mtp_draft_count}
+  {configSaving}
+  quant={activeEntry?.quant ?? ""}
+  onSetMtpDraftCount={async (val) => { config = { ...config, mtp_draft_count: val }; await saveConfig(); }}
+/>
+{/if}
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- HuggingFace model search                                                   -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <LlmHfSearchSection
@@ -437,7 +456,18 @@ onDestroy(() => {
   onSetNUbatch={async (val) => { config = { ...config, n_ubatch: val }; await saveConfig(); }}
   onToggleFlashAttention={async () => { config = { ...config, flash_attention: !config.flash_attention }; await saveConfig(); }}
   onToggleOffloadKqv={async () => { config = { ...config, offload_kqv: !config.offload_kqv }; await saveConfig(); }}
+  onSetRuntime={async (val) => { config = { ...config, runtime: val }; await saveConfig(); }}
 />
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Voice input (ASR + VAD) defaults                                            -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<LlmAsrSection />
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Voice output (TTS) engine                                                   -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<LlmTtsSection />
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Server log                                                                  -->

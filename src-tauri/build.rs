@@ -7,6 +7,7 @@
 
 fn main() {
     emit_build_info();
+    emit_tts_kitten_cfg();
 
     // ── macOS / Linux: increase main-thread stack size (binary only) ─────
     //
@@ -58,6 +59,20 @@ fn main() {
 // the env vars come out empty and the runtime falls back to the package
 // version. CI shallow checkouts work fine because the workflows already do
 // fetch-depth: 0.
+
+// `tts-kitten` is a portable feature flag, but `rlx-kittentts` in skill-tts is
+// target-conditional (Windows skips it — see skill-tts/Cargo.toml).
+// of bare `cfg(feature = "tts-kitten")` so Windows skips the kitten code path
+// even when the feature is enabled by `default`.
+fn emit_tts_kitten_cfg() {
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_TTS_KITTEN");
+    println!("cargo::rustc-check-cfg=cfg(tts_kitten_active)");
+    let feat_on = std::env::var_os("CARGO_FEATURE_TTS_KITTEN").is_some();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if feat_on && target_os != "windows" {
+        println!("cargo:rustc-cfg=tts_kitten_active");
+    }
+}
 
 fn emit_build_info() {
     // Re-run when the current ref changes so cached builds pick up new commits.

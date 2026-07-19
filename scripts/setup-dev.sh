@@ -28,7 +28,6 @@
 #
 # After running this script, optionally run:
 #   npm run setup:build-cache    # detailed sccache + mold setup
-#   npm run setup:llama-prebuilt # skip llama.cpp cmake rebuild
 
 set -euo pipefail
 
@@ -291,7 +290,6 @@ fi
 echo ""
 info "Optional next steps:"
 echo "  npm run setup:build-cache      # detailed sccache / mold setup"
-echo "  npm run setup:llama-prebuilt   # skip llama.cpp cmake rebuild (~5 min → 3s)"
 echo ""
 info "Start developing:"
 echo "  npm run tauri dev"

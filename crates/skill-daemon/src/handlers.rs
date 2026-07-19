@@ -8,14 +8,17 @@ use axum::{
     Json,
 };
 use base64::Engine as _;
+use futures::{SinkExt, StreamExt};
 use skill_daemon_common::{
     DiscoveredDeviceResponse, EventEnvelope, ForgetDeviceRequest, HealthResponse, LslDiscoveredStreamResponse,
     PairDeviceRequest, ScannerCortexConfigRequest, ScannerStateResponse, ScannerWifiConfigRequest,
     SessionControlRequest, SetPreferredDeviceRequest, StatusResponse, VersionResponse, WsClient, WsPortResponse,
     WsRequestLog, DAEMON_NAME, PROTOCOL_VERSION,
 };
+use std::collections::HashSet;
 use std::net::SocketAddr;
-use tokio::sync::{broadcast, oneshot};
+use std::sync::{Arc, RwLock as StdRwLock};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::error;
 
 use crate::state::AppState;
@@ -735,9 +738,10 @@ pub(crate) async fn set_preferred_device(
     Json(req): Json<SetPreferredDeviceRequest>,
 ) -> Json<Vec<DiscoveredDeviceResponse>> {
     // Persist preferred_id to settings (synchronous so the response reflects it).
-    let mut settings = crate::routes::settings_io::load_user_settings(&state);
-    settings.preferred_id = if req.id.is_empty() { None } else { Some(req.id.clone()) };
-    crate::routes::settings_io::save_user_settings(&state, &settings);
+    let preferred_id = if req.id.is_empty() { None } else { Some(req.id.clone()) };
+    crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
+        s.preferred_id = preferred_id;
+    });
 
     // Also update in-memory devices for consistency.
     if let Ok(mut guard) = state.devices.lock() {
@@ -982,9 +986,10 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
             persist_paired_devices(&state);
 
             // Set as preferred.
-            let mut settings = crate::routes::settings_io::load_user_settings(&state);
-            settings.preferred_id = Some(dev.id.clone());
-            crate::routes::settings_io::save_user_settings(&state, &settings);
+            let preferred_id = dev.id.clone();
+            crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
+                s.preferred_id = Some(preferred_id);
+            });
 
             state.broadcast("devices-updated", serde_json::json!({ "auto_paired": dev.id }));
 
@@ -1111,20 +1116,13 @@ pub(crate) async fn control_start_session(
     // would attempt a BLE scan even though the user plugged in a USB dongle.
     if let Some(ref t) = target {
         if let Some(port) = t.strip_prefix("usb:") {
-            let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-            let mut settings = skill_settings::load_settings(&skill_dir);
-            settings.openbci.serial_port = port.to_string();
-            // A usb: target always means a serial board (Cyton or CytonDaisy).
-            // Preserve the user's choice if it is already a serial board;
-            // otherwise reset to Cyton so we never attempt a BLE / WiFi /
-            // UDP connection when a dongle is plugged in.
-            if !settings.openbci.board.is_serial() {
-                settings.openbci.board = skill_settings::OpenBciBoard::Cyton;
-            }
-            let path = skill_settings::settings_path(&skill_dir);
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let _ = std::fs::write(path, json);
-            }
+            let port = port.to_string();
+            crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
+                s.openbci.serial_port = port;
+                if !s.openbci.board.is_serial() {
+                    s.openbci.board = skill_settings::OpenBciBoard::Cyton;
+                }
+            });
         }
         if target_requires_pairing(t) && !is_paired_target(&state, t) {
             if let Ok(mut status) = state.status.lock() {
@@ -1527,17 +1525,62 @@ pub(crate) async fn cmd_tunnel_root(
     Json(crate::cmd_dispatch::dispatch(state, msg).await)
 }
 
-pub(crate) async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<EventEnvelope>, state: AppState) {
+/// Event types whose volume is high enough to overwhelm the WS sender path
+/// (Muse @ 256 Hz produces ~300–500 frames/sec across these). They are
+/// dropped by default and only forwarded when the client explicitly opts in
+/// via `{command:"subscribe",events:[...]}`. See `handle_ws` for details.
+pub(crate) const HIGH_RATE_EVENT_TYPES: &[&str] = &[
+    "EegSample",
+    "EegBands",
+    "ImuSample",
+    "PpgSample",
+    "FnirsSample",
+    "SignalQuality",
+];
+
+pub(crate) async fn handle_ws(socket: WebSocket, mut rx: broadcast::Receiver<EventEnvelope>, state: AppState) {
+    // Split the socket so the sender half can drain (events + responses)
+    // concurrently with the receiver half pulling commands off the wire.
+    //
+    // The original design ran `socket.send` and `socket.recv` in the same
+    // `tokio::select!` arm-set. When a device is streaming (Muse @ 256 Hz
+    // produces ~300–500 EegSample events/sec via the broadcast channel),
+    // the event arm wins repeatedly and `socket.send().await` keeps the
+    // task busy — incoming commands queued up and timed out client-side.
+    //
+    // Two-queue split:
+    //   - `tx_resp` (unbounded): command responses + LLM chat deltas.
+    //     Drained first (biased select) so responses jump ahead of any
+    //     queued event backlog. Unbounded because responses are rare and
+    //     small; bounding here can dead-end a command if events are
+    //     filling the priority queue.
+    //   - `tx_evt` (mpsc 64): broadcast events. `try_send` — dropped if
+    //     the socket is backed up.
+    //   - Dispatch runs in a spawned task per command so a slow handler
+    //     (`umap`, `sessions`) doesn't block subsequent commands.
+    //
+    // Subscribe protocol:
+    //   - Default: only low-rate control events (DaemonStarted, StatusUpdate,
+    //     Battery, label/session lifecycle, etc.) are forwarded.
+    //   - `{command:"subscribe",events:["EegSample","SignalQuality"]}` opts
+    //     a specific event type in. `events:["*"]` opts into all known
+    //     high-rate types at once.
+    //   - `{command:"unsubscribe",events:[…]}` removes types; an empty
+    //     array or `["*"]` clears the whole subscription set.
+    //   - Response: `{command:"subscribe",ok:true,subscribed:[…]}`.
+    let subscribed: Arc<StdRwLock<HashSet<String>>> = Arc::new(StdRwLock::new(HashSet::new()));
+
+    let (mut sender, mut receiver) = socket.split();
+
     let connected = EventEnvelope {
         r#type: "DaemonStarted".to_string(),
         ts_unix_ms: now_unix_ms(),
         correlation_id: None,
         payload: serde_json::json!({ "message": "connected" }),
     };
-
     match serde_json::to_string(&connected) {
         Ok(payload) => {
-            if socket.send(Message::Text(payload.into())).await.is_err() {
+            if sender.send(Message::Text(payload.into())).await.is_err() {
                 return;
             }
         }
@@ -1547,94 +1590,189 @@ pub(crate) async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver
         }
     }
 
-    // Channel for streaming messages back to the WS client.
-    // Used by LLM chat streaming to send incremental deltas.
-    let (_stream_tx, mut stream_rx) = tokio::sync::mpsc::channel::<String>(64);
-    #[cfg(feature = "llm")]
-    let stream_tx = _stream_tx;
+    let (tx_resp, mut rx_resp) = mpsc::unbounded_channel::<String>();
+    let (tx_evt, mut rx_evt) = mpsc::channel::<String>(64);
 
-    loop {
-        tokio::select! {
-            // Broadcast events → send to client
-            event = rx.recv() => {
-                match event {
-                    Ok(ev) => {
-                        let payload = match serde_json::to_string(&ev) {
-                            Ok(v) => v,
-                            Err(err) => {
-                                error!(%err, "failed to serialize websocket event");
-                                continue;
-                            }
+    // Sender task: drain responses with priority, then events.
+    let send_task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                biased;
+                Some(msg) = rx_resp.recv() => {
+                    if sender.send(Message::Text(msg.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Some(msg) = rx_evt.recv() => {
+                    if sender.send(Message::Text(msg.into())).await.is_err() {
+                        break;
+                    }
+                }
+                else => break,
+            }
+        }
+    });
+
+    // Event forwarder: broadcast → tx_evt with try_send (lossy by design).
+    //
+    // High-rate per-sample events (`EegSample`, `EegBands`, `ImuSample`,
+    // `PpgSample`, `FnirsSample`, `SignalQuality`) are gated behind the
+    // per-connection subscribed set. Low-rate control events (status,
+    // battery, label/session lifecycle, etc.) are always forwarded.
+    //
+    // Without this gate, a Muse @ 256 Hz produces 300–500 frames/sec and
+    // fills the kernel TCP send buffer faster than smoke tests / CLIs
+    // drain it; once `sender.send(event).await` blocks, even the priority
+    // response queue (rx_resp) can't get through.
+    fn is_high_rate_event(ty: &str) -> bool {
+        HIGH_RATE_EVENT_TYPES.contains(&ty)
+    }
+    let subscribed_for_evt = subscribed.clone();
+    let evt_task = tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(ev) => {
+                    if is_high_rate_event(&ev.r#type) {
+                        // Cheap read lock — RwLock is std::sync (sub-µs reads).
+                        let subs = match subscribed_for_evt.read() {
+                            Ok(g) => g,
+                            Err(p) => p.into_inner(),
                         };
-                        if socket.send(Message::Text(payload.into())).await.is_err() {
+                        if !subs.contains(&ev.r#type) {
+                            continue;
+                        }
+                    }
+                    let payload = match serde_json::to_string(&ev) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            error!(%err, "failed to serialize websocket event");
+                            continue;
+                        }
+                    };
+                    let _ = tx_evt.try_send(payload);
+                }
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::debug!(%skipped, "websocket client lagged behind event stream");
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+
+    // Receiver loop: dispatch commands, push responses into the priority queue.
+    while let Some(msg) = receiver.next().await {
+        match msg {
+            Ok(Message::Text(text)) => {
+                let cmd: serde_json::Value = match serde_json::from_str(&text) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let cmd_name = cmd
+                    .get("command")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                if cmd_name.is_empty() {
+                    continue;
+                }
+
+                // ── subscribe / unsubscribe (per-connection, in-band) ──
+                // Handled inline (not via cmd_dispatch) because the
+                // subscription set is per-WS state, not global daemon state.
+                if cmd_name == "subscribe" || cmd_name == "unsubscribe" {
+                    let events: Vec<String> = cmd
+                        .get("events")
+                        .and_then(serde_json::Value::as_array)
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+                    let mut subs = match subscribed.write() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    let wants_all = events.iter().any(|e| e == "*");
+                    if cmd_name == "subscribe" {
+                        if wants_all {
+                            for ty in HIGH_RATE_EVENT_TYPES {
+                                subs.insert((*ty).to_string());
+                            }
+                        } else {
+                            for ev in events {
+                                if HIGH_RATE_EVENT_TYPES.contains(&ev.as_str()) {
+                                    subs.insert(ev);
+                                }
+                            }
+                        }
+                    } else if events.is_empty() || wants_all {
+                        subs.clear();
+                    } else {
+                        for ev in &events {
+                            subs.remove(ev);
+                        }
+                    }
+                    let mut current: Vec<String> = subs.iter().cloned().collect();
+                    drop(subs);
+                    current.sort();
+                    let response = serde_json::json!({
+                        "command": cmd_name,
+                        "ok": true,
+                        "subscribed": current,
+                    });
+                    if let Ok(resp_str) = serde_json::to_string(&response) {
+                        if tx_resp.send(resp_str).is_err() {
                             break;
                         }
                     }
-                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                        tracing::debug!(%skipped, "websocket client lagged behind event stream");
-                    }
-                    Err(broadcast::error::RecvError::Closed) => break,
+                    continue;
                 }
-            }
-            // Streaming messages (from LLM chat) → send to client
-            Some(msg_str) = stream_rx.recv() => {
-                if socket.send(Message::Text(msg_str.into())).await.is_err() {
-                    break;
-                }
-            }
-            // Incoming messages from client → dispatch as commands
-            msg = socket.recv() => {
-                match msg {
-                    Some(Ok(Message::Text(text))) => {
-                        let text_str: &str = &text;
-                        if let Ok(cmd) = serde_json::from_str::<serde_json::Value>(text_str) {
-                            let cmd_name = cmd.get("command")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or("");
 
-                            if cmd_name == "llm_chat" {
-                                // LLM chat uses streaming: send deltas incrementally.
-                                // Spawned as a separate task so that ARM 2 of the select!
-                                // loop (stream_rx.recv()) can drain the mpsc channel and
-                                // forward delta tokens to the socket concurrently with
-                                // inference.  Without the spawn the select! loop is blocked
-                                // for the entire generation, stream_rx is never polled, and
-                                // blocking_send deadlocks once the 64-slot buffer is full.
-                                #[cfg(feature = "llm")]
-                                {
-                                    let mut tx = stream_tx.clone();
-                                    let state2 = state.clone();
-                                    tokio::spawn(async move {
-                                        crate::cmd_dispatch::dispatch_llm_chat_streaming(
-                                            state2, cmd, &mut tx,
-                                        ).await;
-                                    });
+                if cmd_name == "llm_chat" {
+                    #[cfg(feature = "llm")]
+                    {
+                        // dispatch_llm_chat_streaming expects an mpsc::Sender<String>;
+                        // adapt unbounded → bounded with a thin shim that forwards
+                        // deltas (deltas are small + rare, can't realistically
+                        // saturate the unbounded channel).
+                        let (mut tx_shim, mut rx_shim) = mpsc::channel::<String>(64);
+                        let tx_resp2 = tx_resp.clone();
+                        tokio::spawn(async move {
+                            while let Some(s) = rx_shim.recv().await {
+                                if tx_resp2.send(s).is_err() {
+                                    break;
                                 }
-                                #[cfg(not(feature = "llm"))]
-                                {
-                                    let response = crate::cmd_dispatch::dispatch(state.clone(), cmd).await;
-                                    if let Ok(resp_str) = serde_json::to_string(&response) {
-                                        if socket.send(Message::Text(resp_str.into())).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                            } else if !cmd_name.is_empty() {
-                                let response = crate::cmd_dispatch::dispatch(state.clone(), cmd).await;
-                                if let Ok(resp_str) = serde_json::to_string(&response) {
-                                    if socket.send(Message::Text(resp_str.into())).await.is_err() {
-                                        break;
-                                    }
-                                }
+                            }
+                        });
+                        let state2 = state.clone();
+                        tokio::spawn(async move {
+                            crate::cmd_dispatch::dispatch_llm_chat_streaming(state2, cmd, &mut tx_shim).await;
+                        });
+                    }
+                    #[cfg(not(feature = "llm"))]
+                    {
+                        let response = crate::cmd_dispatch::dispatch(state.clone(), cmd).await;
+                        if let Ok(resp_str) = serde_json::to_string(&response) {
+                            if tx_resp.send(resp_str).is_err() {
+                                break;
                             }
                         }
                     }
-                    Some(Ok(Message::Close(_))) | None => break,
-                    _ => {}
+                } else {
+                    let state2 = state.clone();
+                    let tx = tx_resp.clone();
+                    tokio::spawn(async move {
+                        let response = crate::cmd_dispatch::dispatch(state2, cmd).await;
+                        if let Ok(resp_str) = serde_json::to_string(&response) {
+                            let _ = tx.send(resp_str);
+                        }
+                    });
                 }
             }
+            Ok(Message::Close(_)) | Err(_) => break,
+            _ => {}
         }
     }
+
+    evt_task.abort();
+    send_task.abort();
 }
 
 #[cfg(test)]

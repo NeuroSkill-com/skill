@@ -143,6 +143,15 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
 
     let llm_downloads = tray_download_fingerprint(app);
 
+    // Pending update version (only set when auto-update is OFF). Including it
+    // in the structure key forces a rebuild that adds/removes the tray hint
+    // when the background poller flips the state.
+    let pending_update = {
+        let r = app.app_state();
+        let g = r.lock_or_recover();
+        g.update_available_pending.clone().unwrap_or_default()
+    };
+
     let mut pair_parts = st
         .paired_devices
         .iter()
@@ -156,7 +165,7 @@ fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let state = st.state.as_str();
 
     format!(
-        "{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{compare}|{llm_downloads}"
+        "{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{compare}|{llm_downloads}|{pending_update}"
     )
 }
 
@@ -274,6 +283,25 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         true,
         Some("CmdOrCtrl+Shift+O"),
     )?)?;
+
+    // Pending update hint — only shown when auto-update is OFF and the
+    // background poller has detected a newer version. Click opens the
+    // Updates settings tab where the user can install it.
+    let pending_version = {
+        let r = app.app_state();
+        let g = r.lock_or_recover();
+        g.update_available_pending.clone()
+    };
+    if let Some(v) = pending_version {
+        menu.append(&MenuItem::with_id(
+            app,
+            "update_available",
+            format!("⬆ Update available: v{v}"),
+            true,
+            None::<&str>,
+        )?)?;
+    }
+
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     // ── Status info (always present — updated in-place by update_status_items) ──

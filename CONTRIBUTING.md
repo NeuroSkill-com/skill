@@ -30,8 +30,11 @@ npm run tauri:build
 
 `npm run setup` auto-detects your platform and installs everything needed
 (protobuf, OpenMP, GNU ar, sccache, etc.).  Pass `--yes` to skip prompts.
-See also `npm run setup:build-cache` and `npm run setup:llama-prebuilt`
-for optional build acceleration.
+See also `npm run setup:build-cache`
+for optional build acceleration, and `npm run setup:rlx` for the optional
+[RLX](https://github.com/MIT-RLX/rlx) sibling checkout (required for CI and
+for `llm-rlx` / `text-embeddings-rlx` features). Details:
+[docs/DEVELOPMENT.md#rlx-optional-path-dependency](docs/DEVELOPMENT.md#rlx-optional-path-dependency).
 
 ## Project Structure
 
@@ -44,7 +47,7 @@ for optional build acceleration.
 │   ├── skill-eeg/           # EEG signal processing
 │   ├── skill-exg/           # ExG (multi-modal biosignal) inference
 │   ├── skill-gpu/           # GPU FFT / UMAP backends (MLX, CUDA, Vulkan)
-│   ├── skill-llm/           # Local LLM inference (llama.cpp, MLX, Burn)
+│   ├── skill-llm/           # Local LLM inference (RLX runtime)
 │   ├── skill-tools/         # LLM function-calling
 │   ├── skill-vision/        # Screen content + camera vision
 │   ├── skill-screenshots/   # Screenshot capture + encoding
@@ -244,7 +247,6 @@ npm run ci:dry-run:fast
 | `prepare-changelog VER OUT [RANGE]` | Extract changelog + contributors to markdown |
 | `update-latest-json --platform P ...` | Merge platform entry into Tauri updater manifest |
 | `discord-notify --status S ...` | Send Discord webhook notification |
-| `download-llama PLAT TARGET FEAT` | Download + validate prebuilt llama.cpp libs |
 | `import-apple-cert` | Import .p12 certificate into temporary keychain (macOS) |
 | `validate-notarization` | Check Apple notarization credentials pre-flight (macOS) |
 | `free-disk-space` | Remove unused toolchains on Linux runners |

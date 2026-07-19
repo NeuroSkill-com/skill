@@ -66,14 +66,17 @@ pub fn broadcast_event(tx: &broadcast::Sender<EventEnvelope>, event_type: &str, 
 
 // ── Band snapshot enrichment ──────────────────────────────────────────────────
 
-/// Enrich a `BandSnapshot` with composite scores (focus, relaxation, engagement,
-/// artifacts) and return the result as JSON.
+/// Enrich a `BandSnapshot` with composite scores and return the result as JSON.
+///
+/// All composite-score math (engagement / relaxation / focus / meditation /
+/// cognitive_load / drowsiness) lives in `skill_devices` and is written
+/// directly onto the snapshot fields by `skill_devices::enrich_band_snapshot`.
+/// This wrapper only adds the daemon-side context (artifacts, GPU stats) and
+/// serializes — every consumer reads identical values from the snapshot.
 pub fn enrich_band_snapshot(
     snap: &mut skill_eeg::eeg_bands::BandSnapshot,
     artifacts: Option<&skill_eeg::artifact_detection::ArtifactMetrics>,
 ) -> serde_json::Value {
-    // Use skill_devices::enrich_band_snapshot for the full enrichment
-    // (blink_count, blink_rate, head_pose, composite scores).
     let ctx = skill_devices::SnapshotContext {
         ppg: None,
         artifacts: artifacts.copied(),
@@ -82,26 +85,7 @@ pub fn enrich_band_snapshot(
         gpu: skill_data::gpu_stats::read(),
     };
     skill_devices::enrich_band_snapshot(snap, &ctx);
-
-    // Add composite scores derived from band power.
-    let mut val = serde_json::to_value(&*snap).unwrap_or_default();
-    if let Some(obj) = val.as_object_mut() {
-        let engage_raw = skill_devices::compute_engagement_raw(snap);
-        let focus = skill_devices::focus_score(engage_raw);
-        let nch = snap.channels.len().max(1) as f64;
-        let avg_alpha = snap.channels.iter().map(|c| c.rel_alpha as f64).sum::<f64>() / nch;
-        let avg_beta = snap.channels.iter().map(|c| c.rel_beta as f64).sum::<f64>() / nch;
-        let relaxation = if (avg_alpha + avg_beta) > 0.0 {
-            (avg_alpha / (avg_alpha + avg_beta)) * 100.0
-        } else {
-            0.0
-        };
-        let engagement = 100.0 / (1.0 + (-2.0 * (engage_raw as f64 - 0.8)).exp());
-        obj.insert("focus".into(), serde_json::json!(focus));
-        obj.insert("relaxation".into(), serde_json::json!(relaxation));
-        obj.insert("engagement".into(), serde_json::json!(engagement));
-    }
-    val
+    serde_json::to_value(&*snap).unwrap_or_default()
 }
 
 // ── Session metadata ──────────────────────────────────────────────────────────
@@ -193,6 +177,45 @@ pub fn write_session_meta_full(
             obj.insert("eeg_sample_rate_hz".into(), serde_json::json!(s.eeg_sample_rate_hz));
         }
     }
+
+    if let Ok(json) = serde_json::to_string_pretty(&meta) {
+        let _ = std::fs::write(csv_path.with_extension("json"), json);
+    }
+}
+
+/// Write a minimal in-progress sidecar JSON immediately after opening a
+/// recording, before any samples are flushed. Crash-resilience: a daemon
+/// killed mid-chunk leaves a sidecar with the known device/channel/rate
+/// fields, so `list_sessions_for_day` doesn't have to fall back to
+/// CSV-header sniffing for partial recordings.
+///
+/// Carries an `in_progress: true` marker; the full writer overwrites this
+/// file on `finalize()` and that flag is dropped.
+pub fn write_session_meta_partial(
+    csv_path: &Path,
+    device_name: &str,
+    channel_names: &[String],
+    sample_rate: f64,
+    start_utc: u64,
+    device_id: &SessionDeviceId<'_>,
+    device_kind: &str,
+) {
+    let meta = serde_json::json!({
+        "csv_file": csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
+        "session_start_utc": start_utc,
+        "total_samples": 0,
+        "sample_rate_hz": sample_rate,
+        "device_name": device_name,
+        "device_kind": device_kind,
+        "channel_names": channel_names,
+        "channel_count": channel_names.len(),
+        "firmware_version": device_id.firmware_version,
+        "serial_number": device_id.serial_number,
+        "daemon": true,
+        "in_progress": true,
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    });
 
     if let Ok(json) = serde_json::to_string_pretty(&meta) {
         let _ = std::fs::write(csv_path.with_extension("json"), json);

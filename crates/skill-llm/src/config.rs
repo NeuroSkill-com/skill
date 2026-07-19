@@ -11,6 +11,15 @@ pub use skill_tools::types::{LlmToolConfig, ToolExecutionMode};
 
 // ── LLM server configuration ─────────────────────────────────────────────────
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmInferenceRuntime {
+    /// Legacy value kept for serde compat with existing config files; treated as Rlx.
+    LlamaCpp,
+    #[default]
+    Rlx,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LlmConfig {
@@ -22,6 +31,11 @@ pub struct LlmConfig {
     /// Absolute path to a GGUF model file.  Required when `enabled = true`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_path: Option<std::path::PathBuf>,
+
+    /// Inference runtime. Always RLX in practice; `llama_cpp` is accepted in
+    /// existing config files but treated identically.
+    #[serde(default)]
+    pub runtime: LlmInferenceRuntime,
 
     /// Number of transformer layers to offload to the GPU.
     /// `0` = CPU-only inference.  `-1` (stored as `u32::MAX`) = offload all.
@@ -68,7 +82,7 @@ pub struct LlmConfig {
     #[serde(default = "default_autoload_mmproj")]
     pub autoload_mmproj: bool,
 
-    /// Enable verbose llama.cpp / clip_model_loader logging to stderr.
+    /// Enable verbose inference / clip_model_loader logging to stderr.
     #[serde(default)]
     pub verbose: bool,
 
@@ -128,7 +142,7 @@ pub struct LlmConfig {
     #[serde(default, skip_serializing)]
     pub max_context_length: u32,
 
-    // ── TurboQuant KV-cache settings (llama-cpp-4 ≥ 0.2.20) ──────────────────
+    // ── TurboQuant KV-cache settings ─────────────────────────────────────────
     /// Storage type for the **K** (key) KV-cache tensors.
     ///
     /// Options: `"f16"` (default, highest quality), `"q8_0"` (saves ~47% VRAM,
@@ -145,15 +159,49 @@ pub struct LlmConfig {
     #[serde(default = "default_cache_type_v")]
     pub cache_type_v: String,
 
-    /// Disable the TurboQuant attention rotation (llama.cpp PR #21038).
+    /// Disable the TurboQuant attention rotation.
     ///
-    /// When `false` (the default), llama.cpp applies a Hadamard rotation to
-    /// Q/K/V tensors before writing them to the KV cache.  This significantly
-    /// improves the quality of quantized KV caches at near-zero overhead.
-    /// Set to `true` only if you experience compatibility issues with a
-    /// particular model.
+    /// When `false` (the default), a Hadamard rotation is applied to Q/K/V
+    /// tensors before writing to the KV cache, significantly improving the
+    /// quality of quantized KV caches at near-zero overhead.  Set to `true`
+    /// only if you experience compatibility issues with a particular model.
     #[serde(default)]
     pub attn_rot_disabled: bool,
+
+    // ── Multi-Token Prediction ───────────────────────────────────────────────
+    /// Number of MTP draft tokens generated per decode step.
+    ///
+    /// `0` = MTP disabled (default).  Typical values: `1` for Q4 models,
+    /// `3` for Q8 models (per the v0.2.53 bench: `=3` regressed, `=1` gained
+    /// +6.2% on Qwen3.6-27B-Q4_K_M-mtp). Requires an MTP-capable model
+    /// (e.g. the `froggeric/Qwen3.6-27B-MTP-GGUF` family).
+    #[serde(default)]
+    pub mtp_draft_count: u32,
+
+    /// Number of recurrent-state snapshots per sequence on the draft context.
+    /// Must be `>= mtp_draft_count` so partial KV rollback after rejected
+    /// drafts succeeds on hybrid/recurrent models (e.g. Qwen3.6 M-RoPE).
+    /// `0` lets the smoke-validation step pick a sensible default (4).
+    #[serde(default)]
+    pub mtp_n_rs_seq: u32,
+
+    /// Carries the catalog `mtp` flag for the active model into the actor.
+    /// Set by `init.rs` from `LlmModelEntry::mtp` — not user-configurable.
+    #[serde(default, skip_serializing)]
+    pub mtp_capable: bool,
+
+    // ── RLX experimental runtime ─────────────────────────────────────────────
+    /// RLX device tag: `"cpu"`, `"metal"`, `"mlx"`, `"gpu"`, `"cuda"`, etc.
+    #[serde(default = "default_rlx_device")]
+    pub rlx_device: String,
+
+    /// RLX Qwen3 prefill/decode bucket length.
+    #[serde(default = "default_rlx_max_seq")]
+    pub rlx_max_seq: usize,
+
+    /// Optional RLX soft cap for F32 dequantized weight memory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rlx_max_memory_gb: Option<f32>,
 }
 
 fn default_llm_parallel() -> usize {
@@ -183,12 +231,23 @@ fn default_cache_type_k() -> String {
 fn default_cache_type_v() -> String {
     "f16".into()
 }
+fn default_rlx_device() -> String {
+    if cfg!(target_os = "macos") {
+        "metal".into()
+    } else {
+        "cpu".into()
+    }
+}
+fn default_rlx_max_seq() -> usize {
+    128
+}
 
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             enabled: false,
             model_path: None,
+            runtime: LlmInferenceRuntime::Rlx,
             n_gpu_layers: u32::MAX,
             ctx_size: None,
             parallel: default_llm_parallel(),
@@ -212,6 +271,12 @@ impl Default for LlmConfig {
             cache_type_k: default_cache_type_k(),
             cache_type_v: default_cache_type_v(),
             attn_rot_disabled: false,
+            mtp_draft_count: 0,
+            mtp_n_rs_seq: 0,
+            mtp_capable: false,
+            rlx_device: default_rlx_device(),
+            rlx_max_seq: default_rlx_max_seq(),
+            rlx_max_memory_gb: None,
         }
     }
 }

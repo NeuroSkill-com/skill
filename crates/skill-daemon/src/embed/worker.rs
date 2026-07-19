@@ -11,6 +11,10 @@ use std::sync::mpsc;
 
 use skill_daemon_common::EventEnvelope;
 use skill_eeg::eeg_model_config::{ExgModelBackend, ExgModelConfig};
+#[cfg(feature = "embed-eegdino")]
+use skill_exg::eegdino::EegDino;
+#[cfg(feature = "embed-lumamba")]
+use skill_exg::lumamba::LuMamba;
 #[cfg(feature = "embed-neurorvq")]
 use skill_exg::neurorvq::{Modality as NeuroModality, NeuroRVQFM};
 use skill_settings::HookRule;
@@ -166,9 +170,9 @@ impl HookMatcher {
                 continue;
             }
 
-            // Embed keywords.
+            // Embed keywords as search queries (against the label index).
             let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
-            let Some(embeddings) = self.text_embedder.embed_batch(query_refs) else {
+            let Some(embeddings) = self.text_embedder.embed_queries(query_refs) else {
                 continue;
             };
 
@@ -364,7 +368,7 @@ fn embed_worker_main(
     }
 
     // Load encoder.
-    let encoder = load_encoder(&config, &skill_dir);
+    let mut encoder = load_encoder(&config, &skill_dir);
 
     // Initialize hook matcher.
     let mut hook_matcher = if hooks.iter().any(|h| h.enabled) {
@@ -441,7 +445,7 @@ fn embed_worker_main(
 
         // Encode the epoch.
         let t0 = std::time::Instant::now();
-        let embedding = encoder.as_ref().and_then(|enc| encode_epoch(enc, &msg));
+        let embedding = encoder.as_mut().and_then(|enc| encode_epoch(enc, &msg));
         let embed_ms = t0.elapsed().as_millis();
 
         if embedding.is_none() && encoder.is_some() {
@@ -519,64 +523,73 @@ fn embed_worker_main(
 pub(crate) enum Encoder {
     #[cfg(feature = "embed-zuna")]
     Zuna(Box<ZunaState>),
-    #[cfg(feature = "embed-zuna-gpu")]
-    ZunaGpu(Box<ZunaGpuState>),
-    #[cfg(feature = "embed-zuna-gpu-f16")]
-    ZunaGpuF16(Box<ZunaGpuF16State>),
-    #[cfg(feature = "embed-zuna-mlx")]
-    ZunaMlx(Box<ZunaMlxState>),
     #[cfg(feature = "embed-luna")]
-    Luna(Box<luna_rs::LunaEncoder<burn::backend::NdArray>>),
+    Luna(Box<luna_rs::LunaEncoder>),
     #[cfg(feature = "embed-reve")]
-    Reve(Box<reve_rs::ReveEncoder<burn::backend::NdArray>>),
-    #[cfg(feature = "embed-osf")]
-    Osf(Box<osf_rs::OsfEncoder<burn::backend::NdArray>>),
-    #[cfg(feature = "embed-sleepfm")]
-    SleepFM(Box<sleepfm::SleepFmEncoder<burn::backend::NdArray>>),
-    #[cfg(feature = "embed-sleeplm")]
-    SleepLM(Box<sleeplm::SleepLMEncoder<burn::backend::NdArray>>),
-    #[cfg(feature = "embed-steegformer")]
-    STEEGFormer(Box<steegformer::STEEGFormerEncoder<burn::backend::NdArray>>),
+    Reve(Box<ReveState>),
+    #[cfg(feature = "embed-brainjepa")]
+    Brainjepa(Box<brainjepa::rlx::BrainJepaEncoder>),
     #[cfg(feature = "embed-tribev2")]
     Tribev2(Box<Tribev2State>),
     #[cfg(feature = "embed-neurorvq")]
     NeuroRVQ(Box<NeuroRVQState>),
+    #[cfg(feature = "embed-eegdino")]
+    EegDino(Box<EegDinoState>),
+    #[cfg(feature = "embed-lumamba")]
+    Lumamba(Box<LumambaState>),
     None,
 }
 
 #[cfg(feature = "embed-tribev2")]
 pub(crate) struct Tribev2State {
-    _placeholder: (),
+    #[allow(dead_code)]
+    encoder: tribev2::TribeRlx,
 }
 
 #[cfg(feature = "embed-zuna")]
 pub(crate) struct ZunaState {
-    encoder: zuna_rs::ZunaEncoder<burn::backend::NdArray>,
-    data_config: zuna_rs::config::DataConfig,
-}
-
-#[cfg(feature = "embed-zuna-gpu")]
-pub(crate) struct ZunaGpuState {
-    encoder: zuna_rs::ZunaEncoder<burn::backend::wgpu::Wgpu>,
-    data_config: zuna_rs::config::DataConfig,
-}
-
-#[cfg(feature = "embed-zuna-gpu-f16")]
-#[allow(dead_code)]
-pub(crate) struct ZunaGpuF16State {
-    encoder: zuna_rs::ZunaEncoder<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>,
-    data_config: zuna_rs::config::DataConfig,
-}
-
-#[cfg(feature = "embed-zuna-mlx")]
-pub(crate) struct ZunaMlxState {
-    encoder: zuna_rs::ZunaEncoder<burn_mlx::Mlx>,
+    encoder: zuna_rs::ZunaEncoder,
     data_config: zuna_rs::config::DataConfig,
 }
 
 #[cfg(feature = "embed-neurorvq")]
 pub(crate) struct NeuroRVQState {
     model: NeuroRVQFM,
+}
+
+#[cfg(feature = "embed-eegdino")]
+pub(crate) struct EegDinoState {
+    model: EegDino,
+}
+
+#[cfg(feature = "embed-lumamba")]
+pub(crate) struct LumambaState {
+    model: LuMamba,
+}
+
+#[cfg(feature = "embed-reve")]
+pub(crate) struct ReveState {
+    encoder: reve_rs::ReveEncoder,
+    positions: reve_rs::PositionBank,
+}
+
+#[cfg(feature = "embed-reve")]
+const REVE_WEIGHTS_FILE: &str = "model.safetensors";
+#[cfg(feature = "embed-reve")]
+const REVE_CONFIG_FILE: &str = "config.json";
+#[cfg(feature = "embed-reve")]
+const REVE_POSITIONS_REPO: &str = "brain-bzh/reve-positions";
+
+#[cfg(feature = "embed-reve")]
+fn load_reve_position_bank() -> reve_rs::PositionBank {
+    if let Some(path) = skill_exg::resolve_hf_file(REVE_POSITIONS_REPO, "positions.json") {
+        if let Some(path_str) = path.to_str() {
+            if let Ok(bank) = reve_rs::PositionBank::from_json(path_str) {
+                return bank;
+            }
+        }
+    }
+    reve_rs::PositionBank::from_json_str("{}").expect("empty REVE position bank")
 }
 
 fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
@@ -587,7 +600,8 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         #[cfg(feature = "embed-neurorvq")]
         ExgModelBackend::Neurorvq => {
             info!("loading NeuroRVQ encoder");
-            match NeuroRVQFM::from_default_hf(NeuroModality::EEG) {
+            let device = super::resolve_exg_device(&device_pref);
+            match NeuroRVQFM::from_default_hf(NeuroModality::EEG, device) {
                 Ok(model) => {
                     info!("NeuroRVQ encoder loaded");
                     Some(Encoder::NeuroRVQ(Box::new(NeuroRVQState { model })))
@@ -603,46 +617,51 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
             warn!("NeuroRVQ backend selected but support is not compiled (enable feature: embed-neurorvq)");
             None
         }
+        #[cfg(feature = "embed-eegdino")]
+        ExgModelBackend::Eegdino => {
+            info!(variant = %config.eegdino_variant, "loading EEG-DINO encoder");
+            let device = super::resolve_exg_device(&device_pref);
+            match EegDino::from_hf(&config.eegdino_hf_repo, &config.eegdino_variant, device) {
+                Ok(model) => {
+                    info!(dim = model.embed_dim(), "EEG-DINO encoder loaded");
+                    Some(Encoder::EegDino(Box::new(EegDinoState { model })))
+                }
+                Err(e) => {
+                    warn!(%e, "EEG-DINO load failed — metrics-only");
+                    None
+                }
+            }
+        }
+        #[cfg(not(feature = "embed-eegdino"))]
+        ExgModelBackend::Eegdino => {
+            warn!("EEG-DINO backend selected but support is not compiled (enable feature: embed-eegdino)");
+            None
+        }
+        #[cfg(feature = "embed-lumamba")]
+        ExgModelBackend::Lumamba => {
+            info!(variant = %config.lumamba_variant, repo = %config.lumamba_hf_repo, "loading LuMamba encoder");
+            let device = super::resolve_exg_device(&device_pref);
+            match LuMamba::load(&config.lumamba_hf_repo, &config.lumamba_variant, device) {
+                Ok(model) => {
+                    info!(dim = model.embed_dim(), "LuMamba encoder loaded");
+                    Some(Encoder::Lumamba(Box::new(LumambaState { model })))
+                }
+                Err(e) => {
+                    warn!(%e, repo = %config.lumamba_hf_repo, "LuMamba load failed — metrics-only");
+                    None
+                }
+            }
+        }
+        #[cfg(not(feature = "embed-lumamba"))]
+        ExgModelBackend::Lumamba => {
+            warn!("LuMamba backend selected but support is not compiled (enable feature: embed-lumamba)");
+            None
+        }
         #[cfg(feature = "embed-zuna")]
         ExgModelBackend::Zuna => {
             info!(repo = %config.hf_repo, "loading ZUNA encoder");
-            // Backend selection: auto → mlx (macOS) → gpu → cpu
-            // "auto" on macOS tries MLX first, then GPU, then CPU.
-            // "mlx" forces MLX only (macOS).
-            // "gpu" forces wgpu only.
-            // "cpu" skips all accelerated backends.
-            let _try_mlx = matches!(device_pref.as_str(), "auto" | "mlx");
-            let try_gpu = matches!(device_pref.as_str(), "auto" | "gpu");
-
-            #[cfg(feature = "embed-zuna-mlx")]
-            if _try_mlx {
-                if let Some(s) = load_zuna_mlx(config) {
-                    info!("ZUNA MLX encoder loaded");
-                    return Some(Encoder::ZunaMlx(Box::new(s)));
-                }
-                if device_pref == "mlx" {
-                    warn!("MLX requested but unavailable, falling back to CPU");
-                } else {
-                    warn!("MLX unavailable, trying GPU wgpu");
-                }
-            }
-            #[cfg(feature = "embed-zuna-gpu-f16")]
-            if try_gpu {
-                if let Some(s) = load_zuna_gpu_f16(config) {
-                    info!("ZUNA GPU f16 encoder loaded");
-                    return Some(Encoder::ZunaGpuF16(Box::new(s)));
-                }
-                warn!("GPU f16 unavailable, trying GPU f32");
-            }
-            #[cfg(feature = "embed-zuna-gpu")]
-            if try_gpu {
-                if let Some(s) = load_zuna_gpu(config) {
-                    info!("ZUNA GPU encoder loaded");
-                    return Some(Encoder::ZunaGpu(Box::new(s)));
-                }
-                warn!("GPU f32 unavailable, falling back to CPU");
-            }
-            load_zuna(config)
+            let device = super::resolve_exg_device(&device_pref);
+            load_zuna(config, device)
                 .map(|s| {
                     info!("ZUNA encoder loaded");
                     Encoder::Zuna(Box::new(s))
@@ -654,57 +673,109 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         }
         #[cfg(feature = "embed-luna")]
         ExgModelBackend::Luna => {
+            let device = super::resolve_exg_device(&device_pref);
             let wf = config.luna_weights_file();
-            skill_exg::resolve_luna_weights(&config.luna_hf_repo, wf).and_then(|(w, c)| {
-                let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-                luna_rs::LunaEncoder::<burn::backend::NdArray>::load(&c, &w, device)
-                    .ok()
-                    .map(|(enc, _)| Encoder::Luna(Box::new(enc)))
-            })
+            skill_exg::resolve_luna_weights(&config.luna_hf_repo, wf).and_then(
+                |(w, c)| match luna_rs::LunaEncoder::load(&c, &w, device) {
+                    Ok((enc, ms)) => {
+                        info!(ms, "LUNA encoder loaded");
+                        Some(Encoder::Luna(Box::new(enc)))
+                    }
+                    Err(e) => {
+                        warn!(%e, "LUNA encoder load failed");
+                        None
+                    }
+                },
+            )
+        }
+        #[cfg(not(feature = "embed-luna"))]
+        ExgModelBackend::Luna => {
+            warn!("LUNA backend selected but support is not compiled (enable feature: embed-luna)");
+            None
         }
         #[cfg(feature = "embed-reve")]
-        ExgModelBackend::Reve => resolve_catalog_hf("reve-base").and_then(|(w, c)| {
-            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-            reve_rs::ReveEncoder::<burn::backend::NdArray>::load(&c, &w, device)
-                .ok()
-                .map(|(enc, _)| Encoder::Reve(Box::new(enc)))
-        }),
-        #[cfg(feature = "embed-osf")]
-        ExgModelBackend::Osf => resolve_catalog_hf("osf-base").and_then(|(w, c)| {
-            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-            osf_rs::OsfEncoder::<burn::backend::NdArray>::load(&c, &w, device)
-                .ok()
-                .map(|(enc, _)| Encoder::Osf(Box::new(enc)))
-        }),
-        #[cfg(feature = "embed-sleepfm")]
-        ExgModelBackend::Sleepfm => resolve_catalog_hf("sleepfm").and_then(|(w, c)| {
-            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-            sleepfm::SleepFmEncoder::<burn::backend::NdArray>::load(&c, &w, device)
-                .ok()
-                .map(|(enc, _)| Encoder::SleepFM(Box::new(enc)))
-        }),
-        #[cfg(feature = "embed-sleeplm")]
-        ExgModelBackend::Sleeplm => resolve_catalog_hf("sleeplm").and_then(|(w, c)| {
-            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-            sleeplm::SleepLMEncoder::<burn::backend::NdArray>::load(&c, &w, device)
-                .ok()
-                .map(|(enc, _)| Encoder::SleepLM(Box::new(enc)))
-        }),
-        #[cfg(feature = "embed-steegformer")]
-        ExgModelBackend::Steegformer => resolve_catalog_hf("steegformer-base").and_then(|(w, c)| {
-            let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-            steegformer::STEEGFormerEncoder::<burn::backend::NdArray>::load(&c, &w, device)
-                .ok()
-                .map(|(enc, _)| Encoder::STEEGFormer(Box::new(enc)))
-        }),
+        ExgModelBackend::Reve => {
+            let device = super::resolve_exg_device(&device_pref);
+            info!(repo = %config.hf_repo, "loading REVE encoder");
+            skill_exg::resolve_exg_weights(&config.hf_repo, REVE_WEIGHTS_FILE, REVE_CONFIG_FILE)
+                .and_then(|(w, c)| match reve_rs::ReveEncoder::load(&c, &w, device) {
+                    Ok((enc, ms)) => {
+                        let positions = load_reve_position_bank();
+                        info!(ms, "REVE encoder loaded");
+                        Some(Encoder::Reve(Box::new(ReveState {
+                            encoder: enc,
+                            positions,
+                        })))
+                    }
+                    Err(e) => {
+                        warn!(%e, "REVE encoder load failed");
+                        None
+                    }
+                })
+                .or_else(|| {
+                    warn!(
+                        repo = %config.hf_repo,
+                        "REVE weights not found — metrics-only"
+                    );
+                    None
+                })
+        }
+        #[cfg(not(feature = "embed-reve"))]
+        ExgModelBackend::Reve => {
+            warn!("REVE backend selected but support is not compiled (enable feature: embed-reve)");
+            None
+        }
+        #[cfg(feature = "embed-brainjepa")]
+        ExgModelBackend::Brainjepa => {
+            let device = super::resolve_exg_device(&device_pref);
+            let repo = if config.hf_repo.is_empty() || config.hf_repo == skill_constants::ZUNA_HF_REPO {
+                skill_exg::BRAINJEPA_HF_REPO
+            } else {
+                config.hf_repo.as_str()
+            };
+            info!(repo, "loading Brain-JEPA encoder");
+            skill_exg::resolve_brainjepa_weights(repo).and_then(|(w, g)| {
+                let w_str = w.to_str()?;
+                let g_str = g.to_str()?;
+                match brainjepa::rlx::BrainJepaEncoder::from_weights(
+                    w_str,
+                    g_str,
+                    &brainjepa::ModelConfig::default(),
+                    &brainjepa::DataConfig::default(),
+                    &device,
+                ) {
+                    Ok((enc, ms)) => {
+                        info!(ms, "Brain-JEPA encoder loaded");
+                        Some(Encoder::Brainjepa(Box::new(enc)))
+                    }
+                    Err(e) => {
+                        warn!(%e, "Brain-JEPA encoder load failed");
+                        None
+                    }
+                }
+            })
+        }
+        #[cfg(not(feature = "embed-brainjepa"))]
+        ExgModelBackend::Brainjepa => {
+            warn!("Brain-JEPA backend selected but support is not compiled (enable feature: embed-brainjepa)");
+            None
+        }
         #[cfg(feature = "embed-tribev2")]
         ExgModelBackend::Tribev2 => {
-            // TRIBEv2 is a complex multimodal fMRI encoder.
-            // Weight loading is supported but runtime encoding requires
-            // the full modality pipeline.  For now, report as available
-            // but fall through to metrics-only.
-            info!("TRIBEv2 weights can be resolved but runtime encoding is not yet integrated");
-            None
+            let device = super::resolve_exg_device(&device_pref);
+            resolve_catalog_hf("tribev2").and_then(|(w, c)| {
+                match tribev2::TribeRlx::from_pretrained(c.to_str()?, w.to_str()?, None) {
+                    Ok(enc) => {
+                        let enc = enc.with_device(device);
+                        info!("TRIBEv2 encoder loaded");
+                        Some(Encoder::Tribev2(Box::new(Tribev2State { encoder: enc })))
+                    }
+                    Err(e) => {
+                        warn!(%e, "TRIBEv2 encoder load failed");
+                        None
+                    }
+                }
+            })
         }
         #[allow(unreachable_patterns)]
         other => {
@@ -741,18 +812,17 @@ fn resolve_catalog_hf(family_id: &str) -> Option<(std::path::PathBuf, std::path:
 }
 
 #[cfg(feature = "embed-zuna")]
-fn load_zuna(config: &ExgModelConfig) -> Option<ZunaState> {
+fn load_zuna(config: &ExgModelConfig, device: rlx::Device) -> Option<ZunaState> {
     match skill_exg::resolve_hf_weights(&config.hf_repo) {
         Some((weights_path, config_path)) => {
             info!(weights = %weights_path.display(), config = %config_path.display(), "ZUNA weights resolved");
-            match zuna_rs::ZunaEncoder::<burn::backend::NdArray>::load(
-                &config_path,
-                &weights_path,
-                burn::backend::ndarray::NdArrayDevice::Cpu,
-            ) {
+            match zuna_rs::ZunaEncoder::load(&config_path, &weights_path, device) {
                 Ok((encoder, ms)) => {
                     info!(ms, "ZUNA encoder loaded");
-                    let data_config = encoder.data_cfg.clone();
+                    let data_config = zuna_rs::config::DataConfig {
+                        num_fine_time_pts: encoder.model_cfg.input_dim,
+                        ..Default::default()
+                    };
                     Some(ZunaState { encoder, data_config })
                 }
                 Err(e) => {
@@ -771,43 +841,31 @@ fn load_zuna(config: &ExgModelConfig) -> Option<ZunaState> {
 
 // ── Per-epoch encoding ──────────────────────────────────────────────────────
 
-fn encode_epoch(encoder: &Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
+fn encode_epoch(encoder: &mut Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
     match encoder {
         #[cfg(feature = "embed-zuna")]
         Encoder::Zuna(state) => encode_zuna(state, msg),
-        #[cfg(feature = "embed-zuna-gpu")]
-        Encoder::ZunaGpu(state) => encode_zuna_gpu(state, msg),
-        #[cfg(feature = "embed-zuna-gpu-f16")]
-        Encoder::ZunaGpuF16(state) => encode_zuna_gpu_f16(state, msg),
-        #[cfg(feature = "embed-zuna-mlx")]
-        Encoder::ZunaMlx(state) => encode_zuna_mlx(state, msg),
         #[cfg(feature = "embed-luna")]
         Encoder::Luna(enc) => encode_luna(enc, msg),
         #[cfg(feature = "embed-reve")]
-        Encoder::Reve(enc) => encode_reve(enc, msg),
-        #[cfg(feature = "embed-osf")]
-        Encoder::Osf(enc) => encode_osf(enc, msg),
-        #[cfg(feature = "embed-sleepfm")]
-        Encoder::SleepFM(_enc) => {
-            // SleepFM requires PSG-specific tensor layout; use catalog embedding dim as fallback.
-            None
-        }
-        #[cfg(feature = "embed-sleeplm")]
-        Encoder::SleepLM(enc) => encode_sleeplm(enc, msg),
-        #[cfg(feature = "embed-steegformer")]
-        Encoder::STEEGFormer(enc) => encode_steegformer(enc, msg),
+        Encoder::Reve(state) => encode_reve(state, msg),
+        #[cfg(feature = "embed-brainjepa")]
+        Encoder::Brainjepa(enc) => encode_brainjepa(enc),
         #[cfg(feature = "embed-tribev2")]
         Encoder::Tribev2(state) => encode_tribev2(state, msg),
         #[cfg(feature = "embed-neurorvq")]
         Encoder::NeuroRVQ(state) => encode_neurorvq(state, msg),
+        #[cfg(feature = "embed-eegdino")]
+        Encoder::EegDino(state) => encode_eegdino(state, msg),
+        #[cfg(feature = "embed-lumamba")]
+        Encoder::Lumamba(state) => encode_lumamba(state, msg),
         #[allow(unreachable_patterns)]
         _ => None,
     }
 }
 
 #[cfg(feature = "embed-zuna")]
-fn encode_zuna(state: &ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
-    use std::collections::HashMap as HM;
+fn encode_zuna(state: &mut ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {
         return None;
@@ -820,161 +878,127 @@ fn encode_zuna(state: &ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
         }
     }
     let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let empty_pos: HM<String, [f32; 3]> = HM::new();
-    let batches = zuna_rs::load_from_named_tensor::<burn::backend::NdArray>(
+    let empty_pos: HashMap<String, [f32; 3]> = HashMap::new();
+    let batches = zuna_rs::csv_loader::load_from_named_tensor(
         data,
         &ch_names,
         msg.sample_rate,
         10.0,
         &empty_pos,
         &state.data_config,
-        &device,
     )
     .ok()?;
-    let epochs = state.encoder.encode_batches(batches).ok()?;
-    epochs.first().map(|ep| {
-        let dim = ep.output_dim();
-        let n_tok = ep.n_tokens();
+    batches.into_iter().find_map(|ep| {
+        let emb = state
+            .encoder
+            .encode_one(&ep.eeg_tokens, &ep.tok_idx, &ep.chan_pos, ep.n_channels, ep.tc)
+            .ok()?;
+        let n_tok = emb.shape.first().copied().unwrap_or(0);
+        let dim = emb.shape.get(1).copied().unwrap_or(0);
         if dim == 0 || n_tok == 0 {
-            return Vec::new();
+            return None;
         }
         let mut pooled = vec![0.0f32; dim];
         for t in 0..n_tok {
             for (d, p) in pooled.iter_mut().enumerate() {
-                *p += ep.embeddings[t * dim + d];
+                *p += emb.embeddings[t * dim + d];
             }
         }
-        for v in &mut pooled {
-            *v /= n_tok as f32;
+        let inv = 1.0 / n_tok as f32;
+        for p in &mut pooled {
+            *p *= inv;
         }
-        pooled
+        Some(pooled)
     })
 }
 
 #[cfg(feature = "embed-luna")]
-fn encode_luna(enc: &luna_rs::LunaEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
+fn encode_luna(enc: &mut luna_rs::LunaEncoder, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {
         return None;
     }
     let n_samples = msg.samples[0].len();
-    // LUNA needs uppercase channel names from its vocabulary.
-    let mut luna_names: Vec<String> = Vec::new();
-    let mut luna_indices: Vec<usize> = Vec::new();
+    // Filter to channels in LUNA's vocabulary; collect xyz positions and vocab indices.
+    let mut src_indices: Vec<usize> = Vec::new();
+    let mut chan_pos: Vec<f32> = Vec::new();
+    let mut vocab_indices: Vec<i32> = Vec::new();
     for (idx, name) in msg.channel_names.iter().take(n_ch).enumerate() {
         let upper = name.to_uppercase();
-        if luna_rs::channel_index(&upper).is_some() {
-            luna_names.push(upper);
-            luna_indices.push(idx);
+        if let Some(vi) = luna_rs::channel_index(&upper) {
+            let xyz = luna_rs::channel_positions::channel_xyz(&upper).unwrap_or([0.0, 0.0, 0.0]);
+            src_indices.push(idx);
+            chan_pos.extend_from_slice(&xyz);
+            vocab_indices.push(vi as i32);
         }
     }
-    if luna_names.is_empty() {
+    if src_indices.is_empty() {
         return None;
     }
-    let flat: Vec<f32> = luna_indices
+    let valid_ch = src_indices.len();
+    let flat: Vec<f32> = src_indices
         .iter()
         .flat_map(|&ch| msg.samples[ch].iter().copied())
         .collect();
-    let ch_refs: Vec<&str> = luna_names.iter().map(String::as_str).collect();
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let batch = luna_rs::build_batch_named::<burn::backend::NdArray>(flat, &ch_refs, n_samples, &device);
-    let ep = enc.run_batch(&batch).ok()?;
+    let ep = enc
+        .run_epoch(&flat, &chan_pos, Some(&vocab_indices), valid_ch, n_samples)
+        .ok()?;
     Some(ep.output)
 }
 
 #[cfg(feature = "embed-reve")]
-fn encode_reve(enc: &reve_rs::ReveEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
+fn encode_reve(state: &mut ReveState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {
         return None;
     }
     let n_samples = msg.samples[0].len();
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let positions = state.positions.get_positions(&ch_names);
     let flat: Vec<f32> = (0..n_ch).flat_map(|ch| msg.samples[ch].iter().copied()).collect();
-    let positions = vec![0.0f32; n_ch * 3];
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let batch = reve_rs::build_batch::<burn::backend::NdArray>(flat, positions, n_ch, n_samples, &device);
-    let result = enc.run_batch(&batch).ok()?;
-    Some(result.output)
+    state
+        .encoder
+        .run_one(flat, positions, n_ch, n_samples)
+        .ok()
+        .map(|out| out.output)
 }
 
-#[cfg(feature = "embed-osf")]
-fn encode_osf(enc: &osf_rs::OsfEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
-    let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 {
-        return None;
-    }
-    let n_samples = msg.samples[0].len();
-    let flat: Vec<f32> = (0..n_ch).flat_map(|ch| msg.samples[ch].iter().copied()).collect();
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let batch = osf_rs::build_batch::<burn::backend::NdArray>(flat, n_ch, n_samples, &device);
-    let ep = enc.run_batch(&batch).ok()?;
-    Some(ep.cls_emb)
-}
-
-#[cfg(feature = "embed-sleeplm")]
-fn encode_sleeplm(enc: &sleeplm::SleepLMEncoder<burn::backend::NdArray>, msg: &EpochMsg) -> Option<Vec<f32>> {
-    // SleepLM expects [10, 1920] (10 PSG channels × 1920 samples).
-    // Pad/truncate the EEG signal to fit.
-    let n_ch = msg.channel_names.len().min(msg.samples.len()).min(10);
-    if n_ch == 0 {
-        return None;
-    }
-    let target_samples = 1920;
-    let mut flat = vec![0.0f32; 10 * target_samples];
-    for ch in 0..n_ch {
-        let src = &msg.samples[ch];
-        let copy_len = src.len().min(target_samples);
-        for (i, &v) in src.iter().take(copy_len).enumerate() {
-            flat[ch * target_samples + i] = v;
-        }
-    }
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let batch = sleeplm::build_batch::<burn::backend::NdArray>(flat, &device);
-    let ep = enc.encode(&batch).ok()?;
-    Some(ep.embedding)
-}
-
-#[cfg(feature = "embed-steegformer")]
-fn encode_steegformer(
-    enc: &steegformer::STEEGFormerEncoder<burn::backend::NdArray>,
-    msg: &EpochMsg,
-) -> Option<Vec<f32>> {
-    let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 {
-        return None;
-    }
-    let n_samples = msg.samples[0].len();
-    // ST-EEGFormer has a channel vocabulary like LUNA.
-    let mut names: Vec<String> = Vec::new();
-    let mut indices: Vec<usize> = Vec::new();
-    for (idx, name) in msg.channel_names.iter().take(n_ch).enumerate() {
-        let upper = name.to_uppercase();
-        if steegformer::channel_index(&upper).is_some() {
-            names.push(upper);
-            indices.push(idx);
-        }
-    }
-    if names.is_empty() {
-        return None;
-    }
-    let flat: Vec<f32> = indices.iter().flat_map(|&ch| msg.samples[ch].iter().copied()).collect();
-    let ch_refs: Vec<&str> = names.iter().map(String::as_str).collect();
-    let device = burn::backend::ndarray::NdArrayDevice::Cpu;
-    let batch = steegformer::build_batch_named::<burn::backend::NdArray>(flat, &ch_refs, n_samples, &device);
-    let ep = enc.run_batch(&batch).ok()?;
-    Some(ep.output)
-}
-
-#[cfg(feature = "embed-tribev2")]
-fn encode_tribev2(_state: &Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>> {
-    // TRIBEv2 runtime encoding requires the full multimodal pipeline.
-    // Not yet integrated — weights are downloaded but encoding is pending.
+#[cfg(feature = "embed-brainjepa")]
+fn encode_brainjepa(_enc: &mut brainjepa::rlx::BrainJepaEncoder) -> Option<Vec<f32>> {
+    // Brain-JEPA expects parcellated fMRI time series, not live EEG epochs.
     None
 }
 
+#[cfg(feature = "embed-tribev2")]
+fn encode_tribev2(_state: &mut Tribev2State, _msg: &EpochMsg) -> Option<Vec<f32>> {
+    // TRIBEv2 takes multimodal fMRI features (text/audio/video), not EEG epochs.
+    None
+}
+
+#[cfg(feature = "embed-eegdino")]
+fn encode_eegdino(state: &mut EegDinoState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let samples: Vec<Vec<f32>> = msg.samples.iter().take(n_ch).cloned().collect();
+    state.model.encode_pooled(&samples, &ch_names).ok()
+}
+
+#[cfg(feature = "embed-lumamba")]
+fn encode_lumamba(state: &mut LumambaState, msg: &EpochMsg) -> Option<Vec<f32>> {
+    let n_ch = msg.channel_names.len().min(msg.samples.len());
+    if n_ch == 0 {
+        return None;
+    }
+    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let samples: Vec<Vec<f32>> = msg.samples.iter().take(n_ch).cloned().collect();
+    state.model.encode_pooled(&samples, &ch_names).ok()
+}
+
 #[cfg(feature = "embed-neurorvq")]
-fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {
+fn encode_neurorvq(state: &mut NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {
         return None;
@@ -990,283 +1014,19 @@ fn encode_neurorvq(state: &NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>> {
     state.model.encode_pooled(&signal, &ch_names).ok()
 }
 
-// ── GPU ZUNA encoder ────────────────────────────────────────────────────────
-
-#[cfg(feature = "embed-zuna-gpu")]
-fn load_zuna_gpu(config: &ExgModelConfig) -> Option<ZunaGpuState> {
-    match skill_exg::resolve_hf_weights(&config.hf_repo) {
-        Some((weights_path, config_path)) => {
-            info!(weights = %weights_path.display(), "loading ZUNA encoder on GPU (wgpu/Metal)");
-            let device = burn::backend::wgpu::WgpuDevice::default();
-            match zuna_rs::ZunaEncoder::<burn::backend::wgpu::Wgpu>::load(&config_path, &weights_path, device) {
-                Ok((encoder, ms)) => {
-                    info!(ms, "ZUNA GPU encoder loaded");
-                    let data_config = encoder.data_cfg.clone();
-                    Some(ZunaGpuState { encoder, data_config })
-                }
-                Err(e) => {
-                    warn!(%e, "ZUNA GPU encoder load failed — will fall back to CPU");
-                    None
-                }
-            }
-        }
-        None => {
-            warn!("ZUNA weights not found for GPU encoder");
-            None
-        }
-    }
-}
-
-#[cfg(feature = "embed-zuna-gpu")]
-fn encode_zuna_gpu(state: &ZunaGpuState, msg: &EpochMsg) -> Option<Vec<f32>> {
-    use std::collections::HashMap as HM;
-    let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 {
-        return None;
-    }
-    let n_samples = msg.samples[0].len();
-    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
-    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
-        for (s, &v) in samples.iter().enumerate() {
-            data[[ch, s]] = v;
-        }
-    }
-    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
-    let device = burn::backend::wgpu::WgpuDevice::default();
-    let empty_pos: HM<String, [f32; 3]> = HM::new();
-    let batches = zuna_rs::load_from_named_tensor::<burn::backend::wgpu::Wgpu>(
-        data,
-        &ch_names,
-        msg.sample_rate,
-        10.0,
-        &empty_pos,
-        &state.data_config,
-        &device,
-    )
-    .ok()?;
-    let epochs = state.encoder.encode_batches(batches).ok()?;
-    epochs.first().map(|ep| {
-        let dim = ep.output_dim();
-        let n_tok = ep.n_tokens();
-        if dim == 0 || n_tok == 0 {
-            return Vec::new();
-        }
-        let mut pooled = vec![0.0f32; dim];
-        for t in 0..n_tok {
-            for (d, p) in pooled.iter_mut().enumerate() {
-                *p += ep.embeddings[t * dim + d];
-            }
-        }
-        let inv = 1.0 / n_tok as f32;
-        for p in &mut pooled {
-            *p *= inv;
-        }
-        pooled
-    })
-}
-
-// ── GPU f16 ZUNA encoder ────────────────────────────────────────────────────
-// Currently unused for batch reembed (burn f16→f32 extraction bug).
-// Kept for future use when zuna-rs/burn fix the TypeMismatch issue.
-
-#[cfg(feature = "embed-zuna-gpu-f16")]
-#[allow(dead_code)]
-fn load_zuna_gpu_f16(config: &ExgModelConfig) -> Option<ZunaGpuF16State> {
-    match skill_exg::resolve_hf_weights(&config.hf_repo) {
-        Some((weights_path, config_path)) => {
-            info!(weights = %weights_path.display(), "loading ZUNA encoder on GPU f16 (wgpu/Metal half-precision)");
-            let device = burn::backend::wgpu::WgpuDevice::default();
-            match zuna_rs::ZunaEncoder::<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>::load(
-                &config_path,
-                &weights_path,
-                device,
-            ) {
-                Ok((encoder, ms)) => {
-                    info!(ms, "ZUNA GPU f16 encoder loaded");
-                    let data_config = encoder.data_cfg.clone();
-                    Some(ZunaGpuF16State { encoder, data_config })
-                }
-                Err(e) => {
-                    warn!(%e, "ZUNA GPU f16 encoder load failed — will try f32 or CPU");
-                    None
-                }
-            }
-        }
-        None => {
-            warn!("ZUNA weights not found for GPU f16 encoder");
-            None
-        }
-    }
-}
-
-#[cfg(feature = "embed-zuna-gpu-f16")]
-#[allow(dead_code)]
-fn encode_zuna_gpu_f16(state: &ZunaGpuF16State, msg: &EpochMsg) -> Option<Vec<f32>> {
-    use std::collections::HashMap as HM;
-    let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 {
-        return None;
-    }
-    let n_samples = msg.samples[0].len();
-    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
-    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
-        for (s, &v) in samples.iter().enumerate() {
-            data[[ch, s]] = v;
-        }
-    }
-    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
-    let device = burn::backend::wgpu::WgpuDevice::default();
-    let empty_pos: HM<String, [f32; 3]> = HM::new();
-    let batches = zuna_rs::load_from_named_tensor::<burn::backend::wgpu::Wgpu<half::f16, i32, u32>>(
-        data,
-        &ch_names,
-        msg.sample_rate,
-        10.0,
-        &empty_pos,
-        &state.data_config,
-        &device,
-    )
-    .ok()?;
-    let epochs = match state.encoder.encode_batches(batches) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!("[encode-gpu-f16] encode_batches failed: {e}");
-            return None;
-        }
-    };
-    epochs.first().map(|ep| {
-        let dim = ep.output_dim();
-        let n_tok = ep.n_tokens();
-        if dim == 0 || n_tok == 0 {
-            return Vec::new();
-        }
-        let mut pooled = vec![0.0f32; dim];
-        for t in 0..n_tok {
-            for (d, p) in pooled.iter_mut().enumerate() {
-                *p += ep.embeddings[t * dim + d];
-            }
-        }
-        let inv = 1.0 / n_tok as f32;
-        for p in &mut pooled {
-            *p *= inv;
-        }
-        pooled
-    })
-}
-
-// ── MLX ZUNA encoder ──────────────────────────────────────────────────────────
-
-#[cfg(feature = "embed-zuna-mlx")]
-fn load_zuna_mlx(config: &ExgModelConfig) -> Option<ZunaMlxState> {
-    match skill_exg::resolve_hf_weights(&config.hf_repo) {
-        Some((weights_path, config_path)) => {
-            info!(weights = %weights_path.display(), "loading ZUNA encoder on MLX (Apple Silicon)");
-            let device = burn_mlx::MlxDevice::default();
-            match zuna_rs::ZunaEncoder::<burn_mlx::Mlx>::load(&config_path, &weights_path, device) {
-                Ok((encoder, ms)) => {
-                    info!(ms, "ZUNA MLX encoder loaded");
-                    let data_config = encoder.data_cfg.clone();
-                    Some(ZunaMlxState { encoder, data_config })
-                }
-                Err(e) => {
-                    warn!(%e, "ZUNA MLX encoder load failed — will try wgpu or CPU");
-                    None
-                }
-            }
-        }
-        None => {
-            warn!("ZUNA weights not found for MLX encoder");
-            None
-        }
-    }
-}
-
-#[cfg(feature = "embed-zuna-mlx")]
-fn encode_zuna_mlx(state: &ZunaMlxState, msg: &EpochMsg) -> Option<Vec<f32>> {
-    use std::collections::HashMap as HM;
-    let n_ch = msg.channel_names.len().min(msg.samples.len());
-    if n_ch == 0 {
-        return None;
-    }
-    let n_samples = msg.samples[0].len();
-    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
-    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
-        for (s, &v) in samples.iter().enumerate() {
-            data[[ch, s]] = v;
-        }
-    }
-    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
-    let device = burn_mlx::MlxDevice::default();
-    let empty_pos: HM<String, [f32; 3]> = HM::new();
-    let batches = zuna_rs::load_from_named_tensor::<burn_mlx::Mlx>(
-        data,
-        &ch_names,
-        msg.sample_rate,
-        10.0,
-        &empty_pos,
-        &state.data_config,
-        &device,
-    )
-    .ok()?;
-    let epochs = state.encoder.encode_batches(batches).ok()?;
-    epochs.first().map(|ep| {
-        let dim = ep.output_dim();
-        let n_tok = ep.n_tokens();
-        if dim == 0 || n_tok == 0 {
-            return Vec::new();
-        }
-        let mut pooled = vec![0.0f32; dim];
-        for t in 0..n_tok {
-            for (d, p) in pooled.iter_mut().enumerate() {
-                *p += ep.embeddings[t * dim + d];
-            }
-        }
-        let inv = 1.0 / n_tok as f32;
-        for p in &mut pooled {
-            *p *= inv;
-        }
-        pooled
-    })
-}
-
 // ── Public API for batch reembedding ─────────────────────────────────────────
 
-/// Opaque encoder for batch reembed — GPU f32 or CPU.
-///
-/// GPU f16 is intentionally excluded: burn's `TensorData::to_vec::<f32>()`
-/// has a TypeMismatch bug when the wgpu backend uses half-precision floats,
-/// so embeddings cannot be extracted. Real-time streaming uses f16 fine
-/// because it goes through a different code path.
 pub enum PublicEncoder {
-    Cpu(Encoder),
-    #[cfg(feature = "embed-zuna-gpu")]
-    Gpu(Box<ZunaGpuState>),
+    Inner(Encoder),
 }
 
-/// Load an encoder for batch reembed: tries GPU f32 → CPU.
-///
-/// GPU f16 is intentionally skipped for batch reembed because burn's
-/// `TensorData::to_vec::<f32>()` has a TypeMismatch bug when the backend
-/// uses half-precision floats — the embeddings cannot be extracted as f32.
-/// Real-time streaming uses f16 fine because it goes through a different
-/// code path that doesn't extract to Vec.
 pub fn load_encoder_public(config: &ExgModelConfig, skill_dir: &Path) -> Option<PublicEncoder> {
-    if matches!(config.model_backend, ExgModelBackend::Zuna) {
-        // GPU f32 — works correctly with TensorData extraction.
-        #[cfg(feature = "embed-zuna-gpu")]
-        {
-            if let Some(gpu) = load_zuna_gpu(config) {
-                return Some(PublicEncoder::Gpu(Box::new(gpu)));
-            }
-            warn!("GPU f32 unavailable, falling back to CPU");
-        }
-    }
-    load_encoder(config, skill_dir).map(PublicEncoder::Cpu)
+    load_encoder(config, skill_dir).map(PublicEncoder::Inner)
 }
 
 /// Encode raw EEG samples into an embedding vector.
 pub fn encode_raw_public(
-    encoder: &PublicEncoder,
+    encoder: &mut PublicEncoder,
     samples: &[Vec<f32>],
     channel_names: &[String],
     sample_rate: f64,
@@ -1280,8 +1040,6 @@ pub fn encode_raw_public(
         device_name: None,
     };
     match encoder {
-        PublicEncoder::Cpu(enc) => encode_epoch(enc, &msg),
-        #[cfg(feature = "embed-zuna-gpu")]
-        PublicEncoder::Gpu(gpu) => encode_zuna_gpu(gpu, &msg),
+        PublicEncoder::Inner(enc) => encode_epoch(enc, &msg),
     }
 }

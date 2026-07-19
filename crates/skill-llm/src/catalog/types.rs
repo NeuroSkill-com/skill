@@ -66,6 +66,11 @@ pub struct LlmFamily {
     pub tags: Vec<String>,
     #[serde(default)]
     pub is_mmproj: bool,
+    /// Whether models in this family were compiled with multi-token prediction
+    /// (MTP) support. MTP is activated via `LlamaContextType::Mtp` when the
+    /// engine chooses the speculative decoding path.
+    #[serde(default)]
+    pub mtp: bool,
     #[serde(default)]
     pub params_b: f64,
     #[serde(default)]
@@ -81,6 +86,8 @@ pub struct LlmModelSlim {
     /// References a key in the `families` map.
     pub family: String,
     pub filename: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_filename: Option<String>,
     pub quant: String,
     pub size_gb: f32,
     pub description: String,
@@ -161,6 +168,7 @@ impl LlmCatalogNormalized {
             entries.push(LlmModelEntry {
                 repo: m.repo.unwrap_or_else(|| fam.repo.clone()),
                 filename: m.filename,
+                remote_filename: m.remote_filename,
                 quant: m.quant,
                 size_gb: m.size_gb,
                 description: m.description,
@@ -169,6 +177,7 @@ impl LlmCatalogNormalized {
                 family_desc: fam.description.clone(),
                 tags: fam.tags.clone(),
                 is_mmproj: fam.is_mmproj,
+                mtp: fam.mtp,
                 recommended: m.recommended,
                 advanced: m.advanced,
                 params_b: fam.params_b,
@@ -207,6 +216,7 @@ impl LlmCatalog {
                 repo: e.repo.clone(),
                 tags: e.tags.clone(),
                 is_mmproj: e.is_mmproj,
+                mtp: e.mtp,
                 params_b: e.params_b,
                 max_context_length: e.max_context_length,
             });
@@ -217,6 +227,7 @@ impl LlmCatalog {
             models.push(LlmModelSlim {
                 family: e.family_id.clone(),
                 filename: e.filename.clone(),
+                remote_filename: e.remote_filename.clone(),
                 quant: e.quant.clone(),
                 size_gb: e.size_gb,
                 description: e.description.clone(),
@@ -279,6 +290,10 @@ pub struct LlmModelEntry {
     /// Primary filename — for single-file models this is the only GGUF file.
     /// For split models this is the **first shard** (passed to llama.cpp).
     pub filename: String,
+    /// Optional upstream filename when the catalog needs a unique local/display
+    /// name but the remote HuggingFace file has a colliding name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_filename: Option<String>,
     pub quant: String,
     /// Total size across all shard files (GB).
     pub size_gb: f32,
@@ -289,6 +304,11 @@ pub struct LlmModelEntry {
     /// e.g. `["chat","reasoning","small"]`
     pub tags: Vec<String>,
     pub is_mmproj: bool,
+    /// Whether this model was compiled with multi-token prediction (MTP).
+    /// Inherited from the family and used by the engine to gate speculative
+    /// decoding.
+    #[serde(default)]
+    pub mtp: bool,
     pub recommended: bool,
     /// Hidden in simple view; shown under "Show all quants".
     pub advanced: bool,
@@ -349,7 +369,7 @@ impl LlmModelEntry {
     /// Iterator over all filenames that need to be downloaded / present.
     /// For single-file models this yields just `filename`.
     pub fn all_filenames(&self) -> impl Iterator<Item = &str> {
-        let single = std::iter::once(self.filename.as_str());
+        let single = std::iter::once(self.remote_filename());
         let shards = self.shard_files.iter().map(String::as_str);
         // When shard_files is non-empty use it; otherwise fall back to filename.
         if self.shard_files.is_empty() {
@@ -357,6 +377,11 @@ impl LlmModelEntry {
         } else {
             either::Either::Right(shards)
         }
+    }
+
+    /// Remote HuggingFace filename/path for the primary model file.
+    pub fn remote_filename(&self) -> &str {
+        self.remote_filename.as_deref().unwrap_or(&self.filename)
     }
 
     /// Resolve local path of the **first shard** from the HF Hub cache —
@@ -368,7 +393,7 @@ impl LlmModelEntry {
         let cache = Cache::from_env();
         let repo = cache.repo(Repo::model(self.repo.clone()));
 
-        let first = repo.get(&self.filename)?;
+        let first = repo.get(self.remote_filename())?;
 
         // For split models, verify every shard is present.
         if self.is_split() {
@@ -455,6 +480,7 @@ mod tests {
         LlmModelEntry {
             repo: "test/repo".into(),
             filename: filename.into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 2.0,
             description: String::new(),
@@ -465,6 +491,7 @@ mod tests {
             params_b: 4.0,
             max_context_length: 4096,
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             shard_files: shards.iter().map(|s| s.to_string()).collect(),
@@ -482,6 +509,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "acme/Model-GGUF".into(),
                     filename: "Model-Q4_K_M.gguf".into(),
+                    remote_filename: None,
                     quant: "Q4_K_M".into(),
                     size_gb: 4.5,
                     description: "Recommended".into(),
@@ -490,6 +518,7 @@ mod tests {
                     family_desc: "A great model.".into(),
                     tags: vec!["chat".into(), "reasoning".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 7.0,
@@ -504,6 +533,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "acme/Model-GGUF".into(),
                     filename: "Model-Q2_K.gguf".into(),
+                    remote_filename: None,
                     quant: "Q2_K".into(),
                     size_gb: 2.8,
                     description: "Smallest".into(),
@@ -512,6 +542,7 @@ mod tests {
                     family_desc: "A great model.".into(),
                     tags: vec!["chat".into(), "reasoning".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: false,
                     advanced: true,
                     params_b: 7.0,
@@ -526,6 +557,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "other/Vision-GGUF".into(),
                     filename: "Vision-mmproj-F16.gguf".into(),
+                    remote_filename: None,
                     quant: "F16".into(),
                     size_gb: 1.2,
                     description: "Vision projector".into(),
@@ -534,6 +566,7 @@ mod tests {
                     family_desc: "Vision model.".into(),
                     tags: vec!["vision".into()],
                     is_mmproj: true,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 0.6,
@@ -788,6 +821,7 @@ mod tests {
         cat.entries.push(LlmModelEntry {
             repo: "user/Custom-GGUF".into(),
             filename: "Custom-Q4_K_M.gguf".into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 5.0,
             description: "Custom model".into(),
@@ -796,6 +830,7 @@ mod tests {
             family_desc: "User's custom model.".into(),
             tags: vec!["chat".into()],
             is_mmproj: false,
+            mtp: false,
             recommended: false,
             advanced: false,
             params_b: 13.0,
@@ -835,6 +870,7 @@ mod tests {
             models: vec![LlmModelSlim {
                 family: "nonexistent".into(),
                 filename: "ghost.gguf".into(),
+                remote_filename: None,
                 quant: "Q4_K_M".into(),
                 size_gb: 1.0,
                 description: "orphan".into(),
@@ -860,6 +896,7 @@ mod tests {
         cat.entries.push(LlmModelEntry {
             repo: "acme/BigModel-GGUF".into(),
             filename: "BigModel-Q4_K_M-00001-of-00003.gguf".into(),
+            remote_filename: None,
             quant: "Q4_K_M".into(),
             size_gb: 30.0,
             description: "Sharded model".into(),
@@ -868,6 +905,7 @@ mod tests {
             family_desc: "A big model.".into(),
             tags: vec!["chat".into(), "large".into()],
             is_mmproj: false,
+            mtp: false,
             recommended: true,
             advanced: false,
             params_b: 70.0,
@@ -940,6 +978,7 @@ mod tests {
                 entries: vec![LlmModelEntry {
                     repo: "r/m".into(),
                     filename: format!("m-{:?}.gguf", state),
+                    remote_filename: None,
                     quant: "Q4_0".into(),
                     size_gb: 1.0,
                     description: String::new(),
@@ -948,6 +987,7 @@ mod tests {
                     family_desc: String::new(),
                     tags: vec![],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: false,
                     advanced: false,
                     params_b: 1.0,
@@ -995,6 +1035,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "r/m".into(),
                     filename: "a.gguf".into(),
+                    remote_filename: None,
                     quant: "Q4_K_M".into(),
                     size_gb: 4.0,
                     description: "A".into(),
@@ -1003,6 +1044,7 @@ mod tests {
                     family_desc: "First description.".into(),
                     tags: vec!["chat".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 7.0,
@@ -1017,6 +1059,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "r/m".into(),
                     filename: "b.gguf".into(),
+                    remote_filename: None,
                     quant: "Q2_K".into(),
                     size_gb: 2.0,
                     description: "B".into(),
@@ -1025,6 +1068,7 @@ mod tests {
                     family_desc: "Second description.".into(),
                     tags: vec!["reasoning".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: false,
                     advanced: true,
                     params_b: 7.0,
@@ -1183,6 +1227,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "org/VL-GGUF".into(),
                     filename: "VL-Q4_K_M.gguf".into(),
+                    remote_filename: None,
                     quant: "Q4_K_M".into(),
                     size_gb: 10.0,
                     description: "Main".into(),
@@ -1191,6 +1236,7 @@ mod tests {
                     family_desc: "Vision-language.".into(),
                     tags: vec!["vision".into()],
                     is_mmproj: false,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 30.0,
@@ -1205,6 +1251,7 @@ mod tests {
                 LlmModelEntry {
                     repo: "org/VL-GGUF".into(),
                     filename: "VL-mmproj-F16.gguf".into(),
+                    remote_filename: None,
                     quant: "F16".into(),
                     size_gb: 1.5,
                     description: "Vision projector".into(),
@@ -1213,6 +1260,7 @@ mod tests {
                     family_desc: "Multimodal projector.".into(),
                     tags: vec!["vision".into()],
                     is_mmproj: true,
+                    mtp: false,
                     recommended: true,
                     advanced: false,
                     params_b: 0.6,
@@ -1247,6 +1295,7 @@ mod tests {
             cat.entries.push(LlmModelEntry {
                 repo: "r/m".into(),
                 filename: format!("model-{i}.gguf"),
+                remote_filename: None,
                 quant: "Q4_0".into(),
                 size_gb: i as f32,
                 description: format!("entry {i}"),
@@ -1255,6 +1304,7 @@ mod tests {
                 family_desc: String::new(),
                 tags: vec![],
                 is_mmproj: false,
+                mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 1.0,

@@ -12,7 +12,10 @@ use crate::settings::load_settings;
 use crate::shortcut_cmds::apply_all_shortcuts;
 use crate::state::DiscoveredDevice;
 use crate::tray::build_menu;
-use crate::tts::{init_espeak_bundled_data_path, init_neutts_samples_dir, neutts_apply_config};
+use crate::tts::{
+    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_resource_dir,
+    neutts_apply_config,
+};
 use crate::ws_server;
 use crate::MutexExt;
 
@@ -161,6 +164,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> anyhow::Result<()> {
         init_espeak_bundled_data_path(&resource_dir);
         let samples_dir = resource_dir.join("neutts-samples");
         init_neutts_samples_dir(samples_dir);
+        // Bundled TTS engine weights (Inflect-Nano, TinyTTS) live under
+        // `<resource_dir>/tts/<engine>/`. Register the dir for this process and
+        // export it so the daemon we spawn (which runs the voice-loop TTS)
+        // inherits it and resolves the same bundles.
+        init_tts_resource_dir(resource_dir.clone());
+        // SAFETY: Tauri `setup` runs on the main thread before the daemon is
+        // spawned and before other threads read this variable.
+        unsafe { std::env::set_var("SKILL_RESOURCE_DIR", &resource_dir) };
     }
 
     // ── Linux: fix main-window property overrides ─────────────────────
@@ -391,11 +402,10 @@ fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
         s.hooks = data.hooks;
         s.ws_host = data.ws_host.clone();
         s.ws_port = data.ws_port;
-        s.api_token = data.api_token.clone();
+        // Secrets stay in the keychain; Tauri no longer caches them in AppState.
         s.hf_endpoint = data.hf_endpoint.clone();
         s.update_check_interval_secs = data.update_check_interval_secs;
         s.openbci_config = data.openbci;
-        s.device_api_config = data.device_api;
         s.scanner_config = data.scanner;
         s.location_enabled = data.location_enabled;
         s.inference_device = data.inference_device.clone();

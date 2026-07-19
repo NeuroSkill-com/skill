@@ -744,7 +744,7 @@ onDestroy(() => {
 
 <div class="flex flex-col gap-0.5" bind:this={container}>
   {#if yLabel}
-    <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{yLabel}</span>
+    <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{yLabel}</span>
   {/if}
   <div class="relative rounded-lg border border-border dark:border-white/[0.04] overflow-hidden"
        style="height:{height}px">
@@ -758,7 +758,7 @@ onDestroy(() => {
             ondblclick={onDblClick}></canvas>
     {#if zoomXMin !== undefined}
       <button
-        class="absolute top-1 right-1 text-[8px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+        class="absolute top-1 right-1 text-ui-2xs px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
         onclick={onDblClick}
         title={t("common.resetZoom")}
       >⟲ reset</button>

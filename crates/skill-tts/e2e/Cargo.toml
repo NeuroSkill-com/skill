@@ -1,0 +1,16 @@
+# Standalone KittenTTS E2E (rlx-kittentts ONNX + Whisper ASR validation).
+[workspace]
+
+[package]
+name = "kitten-e2e-runner"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "kitten-e2e"
+path = "main.rs"
+
+[dependencies]
+anyhow = "1"
+skill-tts = { path = "..", default-features = false, features = ["tts-kitten", "whisper-validate"] }

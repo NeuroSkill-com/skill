@@ -50,6 +50,8 @@ const ui: Record<string, string> = {
   "tip.pacThetaGamma":
     "Acoplamiento fase-amplitud entre fase theta y amplitud gamma. Vinculado a la codificación de la memoria.",
   "tip.lateralityIndex": "Asimetría de poder izquierda-derecha en todas las bandas. Positivo = derecha dominante.",
+  "tip.echt":
+    "Transformada de Hilbert con corrección de extremos — ritmicidad de banda alfa (0–1). Alto = oscilación alfa intensa y estable en fase. [Schreglmann 2021]",
   "tip.hr": "Frecuencia cardíaca derivada de los intervalos entre latidos PPG.",
   "tip.rmssd":
     "Media cuadrática de diferencias sucesivas entre latidos del corazón. Métrica clave de VFC parasimpática.",
@@ -135,6 +137,12 @@ const ui: Record<string, string> = {
     "Las comprobaciones de actualizaciones automáticas están deshabilitadas. Utilice el botón de arriba para comprobarlo manualmente.",
   "updates.autostart": "Iniciar sesión",
   "updates.autostartDesc": "Se inicia automáticamente cuando inicia sesión en su computadora.",
+  "updates.autoUpdate": "Instalar actualizaciones automáticamente",
+  "updates.autoUpdateDesc":
+    "Descarga las nuevas versiones en segundo plano e instálalas al reiniciar. Desactiva esta opción para elegir cuándo instalar.",
+  "updates.autoUpdateOffNotice":
+    "La instalación automática está desactivada — haz clic en Instalar para descargar y actualizar.",
+  "updates.installNow": "Instalar",
   "updates.footer":
     "Las actualizaciones se descargan automáticamente. Reinicie cuando esté listo para presentar la solicitud.",
 

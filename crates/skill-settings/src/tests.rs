@@ -295,6 +295,23 @@ fn user_settings_from_empty_json() {
 }
 
 #[test]
+fn reembed_config_max_resident_memory_defaults_and_migrates() {
+    // Default value is exposed.
+    let cfg = ReembedConfig::default();
+    assert_eq!(cfg.max_resident_memory_percent, 85);
+
+    // Roundtrip preserves it.
+    let json = serde_json::to_string(&cfg).unwrap();
+    let back: ReembedConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.max_resident_memory_percent, 85);
+
+    // Older settings files without the field deserialize cleanly using the default.
+    let legacy = r#"{ "idle_reembed_enabled": true, "idle_reembed_throttle_ms": 200 }"#;
+    let migrated: ReembedConfig = serde_json::from_str(legacy).unwrap();
+    assert_eq!(migrated.max_resident_memory_percent, 85);
+}
+
+#[test]
 fn umap_user_config_default_roundtrip() {
     let cfg = UmapUserConfig::default();
     let json = serde_json::to_string(&cfg).unwrap();
@@ -323,4 +340,50 @@ fn default_values_are_sensible() {
     assert!(default_overlap_secs() >= 0.0);
     assert!(default_update_check_interval() > 0);
     assert!(!default_hf_endpoint().is_empty());
+}
+
+// ── Migrations ──────────────────────────────────────────────────────────
+
+#[test]
+fn idle_reembed_throttle_old_default_is_migrated() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let skill_dir = dir.path();
+    let path = settings_path(skill_dir);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+    // Write a settings file with the legacy 10ms value (the CPU-pinning default).
+    std::fs::write(
+        &path,
+        serde_json::json!({ "reembed": { "idle_reembed_throttle_ms": 10 } }).to_string(),
+    )
+    .unwrap();
+
+    let s = load_settings(skill_dir);
+    assert_eq!(s.reembed.idle_reembed_throttle_ms, 200, "old 10ms must be promoted");
+
+    // Re-save must persist the new value so the migration runs once, not on every load.
+    let on_disk: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(
+        on_disk["reembed"]["idle_reembed_throttle_ms"].as_u64(),
+        Some(200),
+        "migrated value must be written back to disk"
+    );
+}
+
+#[test]
+fn idle_reembed_throttle_user_chosen_value_is_preserved() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let skill_dir = dir.path();
+    let path = settings_path(skill_dir);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+    // Any value other than the legacy 10 must be left alone.
+    std::fs::write(
+        &path,
+        serde_json::json!({ "reembed": { "idle_reembed_throttle_ms": 50 } }).to_string(),
+    )
+    .unwrap();
+
+    let s = load_settings(skill_dir);
+    assert_eq!(s.reembed.idle_reembed_throttle_ms, 50);
 }

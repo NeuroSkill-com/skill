@@ -626,7 +626,7 @@ onDestroy(() => {
               </span>
             </div>
             <span
-              class="text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
+              class="text-ui-2xs font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
                      bg-violet-500/10 text-violet-600 dark:text-violet-400"
             >
               {t("lsl.recording")}
@@ -891,7 +891,7 @@ onDestroy(() => {
                   >
                   {#if stream.paired}
                     <span
-                      class="text-[0.46rem] font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
+                      class="text-ui-2xs font-bold tracking-widest uppercase px-1.5 py-0.5 rounded
                                  bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                     >
                       {t("lsl.paired")}

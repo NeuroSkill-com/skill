@@ -81,6 +81,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "언어 모델",
   "llm.section.mmproj": "멀티모달 프로젝터",
   "llm.section.inference": "추론 설정",
+  "llm.section.mtp": "멀티 토큰 예측",
   "llm.enabled": "LLM 서버 활성화",
   "llm.enabledDesc":
     "WebSocket API와 같은 포트에서 OpenAI 호환 추론 서버를 실행합니다. llm Cargo 기능과 다운로드된 모델이 필요합니다.",
@@ -277,6 +278,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "KQV GPU 오프로드",
   "llm.inference.offloadKqvDesc":
     "모든 트랜스포머 레이어가 GPU에 오프로드되지 않아도 K/Q/V 텐서 연산을 GPU에 오프로드합니다. 하이브리드 CPU+GPU 설정에 권장됩니다.",
+
+  "llm.mtp.draftTokens": "드래프트 토큰",
+  "llm.mtp.draftTokensDesc":
+    "디코딩 단계마다 투기적으로 생성할 토큰 수입니다. 값이 높을수록 처리량이 증가하지만 메모리를 더 많이 사용합니다. MTP 지원 모델이 필요합니다.",
 
   "chat.status.running": "실행 중",
   "chat.status.loading": "모델 로딩 중…",
@@ -480,6 +485,52 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "유휴 기간 대기 중",
   "search.eegCoverage": "EEG 커버리지",
   "search.eegCoverageLabel": "{embedded}개/{total}개 ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "연기됨 — 시스템 메모리 {pct}% (한도 {limit}%)",
+  "model.maxResidentMemory": "최대 시스템 메모리",
+  "model.maxResidentMemoryDesc":
+    "시스템 메모리가 이 비율을 초과하면 백그라운드 임베딩을 건너뜁니다. 100%로 설정하면 비활성화됩니다.",
+  "model.maxResidentMemoryDisabled": "끔",
+  "chat.tts.section": "음성 출력",
+  "chat.tts.engineLabel": "음성 엔진",
+  "chat.tts.engineDesc": "데몬이 답변을 읽어 주는 데 사용하는 텍스트 음성 변환 백엔드입니다.",
+  "chat.tts.experimental":
+    "아직 바로 사용할 수 없습니다: Orpheus는 미리 내보낸 SNAC 디코더가 필요하고, Kyutai-TTS는 rlx 0.2.9에서 아직 작동하지 않습니다.",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS는 rlx 0.2.9에서 아직 작동하지 않습니다(업스트림 generate()는 스텁입니다).",
+  "chat.tts.orpheusHint":
+    "Orpheus는 백본을 자동으로 다운로드합니다. SNAC 디코더는 scripts/export_snac_decoder.py로 한 번보내거나 ORPHEUS_SNAC_PATH를 설정하세요.",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano는 한 번 내보낸 번들에서 로드됩니다. 앱에 자동으로 포함됩니다. 개발 실행 시 ~/.skill/models/inflect-nano에 두거나 INFLECT_NANO_DIR을 설정하세요.",
+  "chat.tts.modelLabel": "음성 모델",
+  "chat.tts.modelDesc": "선택한 엔진의 모델 저장소입니다.",
+  "chat.tts.voiceLabel": "음성",
+  "chat.tts.voiceDesc": "선택한 엔진의 프리셋 화자입니다.",
+  "chat.tts.voiceDefault": "기본값",
+  "chat.voice.section": "음성 입력",
+  "chat.voice.enabled": "음성 컨트롤 표시",
+  "chat.voice.enabledDesc": "채팅 창에 마이크와 음성 모드 선택기를 표시합니다.",
+  "chat.voice.triggerLabel": "기본 트리거",
+  "chat.voice.triggerDesc": "새 음성 세션에서 마이크를 제어하는 방식.",
+  "chat.voice.triggerContinuous": "연속",
+  "chat.voice.triggerPtt": "푸시 투 토크",
+  "chat.voice.routingLabel": "기본 라우팅",
+  "chat.voice.routingDesc": "완료된 전사 결과를 처리하는 방식.",
+  "chat.voice.routingLoop": "음성 루프",
+  "chat.voice.routingTranscribe": "전사만",
+  "chat.voice.engineLabel": "인식 엔진",
+  "chat.voice.engineDesc": "음성을 전사하는 데 사용하는 음성 인식 백엔드.",
+  "chat.voice.modelLabel": "인식 모델",
+  "chat.voice.modelDesc": "Whisper 모델 저장소. 큰 모델일수록 정확하지만 느립니다.",
+  "chat.voice.modelCustom": "사용자 지정…",
+  "chat.voice.languageLabel": "언어",
+  "chat.voice.languageDesc": '음성 인식 언어 힌트 (예: "en").',
+  "chat.voice.start": "음성 입력 시작",
+  "chat.voice.stop": "음성 입력 중지",
+  "chat.voice.pttHint": "누르고 있는 동안 말하기",
+  "chat.voice.statusLoading": "로드 중…",
+  "chat.voice.statusListening": "듣는 중",
+  "chat.voice.statusSpeaking": "말하는 중",
+  "chat.voice.dismissError": "음성 오류 닫기",
 };
 
 export default llm;

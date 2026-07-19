@@ -36,6 +36,7 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "样本熵 — 信号的不规则性。数值越高 = 越不可预测。",
   "tip.pacThetaGamma": "Theta 相位与 Gamma 幅度之间的相幅耦合。与记忆编码相关。",
   "tip.lateralityIndex": "所有频段的左右功率不对称性。正值 = 右侧主导。",
+  "tip.echt": "端点校正希尔伯特变换 — α 频段节律性 (0–1)。高 = α 振荡强且相位稳定。[Schreglmann 2021]",
   "tip.hr": "由 PPG 搏动间期推导的心率。",
   "tip.rmssd": "连续心搏差异的均方根。关键副交感 HRV 指标。",
   "tip.sdnn": "逐搏间期的标准差。反映整体 HRV。",
@@ -114,6 +115,10 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "已禁用自动更新检查。请使用上方按钮手动检查。",
   "updates.autostart": "登录时启动",
   "updates.autostartDesc": "登录计算机时自动启动。",
+  "updates.autoUpdate": "自动安装更新",
+  "updates.autoUpdateDesc": "在后台下载新版本，并在下次重启时安装。关闭后可自行选择安装时机。",
+  "updates.autoUpdateOffNotice": "自动安装已关闭 — 点击“安装”以下载并更新。",
+  "updates.installNow": "安装",
   "updates.footer": "更新会自动下载。准备好后重启即可应用。",
 
   "whatsNew.title": "新功能",

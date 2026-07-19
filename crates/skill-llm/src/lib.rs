@@ -24,12 +24,14 @@ pub mod log;
 /// ```
 ///
 /// Short-circuits (no `format!` allocation) when logging is disabled.
-#[allow(unused_macros)]
 macro_rules! llm_log {
     ($tag:expr, $($arg:tt)*) => {
-        if $crate::log::log_enabled() {
-            $crate::log::write_log($tag, &format!($($arg)*));
-        }
+        ::skill_constants::subsystem_log!(
+            $crate::log::log_enabled,
+            $crate::log::write_log,
+            $tag,
+            $($arg)*
+        );
     };
 }
 
@@ -46,7 +48,7 @@ pub mod engine;
 pub mod handlers;
 
 // Re-export the most-used types at crate root for convenience.
-pub use config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
+pub use config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ToolExecutionMode};
 pub use event::{LlmEventEmitter, NoopEmitter};
 
 #[cfg(feature = "llm")]

@@ -73,6 +73,24 @@
   },
   {
     "tab": "embeddings",
+    "key": "embeddings.backend",
+    "label": "嵌入运行时",
+    "desc": "文本嵌入在本地 RLX 运行时上运行。请在下方选择计算设备和最大序列长度。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend",
+    "label": "标签搜索索引",
+    "desc": "选择为标签语义搜索提供支持的本地向量索引。可先构建两者，用自己的查询做基准测试，再为数据选择更快或更高质量的方案。"
+  },
+  {
+    "tab": "embeddings",
+    "key": "embeddings.indexBackend.turboquant",
+    "label": "TurboQuant 索引",
+    "desc": "压缩的 TurboVec 索引。内存和磁盘占用更低，适合大量标签。"
+  },
+  {
+    "tab": "embeddings",
     "key": "embeddings.model",
     "label": "嵌入模型"
   },
@@ -305,6 +323,12 @@
     "key": "llm.mmproj.nThreads",
     "label": "编码器线程数",
     "desc": "视觉/音频编码器的 CPU 线程数。"
+  },
+  {
+    "tab": "llm",
+    "key": "llm.mtp.draftTokens",
+    "label": "草稿令牌数",
+    "desc": "每个解码步骤投机生成的令牌数。值越大吞吐量越高，但需要更多内存。需要支持 MTP 的模型。"
   },
   {
     "tab": "llm",
@@ -832,6 +856,12 @@
     "key": "updates.autostart",
     "label": "登录时启动",
     "desc": "登录计算机时自动启动。"
+  },
+  {
+    "tab": "updates",
+    "key": "updates.autoUpdate",
+    "label": "自动安装更新",
+    "desc": "在后台下载新版本，并在下次重启时安装。关闭后可自行选择安装时机。"
   },
   {
     "tab": "updates",

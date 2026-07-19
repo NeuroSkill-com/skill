@@ -558,7 +558,7 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     get_screenshot_config: () => ({
       enabled: true, interval_secs: 5, ocr_enabled: true, max_storage_mb: 5000,
       session_only: false, use_gpu: true, image_size: 768, quality: 80,
-      embed_backend: "onnx", fastembed_model: "clip-vit-base", ocr_engine: "ocrs",
+      embed_backend: "rlx", fastembed_model: "nomic-embed-vision-v1.5", ocr_engine: "rlx-ocr",
     }),
     get_screenshot_metrics: () => ({
       total_screenshots: 1284,

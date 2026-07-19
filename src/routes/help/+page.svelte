@@ -192,6 +192,11 @@ let splitRoot: HTMLDivElement | null = null;
 let navEl: HTMLElement | null = null;
 let navWidth = $state(176);
 let resizingNav = false;
+// Tailwind `sm` breakpoint = 640px. Below that the sidebar collapses
+// to icon-only width via the `w-12` class; above, `navWidth` controls
+// the (resizable) width inline.
+let windowWidth = $state(0);
+const navStyle = $derived(windowWidth >= 640 ? `width:${navWidth}px;min-width:max-content` : "");
 
 const NAV_WIDTH_MIN = 140;
 const NAV_WIDTH_MAX = 480;
@@ -287,16 +292,22 @@ onDestroy(() => {
 useWindowTitle("window.title.help");
 </script>
 
+<svelte:window bind:innerWidth={windowWidth} />
+
 <main class="h-full min-h-0 flex flex-col overflow-hidden">
 
   <!-- ── Body: sidebar + content ──────────────────────────────────────────── -->
   <div class="min-h-0 flex-1 flex overflow-hidden" bind:this={splitRoot}>
 
-    <!-- Sidebar nav (always visible, dims when searching) -->
-    <nav bind:this={navEl} style={`width:${navWidth}px;min-width:max-content`}
+    <!-- Sidebar nav (always visible, dims when searching).
+         At < sm (mobile narrow) the sidebar collapses to icon-only so
+         the content column has enough room for prose; the dynamic
+         `navWidth` only applies from `sm:` upwards. -->
+    <nav bind:this={navEl} style={navStyle}
          class="shrink-0 border-r border-border dark:border-white/[0.06]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]
+                w-12 sm:w-auto
                 transition-opacity {searchQuery ? 'opacity-40' : 'opacity-100'}"
          aria-label="Help sections">
       {#each TAB_IDS as id, i}
@@ -321,10 +332,10 @@ useWindowTitle("window.title.help");
             {@html TAB_ICONS[id]}
           </svg>
 
-          <span class="flex-1 leading-none whitespace-nowrap">{helpTabLabel(id)}</span>
+          <span class="hidden sm:inline flex-1 leading-none whitespace-nowrap">{helpTabLabel(id)}</span>
 
           {#if digitForTab(i)}
-            <kbd class="text-ui-2xs font-mono tabular-nums shrink-0
+            <kbd class="hidden sm:inline text-ui-2xs font-mono tabular-nums shrink-0
                         {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
               {modifierForTab(i)}{digitForTab(i)}
             </kbd>
@@ -335,7 +346,7 @@ useWindowTitle("window.title.help");
 
     <button
       type="button"
-      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-violet-500/40 transition-colors"
+      class="hidden sm:block w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-violet-500/40 transition-colors"
       aria-label="Resize sidebar"
       onmousedown={startResize}
     ></button>

@@ -1,0 +1,507 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! PTY proxy for transparent terminal session recording.
+//!
+//! Spawns the user's shell on a new PTY pair and proxies stdin/stdout
+//! between the controlling terminal and that PTY, while writing every byte
+//! the shell produces to a log file. Unlike macOS's `script(1)`, this shim
+//! correctly forwards SIGWINCH so TUI applications (vim, htop, claude code,
+//! etc.) see resize events and re-render at the right size.
+//!
+//! Invoked as `skill-tty <log-file>` (log path optional). Lives in its own
+//! binary — separate from `skill-daemon` — so blanket process-name kills
+//! (Tauri sidecar reload, kill-old-daemon-on-upgrade) do not terminate
+//! active recorded shells.
+
+#[cfg(not(unix))]
+fn main() {
+    eprintln!("skill-tty: PTY recording is only supported on Unix platforms");
+    std::process::exit(126);
+}
+
+#[cfg(unix)]
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let rest = &args[1..];
+
+    // Discoverability subcommands. Users land on `skill-tty` by inspecting
+    // their shell rc file or `which skill-tty`; --help/--status answer the
+    // first two questions they're likely to have without making them open
+    // the desktop UI.
+    if let Some(first) = rest.first().map(String::as_str) {
+        match first {
+            "--help" | "-h" | "help" => {
+                unix::print_help();
+                return;
+            }
+            "--status" | "status" => {
+                std::process::exit(unix::print_status());
+            }
+            "--version" | "-V" | "version" => {
+                println!("skill-tty {}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    // Exit 126 signals the shell hook that the PTY shim failed to start
+    // (not a tty, openpty failed, etc.) so the hook can fall through to a
+    // plain shell instead of closing the terminal. Any other exit code is
+    // the inner shell's own exit code and is forwarded as-is (`run` calls
+    // `std::process::exit` internally on success).
+    if let Err(e) = unix::run(rest) {
+        eprintln!("skill-tty: {e:#}");
+        std::process::exit(126);
+    }
+}
+
+#[cfg(unix)]
+mod unix {
+    // Deliberately thin wrapper over libc PTY/signal/termios primitives.
+    // Every unsafe block invokes a libc function with arguments the Rust
+    // standard library or this file's own ownership invariants guarantee
+    // valid (FDs we just opened, pointers to local stack vars, etc.).
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use std::ffi::CString;
+    use std::fs::OpenOptions;
+    use std::io::{BufWriter, Write};
+    use std::os::fd::RawFd;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    pub fn print_help() {
+        println!(
+            "skill-tty {} — NeuroSkill terminal-session recorder\n\
+             \n\
+             USAGE:\n  \
+               skill-tty [LOG_PATH]    wrap the user's shell on a fresh PTY,\n  \
+                                       writing every byte to LOG_PATH (default:\n  \
+                                       ~/.skill/terminal-logs/<ts>-<pid>.log)\n  \
+               skill-tty --status      print whether the *current* shell is\n  \
+                                       recorded, plus log path and session id\n  \
+               skill-tty --version     print version and exit\n\
+             \n\
+             ENV VARS (read at startup):\n  \
+               NEUROSKILL_SKIP_RECORDING=1   the shell hook will NOT spawn\n  \
+                                             skill-tty for this terminal\n  \
+               NEUROSKILL_RECORDING=1        set by skill-tty inside the\n  \
+                                             wrapped shell; read by the hook\n  \
+                                             to prevent re-entry\n  \
+               NEUROSKILL_SESSION=<id>       session id, written to every\n  \
+                                             command tracked by the hook\n  \
+               SHELL                         which shell to spawn\n\
+             \n\
+             Logs and session metadata live under ~/.skill/. To uninstall the\n\
+             shell hook, use the desktop app's Activity tab, or run the\n\
+             daemon's POST /v1/activity/uninstall-shell-hook route. Removing\n\
+             the daemon binary with --uninstall also strips all hook entries\n\
+             from your rc files.",
+            env!("CARGO_PKG_VERSION"),
+        );
+    }
+
+    /// Print the current shell's recording state. Exits with 0 if the shell
+    /// invoking us is currently recorded, 1 otherwise. Suitable for use in
+    /// scripts: `skill-tty --status >/dev/null && echo "being recorded"`.
+    pub fn print_status() -> i32 {
+        let recording = std::env::var("NEUROSKILL_RECORDING").ok().filter(|v| !v.is_empty());
+        let session = std::env::var("NEUROSKILL_SESSION").ok();
+        let skip = std::env::var("NEUROSKILL_SKIP_RECORDING")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let home = dirs::home_dir();
+        let log_dir = home.as_ref().map(|h| h.join(".skill").join("terminal-logs"));
+
+        if recording.is_some() {
+            println!("recording: yes");
+            if let Some(s) = session {
+                println!("session_id: {s}");
+            }
+            if let Some(dir) = log_dir {
+                println!("log_dir: {}", dir.display());
+            }
+            0
+        } else if skip.is_some() {
+            println!("recording: no (NEUROSKILL_SKIP_RECORDING set)");
+            1
+        } else {
+            println!(
+                "recording: no\n\
+                 (this shell was not started under skill-tty; either no hook is installed,\n\
+                  or this terminal opted out, or the binary at the hook's path is missing)"
+            );
+            1
+        }
+    }
+
+    /// Set by the SIGWINCH handler; checked by the main I/O loop.
+    static SIGWINCH: AtomicBool = AtomicBool::new(false);
+    /// Set by SIGCHLD; main loop exits when set.
+    static SIGCHLD: AtomicBool = AtomicBool::new(false);
+
+    extern "C" fn on_sigwinch(_: libc::c_int) {
+        SIGWINCH.store(true, Ordering::Relaxed);
+    }
+    extern "C" fn on_sigchld(_: libc::c_int) {
+        SIGCHLD.store(true, Ordering::Relaxed);
+    }
+
+    /// Run the shim. Optional arg overrides the log path; otherwise we
+    /// pick one inside `~/.skill/terminal-logs/`.
+    pub fn run(args: &[String]) -> anyhow::Result<()> {
+        let log_path = match args.first() {
+            Some(p) => std::path::PathBuf::from(p),
+            None => default_log_path()?,
+        };
+        rotate_logs(log_path.parent(), &log_path);
+
+        // The session id is the log filename's stem (e.g. "20260426-104530-12345").
+        // It uniquely identifies this shell instance and is exported so the
+        // preexec/precmd hooks can tag every command POST with it; the finalizer
+        // uses the same string when closing the `terminal_sessions` row.
+        let session_id = log_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(String::from)
+            .unwrap_or_default();
+
+        // BufWriter cuts syscalls per PTY-read from ~1 to ~0 (8 KB chunks fit
+        // most TUI redraw bursts). Final flush happens via Drop, but we also
+        // call .flush() explicitly before exit to surface I/O errors.
+        let log_file = OpenOptions::new().create(true).append(true).open(&log_path)?;
+        let mut log = BufWriter::with_capacity(8192, log_file);
+
+        // Timing sidecar: 16 bytes per PTY-write batch — `(u64 offset_after_write_le, u64 unix_micros_le)`.
+        // Lets the finalizer binary-search any time T to its corresponding byte
+        // offset, so per-command output extraction is O(log N).
+        let idx_path = log_path.with_extension("idx");
+        let idx_file = OpenOptions::new().create(true).append(true).open(&idx_path)?;
+        let mut idx = BufWriter::with_capacity(4096, idx_file);
+        let mut log_offset: u64 = 0;
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+
+        let stdin_fd = libc::STDIN_FILENO;
+        let stdout_fd = libc::STDOUT_FILENO;
+
+        // Initial winsize from the controlling tty.
+        let mut winsize: libc::winsize = unsafe { std::mem::zeroed() };
+        unsafe { libc::ioctl(stdout_fd, libc::TIOCGWINSZ as _, &mut winsize) };
+        if winsize.ws_col == 0 {
+            winsize.ws_col = 80;
+        }
+        if winsize.ws_row == 0 {
+            winsize.ws_row = 24;
+        }
+
+        // Snapshot termios so we can restore it on exit.
+        let mut original_termios: libc::termios = unsafe { std::mem::zeroed() };
+        if unsafe { libc::tcgetattr(stdin_fd, &mut original_termios) } != 0 {
+            return Err(anyhow::anyhow!("tcgetattr(stdin) failed: {}", last_err()));
+        }
+
+        // openpty() returns a master/slave pair. Caller owns both FDs.
+        // libc declares the winsize parameter as *const on Linux and *mut on macOS,
+        // so we always pass &mut and silence the Linux-only "unnecessary mut" lint.
+        let mut master_fd: RawFd = -1;
+        let mut slave_fd: RawFd = -1;
+        let rc = unsafe {
+            #[allow(clippy::unnecessary_mut_passed)]
+            libc::openpty(
+                &mut master_fd,
+                &mut slave_fd,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut winsize,
+            )
+        };
+        if rc != 0 {
+            return Err(anyhow::anyhow!("openpty failed: {}", last_err()));
+        }
+
+        let pid = unsafe { libc::fork() };
+        if pid < 0 {
+            return Err(anyhow::anyhow!("fork failed: {}", last_err()));
+        }
+
+        if pid == 0 {
+            // ── child: become session leader, attach slave as ctty, exec shell ──
+            unsafe { libc::close(master_fd) };
+            unsafe { libc::setsid() };
+            // TIOCSCTTY makes `slave_fd` the controlling terminal of the new session.
+            unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0) };
+            unsafe {
+                libc::dup2(slave_fd, libc::STDIN_FILENO);
+                libc::dup2(slave_fd, libc::STDOUT_FILENO);
+                libc::dup2(slave_fd, libc::STDERR_FILENO);
+                if slave_fd > 2 {
+                    libc::close(slave_fd);
+                }
+            }
+            // Mark this shell as the wrapped one; the hook checks this env var.
+            unsafe { libc::setenv(c"NEUROSKILL_RECORDING".as_ptr(), c"1".as_ptr(), 1) };
+            // Tag every command run in this shell with the same session id the
+            // finalizer will use when closing the terminal_sessions row.
+            if let Ok(sid_c) = CString::new(session_id.clone()) {
+                unsafe { libc::setenv(c"NEUROSKILL_SESSION".as_ptr(), sid_c.as_ptr(), 1) };
+            }
+
+            // Login-style argv0: prefix with `-` so the shell reads its rc files.
+            let basename = std::path::Path::new(&shell)
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "shell".into());
+            let argv0 = CString::new(format!("-{basename}")).unwrap();
+            let path_c = CString::new(shell.clone()).unwrap();
+            unsafe {
+                libc::execlp(path_c.as_ptr(), argv0.as_ptr(), std::ptr::null::<libc::c_char>());
+            }
+            // execlp only returns on failure.
+            let _ = std::io::stderr().write_all(b"skill-tty: exec failed\n");
+            unsafe { libc::_exit(127) };
+        }
+
+        // ── parent ──
+        unsafe { libc::close(slave_fd) };
+
+        // Emit OSC 2 immediately so the terminal tab/window title shows the cwd
+        // instead of our argv (which would otherwise expose the log file path).
+        // The inner shell's precmd will keep updating this on each prompt; this
+        // line just covers the brief gap between exec and the first prompt.
+        {
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let cwd_str = cwd.to_string_lossy();
+            let home = std::env::var("HOME").unwrap_or_default();
+            let display = if !home.is_empty() && cwd_str.starts_with(&home) {
+                format!("~{}", &cwd_str[home.len()..])
+            } else {
+                cwd_str.into_owned()
+            };
+            let osc = format!("\x1b]2;{display}\x07");
+            let _ = write_all_fd(stdout_fd, osc.as_bytes());
+        }
+
+        // Restore original termios on every exit path.
+        struct TermiosGuard(libc::termios);
+        impl Drop for TermiosGuard {
+            fn drop(&mut self) {
+                unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &self.0) };
+            }
+        }
+        let _termios_guard = TermiosGuard(original_termios);
+
+        // Put stdin in raw mode so every byte (incl. Ctrl-C, escape sequences,
+        // bracketed paste, mouse events) reaches the slave PTY untouched.
+        let mut raw = original_termios;
+        unsafe { libc::cfmakeraw(&mut raw) };
+        unsafe { libc::tcsetattr(stdin_fd, libc::TCSAFLUSH, &raw) };
+
+        install_signal_handler(libc::SIGWINCH, on_sigwinch)?;
+        install_signal_handler(libc::SIGCHLD, on_sigchld)?;
+
+        // Main I/O loop: select() on stdin and master_fd. Forward bytes both
+        // ways. On SIGWINCH, re-query the outer terminal's size and apply it
+        // to the master end of the PTY (which raises SIGWINCH inside the child).
+        let mut buf = [0u8; 8192];
+        loop {
+            if SIGWINCH.swap(false, Ordering::Relaxed) {
+                let mut new_size: libc::winsize = unsafe { std::mem::zeroed() };
+                if unsafe { libc::ioctl(stdout_fd, libc::TIOCGWINSZ as _, &mut new_size) } == 0 {
+                    unsafe { libc::ioctl(master_fd, libc::TIOCSWINSZ as _, &new_size) };
+                }
+            }
+            if SIGCHLD.load(Ordering::Relaxed) {
+                // Drain any remaining output from the master before quitting.
+                drain_master(master_fd, &mut buf, stdout_fd, &mut log, &mut idx, &mut log_offset);
+                break;
+            }
+
+            let mut readfds: libc::fd_set = unsafe { std::mem::zeroed() };
+            unsafe {
+                libc::FD_ZERO(&mut readfds);
+                libc::FD_SET(stdin_fd, &mut readfds);
+                libc::FD_SET(master_fd, &mut readfds);
+            }
+            let nfds = master_fd.max(stdin_fd) + 1;
+            let r = unsafe {
+                libc::select(
+                    nfds,
+                    &mut readfds,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            };
+            if r < 0 {
+                let errno = std::io::Error::last_os_error().raw_os_error();
+                if errno == Some(libc::EINTR) {
+                    continue;
+                }
+                break;
+            }
+
+            if unsafe { libc::FD_ISSET(stdin_fd, &readfds) } {
+                let n = unsafe { libc::read(stdin_fd, buf.as_mut_ptr().cast(), buf.len()) };
+                if n <= 0 {
+                    break;
+                }
+                let _ = write_all_fd(master_fd, &buf[..n as usize]);
+            }
+            if unsafe { libc::FD_ISSET(master_fd, &readfds) } {
+                let n = unsafe { libc::read(master_fd, buf.as_mut_ptr().cast(), buf.len()) };
+                if n <= 0 {
+                    break;
+                }
+                let bytes = &buf[..n as usize];
+                log_offset += bytes.len() as u64;
+                let micros = unix_micros();
+                let mut entry = [0u8; 16];
+                entry[..8].copy_from_slice(&log_offset.to_le_bytes());
+                entry[8..].copy_from_slice(&micros.to_le_bytes());
+                let _ = idx.write_all(&entry);
+                let _ = write_all_fd(stdout_fd, bytes);
+                let _ = log.write_all(bytes);
+            }
+        }
+
+        let _ = log.flush();
+        let _ = idx.flush();
+
+        let mut status: libc::c_int = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
+        let exit_code = if libc::WIFEXITED(status) {
+            libc::WEXITSTATUS(status)
+        } else {
+            1
+        };
+        drop(_termios_guard); // explicit so it runs before process::exit
+        std::process::exit(exit_code);
+    }
+
+    fn install_signal_handler(sig: libc::c_int, handler: extern "C" fn(libc::c_int)) -> anyhow::Result<()> {
+        let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+        action.sa_sigaction = handler as usize;
+        action.sa_flags = libc::SA_RESTART;
+        unsafe { libc::sigemptyset(&mut action.sa_mask) };
+        let rc = unsafe { libc::sigaction(sig, &action, std::ptr::null_mut()) };
+        if rc != 0 {
+            return Err(anyhow::anyhow!("sigaction({sig}) failed: {}", last_err()));
+        }
+        Ok(())
+    }
+
+    fn write_all_fd(fd: RawFd, mut bytes: &[u8]) -> std::io::Result<()> {
+        while !bytes.is_empty() {
+            let n = unsafe { libc::write(fd, bytes.as_ptr().cast(), bytes.len()) };
+            if n < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                return Err(err);
+            }
+            bytes = &bytes[n as usize..];
+        }
+        Ok(())
+    }
+
+    fn drain_master<W: Write, I: Write>(
+        master_fd: RawFd,
+        buf: &mut [u8],
+        stdout_fd: RawFd,
+        log: &mut W,
+        idx: &mut I,
+        log_offset: &mut u64,
+    ) {
+        // Make master non-blocking so we can drain whatever's pending.
+        let flags = unsafe { libc::fcntl(master_fd, libc::F_GETFL) };
+        if flags >= 0 {
+            unsafe { libc::fcntl(master_fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
+        }
+        loop {
+            let n = unsafe { libc::read(master_fd, buf.as_mut_ptr().cast(), buf.len()) };
+            if n <= 0 {
+                break;
+            }
+            let bytes = &buf[..n as usize];
+            let _ = write_all_fd(stdout_fd, bytes);
+            let _ = log.write_all(bytes);
+            *log_offset += bytes.len() as u64;
+            let micros = unix_micros();
+            let mut entry = [0u8; 16];
+            entry[..8].copy_from_slice(&log_offset.to_le_bytes());
+            entry[8..].copy_from_slice(&micros.to_le_bytes());
+            let _ = idx.write_all(&entry);
+        }
+    }
+
+    fn unix_micros() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_micros() as u64)
+            .unwrap_or(0)
+    }
+
+    fn last_err() -> String {
+        std::io::Error::last_os_error().to_string()
+    }
+
+    /// Default log path: `~/.skill/terminal-logs/<YYYYMMDD-HHMMSS>-<pid>.log`.
+    fn default_log_path() -> anyhow::Result<std::path::PathBuf> {
+        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("no $HOME"))?;
+        let dir = home.join(".skill").join("terminal-logs");
+        std::fs::create_dir_all(&dir)?;
+        let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
+        let pid = std::process::id();
+        Ok(dir.join(format!("{ts}-{pid}.log")))
+    }
+
+    /// Enforce a 100-file retention cap on terminal scratch logs.
+    ///
+    /// Keep this deliberately lightweight: `skill-tty` stays alive for the
+    /// entire shell session, so doing zstd compression here can leave allocator
+    /// workspaces charged to the long-lived shim. The daemon finalizer owns
+    /// heavy processing for completed sessions.
+    fn rotate_logs(dir: Option<&std::path::Path>, current_log: &std::path::Path) {
+        let Some(dir) = dir else { return };
+
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let mut all: Vec<(std::path::PathBuf, std::time::SystemTime)> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let path = e.path();
+                if path == current_log {
+                    return false;
+                }
+                if path.extension().is_some_and(|e| e == "log") && pid_alive_for_log(&path) {
+                    return false;
+                }
+                path.extension()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|ext| ext == "log" || ext == "zst")
+            })
+            .filter_map(|e| Some((e.path(), e.metadata().ok()?.modified().ok()?)))
+            .collect();
+        all.sort_by_key(|(_, m)| std::cmp::Reverse(*m));
+        for (path, _) in all.into_iter().skip(100) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// Filenames are `<YYYYMMDD-HHMMSS>-<pid>.log` — extract the PID and check
+    /// whether that process still exists with `kill(pid, 0)`.
+    fn pid_alive_for_log(path: &std::path::Path) -> bool {
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            return false;
+        };
+        let Some(pid_str) = stem.rsplit('-').next() else {
+            return false;
+        };
+        let Ok(pid) = pid_str.parse::<libc::pid_t>() else {
+            return false;
+        };
+        if pid <= 0 {
+            return false;
+        }
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+}

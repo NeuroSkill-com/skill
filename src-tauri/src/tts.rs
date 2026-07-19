@@ -10,9 +10,9 @@
 
 #[allow(unused_imports)]
 pub use skill_tts::{
-    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_dirs, neutts_apply_config,
-    set_logging, tts_shutdown, use_neutts, NeuttsConfig, NeuttsVoiceInfo, TtsProgressEvent,
-    TTS_PROGRESS_EVENT,
+    init_espeak_bundled_data_path, init_neutts_samples_dir, init_tts_dirs, init_tts_resource_dir,
+    neutts_apply_config, set_logging, tts_shutdown, use_neutts, NeuttsConfig, NeuttsVoiceInfo,
+    TtsProgressEvent, TTS_PROGRESS_EVENT,
 };
 
 /// Wire TTS log output through the app's [`SkillLogger`](crate::skill_log::SkillLogger).
@@ -51,13 +51,13 @@ pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn tts_unload(app_handle: AppHandle) -> Result<(), String> {
     let result = skill_tts::tts_unload().await.map_err(|e| e.to_string());
-    #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+    #[cfg(any(tts_kitten_active, feature = "tts-neutts"))]
     if result.is_ok() {
         app_handle
             .emit(TTS_PROGRESS_EVENT, TtsProgressEvent::unloaded())
             .ok();
     }
-    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    #[cfg(not(any(tts_kitten_active, feature = "tts-neutts")))]
     let _ = &app_handle;
     result
 }

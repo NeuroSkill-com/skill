@@ -3,29 +3,43 @@ name = "skill-exg"
 version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "EEG embedding helpers — cosine distance, fuzzy text matching, timestamp formatting, HuggingFace weight resolution/download, cubecl cache setup, epoch metrics — extracted workspace crate"
+description = "EEG embedding helpers — cosine distance, fuzzy text matching, timestamp formatting, HuggingFace weight resolution/download, epoch metrics — extracted workspace crate"
 
 [features]
 default = []
-cubecl = ["dep:cubecl-runtime"]
-neurorvq-ndarray = ["dep:neurorvq-rs", "dep:burn", "dep:burn-ndarray", "dep:log", "neurorvq-rs/ndarray"]
-neurorvq-metal = ["dep:neurorvq-rs", "dep:burn", "dep:burn-wgpu", "dep:log", "neurorvq-rs/metal", "burn-wgpu/metal"]
-neurorvq-vulkan = ["dep:neurorvq-rs", "dep:burn", "dep:burn-wgpu", "dep:log", "neurorvq-rs/vulkan", "burn-wgpu/vulkan"]
+neurorvq-ndarray = ["dep:neurorvq-rs", "dep:rlx", "dep:log"]
+neurorvq-metal   = ["neurorvq-ndarray", "neurorvq-rs/rlx-metal"]
+neurorvq-mlx     = ["neurorvq-ndarray", "neurorvq-rs/rlx-mlx"]
+neurorvq-gpu     = ["neurorvq-ndarray", "neurorvq-rs/rlx-gpu"]
+neurorvq-cuda    = ["neurorvq-ndarray", "neurorvq-rs/rlx-cuda"]
+neurorvq-rocm    = ["neurorvq-ndarray", "neurorvq-rs/rlx-rocm"]
+eegdino-rlx      = ["dep:eegdino", "dep:rlx", "dep:log"]
+eegdino-metal    = ["eegdino-rlx", "eegdino/metal"]
+eegdino-mlx      = ["eegdino-rlx", "eegdino/mlx"]
+eegdino-gpu      = ["eegdino-rlx", "eegdino/gpu"]
+eegdino-cuda     = ["eegdino-rlx", "eegdino/cuda"]
+eegdino-rocm     = ["eegdino-rlx", "eegdino/rocm"]
+lumamba-rlx      = ["dep:lumamba", "dep:rlx", "dep:log"]
+lumamba-metal    = ["lumamba-rlx", "lumamba/rlx-metal"]
+lumamba-mlx      = ["lumamba-rlx", "lumamba/rlx-mlx"]
+lumamba-gpu      = ["lumamba-rlx", "lumamba/rlx-gpu"]
+lumamba-cuda     = ["lumamba-rlx", "lumamba/rlx-cuda"]
+lumamba-rocm     = ["lumamba-rlx", "lumamba/rlx-rocm"]
 
 [dependencies]
 anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-eeg       = { path = "../skill-eeg" }
 skill-data      = { path = "../skill-data" }
+skill-devices   = { path = "../skill-devices" }
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 hf-hub          = "0.5"
 ureq            = { version = "3.3", features = ["native-tls", "json"] }
-cubecl-runtime  = { version = "0.9.0", optional = true }
-neurorvq-rs     = { package = "neurorvq", version = "0.1.0", optional = true }
-burn            = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
-burn-ndarray    = { version = "0.20.1", default-features = false, features = ["std"], optional = true }
-burn-wgpu       = { version = "0.20.1", default-features = true, optional = true }
+neurorvq-rs     = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
+eegdino         = { version = "0.2.0", default-features = false, features = ["rlx-cpu"], optional = true }
+lumamba         = { version = "0.0.1", default-features = false, features = ["rlx-cpu"], optional = true }
+rlx             = { workspace = true, optional = true }
 log             = { version = "0.4", optional = true }
 
 [lints]

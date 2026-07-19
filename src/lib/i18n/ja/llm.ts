@@ -83,6 +83,7 @@ const llm: Record<string, string> = {
   "llm.section.models": "言語モデル",
   "llm.section.mmproj": "マルチモーダルプロジェクター",
   "llm.section.inference": "推論設定",
+  "llm.section.mtp": "マルチトークン予測",
   "llm.enabled": "LLMサーバーを有効化",
   "llm.enabledDesc":
     "WebSocket APIと同じポートでOpenAI互換推論サーバーを実行します。llm Cargoフィーチャーとダウンロード済みモデルが必要です。",
@@ -282,6 +283,10 @@ const llm: Record<string, string> = {
   "llm.inference.offloadKqv": "KQVをGPUにオフロード",
   "llm.inference.offloadKqvDesc":
     "すべてのトランスフォーマーレイヤーがGPUオフロードされていなくても、K/Q/Vテンソル操作をGPUにオフロードします。ハイブリッドCPU+GPUセットアップに推奨。",
+
+  "llm.mtp.draftTokens": "ドラフトトークン数",
+  "llm.mtp.draftTokensDesc":
+    "デコードステップごとに投機的に生成するトークン数。値が大きいほどスループットが向上しますが、メモリをより多く消費します。MTP対応モデルが必要です。",
 
   "chat.status.running": "実行中",
   "chat.status.loading": "モデルを読み込み中…",
@@ -485,6 +490,52 @@ const llm: Record<string, string> = {
   "model.idleReembedIdle": "アイドル期間を待機中",
   "search.eegCoverage": "EEGカバレッジ",
   "search.eegCoverageLabel": "{embedded}件/{total}件 ({pct}%)",
+
+  "model.idleReembedMemoryThrottled": "延期しました — システムメモリ {pct}% (上限 {limit}%)",
+  "model.maxResidentMemory": "システムメモリ上限",
+  "model.maxResidentMemoryDesc":
+    "システムメモリがこの割合を超えた場合、バックグラウンド埋め込みをスキップします。100% でガードを無効化します。",
+  "model.maxResidentMemoryDisabled": "オフ",
+  "chat.tts.section": "音声出力",
+  "chat.tts.engineLabel": "音声エンジン",
+  "chat.tts.engineDesc": "デーモンが応答を読み上げるために使用する音声合成バックエンド。",
+  "chat.tts.experimental":
+    "まだ即利用できません：Orpheus は事前エクスポートした SNAC デコーダーが必要で、Kyutai-TTS は rlx 0.2.9 ではまだ動作しません。",
+  "chat.tts.kyutaiExperimental": "Kyutai-TTS は rlx 0.2.9 ではまだ動作しません（上流の generate() はスタブです）。",
+  "chat.tts.orpheusHint":
+    "Orpheus はバックボーンを自動ダウンロードします。SNAC デコーダーは scripts/export_snac_decoder.py で一度エクスポートしてください（または ORPHEUS_SNAC_PATH を設定）。",
+  "chat.tts.bundleExportHint":
+    "Inflect-Nano は一度エクスポートしたバンドルから読み込みます。アプリに自動的に同梱されます。開発実行の場合は ~/.skill/models/inflect-nano に配置するか、INFLECT_NANO_DIR を設定してください。",
+  "chat.tts.modelLabel": "音声モデル",
+  "chat.tts.modelDesc": "選択したエンジンのモデルリポジトリ。",
+  "chat.tts.voiceLabel": "声",
+  "chat.tts.voiceDesc": "選択したエンジンのプリセット話者。",
+  "chat.tts.voiceDefault": "デフォルト",
+  "chat.voice.section": "音声入力",
+  "chat.voice.enabled": "音声コントロールを表示",
+  "chat.voice.enabledDesc": "チャットウィンドウにマイクと音声モード選択を表示します。",
+  "chat.voice.triggerLabel": "デフォルトのトリガー",
+  "chat.voice.triggerDesc": "新しい音声セッションでマイクを制御する方法。",
+  "chat.voice.triggerContinuous": "連続",
+  "chat.voice.triggerPtt": "プッシュトゥトーク",
+  "chat.voice.routingLabel": "デフォルトのルーティング",
+  "chat.voice.routingDesc": "確定した文字起こしの扱い方。",
+  "chat.voice.routingLoop": "音声ループ",
+  "chat.voice.routingTranscribe": "文字起こしのみ",
+  "chat.voice.engineLabel": "認識エンジン",
+  "chat.voice.engineDesc": "音声を文字起こしするための音声認識バックエンド。",
+  "chat.voice.modelLabel": "認識モデル",
+  "chat.voice.modelDesc": "Whisper モデルのリポジトリ。大きいモデルほど精度は高いが遅くなります。",
+  "chat.voice.modelCustom": "カスタム…",
+  "chat.voice.languageLabel": "言語",
+  "chat.voice.languageDesc": '音声認識の言語ヒント（例: "en"）。',
+  "chat.voice.start": "音声入力を開始",
+  "chat.voice.stop": "音声入力を停止",
+  "chat.voice.pttHint": "押している間だけ話す",
+  "chat.voice.statusLoading": "読み込み中…",
+  "chat.voice.statusListening": "聞き取り中",
+  "chat.voice.statusSpeaking": "発話中",
+  "chat.voice.dismissError": "音声エラーを閉じる",
 };
 
 export default llm;

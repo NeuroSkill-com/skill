@@ -4,14 +4,30 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "TTS engine for NeuroSkill — extracted workspace crate"
+build = "build.rs"
 
 [features]
 default     = []
-tts-kitten  = ["dep:kittentts", "dep:rodio"]
+tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio"]
 tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
+# Pluggable RLX TTS engines (Qwen3-TTS, Orpheus, Kyutai-TTS, Inflect-Nano,
+# TinyTTS). Enabled on Linux, Windows, and macOS via `tts_engines_active`
+# (see build.rs). Inflect-Nano and TinyTTS are lightweight English single-speaker
+# models loaded from a one-time exported bundle (no Hub auto-download).
+tts-engines = [
+    "dep:rlx-qwen3-tts",
+    "dep:rlx-orpheus",
+    "dep:rlx-kyutai-tts",
+    "dep:rlx-inflect-nano",
+    # "dep:rlx-tiny-tts",  # DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX)
+    "dep:rlx-runtime",
+    "dep:rodio",
+    "dep:hound",
+]
+whisper-validate = ["dep:rlx-whisper", "dep:hound"]
 
 [dependencies]
-anyhow = { workspace = true }
+anyhow      = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -19,15 +35,45 @@ tokio      = { version = "1", features = ["sync"] }
 hf-hub     = "0.5"
 dirs       = "6"
 
-kittentts  = { version = "0.4.1", features = ["espeak"], optional = true }
 rodio      = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
 sha2       = { version = "0.10", optional = true }
 hound      = { version = "3", optional = true }
 
-neutts     = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }
+
+# KittenTTS via rlx-kittentts (ONNX Runtime — native RLX graph not yet ASR-valid).
+# Windows skips the optional dep; `tts-kitten` stays in default for UX parity.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+rlx-kittentts = { workspace = true, features = ["espeak", "onnx", "hf-download"], optional = true }
+rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+rlx-runtime   = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
+rlx-qwen3-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
+rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "cuda", "gpu"], optional = true }
+rlx-kyutai-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
+# Single-speaker English bundles loaded from a one-time export (rlx-graph → CPU
+# base; cuda/gpu add accelerated vocoder graphs).
+rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "cuda", "gpu"], optional = true }
+# DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX):
+# rlx-tiny-tts  = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-neutts     = { version = "0.1.1", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
+rlx-kittentts = { workspace = true, features = ["espeak", "onnx", "hf-download", "metal"], optional = true }
+rlx-runtime   = { workspace = true, features = ["cpu", "metal"], optional = true }
+rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
+rlx-qwen3-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
+rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "metal", "coreml"], optional = true }
+rlx-kyutai-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
+rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "metal"], optional = true }
+# DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX):
+# rlx-tiny-tts  = { workspace = true, features = ["cpu", "metal"], optional = true }
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "kitten-e2e"
+path = "src/bin/kitten_e2e.rs"
+required-features = ["tts-kitten", "whisper-validate"]

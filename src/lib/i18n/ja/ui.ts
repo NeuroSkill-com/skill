@@ -36,6 +36,7 @@ const ui: Record<string, string> = {
   "tip.sampleEntropy": "サンプルエントロピー — 信号の不規則性。高いほど予測不可能。",
   "tip.pacThetaGamma": "シータ位相とガンマ振幅の位相振幅結合。記憶のエンコーディングに関連。",
   "tip.lateralityIndex": "すべての帯域にわたる左右パワー非対称性。正 = 右優位。",
+  "tip.echt": "端点補正ヒルベルト変換 — α帯リズム性 (0–1)。高 = 強く位相が安定したα振動。[Schreglmann 2021]",
   "tip.hr": "PPG拍間間隔から導出された心拍数。",
   "tip.rmssd": "連続する心拍間隔の差の二乗平均平方根。主要な副交感HRV指標。",
   "tip.sdnn": "拍間間隔の標準偏差。全体的なHRVを反映。",
@@ -116,6 +117,12 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning": "自動アップデート確認が無効です。上のボタンを使用して手動で確認してください。",
   "updates.autostart": "ログイン時に起動",
   "updates.autostartDesc": "コンピューターにログインしたときに自動的に起動します。",
+  "updates.autoUpdate": "アップデートを自動的にインストール",
+  "updates.autoUpdateDesc":
+    "新しいバージョンをバックグラウンドでダウンロードし、次回の再起動時にインストールします。タイミングを自分で選ぶには無効にしてください。",
+  "updates.autoUpdateOffNotice":
+    "自動インストールはオフです — 「インストール」をクリックしてダウンロードと更新を行ってください。",
+  "updates.installNow": "インストール",
   "updates.footer": "アップデートは自動的にダウンロードされます。準備ができたら再起動して適用してください。",
 
   "whatsNew.title": "新着情報",

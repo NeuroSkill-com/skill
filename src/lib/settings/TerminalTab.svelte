@@ -297,7 +297,7 @@ function categoryColor(cat: string): string {
                   <span class="text-red-400">!</span>
                 {/if}
               </span>
-              <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] {categoryColor(cmd.category)}">{cmd.category}</span>
+              <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-2xs {categoryColor(cmd.category)}">{cmd.category}</span>
               <span class="min-w-0 flex-1 truncate" title={cmd.command}>{cmd.command}</span>
             </div>
           {/each}

@@ -48,6 +48,7 @@ export interface SessionMetrics {
   sample_entropy: number;
   pac_theta_gamma: number;
   laterality_index: number;
+  echt: number;
   hr: number;
   rmssd: number;
   sdnn: number;
@@ -102,6 +103,7 @@ export interface EpochRow {
   se: number;
   pac: number;
   lat: number;
+  echt: number;
   hr: number;
   rmssd: number;
   sdnn: number;
@@ -217,10 +219,10 @@ export interface CsvMetricsResult {
       ] as item}
         <MetricTooltip text={item.tip}>
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.42rem] text-muted-foreground/60 uppercase tracking-wider">{item.l}</span>
+            <span class="text-ui-2xs text-muted-foreground/60 uppercase tracking-wider">{item.l}</span>
             <div class="flex items-end gap-0.5">
               <span class="text-ui-md font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
-              <span class="text-[0.42rem] text-muted-foreground/30 pb-0.5">{t("sd.outOf100")}</span>
+              <span class="text-ui-2xs text-muted-foreground/30 pb-0.5">{t("sd.outOf100")}</span>
             </div>
           </div>
         </MetricTooltip>
@@ -239,7 +241,7 @@ export interface CsvMetricsResult {
                       {isOpen(id) ? 'rotate-90' : ''}">
             <path d="M9 18l6-6-6-6"/>
           </svg>
-          <span class="text-[0.44rem] text-muted-foreground/40 group-hover:text-muted-foreground/60
+          <span class="text-ui-2xs text-muted-foreground/40 group-hover:text-muted-foreground/60
                        uppercase tracking-wider font-semibold transition-colors">{label}</span>
         </button>
       {/snippet}
@@ -257,7 +259,7 @@ export interface CsvMetricsResult {
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex flex-col items-center gap-0">
-                <span class="text-[0.42rem] text-muted-foreground/50">{item.l}</span>
+                <span class="text-ui-2xs text-muted-foreground/50">{item.l}</span>
                 <span class="text-ui-sm font-bold tabular-nums" style="color:{item.c}">{item.v}</span>
               </div>
             </MetricTooltip>
@@ -285,10 +287,11 @@ export interface CsvMetricsResult {
             { l: t("sd.muSupp"),    v: m.mu_suppression.toFixed(3), tip: t("tip.muSuppression") },
             { l: t("sd.laterality"),v: m.laterality_index.toFixed(3), tip: t("tip.lateralityIndex") },
             { l: t("sd.pac"),       v: m.pac_theta_gamma.toFixed(3), tip: t("tip.pacThetaGamma") },
+            { l: t("sd.echt"),      v: m.echt.toFixed(3), tip: t("tip.echt") },
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                 <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
               </div>
             </MetricTooltip>
@@ -311,7 +314,7 @@ export interface CsvMetricsResult {
           ] as item}
             <MetricTooltip text={item.tip}>
               <div class="flex items-center justify-between">
-                <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                 <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
               </div>
             </MetricTooltip>
@@ -337,7 +340,7 @@ export interface CsvMetricsResult {
             ] as item}
               <MetricTooltip text={item.tip}>
                 <div class="flex items-center justify-between">
-                  <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                   <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
                 </div>
               </MetricTooltip>
@@ -362,7 +365,7 @@ export interface CsvMetricsResult {
             ] as item}
               <MetricTooltip text={item.tip}>
                 <div class="flex items-center justify-between">
-                  <span class="text-[0.42rem] text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
+                  <span class="text-ui-2xs text-muted-foreground/50 uppercase tracking-wider">{item.l}</span>
                   <span class="text-ui-sm font-bold tabular-nums">{item.v}</span>
                 </div>
               </MetricTooltip>
@@ -452,6 +455,7 @@ export interface CsvMetricsResult {
             { key: "mood", label: "Mood", color: C_MOOD, data: ts.map(r => r.mood) },
             { key: "lat", label: "Laterality", color: C_DELTA, data: ts.map(r => r.lat) },
             { key: "pac", label: "PAC θ-γ", color: C_BLINK, data: ts.map(r => r.pac) },
+            { key: "echt", label: "ECHT", color: C_ALPHA, data: ts.map(r => r.echt) },
           ]} /></div>
         {/if}
 
