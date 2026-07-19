@@ -1,15 +1,16 @@
 name: Checkout RLX
 description: >-
   Build the workspace against MIT-RLX/rlx + rlx-models from git instead of
-  crates.io. Resolves each repo's ref to a commit SHA (cheap `git ls-remote`,
-  no clone), restores a per-SHA cache of shallow checkouts — re-cloning only when
-  a SHA changes — then wires a cargo `[patch.crates-io]` override and refreshes
-  Cargo.lock so the workspace's `--locked` build/test steps still pass.
+  crates.io. Each repo is a STANDALONE unit: its ref is resolved to a commit SHA
+  (cheap `git ls-remote`, no clone) and cached under its OWN key, so a push to
+  rlx-models never invalidates the rlx cache (and vice-versa). Only the changed
+  repo re-clones. After both are present, wires a cargo `[patch.crates-io]`
+  override and refreshes Cargo.lock so `--locked` build/test steps still pass.
 
   Both repos are public, so no token is needed. Default ref is `main` (the most
-  recent commit); the resolved SHA feeds the cache key, so unchanged upstream =
-  instant cache restore. Pin a job by passing rlx-ref / rlx-models-ref a tag or
-  SHA, or set enabled=false to fall back to the crates.io build.
+  recent commit); the resolved SHA feeds each cache key, so unchanged upstream =
+  instant restore. Pin a job by passing rlx-ref / rlx-models-ref a tag or SHA,
+  or set enabled=false to fall back to the crates.io build.
 
 inputs:
   rlx-ref:
@@ -29,7 +30,7 @@ runs:
   using: composite
   steps:
     # ── Resolve refs → commit SHAs ────────────────────────────────────────────
-    # `git ls-remote` is a metadata-only call (no objects), so this is where the
+    # `git ls-remote` is a metadata-only call (no objects), so this is where each
     # cache key comes from without paying for a clone. A full SHA passed as the
     # ref won't appear in ls-remote output, so we fall back to using it verbatim.
     - name: Resolve RLX commit SHAs
@@ -66,47 +67,58 @@ runs:
         echo "rlx        @ $rlx_sha (${{ inputs.rlx-ref }})"
         echo "rlx-models @ $mdl_sha (${{ inputs.rlx-models-ref }})"
 
-    # ── Cache the checkouts, keyed by the resolved SHAs ───────────────────────
-    # Exact-match key (no restore-keys): a SHA change must miss and re-clone
-    # rather than restore a stale tree. A hit skips the clone step below.
-    - name: Restore RLX source cache
+    # ── rlx: standalone cache, keyed on rlx's SHA alone ───────────────────────
+    - name: Restore rlx source cache
       if: inputs.enabled == 'true'
-      id: cache
+      id: cache_rlx
       uses: actions/cache@v5
       with:
-        path: |
-          ${{ steps.rev.outputs.rlx_dir }}
-          ${{ steps.rev.outputs.mdl_dir }}
-        key: rlx-src-${{ runner.os }}-${{ steps.rev.outputs.rlx_sha }}-${{ steps.rev.outputs.mdl_sha }}
+        path: ${{ steps.rev.outputs.rlx_dir }}
+        key: rlx-src-${{ runner.os }}-${{ steps.rev.outputs.rlx_sha }}
 
-    # ── Shallow-fetch just the pinned commit (cache miss only) ────────────────
-    # `fetch --depth 1 origin <sha>` pulls a single commit's tree (~25 MB for
-    # both repos combined after the history cleanup). GitHub serves reachable
-    # SHAs, and we resolved these from a ref moments ago. Drop .git afterwards —
-    # nothing needs history, and it keeps the saved cache tiny.
-    - name: Shallow-clone RLX (cache miss)
-      if: inputs.enabled == 'true' && steps.cache.outputs.cache-hit != 'true'
+    - name: Shallow-clone rlx (cache miss)
+      if: inputs.enabled == 'true' && steps.cache_rlx.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
-        fetch_at() { # $1 url  $2 sha  $3 dest
-          rm -rf "$3"
-          git init -q "$3"
-          git -C "$3" remote add origin "$1"
-          git -C "$3" -c protocol.version=2 fetch -q --depth 1 origin "$2"
-          git -C "$3" checkout -q --detach FETCH_HEAD
-          rm -rf "$3/.git"
-        }
-        fetch_at https://github.com/MIT-RLX/rlx.git        '${{ steps.rev.outputs.rlx_sha }}' '${{ steps.rev.outputs.rlx_dir }}'
-        fetch_at https://github.com/MIT-RLX/rlx-models.git '${{ steps.rev.outputs.mdl_sha }}' '${{ steps.rev.outputs.mdl_dir }}'
-        echo "cloned rlx -> ${{ steps.rev.outputs.rlx_dir }}"
-        echo "cloned rlx-models -> ${{ steps.rev.outputs.mdl_dir }}"
+        dst='${{ steps.rev.outputs.rlx_dir }}'
+        rm -rf "$dst"
+        git init -q "$dst"
+        git -C "$dst" remote add origin https://github.com/MIT-RLX/rlx.git
+        git -C "$dst" -c protocol.version=2 fetch -q --depth 1 origin '${{ steps.rev.outputs.rlx_sha }}'
+        git -C "$dst" checkout -q --detach FETCH_HEAD
+        rm -rf "$dst/.git"   # history not needed; keeps the cache tiny
+        echo "cloned rlx -> $dst"
+
+    # ── rlx-models: standalone cache, keyed on rlx-models' SHA alone ──────────
+    - name: Restore rlx-models source cache
+      if: inputs.enabled == 'true'
+      id: cache_mdl
+      uses: actions/cache@v5
+      with:
+        path: ${{ steps.rev.outputs.mdl_dir }}
+        key: rlx-models-src-${{ runner.os }}-${{ steps.rev.outputs.mdl_sha }}
+
+    - name: Shallow-clone rlx-models (cache miss)
+      if: inputs.enabled == 'true' && steps.cache_mdl.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dst='${{ steps.rev.outputs.mdl_dir }}'
+        rm -rf "$dst"
+        git init -q "$dst"
+        git -C "$dst" remote add origin https://github.com/MIT-RLX/rlx-models.git
+        git -C "$dst" -c protocol.version=2 fetch -q --depth 1 origin '${{ steps.rev.outputs.mdl_sha }}'
+        git -C "$dst" checkout -q --detach FETCH_HEAD
+        rm -rf "$dst/.git"   # history not needed; keeps the cache tiny
+        echo "cloned rlx-models -> $dst"
 
     # ── Wire the [patch] override + refresh Cargo.lock ────────────────────────
+    # Runs once, after BOTH checkouts exist (ensure-rlx.sh writes a single
+    # [patch.crates-io] block spanning both repos and refreshes the lock once).
     # RLX_CI_PATCH=1 tells ensure-rlx.sh to skip its "CI uses crates.io"
-    # short-circuit, patch crates.io -> these checkouts, and run `cargo metadata`
-    # (no --locked) so the on-disk Cargo.lock matches the patched sources before
-    # any --locked cargo step runs. cargo is preinstalled on hosted runners.
+    # short-circuit and run `cargo metadata` (no --locked) so the on-disk
+    # Cargo.lock matches the patched sources before any --locked cargo step.
     - name: Wire cargo [patch] override
       if: inputs.enabled == 'true'
       shell: bash

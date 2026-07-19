@@ -66,7 +66,7 @@ impl RefCodeCache {
         Ok(CacheOutcome::Miss { path: cache_file, hash })
     }
 
-    pub fn get_or_encode(&self, wav_path: &Path, encoder: &NeuCodecEncoder) -> Result<(Vec<i32>, CacheOutcome)> {
+    pub fn get_or_encode(&self, wav_path: &Path, encoder: &mut NeuCodecEncoder) -> Result<(Vec<i32>, CacheOutcome)> {
         if let Some(hit) = self.try_load(wav_path)? {
             return Ok(hit);
         }

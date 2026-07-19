@@ -158,6 +158,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
       - name: Install JS dependencies
         run: npm ci
 
