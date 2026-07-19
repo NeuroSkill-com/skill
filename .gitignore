@@ -43,3 +43,9 @@ src-tauri/resources/tts/*
 !src-tauri/resources/tts/inflect-nano/
 # Re-include the bundle contents too, overriding the global **/*.safetensors ignore above.
 !src-tauri/resources/tts/inflect-nano/**
+
+# OCR weights bundled into skill-screenshots via include_bytes! (rlx-ocr, converted
+# offline from the ocrs rten checkpoints) so CI can build the app offline.
+# Override the global **/*.safetensors ignore above.
+!crates/skill-screenshots/assets/ocr-detection.safetensors
+!crates/skill-screenshots/assets/ocr-recognition.safetensors
