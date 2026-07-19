@@ -2516,6 +2516,8 @@ mod tests {
 
     #[test]
     fn daemon_required_env_parsing() {
+        let _guard = daemon_cmds_test_lock().lock().unwrap();
+
         std::env::remove_var("SKILL_DAEMON_REQUIRED");
         assert!(!daemon_required_env());
 

@@ -251,7 +251,7 @@ impl IrohAuthStore {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(ToOwned::to_owned)
-            .unwrap_or_else(|| format!("client-{}", &endpoint_id.chars().take(8).collect::<String>()));
+            .unwrap_or_else(|| format!("client-{}", endpoint_id.chars().take(8).collect::<String>()));
 
         let id = make_id("client");
         let scope = match scope_hint {

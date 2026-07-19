@@ -57,7 +57,7 @@ impl NeuTTS {
             .context("Failed to convert embedded NPY to i32")
     }
 
-    pub fn encode_reference(&self, wav_path: &Path, encoder: &NeuCodecEncoder) -> Result<Vec<i32>> {
+    pub fn encode_reference(&self, wav_path: &Path, encoder: &mut NeuCodecEncoder) -> Result<Vec<i32>> {
         encoder
             .encode_wav(wav_path)
             .with_context(|| format!("Failed to encode reference audio: {}", wav_path.display()))

@@ -552,7 +552,7 @@ fn load_ref_codes(model: &neutts::NeuTTS, preset: &str, wav_path: &str, ref_text
         }
 
         match neutts::codec::NeuCodecEncoder::new() {
-            Ok(enc) => match enc.encode_wav(path) {
+            Ok(mut enc) => match enc.encode_wav(path) {
                 Ok(codes) => {
                     if let Some(c) = &cache {
                         if let Ok(outcome) = c.store(path, &codes) {
