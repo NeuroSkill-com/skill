@@ -5697,3 +5697,9 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - update tts weights
 - updated tts
 - updated to rlx 0.2.11
+
+## [0.0.131-rc.8] — 2026-07-19
+
+### Features
+
+- build: commit rlx-ocr safetensors bundle so CI can build skill-screenshots
