@@ -684,6 +684,7 @@ function cmdSelfTest() {
     "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
     "free-disk-space": cmdFreeDiskSpace, "install-protoc-windows": cmdInstallProtocWindows,
     "self-test": cmdSelfTest, "dry-run-release": cmdDryRunRelease,
+    "update-cask": cmdUpdateCask,
   };
 
   for (const [name, fn] of Object.entries(commandMap)) {
