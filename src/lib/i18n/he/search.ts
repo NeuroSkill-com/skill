@@ -10,12 +10,7 @@ const search: Record<string, string> = {
   "embeddings.modelApplied": "מודל הטמעה הוחל",
   "embeddings.modelFailed": "החלת המודל נכשלה",
   "embeddings.backend": "זמן ריצה להטמעות",
-  "embeddings.backendDesc":
-    "בחר את backend הביצוע להטמעות טקסט. FastEmbed משתמש ב-ORT; ‏RLX מריץ את אותם גרפי הטמעה דרך זמן הריצה המקומי של RLX כאשר הדמון נבנה עם תמיכת RLX.",
-  "embeddings.backendFastembed": "FastEmbed / ORT (ברירת מחדל)",
-  "embeddings.backendFastembedDesc": "ברירת המחדל, תואם לכל מודל ברשימה.",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "נתיב ניסיוני ומהיר יותר למודלי BERT/Nomic מסוג safetensors.",
+  "embeddings.backendDesc": "הטמעות טקסט רצות על זמן הריצה המקומי של RLX. בחר למטה את התקן הביצוע ואת אורך הרצף המרבי.",
   "embeddings.indexBackend": "אינדקס חיפוש תוויות",
   "embeddings.indexBackendDesc":
     "בחר איזה אינדקס וקטורי מקומי מפעיל את החיפוש הסמנטי בתוויות. בנה את שניהם, הרץ benchmark עם שאילתה משלך, ואז בחר את האפשרות המהירה או האיכותית יותר עבור הנתונים שלך.",
@@ -44,8 +39,6 @@ const search: Record<string, string> = {
   "embeddings.rlxMaxSeq": "רצף מרבי",
   "embeddings.rlxHint":
     "RLX מוריד tokenizer.json ו-model.safetensors מ-Hugging Face, ואז מבצע pooling ונרמול וקטורים מקומית.",
-  "embeddings.rlxQuantizedUnsupported":
-    "מודלי FastEmbed מכומתים הם ייעודיים ל-ORT. בחר מודל safetensors לא מכומת כדי להשתמש ב-RLX.",
   "embeddings.info":
     "הטמעות נוצרות עבור הטקסט וההקשר של כל תווית. בשימוש הראשון משקלי המודל מורדים פעם אחת ומאוחסנים מקומית. מודלים קטנים (≤384d) מהירים; גדולים יותר מייצרים ייצוגים עשירים יותר.",
   "embeddings.sharedNote":

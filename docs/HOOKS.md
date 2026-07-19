@@ -23,7 +23,7 @@ Each hook has:
 The matching pipeline runs inside the EEG embed-worker thread:
 
 1. **Cache Refresh** (`maybe_refresh`, every 20s):
-   - For each enabled hook, takes the configured **keywords** and embeds them with a text embedding model (fastembed).
+   - For each enabled hook, takes the configured **keywords** and embeds them with a text embedding model (`nomic-embed-text-v1.5` on the rlx runtime).
    - **Fuzzy-expands** keywords against recent labels (last 180) — if a label fuzzy-matches a keyword, it's added as an additional query.
    - Searches the **label index** (text-embedding vector search) to find the closest labeled EEG sessions.
    - For each neighbor, loads the **mean EEG embedding** for that label's time window → builds a set of `HookReference` vectors (up to `recent_limit`).

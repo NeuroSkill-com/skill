@@ -11,11 +11,7 @@ const search: Record<string, string> = {
   "embeddings.modelFailed": "モデルの適用に失敗しました",
   "embeddings.backend": "埋め込みランタイム",
   "embeddings.backendDesc":
-    "テキスト埋め込みの実行バックエンドを選びます。FastEmbed は ORT を使い、RLX はデーモンが RLX 対応でビルドされている場合に同じ埋め込みグラフをローカル RLX ランタイムで実行します。",
-  "embeddings.backendFastembed": "FastEmbed / ORT（既定）",
-  "embeddings.backendFastembedDesc": "既定。一覧のすべてのモデルに対応します。",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "safetensors の BERT/Nomic モデル向けの実験的な高速パス。",
+    "テキスト埋め込みはローカルの RLX ランタイムで実行されます。以下で計算デバイスと最大シーケンス長を選択してください。",
   "embeddings.indexBackend": "ラベル検索インデックス",
   "embeddings.indexBackendDesc":
     "ラベル意味検索に使うローカルベクトルインデックスを選びます。両方構築し、自分のクエリでベンチマークして、データに合った高速または高品質な方を選んでください。",
@@ -47,8 +43,6 @@ const search: Record<string, string> = {
   "embeddings.rlxMaxSeq": "最大シーケンス",
   "embeddings.rlxHint":
     "RLX は Hugging Face から tokenizer.json と model.safetensors をダウンロードし、ローカルでベクトルをプーリングして正規化します。",
-  "embeddings.rlxQuantizedUnsupported":
-    "量子化 FastEmbed モデルは ORT 専用です。RLX を使うには非量子化の safetensors モデルを選択してください。",
   "embeddings.info":
     "埋め込みは各ラベルのテキストとコンテキストに対して生成されます。初回使用時にモデルの重みが一度ダウンロードされ、ローカルにキャッシュされます。小さいモデル（384次元以下）は高速です。大きいモデルはより豊かな表現を生成します。",
   "embeddings.sharedNote":

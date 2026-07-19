@@ -11,11 +11,7 @@ const search: Record<string, string> = {
   "embeddings.modelFailed": "모델 적용 실패",
   "embeddings.backend": "임베딩 런타임",
   "embeddings.backendDesc":
-    "텍스트 임베딩 실행 백엔드를 선택합니다. FastEmbed는 ORT를 사용하고, RLX는 데몬이 RLX 지원으로 빌드된 경우 같은 임베딩 그래프를 로컬 RLX 런타임에서 실행합니다.",
-  "embeddings.backendFastembed": "FastEmbed / ORT (기본값)",
-  "embeddings.backendFastembedDesc": "기본값이며 목록의 모든 모델과 호환됩니다.",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "safetensors BERT/Nomic 모델용 실험적 고속 경로입니다.",
+    "텍스트 임베딩은 로컬 RLX 런타임에서 실행됩니다. 아래에서 연산 장치와 최대 시퀀스 길이를 선택하세요.",
   "embeddings.indexBackend": "라벨 검색 인덱스",
   "embeddings.indexBackendDesc":
     "라벨 의미 검색에 사용할 로컬 벡터 인덱스를 선택합니다. 둘 다 구축한 뒤 자신의 쿼리로 벤치마크하고, 데이터에 맞는 더 빠르거나 품질이 높은 옵션을 고르세요.",
@@ -46,8 +42,6 @@ const search: Record<string, string> = {
   "embeddings.rlxMaxSeq": "최대 시퀀스",
   "embeddings.rlxHint":
     "RLX는 Hugging Face에서 tokenizer.json과 model.safetensors를 다운로드한 뒤 로컬에서 벡터를 풀링하고 정규화합니다.",
-  "embeddings.rlxQuantizedUnsupported":
-    "양자화된 FastEmbed 모델은 ORT 전용입니다. RLX를 사용하려면 양자화되지 않은 safetensors 모델을 선택하세요.",
   "embeddings.info":
     "각 라벨의 텍스트와 컨텍스트에 대해 임베딩이 생성됩니다. 첫 사용 시 모델 가중치가 한 번 다운로드되어 로컬에 캐시됩니다. 소형 모델(≤384d)은 빠르고, 대형 모델은 더 풍부한 표현을 생성합니다.",
   "embeddings.sharedNote": "이 모델은 앱 전체에서 공유됩니다 — EEG 훅 매칭과 스크린샷 OCR 텍스트 검색에도 사용됩니다.",

@@ -196,17 +196,6 @@ unnecessary_cast = "allow"
 doc_lazy_continuation = "allow"
 
 # ── Build profiles ────────────────────────────────────────────────────────────
-#
-# Rust's incremental compilation on macOS uses "thin archives" for rlibs.
-# When a compilation unit inside candle-core produces a zero-length .o file
-# (any module that is entirely cfg-gated away at the chosen feature set), the
-# thin-archive builder tries to mmap it and panics:
-#   "failed to map object file: memory map must have a non-zero length"
-# Disabling incremental for just candle-core avoids the thin-archive code path
-# without penalising the rest of the workspace.
-# Tracked upstream: https://github.com/rust-lang/rust/issues/129443
-[profile.dev.package.candle-core]
-incremental = false
 
 [profile.dev]
 codegen-units = 8

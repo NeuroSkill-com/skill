@@ -11,11 +11,7 @@ const search: Record<string, string> = {
   "embeddings.modelFailed": "Modell konnte nicht angewendet werden",
   "embeddings.backend": "Embedding-Laufzeit",
   "embeddings.backendDesc":
-    "Wählen Sie das Backend für Text-Embeddings. FastEmbed nutzt ORT; RLX führt dieselben Embedding-Graphen über die lokale RLX-Laufzeit aus, wenn der Daemon mit RLX-Unterstützung gebaut wurde.",
-  "embeddings.backendFastembed": "FastEmbed / ORT (Standard)",
-  "embeddings.backendFastembedDesc": "Standard, kompatibel mit jedem aufgeführten Modell.",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "Experimenteller, schnellerer Pfad für Safetensors-BERT/Nomic-Modelle.",
+    "Text-Embeddings laufen über die lokale RLX-Laufzeit. Wählen Sie unten das Rechengerät und die maximale Sequenzlänge.",
   "embeddings.indexBackend": "Label-Suchindex",
   "embeddings.indexBackendDesc":
     "Wählen Sie, welcher lokale Vektorindex die semantische Labelsuche antreibt. Erstellen Sie beide, benchmarken Sie mit Ihrer eigenen Abfrage und wählen Sie dann die schnellere oder qualitativ bessere Option für Ihre Daten.",
@@ -44,8 +40,6 @@ const search: Record<string, string> = {
   "embeddings.rlxMaxSeq": "Max. Sequenz",
   "embeddings.rlxHint":
     "RLX lädt tokenizer.json und model.safetensors von Hugging Face herunter, dann werden Vektoren lokal gepoolt und normalisiert.",
-  "embeddings.rlxQuantizedUnsupported":
-    "Quantisierte FastEmbed-Modelle sind ORT-spezifisch. Wählen Sie ein nicht quantisiertes Safetensors-Modell, um RLX zu verwenden.",
   "embeddings.info":
     "Einbettungen werden für den Text und Kontext jedes Labels generiert. Beim ersten Start werden die Modellgewichte einmalig heruntergeladen und lokal gespeichert. Kleinere Modelle (≤384d) sind schnell; größere erzeugen reichhaltigere Repräsentationen.",
   "embeddings.sharedNote":

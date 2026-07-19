@@ -23,7 +23,6 @@ interface ModelInfo {
 // ── State ──────────────────────────────────────────────────────────────────
 let models = $state<ModelInfo[]>([]);
 let currentCode = $state("");
-let currentBackend = $state<"fastembed" | "rlx">("fastembed");
 let rlxDevice = $state("metal");
 let rlxMaxSeq = $state(512);
 let staleCount = $state(0);
@@ -228,7 +227,6 @@ async function runIndexBenchmark() {
 }
 
 const activeModel = $derived(models.find((m) => m.code === currentCode) ?? null);
-const supportsRlx = $derived(!currentCode.endsWith("-Q"));
 
 // Group models by family for the dropdown
 const grouped = $derived.by(() => {
@@ -243,8 +241,8 @@ const grouped = $derived.by(() => {
 
 // ── Load ───────────────────────────────────────────────────────────────────
 async function load() {
-  // All fastembed-supported text embedding models.
-  // The daemon currently uses nomic-embed-text-v1.5 (hardcoded).
+  // Text embedding models supported by the RLX runtime.
+  // The daemon currently uses nomic-embed-text-v1.5 by default.
   // Switching requires re-embedding all labels.
   const knownModels: ModelInfo[] = [
     {
@@ -252,14 +250,8 @@ async function load() {
       dim: 768,
       description: "Nomic Embed Text v1.5 — high-quality 768d, recommended",
     },
-    {
-      code: "nomic-ai/nomic-embed-text-v1.5-Q",
-      dim: 768,
-      description: "Nomic Embed Text v1.5 quantized — faster, slightly less accurate",
-    },
     { code: "nomic-ai/nomic-embed-text-v1", dim: 768, description: "Nomic Embed Text v1 — previous generation 768d" },
     { code: "BAAI/bge-small-en-v1.5", dim: 384, description: "BGE Small EN v1.5 — fast, compact 384d" },
-    { code: "BAAI/bge-small-en-v1.5-Q", dim: 384, description: "BGE Small EN v1.5 quantized — fastest, 384d" },
     { code: "BAAI/bge-base-en-v1.5", dim: 768, description: "BGE Base EN v1.5 — balanced 768d" },
     { code: "BAAI/bge-large-en-v1.5", dim: 1024, description: "BGE Large EN v1.5 — highest quality 1024d" },
     {
@@ -297,12 +289,10 @@ async function load() {
   try {
     const r = await daemonInvoke<{
       model: string;
-      backend?: string;
       rlx_device?: string;
       rlx_max_seq?: number;
     }>("get_embedding_model");
     currentCode = r.model || models[0]?.code || "";
-    currentBackend = r.backend === "rlx" ? "rlx" : "fastembed";
     rlxDevice = r.rlx_device || rlxDevice;
     rlxMaxSeq = r.rlx_max_seq || rlxMaxSeq;
   } catch {
@@ -320,22 +310,18 @@ async function load() {
 async function applyModel() {
   saving = true;
   try {
-    const backend = supportsRlx ? currentBackend : "fastembed";
     const r = await daemonInvoke<{
       ok: boolean;
       model?: string;
-      backend?: string;
       rlx_device?: string;
       rlx_max_seq?: number;
       error?: string;
     }>("set_embedding_model", {
       model: currentCode,
-      backend,
       rlx_device: rlxDevice,
       rlx_max_seq: rlxMaxSeq,
     });
     if (r.ok) {
-      currentBackend = r.backend === "rlx" ? "rlx" : "fastembed";
       rlxDevice = r.rlx_device || rlxDevice;
       rlxMaxSeq = r.rlx_max_seq || rlxMaxSeq;
       addToast("success", t("embeddings.modelApplied"), currentCode, 3000);
@@ -456,63 +442,39 @@ function pct(v: number) {
       </p>
     </div>
 
-    <div class="grid grid-cols-2 gap-2">
-      <label class="rounded-lg border px-3 py-2 cursor-pointer transition-colors
-                    {currentBackend === 'fastembed' ? 'border-violet-500/40 bg-violet-500/10' : 'border-border dark:border-white/[0.08]'}">
-        <input class="sr-only" type="radio" bind:group={currentBackend} value="fastembed" />
-        <span class="block text-ui-base font-semibold text-foreground">{t("embeddings.backendFastembed")}</span>
-        <span class="block text-ui-sm text-muted-foreground/60">{t("embeddings.backendFastembedDesc")}</span>
-      </label>
-      <label class="rounded-lg border px-3 py-2 cursor-pointer transition-colors
-                    {currentBackend === 'rlx' ? 'border-violet-500/40 bg-violet-500/10' : 'border-border dark:border-white/[0.08]'}
-                    {!supportsRlx ? 'opacity-50 cursor-not-allowed' : ''}">
-        <input class="sr-only" type="radio" bind:group={currentBackend} value="rlx" disabled={!supportsRlx} />
-        <span class="block text-ui-base font-semibold text-foreground">{t("embeddings.backendRlx")}</span>
-        <span class="block text-ui-sm text-muted-foreground/60">{t("embeddings.backendRlxDesc")}</span>
-      </label>
-    </div>
-
-    {#if !supportsRlx}
-      <p class="text-ui-sm text-amber-600 dark:text-amber-400">
-        {t("embeddings.rlxQuantizedUnsupported")}
-      </p>
-    {/if}
-
-    {#if currentBackend === "rlx" && supportsRlx}
-      <div class="grid grid-cols-2 gap-3">
-        <div class="flex flex-col gap-1">
-          <label for="rlx-device" class="text-ui-sm text-muted-foreground/60">
-            {t("embeddings.rlxDevice")}
-          </label>
-          <select id="rlx-device" bind:value={rlxDevice}
-                  class="w-full rounded-md border border-border dark:border-white/[0.08]
-                         bg-surface-1 px-2.5 py-1.5
-                         text-ui-md text-foreground
-                         focus:outline-none focus:ring-1 focus:ring-ring/50">
-            <option value="metal">Metal</option>
-            <option value="cpu">CPU</option>
-            <option value="mlx">MLX</option>
-            <option value="gpu">GPU / wgpu</option>
-            <option value="cuda">CUDA</option>
-            <option value="rocm">ROCm</option>
-          </select>
-        </div>
-        <div class="flex flex-col gap-1">
-          <label for="rlx-max-seq" class="text-ui-sm text-muted-foreground/60">
-            {t("embeddings.rlxMaxSeq")}
-          </label>
-          <input id="rlx-max-seq" type="number" min="16" max="4096" step="16"
-                 bind:value={rlxMaxSeq}
-                 class="w-full rounded-md border border-border dark:border-white/[0.08]
-                        bg-surface-1 px-2.5 py-1.5
-                        text-ui-md text-foreground tabular-nums
-                        focus:outline-none focus:ring-1 focus:ring-ring/50" />
-        </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <label for="rlx-device" class="text-ui-sm text-muted-foreground/60">
+          {t("embeddings.rlxDevice")}
+        </label>
+        <select id="rlx-device" bind:value={rlxDevice}
+                class="w-full rounded-md border border-border dark:border-white/[0.08]
+                       bg-surface-1 px-2.5 py-1.5
+                       text-ui-md text-foreground
+                       focus:outline-none focus:ring-1 focus:ring-ring/50">
+          <option value="metal">Metal</option>
+          <option value="cpu">CPU</option>
+          <option value="mlx">MLX</option>
+          <option value="gpu">GPU / wgpu</option>
+          <option value="cuda">CUDA</option>
+          <option value="rocm">ROCm</option>
+        </select>
       </div>
-      <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
-        {t("embeddings.rlxHint")}
-      </p>
-    {/if}
+      <div class="flex flex-col gap-1">
+        <label for="rlx-max-seq" class="text-ui-sm text-muted-foreground/60">
+          {t("embeddings.rlxMaxSeq")}
+        </label>
+        <input id="rlx-max-seq" type="number" min="16" max="4096" step="16"
+               bind:value={rlxMaxSeq}
+               class="w-full rounded-md border border-border dark:border-white/[0.08]
+                      bg-surface-1 px-2.5 py-1.5
+                      text-ui-md text-foreground tabular-nums
+                      focus:outline-none focus:ring-1 focus:ring-ring/50" />
+      </div>
+    </div>
+    <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
+      {t("embeddings.rlxHint")}
+    </p>
   </div>
 
   <!-- ── Label index backend ─────────────────────────────────────────────── -->

@@ -86,33 +86,33 @@ Screenshots of the active application window are captured every ~5 seconds and e
 
 | Backend | Model | Repo / Source | Format | Dimensions | Notes |
 |---------|-------|---------------|--------|------------|-------|
-| **fastembed** (default) | CLIP ViT-B/32 | `Qdrant/clip-ViT-B-32-vision` | ONNX | 512 | ~130 MB; runs via ONNX Runtime |
-| **fastembed** (alt) | Nomic Embed Vision v1.5 | `nomic-ai/nomic-embed-vision-v1.5` | ONNX | 768 | Larger, higher quality |
-| **mmproj** | LLM vision projector | (same as active LLM mmproj) | GGUF | varies | Reuses the loaded LLM's multimodal adapter |
+| **rlx** (default) | Nomic Embed Vision v1.5 | `nomic-ai/nomic-embed-vision-v1.5` | Safetensors | 768 | Runs on the RLX runtime. In this mode the vision vector is the embedding of the screenshot's OCR text — `nomic-embed-text` and `nomic-embed-vision` share an aligned space, so query-by-image still works |
+| **mmproj** / **llm-vlm** | LLM vision projector | (same as active LLM mmproj) | GGUF | varies | Embeds pixels via the loaded LLM's multimodal adapter |
 
-The backend and model are configurable via `ScreenshotConfig.embed_backend` and `ScreenshotConfig.fastembed_model`. ONNX Runtime execution providers are selected automatically:
+The backend and model are configurable via `ScreenshotConfig.embed_backend` (default `rlx`) and `ScreenshotConfig.fastembed_model` (a legacy field name, default `nomic-embed-vision-v1.5`). Legacy `fastembed`/`onnx` configs are treated as `rlx`. The RLX runtime device is chosen by the compiled backend feature:
 
-| Platform | Provider |
-|----------|----------|
-| macOS | CoreML |
-| Windows | DirectML → CPU fallback |
-| Linux (NVIDIA) | CUDA → CPU fallback |
-| Other | CPU |
+| Feature | Device |
+|---------|--------|
+| `text-embeddings-rlx-metal` | Metal (macOS) |
+| `text-embeddings-rlx-cuda` | CUDA (NVIDIA) |
+| `text-embeddings-rlx-rocm` | ROCm (AMD) |
+| `text-embeddings-rlx-wgpu` | wgpu (cross-platform GPU) |
+| (none) | CPU |
 
 Embeddings are stored in per-session HNSW indices (`screenshots.hnsw`) for fast K-NN visual similarity search.
 
 ---
 
-## 4. Text Embeddings (`fastembed` via `skill-label-index`, `skill-screenshots`)
+## 4. Text Embeddings (`rlx` via `skill-label-index`, `skill-screenshots`)
 
 Text embeddings are used for semantic search over labels, OCR text, and contextual metadata.
 
-| Component | Model | Library | Notes |
+| Component | Model | Runtime | Notes |
 |-----------|-------|---------|-------|
-| Label text & context embeddings | User-selectable (fastembed catalog) | `fastembed::TextEmbedding` | Stored in `labels.sqlite`; indexed via HNSW (`label_text_index.hnsw`, `label_context_index.hnsw`) |
-| OCR text embeddings | Shared app-wide text embedder | `fastembed::TextEmbedding` | Reuses the same instance as labels to save ~130 MB RAM; indexed via `screenshots_ocr.hnsw` |
+| Label text & context embeddings | `nomic-embed-text-v1.5` | rlx (`nomic-ai/nomic-embed-text-v1.5`) | Stored in `labels.sqlite`; indexed via HNSW (`label_text_index.hnsw`, `label_context_index.hnsw`) |
+| OCR text embeddings | `nomic-embed-text-v1.5` | rlx | Reuses the same shared embedder instance as labels; indexed via `screenshots_ocr.hnsw` |
 
-The text embedding model is selectable at runtime from all models reported by `fastembed::TextEmbedding::list_supported_models()`.
+The text embedder runs on the RLX runtime (CPU by default, GPU via the `text-embeddings-rlx-*` features). The model is fixed to `nomic-embed-text-v1.5`, which shares an aligned space with `nomic-embed-vision-v1.5` so image and text queries land in the same vector space.
 
 ---
 
@@ -120,18 +120,18 @@ The text embedding model is selectable at runtime from all models reported by `f
 
 Two OCR engines are available, chosen per platform:
 
-### ocrs (Linux / Windows, default on non-macOS)
+### rlx-ocr (Linux / Windows, default on non-macOS)
 
-| Model | File | Source URL | Size |
-|-------|------|-----------|------|
-| Text detection | `text-detection.rten` | `https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten` | ~10 MB |
-| Text recognition | `text-recognition.rten` | `https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten` | ~10 MB |
+| Model | File | Source | Size |
+|-------|------|--------|------|
+| Text detection | `ocr-detection.safetensors` | Bundled asset (converted offline from the ocrs `text-detection` checkpoint) | ~6 MB |
+| Text recognition | `ocr-recognition.safetensors` | Bundled asset (converted offline from the ocrs `text-recognition` checkpoint) | ~6 MB |
 
-Both models are small neural networks in **rten** format (Rust Tensor Engine). They are auto-downloaded on first use and loaded via the `ocrs` crate for CPU inference.
+Both models are small neural networks run via **`rlx-ocr`** (rlx-models' drop-in replacement for the legacy `ocrs` / `rten` stack). Weights (~12 MB total) are **bundled as safetensors** — no runtime download, so OCR works offline on first launch. Inference runs on CPU by default, or on a GPU (Metal / MLX / wgpu / CUDA / ROCm) when the matching `ocr-*` feature is compiled.
 
 ### Apple Vision (macOS, default)
 
-On macOS the `skill-vision` crate wraps Apple's **Vision framework** (`VNRecognizeTextRequest`) via Objective-C FFI. Runs on GPU / Apple Neural Engine; typically 20–50 ms for a 768×768 image. Falls back to `ocrs` if Vision framework fails.
+On macOS the `skill-vision` crate wraps Apple's **Vision framework** (`VNRecognizeTextRequest`) via Objective-C FFI. Runs on GPU / Apple Neural Engine; typically 20–50 ms for a 768×768 image. Falls back to `rlx-ocr` if Vision framework fails.
 
 ---
 
@@ -212,10 +212,10 @@ Not a separate model — extends the active LLM with structured function-calling
 |-----------|----------|--------|---------|----------|
 | Chat / Reasoning / Coding | Qwen3.5, GPT-OSS, Ministral, Gemma, Phi-4, etc. | GGUF | llama.cpp | CPU / Metal / CUDA / Vulkan |
 | Multimodal Vision (LLM) | mmproj adapters per model family | GGUF | llama.cpp (mtmd) | Same as LLM |
-| EEG Embeddings | ZUNA (Zyphra) | Safetensors | candle / wgpu | GPU |
-| Screenshot Embeddings | CLIP ViT-B/32 or Nomic Embed Vision v1.5 | ONNX | ONNX Runtime | CPU / CoreML / CUDA / DirectML |
-| Text Embeddings | fastembed catalog (user-selectable) | ONNX | ONNX Runtime | CPU |
-| OCR (cross-platform) | ocrs text-detection + text-recognition | rten | rten (CPU) | CPU |
+| EEG Embeddings | ZUNA (Zyphra) | Safetensors | rlx | GPU / CPU |
+| Screenshot Embeddings | Nomic Embed Vision v1.5 | Safetensors | rlx | CPU / Metal / CUDA / wgpu |
+| Text Embeddings | Nomic Embed Text v1.5 | Safetensors | rlx | CPU / Metal / CUDA / wgpu |
+| OCR (cross-platform) | ocrs detection + recognition (rlx-converted) | Safetensors | rlx-ocr | CPU / Metal / CUDA / wgpu |
 | OCR (macOS) | Apple Vision framework | Native | VNRecognizeTextRequest | GPU / ANE |
 | TTS (English) | KittenTTS Mini 0.8 | ONNX | kittentts | CPU |
 | TTS (Multilingual) | NeuTTS Nano Q4 + NeuCodec | GGUF + Safetensors | neutts | CPU |

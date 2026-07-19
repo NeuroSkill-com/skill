@@ -11,11 +11,7 @@ const search: Record<string, string> = {
   "embeddings.modelFailed": "No se pudo aplicar el modelo",
   "embeddings.backend": "Runtime de embeddings",
   "embeddings.backendDesc":
-    "Elige el backend de ejecución para embeddings de texto. FastEmbed usa ORT; RLX ejecuta los mismos grafos de embeddings mediante el runtime local de RLX cuando el daemon se compiló con soporte RLX.",
-  "embeddings.backendFastembed": "FastEmbed / ORT (predeterminado)",
-  "embeddings.backendFastembedDesc": "Predeterminado, compatible con todos los modelos de la lista.",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "Ruta experimental más rápida para modelos BERT/Nomic en safetensors.",
+    "Los embeddings de texto se ejecutan en el runtime local de RLX. Elige el dispositivo de cómputo y la longitud máxima de secuencia a continuación.",
   "embeddings.indexBackend": "Índice de búsqueda de etiquetas",
   "embeddings.indexBackendDesc":
     "Elige qué índice vectorial local impulsa la búsqueda semántica de etiquetas. Crea ambos, compara con tu propia consulta y luego elige la opción más rápida o de mayor calidad para tus datos.",
@@ -44,8 +40,6 @@ const search: Record<string, string> = {
   "embeddings.rlxMaxSeq": "Secuencia máxima",
   "embeddings.rlxHint":
     "RLX descarga tokenizer.json y model.safetensors de Hugging Face, luego agrupa y normaliza los vectores localmente.",
-  "embeddings.rlxQuantizedUnsupported":
-    "Los modelos cuantizados de FastEmbed son específicos de ORT. Elige un modelo safetensors no cuantizado para usar RLX.",
   "embeddings.info":
     "Las incrustaciones se generan para el texto y el contexto de cada etiqueta. En el primer uso, los pesos del modelo se descargan una vez y se almacenan en caché localmente. Los modelos más pequeños (≤384d) son rápidos; Los modelos más grandes producen representaciones más ricas.",
   "embeddings.sharedNote":
