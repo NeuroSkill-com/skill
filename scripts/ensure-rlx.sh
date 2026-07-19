@@ -30,6 +30,13 @@ CONFIG_DIR="${PARENT}/.cargo"
 CONFIG="${CONFIG_DIR}/config.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
 
+# cargo on Windows wants forward-slash / drive-letter paths (C:/…) in config,
+# not the MSYS /c/… form git-bash produces. Convert emitted [patch] paths;
+# no-op on macOS/Linux where cygpath is absent.
+to_cargo_path() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi
+}
+
 # Keep local [patch] lock churn out of the committed registry-pinned Cargo.lock.
 lock_protect() { git -C "${REPO_ROOT}" update-index --skip-worktree Cargo.lock 2>/dev/null || true; }
 # Resume tracking Cargo.lock and restore the DEPLOYED (crates.io) registry lock.
@@ -56,8 +63,12 @@ disable_override() {
   echo "ensure-rlx: building against crates.io; Cargo.lock un-skipped + restored"
 }
 
-# CI / published builds: rlx comes from crates.io — no sibling, never touch git.
-if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+# CI: default is crates.io (no sibling checkout). The checkout-rlx action opts
+# into a git-source build by cloning rlx/rlx-models and exporting RLX_CI_PATCH=1
+# (with RLX_ROOT / RLX_MODELS_ROOT). In that mode we fall through to the normal
+# [patch] path below, then refresh Cargo.lock so the workspace's `--locked`
+# build/test steps still pass against the patched (git) sources.
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${RLX_CI_PATCH:-}" != "1" ]]; then
   echo "ensure-rlx: CI — using published rlx from crates.io (no sibling checkout)"
   exit 0
 fi
@@ -153,7 +164,7 @@ mkdir -p "${CONFIG_DIR}"
         # `if` (not `&&`) so a non-matching crate returns 0 — otherwise the last
         # unmatched line would make the loop/pipeline non-zero and set -e aborts.
         if printf '%s\n' "${needed_rlx}" | grep -qxF "${name}"; then
-          printf '%s = { path = "%s" }\n' "${name}" "${dir}"
+          printf '%s = { path = "%s" }\n' "${name}" "$(to_cargo_path "${dir}")"
         fi
       done
 } > "${CONFIG}"
@@ -163,3 +174,19 @@ count="$(grep -c ' = { path = ' "${CONFIG}" || true)"
 echo "ensure-rlx: local [patch] override -> ${CONFIG} (${count} rlx crates)"
 for r in "${roots[@]}"; do echo "  from ${r}"; done
 echo "ensure-rlx: Cargo.lock marked skip-worktree — committed registry lock protected from local churn"
+
+# CI git-source mode only: the committed Cargo.lock pins registry sources, but
+# the [patch] above swaps rlx to path deps — a `--locked` build would refuse to
+# reconcile that ("cannot update the lock file because --locked was passed").
+# Materialise the patched lock now (no --locked) so every later --locked step
+# sees an up-to-date lock. Local dev skips this: the next `cargo build` rewrites
+# the lock lazily and nothing local passes --locked.
+if [[ "${RLX_CI_PATCH:-}" == "1" ]]; then
+  if command -v cargo >/dev/null 2>&1; then
+    echo "ensure-rlx: refreshing Cargo.lock against patched git sources (CI)…"
+    ( cd "${REPO_ROOT}" && cargo metadata --format-version=1 >/dev/null )
+    echo "ensure-rlx: Cargo.lock now matches patched sources — --locked builds will pass"
+  else
+    echo "ensure-rlx: WARNING cargo not on PATH; --locked steps will fail until Cargo.lock is refreshed" >&2
+  fi
+fi

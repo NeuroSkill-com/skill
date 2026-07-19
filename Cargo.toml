@@ -64,7 +64,7 @@ members = [
 
 [patch.crates-io]
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
-# rlx / rlx-models: resolved from crates.io (=0.2.11, pinned in [workspace.dependencies]).
+# rlx / rlx-models: resolved from crates.io (=0.2.13, pinned in [workspace.dependencies]).
 # ../rlx and ../rlx-models are LOCAL-DEV ONLY — never patched here so CI/published
 # builds use the registry. For local work against sibling checkouts, run
 # `bash scripts/ensure-rlx.sh` (writes a cargo `[patch]` override outside the repo).
@@ -113,27 +113,30 @@ zip = { version = "7", features = ["deflate"] }
 # registers a cargo `[patch]` override OUTSIDE the repo (and skip-worktrees the
 # lock), so you build against your local rlx without editing Cargo.toml or
 # committing a path-based Cargo.lock (never commit `../` paths here).
-rlx          = { version = "=0.2.11", default-features = false }
-rlx-models   = { version = "=0.2.11", default-features = false }
-rlx-minicpm5 = { version = "=0.2.11", default-features = false }
-rlx-minimax  = { version = "=0.2.11", default-features = false }
-rlx-nemotron = { version = "=0.2.11", default-features = false }
-rlx-gemma    = { version = "=0.2.11", default-features = false }
-rlx-neutts   = { version = "=0.2.11", default-features = false }
-rlx-runtime   = { version = "=0.2.11", default-features = false }
-rlx-umap      = { version = "=0.2.11", default-features = false }
-rlx-kittentts = { version = "=0.2.11", default-features = false }
-rlx-inflect-nano = { version = "=0.2.11", default-features = false }
-rlx-tiny-tts  = { version = "=0.2.11", default-features = false }
-rlx-whisper   = { version = "=0.2.11", default-features = false }
-rlx-vad       = { version = "=0.2.11", default-features = false }
-rlx-qwen3-asr = { version = "=0.2.11", default-features = false }
-rlx-qwen3-tts = { version = "=0.2.11", default-features = false }
-rlx-kyutai-tts = { version = "=0.2.11", default-features = false }
-rlx-orpheus   = { version = "=0.2.11", default-features = false }
-rlx-voxtral   = { version = "=0.2.11", default-features = false }
+rlx          = { version = "=0.2.13", default-features = false }
+rlx-models   = { version = "=0.2.13", default-features = false }
+rlx-minicpm5 = { version = "=0.2.13", default-features = false }
+rlx-minimax  = { version = "=0.2.13", default-features = false }
+rlx-nemotron = { version = "=0.2.13", default-features = false }
+rlx-gemma    = { version = "=0.2.13", default-features = false }
+rlx-neutts   = { version = "=0.2.13", default-features = false }
+rlx-runtime   = { version = "=0.2.13", default-features = false }
+rlx-umap      = { version = "=0.2.13", default-features = false }
+rlx-kittentts = { version = "=0.2.13", default-features = false }
+rlx-inflect-nano = { version = "=0.2.13", default-features = false }
+rlx-tiny-tts  = { version = "=0.2.13", default-features = false }
+rlx-whisper   = { version = "=0.2.13", default-features = false }
+rlx-vad       = { version = "=0.2.13", default-features = false }
+rlx-qwen3-asr = { version = "=0.2.13", default-features = false }
+rlx-qwen3-tts = { version = "=0.2.13", default-features = false }
+rlx-kyutai-tts = { version = "=0.2.13", default-features = false }
+rlx-orpheus   = { version = "=0.2.13", default-features = false }
+rlx-voxtral   = { version = "=0.2.13", default-features = false }
+# Bonsai-27B (prism-ml/Bonsai-27B-gguf) is a qwen35-arch GGUF: it routes through
+# rlx-models' auto_runner → rlx-qwen35 Qwen35Runner (packed Q1_0), same as the
+# other Bonsai catalog families — no direct rlx-bonsai/rlx-qwen35 dep needed.
 # rlx-ocr keeps its default features (rlx + tensor-ops); consumers add `convert-rten`.
-rlx-ocr       = { version = "=0.2.11" }
+rlx-ocr       = { version = "=0.2.13" }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #

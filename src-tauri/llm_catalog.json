@@ -366,6 +366,34 @@
       "params_b": 456,
       "max_context_length": 131072
     },
+    "bonsai-27b": {
+      "name": "Bonsai 27B",
+      "description": "1-bit Qwen3.6-27B (hybrid gated-DeltaNet + 1-in-4 full attention) at ~1.13 bpw — a 26.9B-param model packed into ~3.8 GB. Runs CPU-packed on Apple Silicon and any device.",
+      "repo": "prism-ml/Bonsai-27B-gguf",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 26.9,
+      "max_context_length": 262144
+    },
+    "ternary-bonsai-27b": {
+      "name": "Ternary Bonsai 27B",
+      "description": "Ternary Q2_0 (~2.125 bpw) build of the same Qwen3.6-27B hybrid (gated-DeltaNet + 1-in-4 full attention) — 26.9B params in ~7.2 GB, higher fidelity than the 1-bit Q1_0. Runs CPU-packed on any device.",
+      "repo": "prism-ml/Ternary-Bonsai-27B-gguf",
+      "tags": [
+        "chat",
+        "reasoning",
+        "large"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 26.9,
+      "max_context_length": 262144
+    },
     "bonsai-8b": {
       "name": "Bonsai 8B",
       "description": "Ultra-efficient 1-bit Qwen3-8B — 14× smaller than FP16, competitive with full-precision 8B models. Runs on low-end GPUs and Apple Silicon.",
@@ -4433,6 +4461,22 @@
         "Q8_0/MiniMax-M2.5-Q8_0-00005-of-00006.gguf",
         "Q8_0/MiniMax-M2.5-Q8_0-00006-of-00006.gguf"
       ]
+    },
+    {
+      "family": "bonsai-27b",
+      "filename": "Bonsai-27B-Q1_0.gguf",
+      "quant": "Q1_0",
+      "size_gb": 3.8,
+      "description": "1-bit Q1_0 (~1.13 bpw) — 26.9B params in ~3.8 GB, CPU-packed decode",
+      "recommended": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-Q2_0.gguf",
+      "quant": "Q2_0",
+      "size_gb": 7.2,
+      "description": "Ternary Q2_0 (~2.125 bpw) — higher fidelity than Q1_0, 26.9B params in ~7.2 GB, CPU-packed decode",
+      "recommended": true
     },
     {
       "family": "bonsai-8b",
