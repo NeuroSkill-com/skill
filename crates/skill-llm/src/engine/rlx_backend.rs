@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! RLX text-generation backend — fully independent of llama-cpp.
+//! RLX text-generation backend.
 //!
 //! Routes through [`rlx_models::run::auto_runner_with_mmproj`] for the
 //! families it knows (Qwen3 / Qwen3.5 / Qwen3.6 incl. MTP, Llama32-shaped
@@ -601,8 +601,7 @@ impl RlxTextRunner {
     /// Multimodal generation — decodes the first image to RGB and
     /// hands it off to the runner's [`LmRunner::generate_multimodal`]
     /// (currently the Qwen3.5 family path). Additional images beyond
-    /// the first are ignored (matches llama-cpp's first-image behaviour
-    /// for single-frame chat). Streams decoded text via `token_tx`.
+    /// the first are ignored (single-frame chat). Streams decoded text via `token_tx`.
     pub(super) fn generate_multimodal(
         &mut self,
         prompt: &str,

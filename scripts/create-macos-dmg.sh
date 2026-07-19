@@ -82,7 +82,9 @@ echo "  ✓ .app signed"
 # ── Ensure appdmg is available ────────────────────────────────────────────
 if ! node -e "require('appdmg')" 2>/dev/null; then
   echo "  Installing appdmg …"
-  npm install --global appdmg
+  # npm@latest skips dependency install scripts by default; appdmg's native deps
+  # (fs-xattr, macos-alias) need theirs to build `volume.node`. Allowlist them.
+  npm install --global appdmg --allow-scripts=fs-xattr,macos-alias
 fi
 
 # Clean up any existing DMG files to avoid using cached versions.

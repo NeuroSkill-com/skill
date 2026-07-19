@@ -82,7 +82,6 @@
     "sync:readme:supported:check": "node scripts/sync-readme-supported.js --check",
     "setup": "bash scripts/setup-dev.sh",
     "setup:build-cache": "bash scripts/setup-build-cache.sh",
-    "setup:llama-prebuilt": "bash scripts/download-llama-prebuilt.sh",
     "setup:rlx": "bash scripts/ensure-rlx.sh",
     "setup:rlx-models": "bash scripts/ensure-rlx-models.sh",
     "compile:changelog": "node scripts/compile-changelog.js",

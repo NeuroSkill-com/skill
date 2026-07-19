@@ -133,9 +133,6 @@ jobs:
             vulkan-sdk
           version: tauri-rust-check-v7
 
-      - name: Download prebuilt llama libs (Linux, optional)
-        run: node scripts/ci.mjs download-llama linux x86_64-unknown-linux-gnu vulkan
-
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
         env:
@@ -153,15 +150,7 @@ jobs:
               --no-default-features -p skill-router --features cpu \
               -- -D warnings
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::clippy failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          run_cmd
 
       # clippy (app crate — needs espeak + Vulkan)
       - name: cargo clippy (app)
@@ -178,15 +167,7 @@ jobs:
           run_cmd() {
             cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu -- -D warnings
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::app clippy failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          run_cmd
 
       # Determine which crates need testing based on changed files.
       # On PRs: compare against the base branch.
@@ -286,15 +267,7 @@ jobs:
               run_router_cmd
             fi
           }
-          if ! run_all; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::unit tests failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_all
-            else
-              exit 1
-            fi
-          fi
+          run_all
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -327,15 +300,7 @@ jobs:
               run_router_cmd
             fi
           }
-          if ! run_all; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::integration tests failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_all
-            else
-              exit 1
-            fi
-          fi
+          run_all
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -677,10 +642,6 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
 
-      - name: Download prebuilt llama libs (Windows, optional)
-        shell: bash
-        run: node scripts/ci.mjs download-llama windows x86_64-pc-windows-msvc vulkan
-
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
       # mmintrin.h references __builtin_ia32_* GCC-style intrinsics that
@@ -741,15 +702,7 @@ jobs:
               --target x86_64-pc-windows-msvc \
               -- -D warnings
           }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::windows clippy failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          run_cmd
 
       - name: Capture + summarize sccache hit rate (Windows job)
         if: always()

@@ -85,10 +85,6 @@ jobs:
           # Use GNU ar to suppress "illegal option -- D" warnings from Apple's system ar
           echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
 
-      - name: Download prebuilt llama libs (macOS, optional)
-        shell: bash
-        run: node scripts/ci.mjs download-llama macos aarch64-apple-darwin metal
-
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
       # build.  Each variable is checked for non-empty; none of the values are
@@ -260,7 +256,10 @@ jobs:
       #   • Notarizes with Apple (staples both DMG and .app)
       - name: Install DMG dependencies
         run: |
-          npm install --global appdmg
+          # npm@latest no longer runs dependency install scripts by default, so
+          # appdmg's native deps (fs-xattr, macos-alias) skip their node-gyp build
+          # and `volume.node` goes missing. Allowlist their scripts explicitly.
+          npm install --global appdmg --allow-scripts=fs-xattr,macos-alias
           pip3 install --quiet --break-system-packages Pillow
 
       - name: Create DMG

@@ -290,10 +290,6 @@ jobs:
           $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "[ok] NSIS_DIR=$nsisDir"
 
-      - name: Download prebuilt llama libs (Windows, optional)
-        shell: bash
-        run: node scripts/ci.mjs download-llama windows x86_64-pc-windows-msvc vulkan
-
       # ── OpenBLAS (upstream binary release) ────────────────────────────────────
       # rlx-cpu emits `cargo:rustc-link-lib=openblas` on all non-macOS targets,
       # so the Windows link step needs `openblas.lib` + `openblas.dll`. We
@@ -501,7 +497,7 @@ jobs:
           # app-locally so end users don't need a separate install.
           CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreadedDLL
           # Let sccache cache C/C++ compilations from cmake-based -sys crates
-          # (llama-cpp-sys-4, espeak-ng, etc.).  Without these, only rustc
+          # (espeak-ng, etc.).  Without these, only rustc
           # invocations go through sccache — the heavy cmake builds are
           # re-done from scratch every time.
           CMAKE_C_COMPILER_LAUNCHER:   sccache

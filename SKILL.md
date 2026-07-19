@@ -2837,7 +2837,7 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ### `llm`
 
-Control the built-in on-device LLM inference server (OpenAI-compatible, powered by llama.cpp).
+Control the built-in on-device LLM inference server (OpenAI-compatible, powered by the RLX runtime).
 All subcommands route to the WebSocket/HTTP API — no GPU dependency for status/catalog/logs queries.
 
 #### Subcommands

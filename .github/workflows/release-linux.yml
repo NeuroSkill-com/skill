@@ -133,10 +133,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: node scripts/ci.mjs verify-secrets TAURI_SIGNING_PRIVATE_KEY
 
-      - name: Download prebuilt llama libs (Linux, optional)
-        shell: bash
-        run: node scripts/ci.mjs download-llama linux x86_64-unknown-linux-gnu vulkan
-
       # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Build frontend ────────────────────────────────────────────────────────
       - name: Build frontend
@@ -170,27 +166,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Build both in one invocation for consistent feature unification.
-          # NOTE: `|| return $?` is required — `set -e` is inhibited inside a
-          # function called via `if ! cmd`, so a failing cargo build would
-          # silently fall through and run_cmd would still return 0.
-          run_cmd() {
-            # Build daemon first — its default features compile llama-cpp-sys-4
-            # with mtmd+vulkan+q1 via skill-llm's target-specific deps.
-            cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --timings || return $?
-            cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol --timings || return $?
-          }
-          if ! run_cmd; then
-            if [[ -n "${LLAMA_PREBUILT_DIR:-}" ]]; then
-              echo "::warning::Linux release compile failed with prebuilt llama; retrying with source build"
-              unset LLAMA_PREBUILT_DIR LLAMA_PREBUILT_SHARED
-              find src-tauri/target -name "*llama_cpp_sys*" -exec rm -rf {} + 2>/dev/null || true
-              find src-tauri/target -name "*llama-cpp-sys*" -exec rm -rf {} + 2>/dev/null || true
-              run_cmd
-            else
-              exit 1
-            fi
-          fi
+          # Build the daemon first for consistent feature unification, then the app.
+          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --timings
+          cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol --timings
 
       # ── Stage files for packaging ─────────────────────────────────────---
       # The daemon binary sits next to the app binary.  At runtime the
