@@ -14,6 +14,13 @@ updates:
       npm-all:
         patterns:
           - "*"
+    ignore:
+      # typescript is capped at 6.x: @sveltejs/kit's peer range is
+      # "^5.3.3 || ^6.0.0", so a major bump to 7.x breaks a fresh
+      # `npm install` with ERESOLVE (see issue #81, regression from #75).
+      # Drop this once kit widens its peerDependencies to include TS 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directory: "/"
