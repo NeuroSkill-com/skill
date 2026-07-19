@@ -75,13 +75,7 @@
     "tab": "embeddings",
     "key": "embeddings.backend",
     "label": "Runtime d'embeddings",
-    "desc": "Choisissez le backend d'exécution pour les embeddings texte. FastEmbed utilise ORT ; RLX exécute les mêmes graphes d'embedding via le runtime RLX local lorsque le daemon a été compilé avec le support RLX."
-  },
-  {
-    "tab": "embeddings",
-    "key": "embeddings.backendFastembed",
-    "label": "FastEmbed / ORT (par défaut)",
-    "desc": "Par défaut, compatible avec tous les modèles listés."
+    "desc": "Les embeddings texte s'exécutent sur le runtime RLX local. Choisissez ci-dessous le périphérique de calcul et la longueur de séquence maximale."
   },
   {
     "tab": "embeddings",

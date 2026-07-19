@@ -5689,3 +5689,11 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 ### Features
 
 - Minor updates and improvements
+
+## [0.0.131-rc.7] — 2026-07-19
+
+### Features
+
+- update tts weights
+- updated tts
+- updated to rlx 0.2.11
