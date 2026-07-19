@@ -11,11 +11,7 @@ const search: Record<string, string> = {
   "embeddings.modelFailed": "Не вдалося застосувати модель",
   "embeddings.backend": "Рантайм ембедингів",
   "embeddings.backendDesc":
-    "Виберіть backend виконання для текстових ембедингів. FastEmbed використовує ORT; RLX запускає ті самі графи ембедингів через локальний рантайм RLX, якщо демон зібрано з підтримкою RLX.",
-  "embeddings.backendFastembed": "FastEmbed / ORT (типово)",
-  "embeddings.backendFastembedDesc": "Типово, сумісно з усіма моделями у списку.",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "Експериментальний швидший шлях для safetensors BERT/Nomic моделей.",
+    "Текстові ембединги виконуються на локальному рантаймі RLX. Виберіть обчислювальний пристрій і максимальну довжину послідовності нижче.",
   "embeddings.indexBackend": "Індекс пошуку міток",
   "embeddings.indexBackendDesc":
     "Виберіть, який локальний векторний індекс обслуговує семантичний пошук міток. Побудуйте обидва, порівняйте на власному запиті, а потім виберіть швидший або якісніший варіант для ваших даних.",
@@ -44,8 +40,6 @@ const search: Record<string, string> = {
   "embeddings.rlxMaxSeq": "Макс. послідовність",
   "embeddings.rlxHint":
     "RLX завантажує tokenizer.json і model.safetensors з Hugging Face, а потім локально пулить і нормалізує вектори.",
-  "embeddings.rlxQuantizedUnsupported":
-    "Квантовані моделі FastEmbed специфічні для ORT. Виберіть неквантовану safetensors модель, щоб використовувати RLX.",
   "embeddings.info":
     "Вбудовування генеруються для тексту та контексту кожної мітки. При першому використанні ваги моделі завантажуються один раз і кешуються локально. Менші моделі (≤384d) швидші; більші дають насиченіші представлення.",
   "embeddings.sharedNote":

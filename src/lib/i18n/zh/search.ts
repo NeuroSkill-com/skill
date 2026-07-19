@@ -10,12 +10,7 @@ const search: Record<string, string> = {
   "embeddings.modelApplied": "嵌入模型已应用",
   "embeddings.modelFailed": "应用模型失败",
   "embeddings.backend": "嵌入运行时",
-  "embeddings.backendDesc":
-    "选择文本嵌入的执行后端。FastEmbed 使用 ORT；如果守护进程构建时启用了 RLX，RLX 会通过本地 RLX 运行时执行相同的嵌入图。",
-  "embeddings.backendFastembed": "FastEmbed / ORT（默认）",
-  "embeddings.backendFastembedDesc": "默认选项，兼容列表中的所有模型。",
-  "embeddings.backendRlx": "RLX",
-  "embeddings.backendRlxDesc": "面向 safetensors BERT/Nomic 模型的实验性高速路径。",
+  "embeddings.backendDesc": "文本嵌入在本地 RLX 运行时上运行。请在下方选择计算设备和最大序列长度。",
   "embeddings.indexBackend": "标签搜索索引",
   "embeddings.indexBackendDesc":
     "选择为标签语义搜索提供支持的本地向量索引。可先构建两者，用自己的查询做基准测试，再为数据选择更快或更高质量的方案。",
@@ -45,7 +40,6 @@ const search: Record<string, string> = {
   "embeddings.rlxDevice": "RLX 设备",
   "embeddings.rlxMaxSeq": "最大序列",
   "embeddings.rlxHint": "RLX 会从 Hugging Face 下载 tokenizer.json 和 model.safetensors，然后在本地池化并归一化向量。",
-  "embeddings.rlxQuantizedUnsupported": "量化 FastEmbed 模型是 ORT 专用的。请选择非量化 safetensors 模型以使用 RLX。",
   "embeddings.info":
     "系统会为每个标签的文本和上下文生成嵌入向量。首次使用时，模型权重会下载一次并缓存到本地。较小的模型（≤384维）速度快；较大的模型生成更丰富的表示。",
   "embeddings.sharedNote": "此模型在整个应用中共享——它也用于 EEG 钩子匹配和截图 OCR 文本搜索。",

@@ -229,7 +229,7 @@ Choose which embedding model to use from a family-grouped dropdown, see the curr
 <details>
 <summary>Capture Configuration</summary>
 
-Toggle screenshot capture on/off, restrict to recording sessions only, and fine-tune: capture interval (1–30 seconds), image size (224–1536px), JPEG quality (10–100%), embedding backend (ONNX or FastEmbed), and OCR toggle. These settings control how the app builds its visual activity timeline.
+Toggle screenshot capture on/off, restrict to recording sessions only, and fine-tune: capture interval (1–30 seconds), image size (224–1536px), JPEG quality (10–100%), embedding backend (rlx, or the local LLM's vision projector), and OCR toggle. These settings control how the app builds its visual activity timeline.
 
 ![Screenshots config](screenshots/gifs/settings-screenshots-config-light.gif)
 
@@ -238,7 +238,7 @@ Toggle screenshot capture on/off, restrict to recording sessions only, and fine-
 <details>
 <summary>OCR & Pipeline Metrics</summary>
 
-Configure the OCR engine (ocrs or Apple Vision on macOS), trigger model downloads, manage re-embedding when you change the vision model, and monitor the live pipeline metrics dashboard: captures per minute, OCR processing rate, timing breakdown (capture/OCR/resize/save), and error counts.
+Configure the OCR engine (rlx-ocr or Apple Vision on macOS), trigger model downloads, manage re-embedding when you change the vision model, and monitor the live pipeline metrics dashboard: captures per minute, OCR processing rate, timing breakdown (capture/OCR/resize/save), and error counts.
 
 ![Screenshots OCR and metrics](screenshots/gifs/settings-screenshots-ocr-and-metrics-light.gif)
 

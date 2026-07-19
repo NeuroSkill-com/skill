@@ -239,6 +239,7 @@ export const EXEMPT_KEY_PREFIXES = [
   "settings.logChatStore", // "Chat Store" technical term
   "screenshots.modelNomic", // model product name
   "screenshots.backendLlmVlm", // "LLM VLM" technical label
+  "screenshots.backendRlx", // "RLX (local, safetensors)" technical label
   "screenshots.ocrEngineAppleVision", // "Apple Vision" product name
   "screenshots.ocrEngineOcrs", // "ocrs" engine name
   "llm.tools.skillApi", // product name

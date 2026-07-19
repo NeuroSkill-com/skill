@@ -95,18 +95,17 @@ let { config, saving, recommendedSize, onUpdate, onSave }: Props = $props();
             value={config.embed_backend}
             onchange={(e) => onUpdate({ embed_backend: (e.target as HTMLSelectElement).value }, true)}
             class="w-full rounded-lg border border-border dark:border-white/[0.08] bg-surface-1 px-3 py-2 text-ui-md text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/50">
-            <option value="fastembed">{t("screenshots.backendFastembed")}</option>
+            <option value="rlx">{t("screenshots.backendRlx")}</option>
             <option value="mmproj">{t("screenshots.backendMmproj")}</option>
             <option value="llm-vlm">{t("screenshots.backendLlmVlm")}</option>
           </select>
 
-          {#if config.embed_backend === "fastembed"}
+          {#if config.embed_backend === "rlx"}
             <select
-              aria-label="Fastembed model"
+              aria-label="Vision model"
               value={config.fastembed_model}
               onchange={(e) => onUpdate({ fastembed_model: (e.target as HTMLSelectElement).value }, true)}
               class="w-full rounded-lg border border-border dark:border-white/[0.08] bg-surface-1 px-3 py-2 text-ui-md text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/50">
-              <option value="clip-vit-b-32">{t("screenshots.modelClip")}</option>
               <option value="nomic-embed-vision-v1.5">{t("screenshots.modelNomic")}</option>
             </select>
           {/if}

@@ -1405,7 +1405,7 @@ async function testHooksLog(): Promise<void> {
 //                         eeg_metrics }] }
 //
 // What the server does:
-//   Embeds `query` using the configured fastembed model, then searches the
+//   Embeds `query` using the rlx text embedder (nomic-embed-text-v1.5), then searches the
 //   in-memory HNSW label index for the k nearest neighbors.  Three index
 //   choices exist, selected by `mode`:
 //     "text"    — searches the label-text HNSW (built from labels.text column)
@@ -1426,7 +1426,7 @@ async function testHooksLog(): Promise<void> {
 async function testSearchLabels(): Promise<void> {
   heading("search_labels");
   info("Request: { command: 'search_labels', query: '...', k?, ef?, mode? }");
-  info("Searches the label HNSW index using a free-text query embedded by fastembed.");
+  info("Searches the label HNSW index using a free-text query embedded by the rlx text embedder.");
   info("mode: \"text\" (default) | \"context\" | \"both\"");
   info("Returns results sorted by cosine distance (lower = more similar).");
 
@@ -1438,7 +1438,7 @@ async function testSearchLabels(): Promise<void> {
 
     field("query",   r.query,   "echoed back from request");
     field("mode",    r.mode,    "search mode used (default: \"text\")");
-    field("model",   r.model,   "fastembed model code that embedded the query");
+    field("model",   r.model,   "embedding model that embedded the query");
     field("k",       r.k,       "neighbors requested");
     field("count",   r.count,   "results actually returned (≤ k)");
 
@@ -1558,7 +1558,7 @@ async function testSearchLabels(): Promise<void> {
 //
 // What the server does:
 //   Runs a 5-step cross-modal pipeline:
-//     1. Embed query text → text vector (fastembed).
+//     1. Embed query text → text vector (rlx, nomic-embed-text-v1.5).
 //     2. Search label text-HNSW → k_text semantically similar labels
 //        (layer 1: text_label nodes).
 //     3. For each text label, compute mean EEG embedding of its time window.
@@ -3088,7 +3088,7 @@ async function testScreenshotSearch(): Promise<void> {
   // ── search_screenshots — semantic mode (default) ──────────────────────────
   heading("search_screenshots — semantic");
   info("Request: { command: 'search_screenshots', query: '...', k?, mode? }");
-  info("Searches screenshot OCR text using a fastembed semantic embedding (default mode).");
+  info("Searches screenshot OCR text using an rlx semantic embedding (default mode).");
   try {
     const r = await send({ command: "search_screenshots", query: "code editor", k: 5 });
     if (r.ok === false) {
