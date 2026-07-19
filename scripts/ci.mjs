@@ -398,8 +398,11 @@ async function cmdDiscordNotify(args) {
 
   let commit = "";
   try {
-    const r = run(["git", "log", "-1", "--format=%s"], { capture: true });
-    commit = (r.stdout || "").trim().slice(0, 200);
+    // Full message (subject + body). Cap for the Discord embed field
+    // (limit 1024) and add an ellipsis when truncated.
+    const r = run(["git", "log", "-1", "--format=%B"], { capture: true });
+    const full = (r.stdout || "").trim();
+    commit = full.length > 500 ? `${full.slice(0, 500)}…` : full;
   } catch {}
 
   const { status, title, version, tag, platform } = args;

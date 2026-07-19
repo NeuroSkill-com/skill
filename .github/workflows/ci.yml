@@ -1121,8 +1121,23 @@ jobs:
           fetch-depth: 1
       - name: Send CI result to Discord
         if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          # Take the real commit message from the event payload. On
+          # pull_request the checked-out HEAD is an auto-generated merge
+          # commit, so `git log` would show "Merge <sha> into <sha>" instead
+          # of the actual change. Passed via env to avoid script injection.
+          EVENT_COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         run: |
-          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
+          COMMIT_MSG="$EVENT_COMMIT_MSG"
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG=$(git log -1 --format='%B')
+          fi
+          # Cap length for the Discord embed field (limit 1024) and add an
+          # ellipsis so it's clear when there's more. Substring is char-based
+          # so it never splits a multi-byte UTF-8 sequence.
+          if [ "${#COMMIT_MSG}" -gt 500 ]; then
+            COMMIT_MSG="${COMMIT_MSG:0:500}…"
+          fi
           RUST="${{ needs.rust-check.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
@@ -1151,7 +1166,10 @@ jobs:
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           REF="${{ github.ref_name }}"
-          SHA="${{ github.sha }}"
+          # On pull_request github.sha is the merge commit; prefer the PR's
+          # real head commit so the SHA and its link point at the change.
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/$SHA"
           ACTOR="${{ github.actor }}"
           EVENT="${{ github.event_name }}"
 
@@ -1164,7 +1182,7 @@ jobs:
                 \"color\": $COLOR,
                 \"fields\": [
                   {\"name\": \"Branch\",    \"value\": \"\`$REF\`\",          \"inline\": true},
-                  {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
+                  {\"name\": \"Commit\",    \"value\": \"[\`${SHA:0:8}\`]($COMMIT_URL)\", \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
                   {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false},
                   {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
