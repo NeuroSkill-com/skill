@@ -12,6 +12,9 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # WidgetKit signing currently breaks Apple notarization (Invalid). Set to
+  # 'true' to re-enable once appex signing/timestamps are fixed.
+  ENABLE_WIDGETKIT: 'false'
 
 jobs:
   release:
@@ -142,11 +145,13 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: node scripts/ci.mjs import-apple-cert
 
-      # ── WidgetKit extension (automatic signing, release entitlements) ───────
+      # ── WidgetKit extension (optional; off until notarization-safe) ─────────
       - name: Install XcodeGen
+        if: env.ENABLE_WIDGETKIT == 'true'
         run: brew install xcodegen
 
       - name: Setup WidgetKit signing
+        if: env.ENABLE_WIDGETKIT == 'true'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
@@ -156,6 +161,7 @@ jobs:
         run: node scripts/ci.mjs setup-widget-signing
 
       - name: Build WidgetKit extension
+        if: env.ENABLE_WIDGETKIT == 'true'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -212,6 +218,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           FRONTEND_BUILD_DIR: build
+          SKIP_WIDGETS: ${{ env.ENABLE_WIDGETKIT == 'true' && '0' || '1' }}
         run: bash scripts/assemble-macos-app.sh aarch64-apple-darwin
 
       # ── Smoke-test bundled binaries ──────────────────────────────────────

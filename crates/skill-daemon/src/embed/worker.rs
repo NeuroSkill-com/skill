@@ -592,8 +592,10 @@ fn load_reve_position_bank() -> reve_rs::PositionBank {
     reve_rs::PositionBank::from_json_str("{}").expect("empty REVE position bank")
 }
 
-fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
-    let device_pref = skill_settings::load_settings(_skill_dir).exg_inference_device;
+/// Load the EEG/EXG encoder for `config` on the given device preference.
+/// Split out from `load_encoder` so the latter can retry on CPU when a GPU
+/// device fails to load/compile the model.
+fn load_encoder_on(config: &ExgModelConfig, device_pref: String) -> Option<Encoder> {
     let backend = config.model_backend.clone();
     info!(backend = backend.as_str(), device = %device_pref, "loading EXG encoder");
     let result = match &backend {
@@ -793,6 +795,26 @@ fn load_encoder(config: &ExgModelConfig, _skill_dir: &Path) -> Option<Encoder> {
         );
     }
     result
+}
+
+/// Load the EEG/EXG encoder, retrying on CPU when the preferred (GPU) device
+/// fails to load or compile the model. A GPU hiccup then yields CPU embeddings
+/// instead of silently degrading the session to metrics-only.
+fn load_encoder(config: &ExgModelConfig, skill_dir: &Path) -> Option<Encoder> {
+    let pref = skill_settings::load_settings(skill_dir).exg_inference_device;
+    if let Some(enc) = load_encoder_on(config, pref.clone()) {
+        return Some(enc);
+    }
+    // Only retry if the preferred device actually resolved to a non-CPU device;
+    // otherwise CPU already failed and there is nothing left to try.
+    if !matches!(super::resolve_exg_device(&pref), rlx::Device::Cpu) {
+        warn!(pref = %pref, "EEG encoder failed on preferred device — retrying on CPU");
+        if let Some(enc) = load_encoder_on(config, "cpu".to_string()) {
+            info!("EEG encoder loaded on CPU (fallback)");
+            return Some(enc);
+        }
+    }
+    None
 }
 
 /// Resolve weights+config from HF cache using the exg_catalog.json family ID.

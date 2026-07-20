@@ -295,26 +295,32 @@ if [[ -n "$FRONTEND_DIR" && -d "$FRONTEND_DIR" ]]; then
 fi
 
 # ── WidgetKit extension (optional) ────────────────────────────────────────
+# Set SKIP_WIDGETS=1 to omit embed + signing (CI default while notarization
+# rejects the appex signature). Local builds still pick up a prebuilt .appex.
 WIDGET_DIR="$ROOT/extensions/widgets"
 WIDGET_APPEX=""
-for candidate in \
-  "$WIDGET_DIR/.build/Build/Products/Release/SkillWidgets.appex" \
-  "$WIDGET_DIR/.build/Build/Products/Debug/SkillWidgets.appex"
-do
-  if [[ -d "$candidate" ]]; then
-    WIDGET_APPEX="$candidate"
-    break
-  fi
-done
+if [[ "${SKIP_WIDGETS:-0}" == "1" ]]; then
+  echo "  ⊘ SkillWidgets.appex skipped (SKIP_WIDGETS=1)"
+else
+  for candidate in \
+    "$WIDGET_DIR/.build/Build/Products/Release/SkillWidgets.appex" \
+    "$WIDGET_DIR/.build/Build/Products/Debug/SkillWidgets.appex"
+  do
+    if [[ -d "$candidate" ]]; then
+      WIDGET_APPEX="$candidate"
+      break
+    fi
+  done
 
-if [[ -n "$WIDGET_APPEX" ]]; then
-  PLUGINS_DIR="$CONTENTS/PlugIns"
-  mkdir -p "$PLUGINS_DIR"
-  rm -rf "$PLUGINS_DIR/SkillWidgets.appex"
-  cp -R "$WIDGET_APPEX" "$PLUGINS_DIR/"
-  echo "  ✓ SkillWidgets.appex (from $(basename "$(dirname "$WIDGET_APPEX")"))"
-elif [[ -x "$WIDGET_DIR/build-widgets.sh" ]]; then
-  echo "  ⚠ SkillWidgets.appex not found — run: bash extensions/widgets/build-widgets.sh --release"
+  if [[ -n "$WIDGET_APPEX" ]]; then
+    PLUGINS_DIR="$CONTENTS/PlugIns"
+    mkdir -p "$PLUGINS_DIR"
+    rm -rf "$PLUGINS_DIR/SkillWidgets.appex"
+    cp -R "$WIDGET_APPEX" "$PLUGINS_DIR/"
+    echo "  ✓ SkillWidgets.appex (from $(basename "$(dirname "$WIDGET_APPEX")"))"
+  elif [[ -x "$WIDGET_DIR/build-widgets.sh" ]]; then
+    echo "  ⚠ SkillWidgets.appex not found — run: bash extensions/widgets/build-widgets.sh --release"
+  fi
 fi
 
 
@@ -348,7 +354,7 @@ if [[ -d "$TTY_APP" ]]; then
 fi
 
 WIDGET_APPEX_BUNDLE="$APP_DIR/Contents/PlugIns/SkillWidgets.appex"
-if [[ -d "$WIDGET_APPEX_BUNDLE" ]]; then
+if [[ "${SKIP_WIDGETS:-0}" != "1" && -d "$WIDGET_APPEX_BUNDLE" ]]; then
   if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && "$SIGN_ID" != "-" ]]; then
     WIDGET_ENTITLEMENTS="$WIDGET_DIR/Sources/SkillWidgets.entitlements"
   else

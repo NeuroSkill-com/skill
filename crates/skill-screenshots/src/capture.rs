@@ -1129,7 +1129,9 @@ fn run_embed_thread(
         // The default "rlx" backend embeds the actual image via
         // nomic-embed-vision-v1.5, which shares an aligned 768-d space with
         // nomic-embed-text — so text queries (search_query:) match images
-        // cross-modally. "mmproj"/"llm-vlm" embed pixels via the local LLM.
+        // cross-modally. "mmproj"/"llm-vlm" try the local LLM's vision projector
+        // and fall back to the rlx vision embedder (the RLX LLM runner has no
+        // image-embedding path).
         let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
             "rlx" | "fastembed" => {
                 #[cfg(feature = "text-embeddings-rlx")]
@@ -1153,17 +1155,37 @@ fn run_embed_thread(
             }
             "mmproj" | "llm-vlm" => {
                 let encoded = job.resized_img.as_ref().map(encoded_bytes_lazy).unwrap_or_default();
-                let result = if !encoded.is_empty() {
+                let llm_result = if !encoded.is_empty() {
                     ctx.embed_image_via_llm(&encoded)
                 } else {
                     None
                 };
-                let backend = config.embed_backend.clone();
-                let mid = config.model_id();
-                if result.is_some() {
-                    (result, backend, mid)
-                } else {
-                    (None, String::new(), String::new())
+                match llm_result {
+                    Some(v) => (Some(v), config.embed_backend.clone(), config.model_id()),
+                    // The RLX LLM runner has no image-embedding path, so
+                    // embed_image_via_llm returns None. Fall back to the rlx
+                    // vision embedder (nomic-embed-vision) so mmproj/llm-vlm
+                    // still produce vectors instead of silently emitting nothing.
+                    None => {
+                        #[cfg(feature = "text-embeddings-rlx")]
+                        {
+                            match job.resized_img.as_ref().and_then(|img| {
+                                ensure_image_embedder(&mut image_embedder, &image_device)
+                                    .and_then(|e| e.embed_image(img))
+                            }) {
+                                Some(v) => (
+                                    Some(v),
+                                    "rlx".to_string(),
+                                    "nomic-ai/nomic-embed-vision-v1.5".to_string(),
+                                ),
+                                None => (None, String::new(), String::new()),
+                            }
+                        }
+                        #[cfg(not(feature = "text-embeddings-rlx"))]
+                        {
+                            (ocr_embedding.clone(), "rlx".to_string(), config.model_id())
+                        }
+                    }
                 }
             }
             _ => (None, String::new(), String::new()),
