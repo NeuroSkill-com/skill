@@ -102,7 +102,10 @@ describe("wall-clock runCountdown", () => {
     const state = { countdown: 0, totalSecs: 0, running: true };
     const start = Date.now();
     const p = runCountdown(5, state);
-    await vi.advanceTimersByTimeAsync(5_500);
+    // Advance by exactly the countdown duration. With `shouldAdvanceTime: true`
+    // the fake clock also picks up real elapsed time during the awaits, so
+    // over-advancing here would push `elapsed` past the upper bound below.
+    await vi.advanceTimersByTimeAsync(5_000);
     const ok = await p;
     const elapsed = Date.now() - start;
 
@@ -424,7 +427,9 @@ describe("drift comparison (old vs new)", () => {
     const start = Date.now();
 
     const p = runCountdown(3, state);
-    await vi.advanceTimersByTimeAsync(3_500);
+    // Advance by exactly the countdown duration; `shouldAdvanceTime: true` adds
+    // real elapsed time on top, so over-advancing would exceed the upper bound.
+    await vi.advanceTimersByTimeAsync(3_000);
     await p;
 
     const elapsed = Date.now() - start;
