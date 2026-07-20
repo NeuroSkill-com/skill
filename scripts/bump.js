@@ -193,6 +193,10 @@ function formatDuration(ms) {
 /**
  * Detect warning lines in command output — treat any warning as fatal.
  * Returns array of warning lines.
+ *
+ * Cargo future-incompat notices (e.g. transitive `block` via `metal`/`rlx-metal`)
+ * are excluded: clippy still exits 0 with `-D warnings`, and those deps are not
+ * fixable here until upstream migrates off the unmaintained `objc`/`block` stack.
  */
 function extractWarnings(output) {
   return output
@@ -204,7 +208,12 @@ function extractWarnings(output) {
         !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
         !/^warning: \S+@\S+:/i.test(line.trim()) &&
         !/^warning: build failed/i.test(line.trim()) &&
-        !/DeprecationWarning|--trace-deprecation/i.test(line),
+        !/DeprecationWarning|--trace-deprecation/i.test(line) &&
+        // Cargo future-incompat report (deps), not a project clippy/rustc warning
+        !/packages contain code that will be rejected by a future version of Rust/i.test(
+          line,
+        ) &&
+        !/use the option `--future-incompat-report`/i.test(line),
     );
 }
 
