@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Headless E2E: HF download → KittenTTS (ONNX) → WAV → Whisper ASR check.
+//! Headless E2E: HF download → KittenTTS (native RLX) → WAV → Whisper ASR check.
 
 use std::path::PathBuf;
 
@@ -29,7 +29,7 @@ fn main() -> anyhow::Result<()> {
         LoadProgress::Fetching { step, total, file } => {
             eprintln!("[{step}/{total}] fetch {file}");
         }
-        LoadProgress::Loading => eprintln!("[loading] KittenTTS ONNX session…"),
+        LoadProgress::Loading => eprintln!("[loading] KittenTTS native RLX…"),
     })?;
 
     let meta = std::fs::metadata(&out)?;

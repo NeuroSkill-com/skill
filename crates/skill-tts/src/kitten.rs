@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! KittenTTS backend — inference via `rlx-kittentts` (ONNX Runtime).
+//! KittenTTS backend — native RLX inference via `rlx-kittentts`.
 //!
-//! Native RLX graph synthesis is not yet intelligible (fails Whisper ASR vs ONNX);
-//! we load the published ONNX checkpoint until `rlx-kittentts` native parity is fixed.
+//! Voices + config come from [`HF_REPO`]; the decomposed RLX graph is fetched
+//! from [`skill_constants::KITTEN_TTS_RLX_HF_REPO`] into `<snapshot>/rlx_bundle/`.
 
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -24,7 +24,7 @@ use crate::{init_espeak_data_path, play_f32_audio, skill_dir};
 pub use skill_constants::KITTEN_TTS_HF_REPO as HF_REPO;
 pub use skill_constants::KITTEN_TTS_VOICE_DEFAULT as VOICE_DEFAULT;
 const SPEED: f32 = skill_constants::KITTEN_TTS_SPEED;
-const LANG: &str = "en";
+const LANG: &str = "en-us";
 pub const SAMPLE_RATE: u32 = rlx_kittentts::SAMPLE_RATE;
 
 /// Progress event emitted during model loading (mirrors legacy `kittentts` API).
@@ -114,28 +114,69 @@ fn resolve_device() -> Device {
     Device::Cpu
 }
 
+/// Match rlx-kittentts smoke defaults so HF `rlx_bundle` synthesis is audible.
+fn apply_native_runtime_defaults() {
+    if std::env::var_os("KITTEN_RLX_INFER").is_none() {
+        // SAFETY: process-local defaults before any KittenTTS load; no concurrent readers yet.
+        unsafe {
+            std::env::set_var("KITTEN_RLX_INFER", "production");
+        }
+    }
+}
+
+/// Fetch the RLX-native graph into `<snapshot>/rlx_bundle/` when missing.
+fn ensure_rlx_bundle(snapshot: &Path, mut on_progress: impl FnMut(LoadProgress)) -> anyhow::Result<()> {
+    let dest = snapshot.join("rlx_bundle");
+    let files = skill_constants::KITTEN_TTS_RLX_BUNDLE_FILES;
+    if files.iter().all(|name| dest.join(name).is_file()) {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(&dest).with_context(|| format!("create {}", dest.display()))?;
+
+    let api = hf_hub::api::sync::ApiBuilder::new()
+        .with_cache_dir(hf_cache_dir())
+        .build()
+        .context("hf_hub ApiBuilder (KittenTTS RLX bundle)")?;
+    let repo = api.model(skill_constants::KITTEN_TTS_RLX_HF_REPO.to_string());
+
+    // Progress steps 2..=4 follow the KittenML fetch at step 1.
+    for (i, name) in files.iter().enumerate() {
+        on_progress(LoadProgress::Fetching {
+            step: (i as u32) + 2,
+            total: 5,
+            file: (*name).into(),
+        });
+        let cached = repo
+            .get(name)
+            .with_context(|| format!("download {name} from {}", skill_constants::KITTEN_TTS_RLX_HF_REPO))?;
+        let target = dest.join(name);
+        if cached != target {
+            std::fs::copy(&cached, &target)
+                .with_context(|| format!("copy {} → {}", cached.display(), target.display()))?;
+        }
+    }
+    Ok(())
+}
+
 fn load_from_hub_cb<F>(repo_id: &str, mut on_progress: F) -> anyhow::Result<KittenTTS>
 where
     F: FnMut(LoadProgress),
 {
-    const TOTAL: u32 = 3;
+    apply_native_runtime_defaults();
 
     on_progress(LoadProgress::Fetching {
         step: 1,
-        total: TOTAL,
+        total: 5,
         file: "config.json".into(),
     });
     let snapshot = rlx_kittentts::download::fetch_repo(repo_id, &hf_cache_dir())
         .with_context(|| format!("fetch KittenTTS checkpoint {repo_id}"))?;
 
-    on_progress(LoadProgress::Fetching {
-        step: 2,
-        total: TOTAL,
-        file: "voices.npz".into(),
-    });
+    ensure_rlx_bundle(&snapshot, &mut on_progress)?;
 
     on_progress(LoadProgress::Loading);
-    KittenTTS::load_from_dir(&snapshot, resolve_device()).context("load KittenTTS (ONNX)")
+    KittenTTS::load_from_dir(&snapshot, resolve_device()).context("load KittenTTS (native RLX)")
 }
 
 // ─── Worker ───────────────────────────────────────────────────────────────────
@@ -157,7 +198,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     Ok(m) => {
                         let voices = m.available_voices.clone();
                         let _ = AVAILABLE_VOICES.set(voices.clone());
-                        tts_log!("tts", "KittenTTS ready (ONNX, voices={voices:?})");
+                        tts_log!("tts", "KittenTTS ready (native RLX, voices={voices:?})");
                         model = Some(m);
                         LOADED.store(true, Ordering::Relaxed);
                         done.send(Ok(())).ok();

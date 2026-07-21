@@ -1,4 +1,4 @@
-# Standalone KittenTTS E2E (rlx-kittentts ONNX + Whisper ASR validation).
+# Standalone KittenTTS E2E (rlx-kittentts native RLX + Whisper ASR validation).
 [workspace]
 
 [package]

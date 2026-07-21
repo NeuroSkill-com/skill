@@ -34,6 +34,7 @@ test-results/
 src-tauri/binaries/
 errors/
 logs/
+output/
 
 # Bundled TTS engine weights — staged by scripts/bundle-tts-weights.sh before packaging.
 # inflect-nano is committed (declared in tauri.conf.json bundle.resources so CI can build the app);

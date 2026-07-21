@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Headless E2E for KittenTTS (HF download → ONNX → WAV → optional Whisper ASR).
+//! Headless E2E for KittenTTS (HF download → native RLX → WAV → optional Whisper ASR).
 //!
 //! ```bash
 //! cargo run -p skill-tts --features tts-kitten,whisper-validate --release --bin kitten-e2e
@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
         LoadProgress::Fetching { step, total, file } => {
             eprintln!("[{step}/{total}] fetch {file}");
         }
-        LoadProgress::Loading => eprintln!("[loading] KittenTTS ONNX session…"),
+        LoadProgress::Loading => eprintln!("[loading] KittenTTS native RLX…"),
     })?;
 
     let meta = std::fs::metadata(&out)?;

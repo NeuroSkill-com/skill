@@ -49,9 +49,10 @@ fn whisper_weights_dir() -> Option<PathBuf> {
     None
 }
 
-/// Minimum expected speech duration from reference text (Orpheus @ 24 kHz).
+/// Minimum expected speech duration from reference text (~0.42 s/word, floor 0.85 s).
 pub fn min_expected_speech_secs(text: &str) -> f32 {
-    crate::engines::orpheus_min_expected_speech_secs(text)
+    let words = text.split_whitespace().count().max(1) as f32;
+    (words * 0.42).max(0.85)
 }
 
 /// Fraction of reference words that must appear in the Whisper transcript.
