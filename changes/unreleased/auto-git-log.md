@@ -1,3 +1,0 @@
-### Features
-
-- disable widgekit
