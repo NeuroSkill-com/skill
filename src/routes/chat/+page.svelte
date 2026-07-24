@@ -94,6 +94,7 @@ let asrAvailable = $state(true);
 let asrRunning = $state(false);
 let asrPhase = $state<AsrPhase>("idle");
 let asrError = $state("");
+let asrDownloadLabel = $state("");
 let asrTrigger = $state<AsrTrigger>(_asrDefaults.default_trigger);
 let asrRouting = $state<AsrRouting>(_asrDefaults.default_routing);
 let asrLanguage = $state(_asrDefaults.language);
@@ -1275,9 +1276,21 @@ function handleAsrEvent(event: DaemonEvent) {
     case "loading":
       asrPhase = "loading";
       break;
+    case "download": {
+      asrPhase = "loading";
+      const label = p.label?.trim() || t("chat.voice.statusLoading");
+      if (p.total && p.total > 0 && typeof p.downloaded === "number") {
+        const pct = Math.min(100, Math.round((p.downloaded / p.total) * 100));
+        asrDownloadLabel = `${label} ${pct}%`;
+      } else {
+        asrDownloadLabel = label;
+      }
+      break;
+    }
     case "listening":
       asrRunning = true;
       asrPhase = "listening";
+      asrDownloadLabel = "";
       break;
     case "speech_start":
       asrPhase = "speaking";
@@ -1313,6 +1326,7 @@ function handleAsrEvent(event: DaemonEvent) {
     case "stopped":
       asrRunning = false;
       asrPhase = "idle";
+      asrDownloadLabel = "";
       break;
   }
 }
@@ -1642,6 +1656,7 @@ onDestroy(() => {
             routing={asrRouting}
             running={asrRunning}
             phase={asrPhase}
+            statusDetail={asrDownloadLabel}
             errorMsg={asrError}
             disabled={status !== "running"}
             onSetTrigger={setAsrTrigger}

@@ -8,6 +8,8 @@
 //! patched `rlx-models` crates (see workspace `[patch.crates-io]`).
 //!   * Orpheus needs a pre-exported SNAC decoder (`scripts/export_snac_decoder.py`).
 //!   * Kyutai downloads `kyutai/tts-1.6b-en_fr` (~4 GB) on first use.
+//!   * Other native catalog engines auto-fetch Hub weights via
+//!     [`crate::weights_download`] into `~/.skill/models/<engine>/` on first load.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,14 +36,120 @@ trait Synthesizer: Send {
 /// Preset voices to surface in the UI for `engine` (empty for engines with no
 /// fixed preset list).
 pub fn voices_for(engine: &str) -> Vec<String> {
-    match engine.trim().to_ascii_lowercase().as_str() {
-        "qwen3-tts" | "qwen3_tts" => rlx_qwen3_tts::PRESET_SPEAKERS
+    match normalize_engine_id(engine).as_str() {
+        "qwen3-tts" => rlx_qwen3_tts::PRESET_SPEAKERS
             .iter()
             .map(|s| (*s).to_string())
             .collect(),
         "orpheus" => rlx_orpheus::VOICES.iter().map(|s| (*s).to_string()).collect(),
+        "voxtral-tts" | "voxtral" => rlx_tts_bench_voxtral_voices(),
         _ => Vec::new(),
     }
+}
+
+/// Engine ids the UI / daemon can select (legacy kitten/neutts + native catalog).
+pub fn list_engine_ids() -> Vec<&'static str> {
+    let mut v = vec!["kitten", "neutts", "qwen3-tts", "orpheus", "kyutai-tts", "inflect-nano"];
+    for id in rlx_tts_bench::adapters::all_model_ids() {
+        if id == "fake" || id == "kittentts" {
+            continue;
+        }
+        // Prefer skill aliases (kyutai-tts) over bench short ids when duplicated.
+        if id == "kyutai" || id == "qwen3-tts" || id == "orpheus" {
+            continue;
+        }
+        if !v.contains(&id) {
+            v.push(id);
+        }
+    }
+    v
+}
+
+fn normalize_engine_id(engine: &str) -> String {
+    match engine.trim().to_ascii_lowercase().as_str() {
+        "qwen3_tts" => "qwen3-tts".into(),
+        "kyutai" => "kyutai-tts".into(),
+        "inflect_nano" => "inflect-nano".into(),
+        "moss_nano" => "moss-nano".into(),
+        "f5_tts" | "f5-tts" => "f5tts".into(),
+        "voxtral" => "voxtral-tts".into(),
+        "pocket" => "pocket-tts".into(),
+        "parler" => "parlertts".into(),
+        "styletts" | "kokoro" => "styletts2".into(),
+        other => other.to_string(),
+    }
+}
+
+fn rlx_tts_bench_voxtral_voices() -> Vec<String> {
+    Vec::new()
+}
+
+/// Wrap a `rlx-tts-bench` adapter as a skill [`Synthesizer`].
+struct BenchSynth {
+    adapter: Box<dyn rlx_tts_bench::adapter::TtsAdapter>,
+    device: Device,
+}
+
+impl Synthesizer for BenchSynth {
+    fn synthesize(&mut self, text: &str, voice: &str) -> Result<(Vec<f32>, u32)> {
+        use rlx_tts_bench::adapter::{CloneRequest, SynthRequest};
+        use std::path::Path;
+
+        let voice = voice.trim();
+        let ref_path = if !voice.is_empty() && Path::new(voice).is_file() {
+            Some(Path::new(voice))
+        } else {
+            None
+        };
+        let clone = ref_path.map(|p| CloneRequest {
+            ref_wav: p,
+            ref_text: None,
+        });
+        let req = SynthRequest {
+            text,
+            phrase_id: "skill",
+            device: self.device,
+            clone,
+            seed: 0,
+        };
+        let res = self
+            .adapter
+            .synthesize(req)
+            .with_context(|| format!("bench adapter '{}' synthesize", self.adapter.id()))?;
+        Ok((res.pcm, res.sample_rate))
+    }
+}
+
+fn build_bench_synthesizer(engine: &str) -> Result<Box<dyn Synthesizer>> {
+    let id = normalize_engine_id(engine);
+    // Bench uses short id `kyutai` for Kyutai-TTS.
+    let bench_id = match id.as_str() {
+        "kyutai-tts" => "kyutai",
+        other => other,
+    };
+    crate::weights_download::ensure_bench_engine_weights_with_progress(bench_id, |label, done, total| {
+        // Progress is surfaced via the TTS init callback when one is active;
+        // always log so Settings → Voice can show download activity.
+        tts_log!("tts", "weights {bench_id}: {label} ({done}/{total})");
+        let _ = (label, done, total);
+    })
+    .with_context(|| format!("ensure weights for TTS engine '{bench_id}'"))?;
+    let device = resolve_device();
+    // rlx-tts product path is CPU-only.
+    let device = if bench_id == "rlx-tts" { Device::Cpu } else { device };
+    let adapter = rlx_tts_bench::adapters::make_adapter(bench_id, device)
+        .with_context(|| format!("load native TTS engine '{bench_id}' (weights missing?)"))?;
+    tts_log!(
+        "tts",
+        "bench engine '{bench_id}' ready on {:?} ({})",
+        device,
+        adapter
+            .weight_hints()
+            .resolve_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    );
+    Ok(Box::new(BenchSynth { adapter, device }))
 }
 
 /// Preset voices for the currently active engine.
@@ -244,19 +352,10 @@ fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> 
             Ok(Box::new(InflectNanoSynth { model: synth, device }))
         }
         // DISABLED FOR NOW — rlx-tiny-tts reshape bug (see TinyTtsSynth above).
-        // "tiny-tts" | "tiny_tts" => {
-        //     let dir = resolve_bundle_dir(
-        //         model,
-        //         "TINY_TTS_DIR",
-        //         "tiny-tts",
-        //         "Export it once with rlx-tiny-tts's scripts/export_tiny_tts.py.",
-        //     )?;
-        //     let synth = rlx_tiny_tts::TinyTts::load_from_dir(&dir).context("load TinyTTS")?;
-        //     let device = resolve_device();
-        //     tts_log!("tts", "tiny-tts ready on {:?} ({})", device, dir.display());
-        //     Ok(Box::new(TinyTtsSynth { model: synth, device }))
-        // }
-        other => anyhow::bail!("unknown TTS engine: {other}"),
+        // "tiny-tts" | "tiny_tts" => { ... }
+
+        // Full native catalog via rlx-tts-bench (no ONNX Runtime).
+        other => build_bench_synthesizer(other),
     }
 }
 

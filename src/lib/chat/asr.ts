@@ -125,6 +125,7 @@ export function saveAsrDefaults(defaults: AsrDefaults): void {
 
 export type AsrEventKind =
   | "loading"
+  | "download"
   | "listening"
   | "speech_start"
   | "speech_end"
@@ -136,13 +137,17 @@ export type AsrEventKind =
 /** Payload of a daemon `"asr"` event (`DaemonEvent.payload`). */
 export interface AsrEventPayload {
   kind: AsrEventKind;
-  // transcript
+  // transcript / assistant
   text?: string;
   is_final?: boolean;
   // error
   message?: string;
   // assistant
   spoken?: boolean;
+  // download progress
+  label?: string;
+  downloaded?: number;
+  total?: number;
 }
 
 /** Visual listening state derived from the event stream. */

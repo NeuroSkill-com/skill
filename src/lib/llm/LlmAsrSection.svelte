@@ -3,12 +3,9 @@
 <!--
   Voice input (ASR + VAD) defaults — settings.asr surfaced in the LLM/chat tab.
 
-  These are the per-session fall-backs the chat window uses for the voice loop:
-  trigger (continuous / push-to-talk), routing (voice loop / transcribe-only),
-  the speech-recognition engine + model, and the language hint. The daemon
-  (settings.json) is the source of truth: `fetchAsrDefaults` reads it on mount and
-  `saveAsrDefaults` writes through on every change (with a localStorage cache for
-  instant first paint).
+  Engine chips come from the daemon catalog (`/v1/asr/engines`) so every
+  rlx-models ASR backend Skill wires (Whisper, Qwen3-ASR, Voxtral, FunASR,
+  Nemotron) is selectable; first use auto-downloads Hub weights.
 -->
 <script lang="ts">
 import { onMount } from "svelte";
@@ -24,13 +21,23 @@ import { Card, CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
 import { ToggleRow } from "$lib/components/ui/toggle-row";
 import { t } from "$lib/i18n/index.svelte";
+import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
+import {
+  ASR_ENGINE_FALLBACK_LIST,
+  fetchAsrEngines,
+  type AsrEngineInfo,
+} from "$lib/llm/voice-catalog";
 
-// Seed from the localStorage cache for instant first paint, then reconcile
-// against the authoritative daemon defaults on mount.
 let defaults = $state<AsrDefaults>(loadAsrDefaults());
+let engines = $state<AsrEngineInfo[]>([...ASR_ENGINE_FALLBACK_LIST]);
 
 onMount(async () => {
-  defaults = await fetchAsrDefaults();
+  const [nextDefaults, nextEngines] = await Promise.all([
+    fetchAsrDefaults(),
+    fetchAsrEngines(),
+  ]);
+  defaults = nextDefaults;
+  engines = nextEngines;
 });
 
 function update(patch: Partial<AsrDefaults>) {
@@ -48,48 +55,22 @@ const routingOptions: { val: AsrRouting; labelKey: string }[] = [
   { val: "transcribe_only", labelKey: "chat.voice.routingTranscribe" },
 ];
 
-// ASR engine backends. Structured as a list so more engines slot in over time.
-const engineOptions: { val: string; label: string }[] = [
-  { val: "whisper", label: "Whisper" },
-  { val: "qwen3-asr", label: "Qwen3-ASR" },
-  { val: "voxtral", label: "Voxtral" },
-];
-
-// Known model repos per engine for the dropdown; a free-text field allows any repo.
-const MODELS_BY_ENGINE: Record<string, string[]> = {
-  whisper: [
-    "openai/whisper-tiny.en",
-    "openai/whisper-base.en",
-    "openai/whisper-small.en",
-    "openai/whisper-small",
-    "openai/whisper-medium",
-    "openai/whisper-large-v3",
-  ],
-  "qwen3-asr": ["Qwen/Qwen3-ASR-0.6B", "Qwen/Qwen3-ASR-1.7B"],
-  voxtral: ["mistralai/Voxtral-Mini-3B-2507"],
-};
-const DEFAULT_MODEL_BY_ENGINE: Record<string, string> = {
-  whisper: "openai/whisper-base.en",
-  "qwen3-asr": "Qwen/Qwen3-ASR-0.6B",
-  voxtral: "mistralai/Voxtral-Mini-3B-2507",
-};
-
-const knownModels = $derived(MODELS_BY_ENGINE[defaults.engine] ?? []);
-// `true` when the current model isn't one of the known repos — surface the
-// free-text field so the custom value stays editable.
+const activeMeta = $derived(engines.find((e) => e.id === defaults.engine));
+const knownModels = $derived(activeMeta?.models ?? []);
 let customModel = $derived(!knownModels.includes(defaults.model));
 const CUSTOM_SENTINEL = "__custom__";
 
 function onEngineSelect(engine: string) {
-  // Reset the model to the engine's default unless the current one is valid for it.
-  const models = MODELS_BY_ENGINE[engine] ?? [];
-  const model = models.includes(defaults.model) ? defaults.model : (DEFAULT_MODEL_BY_ENGINE[engine] ?? defaults.model);
+  const meta = engines.find((e) => e.id === engine);
+  const models = meta?.models ?? [];
+  const model = models.includes(defaults.model)
+    ? defaults.model
+    : (meta?.default_model ?? defaults.model);
   update({ engine, model });
 }
 
 function onModelSelect(value: string) {
   if (value === CUSTOM_SENTINEL) {
-    // Switching to "custom" keeps whatever is there but lets the user type a repo.
     update({ model: defaults.model });
     return;
   }
@@ -103,7 +84,6 @@ function onModelSelect(value: string) {
   <Card class="border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
     <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
 
-      <!-- Enable voice controls -->
       <ToggleRow
         checked={defaults.enabled}
         label={t("chat.voice.enabled")}
@@ -112,7 +92,6 @@ function onModelSelect(value: string) {
         showBadge={false}
       />
 
-      <!-- Default trigger -->
       <div class="flex flex-col gap-2 px-4 py-3.5">
         <div class="flex flex-col gap-0.5">
           <span class="text-ui-lg font-semibold text-foreground">{t("chat.voice.triggerLabel")}</span>
@@ -133,7 +112,6 @@ function onModelSelect(value: string) {
         </div>
       </div>
 
-      <!-- Default routing -->
       <div class="flex flex-col gap-2 px-4 py-3.5">
         <div class="flex flex-col gap-0.5">
           <span class="text-ui-lg font-semibold text-foreground">{t("chat.voice.routingLabel")}</span>
@@ -154,28 +132,22 @@ function onModelSelect(value: string) {
         </div>
       </div>
 
-      <!-- ASR engine -->
       <div class="flex flex-col gap-2 px-4 py-3.5">
         <div class="flex flex-col gap-0.5">
           <span class="text-ui-lg font-semibold text-foreground">{t("chat.voice.engineLabel")}</span>
           <p class="text-ui-base text-muted-foreground">{t("chat.voice.engineDesc")}</p>
         </div>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          {#each engineOptions as opt}
-            <button
-              onclick={() => onEngineSelect(opt.val)}
-              class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
-                   {defaults.engine === opt.val
-                     ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                     : 'border-border bg-muted text-muted-foreground hover:text-foreground'}"
-            >
-              {opt.label}
-            </button>
-          {/each}
-        </div>
+        <VoiceEnginePicker
+          kind="asr"
+          {engines}
+          selectedId={defaults.engine}
+          onSelect={onEngineSelect}
+        />
+        {#if activeMeta?.experimental}
+          <p class="text-ui-base text-amber-600 dark:text-amber-400">{t("chat.voice.engineExperimental")}</p>
+        {/if}
       </div>
 
-      <!-- ASR model -->
       <div class="flex flex-col gap-2 px-4 py-3.5">
         <div class="flex flex-col gap-0.5">
           <span class="text-ui-lg font-semibold text-foreground">{t("chat.voice.modelLabel")}</span>
@@ -208,7 +180,6 @@ function onModelSelect(value: string) {
         {/if}
       </div>
 
-      <!-- Language hint -->
       <div class="flex flex-col gap-2 px-4 py-3.5">
         <div class="flex flex-col gap-0.5">
           <span class="text-ui-lg font-semibold text-foreground">{t("chat.voice.languageLabel")}</span>

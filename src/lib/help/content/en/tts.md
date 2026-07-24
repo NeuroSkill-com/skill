@@ -1,25 +1,22 @@
-# On-device Voice Guidance (TTS)
+# On-device Voice (TTS + ASR)
 
-## On-device Voice Guidance (TTS)
-NeuroSkill™ includes a fully on-device English text-to-speech engine. It announces calibration phases aloud (action labels, breaks, completion) and can be triggered remotely from any script via the WebSocket or HTTP API. All synthesis runs locally — no internet is needed after the ~30 MB model is downloaded once.
+## Overview
+NeuroSkill™ speaks and listens fully on-device. **Text-to-speech (TTS)** announces calibration phases and can be triggered from scripts or chat. **Speech recognition (ASR)** powers the chat microphone (continuous or push-to-talk). After the first model download, synthesis and transcription run locally — no cloud round-trip.
 
-## How It Works
-Text preprocessing → sentence chunking (≤400 chars) → phonemisation via libespeak-ng (C library, in-process, en-us voice) → tokenisation (IPA → integer IDs) → ONNX inference (KittenTTS model: input_ids + style + speed → f32 waveform) → 1 s silence pad → rodio plays on the system default audio output.
+## Choosing engines
+Open **Settings → Voice** or the **LLM / Chat** voice sections. Engine chips come from the daemon catalog (`/v1/tts/engines`, `/v1/asr/engines`), which mirrors every backend Skill wires from rlx-models.
 
-## Model
-KittenML/kitten-tts-mini-0.8 from HuggingFace Hub. Voice: Jasper (English en-us). Sample rate: 24 000 Hz mono float32. Quantised INT8 ONNX — CPU-only, no GPU required. Cached in ~/.cache/huggingface/hub/ after first download.
+- **TTS** — KittenTTS (default, small ONNX), NeuTTS, RLX-TTS, Qwen3-TTS, Piper, StyleTTS2, and many experimental Hub engines (Orpheus, Kyutai, MetaVoice, MiraTTS, …). Chips marked **exp** may download large checkpoints; **bundle** engines need a one-time local export (Inflect-Nano / MeloTTS). Engines unavailable in this build (for example on Windows) are greyed out.
+- **ASR** — Whisper (default), Qwen3-ASR, Voxtral, FunASR (**SenseVoice** default; Paraformer-zh optional), Nemotron-ASR, and RLX-ASR. First use auto-downloads Hub weights; chat shows download progress while loading.
 
-## Requirements
-espeak-ng must be installed and on PATH — it provides in-process IPA phonemisation (linked as a C library, not spawned as a subprocess). macOS: brew install espeak-ng. Ubuntu/Debian: apt install libespeak-ng-dev. Alpine: apk add espeak-ng-dev. Fedora: dnf install espeak-ng-devel.
+## How TTS works
+Text preprocessing → sentence chunking → engine-specific phonemisation / tokenizer → local inference → playback on the system default output. KittenTTS uses libespeak-ng + an INT8 ONNX model (~30 MB). Larger RLX engines pull HuggingFace packs (`.rlx` / `.rlxp` / GGUF) into `~/.skill/models/`.
 
-## Calibration Integration
-When a calibration session starts the engine is pre-warmed in the background (downloading the model if needed). At each phase the calibration window calls tts_speak with the action label, break announcement, completion message, or cancellation notice. Speech never blocks calibration — all TTS calls are fire-and-forget.
+## How ASR works
+Microphone capture (cpal) → Silero VAD segmentation → selected ASR backend → transcript events on the daemon WebSocket. In voice-loop mode the daemon sends the transcript to the LLM and speaks the reply.
 
 ## API — say command
-Trigger speech from any external script, automation tool, or LLM agent. The command returns immediately while audio plays. WebSocket: {"command":"say","text":"your message"}. HTTP: POST /say with body {"text":"your message"}. CLI (curl): curl -X POST http://localhost:<port>/say -d '{"text":"hello"}' -H 'Content-Type: application/json'.
+Trigger speech from any external script or agent. WebSocket: `{"command":"say","text":"your message"}`. HTTP: `POST /say` with `{"text":"your message"}`.
 
-## Debug Logging
-Enable TTS synthesis logging in Settings → Voice to write events (spoken text, sample count, inference latency) to the NeuroSkill™ log file. Useful for measuring latency and diagnosing issues.
-
-## Test It Here
-Use the widget below to test the TTS engine directly from this help window.
+## Debug
+Enable TTS logging in Settings → Voice. Use the widget below to test synthesis from this help window.

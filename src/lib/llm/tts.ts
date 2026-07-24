@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 /** Selected TTS engine plus engine-specific overrides (mirrors daemon settings). */
 export interface TtsEngineConfig {
-  /** "kitten" | "neutts" | "qwen3-tts" | "orpheus" | "kyutai-tts". */
+  /** "kitten" | "neutts" | "qwen3-tts" | "orpheus" | "kyutai-tts" | … native catalog. */
   engine: string;
   /** HuggingFace repo override (empty = engine default). */
   model: string;

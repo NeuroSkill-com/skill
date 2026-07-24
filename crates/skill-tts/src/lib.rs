@@ -9,8 +9,14 @@
 //! - **neutts** — NeuTTS backend (feature `tts-neutts`)
 //! - Core TTS logic: audio output, espeak init, backend routing, progress events
 
+pub mod catalog;
 pub mod config;
 pub mod log;
+
+pub use catalog::{
+    is_known_engine as is_known_tts_engine, list_engines as list_tts_engines,
+    normalize_engine_id as normalize_tts_engine_id, voice_tts_available, TtsEngineInfo,
+};
 
 /// Log a message from the TTS subsystem.
 ///
@@ -40,6 +46,12 @@ pub mod neutts;
 
 #[cfg(tts_engines_active)]
 pub mod engines;
+
+#[cfg(tts_engines_active)]
+pub mod weights_download;
+
+#[cfg(tts_engines_active)]
+pub use engines::list_engine_ids;
 
 #[cfg(feature = "whisper-validate")]
 pub mod whisper_validate;
@@ -73,6 +85,28 @@ pub fn init_tts_dirs(dir: &std::path::Path) {
         "models/qwen3-tts/hf-cache",
         "models/kyutai-tts",
         "models/inflect-nano",
+        "models/rlx-tts",
+        "models/styletts2",
+        "models/piper",
+        "models/chatterbox",
+        "models/f5tts",
+        "models/luxtts",
+        "models/moss-nano",
+        "models/soprano",
+        "models/supertonic",
+        "models/sesame",
+        "models/zonos",
+        "models/gepard",
+        "models/metavoice",
+        "models/pocket-tts",
+        "models/parlertts",
+        "models/miotts",
+        "models/miratts",
+        "models/melotts",
+        "models/voxtral-tts",
+        "models/mimi",
+        "models/parler-dac",
+        "models/miocodec",
         // "models/tiny-tts",  // DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX)
         "cache/neutts-wav",
         "cache/neutts-ref-codes",
@@ -115,13 +149,32 @@ pub fn tts_resource_dir() -> Option<PathBuf> {
 }
 
 /// Return the resolved skill directory.
+///
+/// Matches [`skill_settings::default_skill_dir`]: `~/.skill` on macOS/Linux,
+/// `%LOCALAPPDATA%\NeuroSkill` on Windows. The previous Unix fallback
+/// (`data_local_dir()/NeuroSkill`) diverged from the daemon and left TTS/ASR
+/// caches in the wrong place when `init_*_dirs` had not run yet.
 pub fn skill_dir() -> PathBuf {
-    SKILL_DIR.get().cloned().unwrap_or_else(|| {
-        // Fallback: use platform-appropriate default
+    SKILL_DIR.get().cloned().unwrap_or_else(default_skill_dir_fallback)
+}
+
+fn default_skill_dir_fallback() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
         dirs::data_local_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+            .unwrap_or_else(|| {
+                std::env::var("APPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| std::env::temp_dir())
+            })
             .join("NeuroSkill")
-    })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(skill_constants::SKILL_DIR)
+    }
 }
 
 /// Set the skill directory explicitly (alternative to `init_tts_dirs`).

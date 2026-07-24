@@ -312,6 +312,7 @@ async fn daemon_main() -> anyhow::Result<()> {
         .merge(routes::brain::router())
         .merge(routes::activity_status::router())
         .merge(routes::asr::router())
+        .merge(routes::models_validate::router())
         .merge(routes::validation::router());
 
     // Test-mode endpoints — debug builds only

@@ -73,7 +73,27 @@ pub(crate) struct TtsEngineRequest {
 
 /// Read the persisted TTS engine selection (engine + model/voice overrides).
 pub(crate) async fn get_tts_engine(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let s = load_user_settings(&state);
+    let mut s = load_user_settings(&state);
+    #[cfg(feature = "voice-tts")]
+    {
+        let normalized = skill_tts::normalize_tts_engine_id(&s.tts_engine);
+        if normalized != s.tts_engine {
+            let engine = normalized.clone();
+            patch_settings(&state, move |settings| {
+                settings.tts_engine = engine;
+            })
+            .await;
+            s.tts_engine = normalized;
+        }
+        if !skill_tts::is_known_tts_engine(&s.tts_engine) {
+            s.tts_engine = skill_settings::default_tts_engine();
+            let engine = s.tts_engine.clone();
+            patch_settings(&state, move |settings| {
+                settings.tts_engine = engine;
+            })
+            .await;
+        }
+    }
     #[cfg(feature = "voice-tts")]
     let voices = skill_tts::engines::voices_for(&s.tts_engine);
     #[cfg(not(feature = "voice-tts"))]
@@ -92,9 +112,24 @@ pub(crate) async fn set_tts_engine(
     State(state): State<AppState>,
     Json(req): Json<TtsEngineRequest>,
 ) -> Json<serde_json::Value> {
-    let engine = req.engine.trim().to_string();
+    let engine = skill_tts::normalize_tts_engine_id(req.engine.trim());
+    if !skill_tts::is_known_tts_engine(&engine) {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": format!("unknown TTS engine '{engine}'"),
+        }));
+    }
     let model = req.model.trim().to_string();
     let voice = req.voice.trim().to_string();
+    // Refuse greying-out engines that need a local bundle with no auto-download.
+    if let Some(info) = skill_tts::list_tts_engines().into_iter().find(|e| e.id == engine) {
+        if !info.available {
+            return Json(serde_json::json!({
+                "ok": false,
+                "error": format!("TTS engine '{engine}' is not available in this build"),
+            }));
+        }
+    }
     skill_tts::set_active_engine(engine.clone(), model.clone(), voice.clone());
     patch_settings(&state, move |s| {
         s.tts_engine = engine;
@@ -103,9 +138,15 @@ pub(crate) async fn set_tts_engine(
     })
     .await;
     #[cfg(feature = "voice-tts")]
-    tokio::spawn(async {
-        let _ = skill_tts::tts_init_with_callback(|_| {}).await;
-    });
+    {
+        let state2 = state.clone();
+        tokio::spawn(async move {
+            let emit = move |ev: skill_tts::TtsProgressEvent| {
+                state2.broadcast(skill_tts::TTS_PROGRESS_EVENT, &ev);
+            };
+            let _ = skill_tts::tts_init_with_callback(emit).await;
+        });
+    }
     Json(serde_json::json!({"ok": true}))
 }
 

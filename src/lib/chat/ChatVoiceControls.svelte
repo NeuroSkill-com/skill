@@ -21,6 +21,8 @@ interface Props {
   routing: AsrRouting;
   running: boolean;
   phase: AsrPhase;
+  /** Optional download / loading detail (e.g. Hub weight label). */
+  statusDetail?: string;
   errorMsg: string;
   disabled: boolean;
   onSetTrigger: (trigger: AsrTrigger) => void;
@@ -39,6 +41,7 @@ let {
   routing,
   running,
   phase,
+  statusDetail = "",
   errorMsg,
   disabled,
   onSetTrigger,
@@ -69,7 +72,7 @@ const micActive = $derived(isPtt ? pressed : running);
 
 const phaseLabel = $derived(
   phase === "loading"
-    ? t("chat.voice.statusLoading")
+    ? statusDetail || t("chat.voice.statusLoading")
     : phase === "speaking"
       ? t("chat.voice.statusSpeaking")
       : phase === "listening"

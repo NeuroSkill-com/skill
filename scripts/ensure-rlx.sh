@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 # ../rlx and ../rlx-models are LOCAL-DEVELOPMENT ONLY.
 #
-# CI and release/published builds resolve rlx* from crates.io — see the pinned
-# `rlx = "=0.2.11"` deps in [workspace.dependencies] (Cargo.toml). Nothing here
-# clones a sibling in CI.
+# Skill resolves all rlx* crates from GitHub in Cargo.toml:
+#   https://github.com/MIT-RLX/rlx.git
+#   https://github.com/MIT-RLX/rlx-models.git
+# Cargo.lock pins the resolved commits. This script does NOT clone anything
+# in CI by itself — `.github/actions/checkout-rlx` does that and sets
+# RLX_CI_PATCH=1 so we wire path overrides onto those clones.
 #
-# Locally, this generates a cargo `[patch.crates-io]` override so your builds
-# resolve rlx AND rlx-models from your sibling checkouts, re-resolving against
-# their ACTUAL dependency graphs (correct while you're actively editing rlx —
-# a `paths` override would warn/misbehave once local deps drift from 0.2.11):
-#   • the override lives OUTSIDE the repo (../.cargo/config.toml), so CI (which
-#     never has that ancestor file) keeps using crates.io;
+# Locally, this generates cargo `[patch."<git-url>"]` overrides so builds
+# resolve rlx AND rlx-models from your sibling checkouts:
+#   • the override lives OUTSIDE the repo (../.cargo/config.toml);
 #   • [patch] rewrites Cargo.lock to path-based on local builds, so we mark
-#     Cargo.lock `skip-worktree`: that local churn is ignored by git and the
-#     committed registry-pinned lock (what CI builds with `--locked`) stays intact.
+#     Cargo.lock `skip-worktree`: local churn is ignored by git and the
+#     committed git-pinned lock stays intact for CI / `--locked` builds.
 #
-#   bash scripts/ensure-rlx.sh          # enable local ../rlx override (default)
-#   bash scripts/ensure-rlx.sh off      # disable: build against crates.io, un-skip
-#                                        #   Cargo.lock so you can commit it again
+#   bash scripts/ensure-rlx.sh          # enable local sibling override (default)
+#   bash scripts/ensure-rlx.sh off      # disable: use GitHub via Cargo.lock
 #
 # Custom checkout locations:
 #   echo /path/to/rlx        > rlx.path          (or export RLX_ROOT=/path/to/rlx)
@@ -30,6 +29,10 @@ CONFIG_DIR="${PARENT}/.cargo"
 CONFIG="${CONFIG_DIR}/config.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
 
+# Must match the `git =` URLs in Cargo.toml [workspace.dependencies].
+RLX_GIT="https://github.com/MIT-RLX/rlx.git"
+RLX_MODELS_GIT="https://github.com/MIT-RLX/rlx-models.git"
+
 # cargo on Windows wants forward-slash / drive-letter paths (C:/…) in config,
 # not the MSYS /c/… form git-bash produces. Convert emitted [patch] paths;
 # no-op on macOS/Linux where cygpath is absent.
@@ -37,11 +40,9 @@ to_cargo_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi
 }
 
-# Keep local [patch] lock churn out of the committed registry-pinned Cargo.lock.
+# Keep local [patch] lock churn out of the committed git-pinned Cargo.lock.
 lock_protect() { git -C "${REPO_ROOT}" update-index --skip-worktree Cargo.lock 2>/dev/null || true; }
-# Resume tracking Cargo.lock and restore the DEPLOYED (crates.io) registry lock.
-# Regenerate from crates.io rather than `git checkout HEAD`, so this yields a
-# correct registry lock even if a poisoned local lock was previously committed.
+# Resume tracking Cargo.lock and refresh against GitHub git deps (no local patch).
 lock_unprotect() {
   git -C "${REPO_ROOT}" update-index --no-skip-worktree Cargo.lock 2>/dev/null || true
   if command -v cargo >/dev/null 2>&1 \
@@ -60,16 +61,13 @@ disable_override() {
     echo "ensure-rlx: ${CONFIG} is not managed by this script — leaving it alone." >&2
   fi
   lock_unprotect
-  echo "ensure-rlx: building against crates.io; Cargo.lock un-skipped + restored"
+  echo "ensure-rlx: building against GitHub git deps (Cargo.lock); lock un-skipped"
 }
 
-# CI: default is crates.io (no sibling checkout). The checkout-rlx action opts
-# into a git-source build by cloning rlx/rlx-models and exporting RLX_CI_PATCH=1
-# (with RLX_ROOT / RLX_MODELS_ROOT). In that mode we fall through to the normal
-# [patch] path below, then refresh Cargo.lock so the workspace's `--locked`
-# build/test steps still pass against the patched (git) sources.
+# CI without checkout-rlx: Cargo.toml already points at GitHub — nothing to do.
+# The checkout-rlx action sets RLX_CI_PATCH=1 so we fall through and patch.
 if [[ "${GITHUB_ACTIONS:-}" == "true" && "${RLX_CI_PATCH:-}" != "1" ]]; then
-  echo "ensure-rlx: CI — using published rlx from crates.io (no sibling checkout)"
+  echo "ensure-rlx: CI — using GitHub rlx* from Cargo.toml / Cargo.lock (no sibling patch)"
   exit 0
 fi
 
@@ -90,23 +88,23 @@ resolve_root() { # $1 = env value, $2 = <repo>/<pathfile>, $3 = default
 RLX_ROOT="$(resolve_root "${RLX_ROOT:-}"               rlx.path        "${PARENT}/rlx")"
 RLX_MODELS_ROOT="$(resolve_root "${RLX_MODELS_ROOT:-}" rlx-models.path "${PARENT}/rlx-models")"
 
-# Roots that actually look like an rlx checkout.
-roots=()
+have_rlx=0
+have_models=0
 warn_missing() { echo "ensure-rlx: $1 not found at '$2' — skipping its local override" >&2; }
 if [[ -f "${RLX_ROOT}/crates/rlx/Cargo.toml" ]]; then
-  roots+=("${RLX_ROOT}")
+  have_rlx=1
 else
   warn_missing rlx "${RLX_ROOT}"
 fi
 if [[ -f "${RLX_MODELS_ROOT}/crates/rlx-models/Cargo.toml" ]]; then
-  roots+=("${RLX_MODELS_ROOT}")
+  have_models=1
 else
   warn_missing rlx-models "${RLX_MODELS_ROOT}"
 fi
 
-# Nothing local to point at → build against crates.io; undo any prior override.
-if [[ ${#roots[@]} -eq 0 ]]; then
-  echo "ensure-rlx: no local rlx/rlx-models checkout found — building against crates.io"
+# Nothing local to point at → use GitHub via Cargo.toml; undo any prior override.
+if [[ "${have_rlx}" -eq 0 && "${have_models}" -eq 0 ]]; then
+  echo "ensure-rlx: no local rlx/rlx-models checkout found — using GitHub git deps"
   disable_override
   exit 0
 fi
@@ -126,7 +124,7 @@ if [[ -f "${CONFIG}" ]] && grep -qF "${MARK}" "${CONFIG}" && [[ "${RLX_REFRESH:-
   exit 0
 fi
 
-# rlx-family package crates available locally, as "<name>\t<dir>" lines.
+# rlx-family package crates available under a root, as "<name>\t<dir>" lines.
 avail_crates() {
   local cargo name
   while IFS= read -r cargo; do
@@ -144,46 +142,82 @@ avail_crates() {
   done < <(find "$1" \( -name target -o -name .git \) -prune -o -name Cargo.toml -print)
 }
 
-# rlx-family crate names skill actually depends on — read from the committed
-# registry-pinned lock (HEAD), so we patch ONLY crates in skill's graph and never
-# emit `patch ... was not used in the crate graph` noise for unrelated rlx crates.
-needed_rlx="$({ git -C "${REPO_ROOT}" show HEAD:Cargo.lock 2>/dev/null || cat "${REPO_ROOT}/Cargo.lock"; } \
-  | awk -F'"' '/^name = "/ { print $2 }' | grep -i rlx | sort -u)"
+# rlx-family crate names skill actually depends on — from committed + working lock.
+needed_rlx="$({
+  git -C "${REPO_ROOT}" show HEAD:Cargo.lock 2>/dev/null || true
+  cat "${REPO_ROOT}/Cargo.lock" 2>/dev/null || true
+} | awk -F'"' '/^name = "/ { print $2 }' | grep -i rlx | sort -u)"
+# Sidecar / bake / runtime crates — pulled transitively even when absent from HEAD lock.
+# Keep in sync with Cargo.toml [patch.crates-io] rlx* → git redirects.
+for extra in \
+  rlx rlx-ir rlx-flow rlx-runtime rlx-driver rlx-opt rlx-optim rlx-autodiff \
+  rlx-compile rlx-fusion rlx-cpu rlx-gguf rlx-pkg rlx-bake rlx-text rlx-metal \
+  rlx-mlx rlx-cuda rlx-wgpu rlx-rocm rlx-onnx-import rlx-nemo rlx-umap rlx-tensor \
+  rlx-macros rlx-funasr rlx-nemotron-asr rlx-asr rlx-tts-bench rlx-whisper rlx-vad
+do
+  needed_rlx="$(printf '%s\n%s\n' "${needed_rlx}" "${extra}" | sort -u)"
+done
+
+# Emit one [patch."<git-url>"] block for packages found under $root that skill needs.
+emit_git_patch() {
+  local git_url="$1" root="$2"
+  local tmp lines=0
+  tmp="$(mktemp)"
+  avail_crates "$root" | sort | awk -F'\t' '!seen[$1]++' > "${tmp}.avail"
+  while IFS="$(printf '\t')" read -r name dir; do
+    if printf '%s\n' "${needed_rlx}" | grep -qxF "${name}"; then
+      printf '%s = { path = "%s" }\n' "${name}" "$(to_cargo_path "${dir}")"
+      lines=$((lines + 1))
+    fi
+  done < "${tmp}.avail" > "${tmp}.out"
+  if [[ "${lines}" -gt 0 ]]; then
+    echo ""
+    echo "[patch.\"${git_url}\"]"
+    cat "${tmp}.out"
+  fi
+  rm -f "${tmp}" "${tmp}.avail" "${tmp}.out"
+}
 
 mkdir -p "${CONFIG_DIR}"
 {
   echo "${MARK}"
   echo "# rlx / rlx-models resolve from your sibling checkouts for local builds."
-  echo "# Only crates in skill's dependency graph are patched (from Cargo.lock)."
-  echo "# [patch] re-resolves against their real dep graphs; local Cargo.lock churn"
-  echo "# is kept out of git via 'git update-index --skip-worktree Cargo.lock'."
-  echo "# Disable + allow committing Cargo.lock again: bash scripts/ensure-rlx.sh off"
+  echo "# Cargo.toml: direct rlx* git deps + [patch.crates-io]→git for transitive"
+  echo "# registry pins from rlx-models. This file overlays BOTH onto local paths"
+  echo "# so crates.io and git consumers unify on the same path package."
+  echo "# Local Cargo.lock churn is skip-worktree'd; disable with: ensure-rlx.sh off"
+
+  # crates-io → path: overrides Cargo.toml's crates-io→git for local builds, and
+  # catches any remaining registry pins (must match the path used in git patches).
   echo "[patch.crates-io]"
-  for r in "${roots[@]}"; do avail_crates "$r"; done | sort | awk -F'\t' '!seen[$1]++' \
-    | while IFS="$(printf '\t')" read -r name dir; do
-        # `if` (not `&&`) so a non-matching crate returns 0 — otherwise the last
-        # unmatched line would make the loop/pipeline non-zero and set -e aborts.
-        if printf '%s\n' "${needed_rlx}" | grep -qxF "${name}"; then
-          printf '%s = { path = "%s" }\n' "${name}" "$(to_cargo_path "${dir}")"
-        fi
-      done
+  {
+    [[ "${have_rlx}" -eq 1 ]] && avail_crates "${RLX_ROOT}"
+    [[ "${have_models}" -eq 1 ]] && avail_crates "${RLX_MODELS_ROOT}"
+  } | sort | awk -F'\t' '!seen[$1]++' | while IFS="$(printf '\t')" read -r name dir; do
+      if printf '%s\n' "${needed_rlx}" | grep -qxF "${name}"; then
+        printf '%s = { path = "%s" }\n' "${name}" "$(to_cargo_path "${dir}")"
+      fi
+    done
+
+  if [[ "${have_rlx}" -eq 1 ]]; then
+    emit_git_patch "${RLX_GIT}" "${RLX_ROOT}"
+  fi
+  if [[ "${have_models}" -eq 1 ]]; then
+    emit_git_patch "${RLX_MODELS_GIT}" "${RLX_MODELS_ROOT}"
+  fi
 } > "${CONFIG}"
 
 lock_protect
 count="$(grep -c ' = { path = ' "${CONFIG}" || true)"
 echo "ensure-rlx: local [patch] override -> ${CONFIG} (${count} rlx crates)"
-for r in "${roots[@]}"; do echo "  from ${r}"; done
-echo "ensure-rlx: Cargo.lock marked skip-worktree — committed registry lock protected from local churn"
+[[ "${have_rlx}" -eq 1 ]] && echo "  from ${RLX_ROOT}  (patch ${RLX_GIT})"
+[[ "${have_models}" -eq 1 ]] && echo "  from ${RLX_MODELS_ROOT}  (patch ${RLX_MODELS_GIT})"
+echo "ensure-rlx: Cargo.lock marked skip-worktree — committed git-pinned lock protected from local churn"
 
-# CI git-source mode only: the committed Cargo.lock pins registry sources, but
-# the [patch] above swaps rlx to path deps — a `--locked` build would refuse to
-# reconcile that ("cannot update the lock file because --locked was passed").
-# Materialise the patched lock now (no --locked) so every later --locked step
-# sees an up-to-date lock. Local dev skips this: the next `cargo build` rewrites
-# the lock lazily and nothing local passes --locked.
+# CI checkout-rlx mode: materialise the patched lock so later --locked steps pass.
 if [[ "${RLX_CI_PATCH:-}" == "1" ]]; then
   if command -v cargo >/dev/null 2>&1; then
-    echo "ensure-rlx: refreshing Cargo.lock against patched git sources (CI)…"
+    echo "ensure-rlx: refreshing Cargo.lock against patched sibling sources (CI)…"
     ( cd "${REPO_ROOT}" && cargo metadata --format-version=1 >/dev/null )
     echo "ensure-rlx: Cargo.lock now matches patched sources — --locked builds will pass"
   else

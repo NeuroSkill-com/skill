@@ -66,10 +66,17 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
         .unwrap_or(8.0); // conservative fallback when GPU info is unavailable
 
     // Budget = available memory x 0.85 (keep 15% headroom for OS + apps).
-    let budget = available_gb * 0.85;
+    // On unified-memory Macs the daemon also hosts TTS/ASR/embeddings, so
+    // take another cut — otherwise recommend_ctx picks 64K and OOMs.
+    let budget = if gpu.as_ref().map(|g| g.is_unified_memory).unwrap_or(false) {
+        available_gb * 0.45
+    } else {
+        available_gb * 0.85
+    };
 
-    // Standard context sizes to try, largest first.
-    const CANDIDATES: &[u32] = &[131072, 65536, 32768, 16384, 8192, 4096];
+    // Standard context sizes to try, largest first. Cap at 16K on the
+    // auto path — larger values need an explicit user ctx_size.
+    const CANDIDATES: &[u32] = &[16384, 8192, 4096];
 
     for &ctx in CANDIDATES {
         if ctx > entry.max_context_length {

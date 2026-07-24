@@ -5,7 +5,7 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx", "asr", "voice-tts"]
+default = ["llm", "llm-rlx-metal", "llm-rlx-mlx", "llm-rlx-wgpu", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx", "asr", "voice-tts"]
 # Voice input for the LLM chat: Whisper ASR + Silero VAD + cpal mic capture
 # (skill-asr). `asr-metal` additionally routes the Whisper encoder through Metal
 # on Apple Silicon (decoder stays on CPU). Inert on Windows (no-op stubs).
@@ -119,6 +119,7 @@ hex = "0.4"
 async-trait = "0.1"
 hf-hub = "0.5"
 sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["png"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 skill-daemon-common = { path = "../skill-daemon-common" }
 skill-daemon-state  = { path = "../skill-daemon-state" }

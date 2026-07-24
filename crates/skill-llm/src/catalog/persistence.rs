@@ -248,17 +248,22 @@ impl LlmCatalog {
             .min_by_key(|e| (!e.recommended as u8, quant_rank(&e.quant)))
     }
 
-    /// If `autoload_mmproj` is requested and no mmproj is currently selected,
-    /// pick the best available one for the active model and return its path.
+    /// Resolve the mmproj path for server start.
+    ///
+    /// When `autoload` is false, returns `None` so callers that only want
+    /// text inference (validate, low-RAM machines) do not pull the vision
+    /// projector. Explicit `LlmConfig.mmproj` is applied by the caller via
+    /// `.or_else(|| config.mmproj.clone())`.
+    ///
+    /// When `autoload` is true, prefer the catalog's `active_mmproj`, else
+    /// auto-pick the best mmproj for the active model.
     pub fn resolve_mmproj_path(&self, autoload: bool) -> Option<PathBuf> {
-        // Explicit selection always wins.
+        if !autoload {
+            return None;
+        }
         if let path @ Some(_) = self.active_mmproj_path() {
             return path;
         }
-        if autoload {
-            self.best_mmproj_for_active_model().and_then(|e| e.local_path.clone())
-        } else {
-            None
-        }
+        self.best_mmproj_for_active_model().and_then(|e| e.local_path.clone())
     }
 }

@@ -1,25 +1,22 @@
-# Голосовий супровід на пристрої (TTS)
+# On-device Voice (TTS + ASR)
 
-## Голосовий супровід на пристрої (TTS)
-NeuroSkill™ включає повністю локальний рушій синтезу мовлення. Він оголошує фази калібрування вголос та запускається через WebSocket або HTTP API. Вся синтеза локальна — інтернет не потрібен після завантаження моделі (~30 МБ).
+## Overview
+NeuroSkill™ speaks and listens fully on-device. **Text-to-speech (TTS)** announces calibration phases and can be triggered from scripts or chat. **Speech recognition (ASR)** powers the chat microphone (continuous or push-to-talk). After the first model download, synthesis and transcription run locally — no cloud round-trip.
 
-## Як це працює
-Обробка тексту → розбиття на речення (≤400 символів) → фонемізація через libespeak-ng (C-бібліотека, в процесі, голос en-us) → токенізація (IPA → IDs) → ONNX-інференція (KittenTTS) → 1 с тиші → відтворення через rodio.
+## Choosing engines
+Open **Settings → Voice** or the **LLM / Chat** voice sections. Engine chips come from the daemon catalog (`/v1/tts/engines`, `/v1/asr/engines`), which mirrors every backend Skill wires from rlx-models.
 
-## Model
-KittenML/kitten-tts-mini-0.8 з HuggingFace Hub. Голос: Jasper (en-us). 24 000 Гц моно float32. Квантований INT8 ONNX — CPU. Кешується після першого завантаження.
+- **TTS** — KittenTTS (default, small ONNX), NeuTTS, RLX-TTS, Qwen3-TTS, Piper, StyleTTS2, and many experimental Hub engines (Orpheus, Kyutai, MetaVoice, MiraTTS, …). Chips marked **exp** may download large checkpoints; **bundle** engines need a one-time local export (Inflect-Nano / MeloTTS). Engines unavailable in this build (for example on Windows) are greyed out.
+- **ASR** — Whisper (default), Qwen3-ASR, Voxtral, FunASR (**SenseVoice** default; Paraformer-zh optional), Nemotron-ASR, and RLX-ASR. First use auto-downloads Hub weights; chat shows download progress while loading.
 
-## Вимоги
-espeak-ng повинен бути встановлений та в PATH. macOS: brew install espeak-ng. Ubuntu/Debian: apt install libespeak-ng-dev. Alpine: apk add espeak-ng-dev. Fedora: dnf install espeak-ng-devel.
+## How TTS works
+Text preprocessing → sentence chunking → engine-specific phonemisation / tokenizer → local inference → playback on the system default output. KittenTTS uses libespeak-ng + an INT8 ONNX model (~30 MB). Larger RLX engines pull HuggingFace packs (`.rlx` / `.rlxp` / GGUF) into `~/.skill/models/`.
 
-## Інтеграція з калібруванням
-При початку калібрування рушій прогрівається у фоні (завантаження моделі за потреби). На кожному етапі викликається tts_speak. Мовлення не блокує калібрування — всі виклики fire-and-forget.
+## How ASR works
+Microphone capture (cpal) → Silero VAD segmentation → selected ASR backend → transcript events on the daemon WebSocket. In voice-loop mode the daemon sends the transcript to the LLM and speaks the reply.
 
-## API — команда say
-Запускайте мовлення з будь-якого скрипту або LLM-агента. Команда повертається негайно. WebSocket: {"command":"say","text":"ваше повідомлення"}. HTTP: POST /say з body {"text":"ваше повідомлення"}. CLI: curl -X POST http://localhost:<port>/say -d '{"text":"привіт"}' -H 'Content-Type: application/json'.
+## API — say command
+Trigger speech from any external script or agent. WebSocket: `{"command":"say","text":"your message"}`. HTTP: `POST /say` with `{"text":"your message"}`.
 
-## Журналювання для налагодження
-Увімкніть журналювання TTS у Налаштуваннях → Голос для запису подій синтезу (текст, семпли, затримка) у файл журналу NeuroSkill™. Корисно для діагностики.
-
-## Протестуйте тут
-Скористайтеся віджетом нижче для тестування рушія TTS з цього вікна довідки.
+## Debug
+Enable TTS logging in Settings → Voice. Use the widget below to test synthesis from this help window.

@@ -566,6 +566,18 @@ pub(crate) async fn openai_models_alias(
 }
 
 pub(crate) async fn service_install() -> Json<serde_json::Value> {
+    if std::env::var("SKILL_DAEMON_SKIP_SERVICE")
+        .map(|v| {
+            let v = v.to_ascii_lowercase();
+            v == "1" || v == "true" || v == "yes" || v == "on"
+        })
+        .unwrap_or(false)
+    {
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": "SKILL_DAEMON_SKIP_SERVICE set (dev mode) — OS service install skipped",
+        }));
+    }
     let bin = std::env::current_exe().unwrap_or_default();
     let installer = crate::service_installer::ServiceInstaller::new(bin);
     match installer.install() {

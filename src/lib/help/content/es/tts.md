@@ -1,25 +1,22 @@
-# Guía de voz (TTS) en el dispositivo
+# On-device Voice (TTS + ASR)
 
-## Guía de voz (TTS) en el dispositivo
-NeuroSkill™ incluye un motor de conversión de texto a voz en inglés completamente integrado en el dispositivo. Anuncia las fases de calibración en voz alta (etiquetas de acción, pausas, finalización) y se puede activar de forma remota desde cualquier script a través de WebSocket o HTTP API. Toda la síntesis se ejecuta localmente: no se necesita Internet después de descargar una vez el modelo de ~30 MB.
+## Overview
+NeuroSkill™ speaks and listens fully on-device. **Text-to-speech (TTS)** announces calibration phases and can be triggered from scripts or chat. **Speech recognition (ASR)** powers the chat microphone (continuous or push-to-talk). After the first model download, synthesis and transcription run locally — no cloud round-trip.
 
-## Cómo funciona
-Preprocesamiento de texto → fragmentación de oraciones (≤400 caracteres) → fonemización a través de libespeak-ng (biblioteca C, en proceso, voz en-us) → tokenización (IPA → ID de enteros) → inferencia ONNX (modelo KittenTTS: input_ids + estilo + velocidad → forma de onda f32) → 1 s de silencio → rodio se reproduce en la salida de audio predeterminada del sistema.
+## Choosing engines
+Open **Settings → Voice** or the **LLM / Chat** voice sections. Engine chips come from the daemon catalog (`/v1/tts/engines`, `/v1/asr/engines`), which mirrors every backend Skill wires from rlx-models.
 
-## Modelo
-KittenML/kitten-tts-mini-0.8 de HuggingFace Hub. Voz: Jasper (inglés en-us). Frecuencia de muestreo: 24 000 Hz mono float32. INT8 ONNX cuantificado: solo CPU, no se requiere GPU. Almacenado en caché en ~/.cache/huggingface/hub/ después de la primera descarga.
+- **TTS** — KittenTTS (default, small ONNX), NeuTTS, RLX-TTS, Qwen3-TTS, Piper, StyleTTS2, and many experimental Hub engines (Orpheus, Kyutai, MetaVoice, MiraTTS, …). Chips marked **exp** may download large checkpoints; **bundle** engines need a one-time local export (Inflect-Nano / MeloTTS). Engines unavailable in this build (for example on Windows) are greyed out.
+- **ASR** — Whisper (default), Qwen3-ASR, Voxtral, FunASR (**SenseVoice** default; Paraformer-zh optional), Nemotron-ASR, and RLX-ASR. First use auto-downloads Hub weights; chat shows download progress while loading.
 
-## Requisitos
-espeak-ng debe estar instalado y en PATH: proporciona fonemización IPA en proceso (vinculada como una biblioteca C, no generada como un subproceso). macOS: instalación de cerveza espeak-ng. Ubuntu/Debian: apto para instalar libespeak-ng-dev. Alpine: apk agrega espeak-ng-dev. Fedora: dnf instala espeak-ng-devel.
+## How TTS works
+Text preprocessing → sentence chunking → engine-specific phonemisation / tokenizer → local inference → playback on the system default output. KittenTTS uses libespeak-ng + an INT8 ONNX model (~30 MB). Larger RLX engines pull HuggingFace packs (`.rlx` / `.rlxp` / GGUF) into `~/.skill/models/`.
 
-## Integración de calibración
-Cuando comienza una sesión de calibración, el motor se precalienta en segundo plano (descargando el modelo si es necesario). En cada fase, la ventana de calibración llama a tts_speak con la etiqueta de acción, anuncio de pausa, mensaje de finalización o aviso de cancelación. El habla nunca bloquea la calibración: todas las llamadas TTS son de tipo "dispara y olvida".
+## How ASR works
+Microphone capture (cpal) → Silero VAD segmentation → selected ASR backend → transcript events on the daemon WebSocket. In voice-loop mode the daemon sends the transcript to the LLM and speaks the reply.
 
-## API: diga el comando
-Active la voz desde cualquier script externo, herramienta de automatización o agente LLM. El comando regresa inmediatamente mientras se reproduce el audio. WebSocket: {"command":"say","text":"your message"}. HTTP: POST /say con cuerpo {"text":"your message"}. CLI (curl): curl -X POST http://localhost:<port>/say -d \\'{"text":"hello"}\\' -H \\'Tipo de contenido: aplicación/json\\'.
+## API — say command
+Trigger speech from any external script or agent. WebSocket: `{"command":"say","text":"your message"}`. HTTP: `POST /say` with `{"text":"your message"}`.
 
-## Registro de depuración
-Habilite el registro de síntesis TTS en Configuración → Voz para escribir eventos (texto hablado, recuento de muestras, latencia de inferencia) en el archivo de registro de NeuroSkill™. Útil para medir la latencia y diagnosticar problemas.
-
-## Pruébelo aquí
-Utilice el siguiente widget para probar el motor TTS directamente desde esta ventana de ayuda.
+## Debug
+Enable TTS logging in Settings → Voice. Use the widget below to test synthesis from this help window.

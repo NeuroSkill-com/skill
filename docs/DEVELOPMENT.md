@@ -111,7 +111,7 @@ You do **not** need RLX for a normal dev build unless you enable `llm-rlx` / `te
 
 ### CI
 
-GitHub Actions use [`.github/actions/checkout-rlx`](../.github/actions/checkout-rlx), which runs `scripts/ensure-rlx.sh` with `GITHUB_ACTIONS=true` to clone `MIT-RLX/rlx` into `../rlx` on the runner (no symlink). The same step is wired into `ci.yml`, release workflows, and `pr-build.yml`.
+GitHub Actions use [`.github/actions/checkout-rlx`](../.github/actions/checkout-rlx), which clones `MIT-RLX/rlx` + `rlx-models` next to the workspace and runs `scripts/ensure-rlx.sh` with `RLX_CI_PATCH=1` to overlay those clones onto Skill's GitHub git dependencies. With `enabled=false`, Cargo fetches the same git URLs from `Cargo.toml` directly (no sibling clone). The same step is wired into `ci.yml`, release workflows, and `pr-build.yml`.
 
 ## Data health check
 

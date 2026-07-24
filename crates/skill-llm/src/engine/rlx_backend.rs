@@ -326,9 +326,8 @@ fn try_gemma_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn Lm
 }
 
 fn try_catalog_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
-    // gemma + minicpm5 expose `.device()` + `.packed_weights()`, so they get the
-    // GPU-F32 plan. minimax + nemotron have no packed toggle (can't force F32 off
-    // the broken packed-GPU path) → left on their device-less CPU default.
+    // gemma + minicpm5 expose `.device()` + `.packed_weights()` → packed GPU path.
+    // minimax + nemotron have no packed/device toggle → device-less CPU default.
     try_gemma_runner(path, config)
         .or_else(|| try_minicpm5_runner(path, config))
         .or_else(|| try_minimax_runner(path))
@@ -337,6 +336,15 @@ fn try_catalog_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn 
 
 fn looks_like_qwen3(path: &Path) -> bool {
     matches!(peek_gguf_arch(path).as_deref(), Some("qwen3"))
+}
+
+fn looks_like_qwen35(path: &Path) -> bool {
+    matches!(
+        peek_gguf_arch(path).as_deref(),
+        Some("qwen35" | "qwen36" | "qwen3.5" | "qwen3.6")
+    ) || filename_hint(path, "qwen3.5")
+        || filename_hint(path, "qwen3.6")
+        || filename_hint(path, "qwen35")
 }
 
 /// Resolve the rlx inference device from config: explicit `rlx_device`, honouring
@@ -367,35 +375,26 @@ fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
 
 /// Resolve `(device, packed_weights)` for a GGUF family runner.
 ///
-/// rlx 0.2.9's packed-K-quant `Op::DequantMatMul` is numerically broken on GPU
-/// backends (Metal emits garbage), while dequant-to-F32 + GPU GEMM is correct and
-/// fast. So GPU uses the **non-packed F32** path — but that materializes the whole
-/// model at F32, so it's only taken for small GGUFs (≈≤1.7B params). Larger models,
-/// or a CPU preference / no GPU available, fall back to CPU + packed K-quant.
+/// Prefer **packed K-quant on the requested accelerator** (Metal / MLX / wgpu / …).
+/// Upstream `Op::DequantMatMul` now matches CPU for Q4_K / Q6_K prefill on those
+/// backends; expanding to F32 only helps tiny GGUFs and OOMs on multi-GB models.
 fn gpu_plan(path: &Path, config: &LlmConfig) -> (rlx::runtime::Device, bool) {
     use rlx::runtime::Device;
-    const MAX_F32_GPU_GGUF_BYTES: u64 = 2 * 1024 * 1024 * 1024;
     let device = resolve_rlx_device(config);
+    let packed = std::fs::metadata(path)
+        .map(|m| m.len() >= 256 * 1024 * 1024)
+        .unwrap_or(true);
     if device == Device::Cpu {
         return (Device::Cpu, true);
     }
-    let too_big = std::fs::metadata(path)
-        .map(|m| m.len() > MAX_F32_GPU_GGUF_BYTES)
-        .unwrap_or(true);
-    if too_big {
-        eprintln!(
-            "[rlx] GGUF too large for F32 on {device:?}; using CPU packed \
-             (packed-GPU parity pending upstream)"
-        );
-        (Device::Cpu, true)
-    } else {
-        (device, false) // F32 on GPU
-    }
+    eprintln!("[rlx] gpu_plan device={device:?} packed={packed}");
+    (device, packed)
 }
 
-/// Build a Qwen3 GGUF runner on a GPU device (F32). Returns `None` when the model
-/// isn't Qwen3, when the plan resolves to CPU (the default `auto_runner` covers
-/// that), or when the GPU build fails (graceful CPU fallback).
+/// Build a Qwen3 GGUF runner with explicit device + packed weights.
+/// Returns `None` when the model isn't Qwen3, when the plan resolves to CPU
+/// (the default `auto_runner` covers that), or when the GPU build fails
+/// (graceful CPU fallback).
 fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<dyn LmRunner>> {
     if !looks_like_qwen3(path) {
         return None;
@@ -415,6 +414,53 @@ fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<d
             eprintln!("[rlx] Qwen3 on {device:?} failed to build ({e}); falling back to CPU auto_runner");
             None
         }
+    }
+}
+
+/// Build a Qwen3.5 / 3.6 runner with explicit device + seq caps.
+///
+/// Important: `auto_runner_with_mmproj` routes MTP-capable GGUFs through
+/// `Qwen35SpecRunner`, which (together with Metal graph warm + mmproj) has
+/// OOMed 64GB machines during validate. Plain `Qwen35Runner` is used here;
+/// speculative MTP stays opt-in via a future config path.
+fn try_qwen35_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_qwen35(path) {
+        return None;
+    }
+    let device = resolve_rlx_device(config);
+    let packed = std::fs::metadata(path)
+        .map(|m| m.len() >= 256 * 1024 * 1024)
+        .unwrap_or(true);
+    let max_seq = config.rlx_max_seq.max(32).min(4096);
+
+    let build = |mm: Option<&Path>| {
+        eprintln!(
+            "[rlx] Qwen35 load device={device:?} packed={packed} max_seq={max_seq} mmproj={}",
+            mm.is_some()
+        );
+        let mut b = rlx_models::run::Qwen35Runner::builder()
+            .weights(path)
+            .device(device)
+            .packed_weights(packed)
+            .max_seq(max_seq)
+            .skip_warm(true);
+        if let Some(mp) = mm {
+            b = b.mmproj(mp);
+        }
+        b.build().map(|runner| Box::new(runner) as Box<dyn LmRunner>)
+    };
+
+    match build(mmproj) {
+        Ok(runner) => Some(Ok(runner)),
+        Err(e) if mmproj.is_some() => {
+            eprintln!("[rlx] Qwen35 with mmproj failed ({e}); retrying text-only");
+            Some(
+                build(None).map_err(|e2| {
+                    anyhow!("Qwen35Runner text-only on {device:?} failed after mmproj error ({e}): {e2}")
+                }),
+            )
+        }
+        Err(e) => Some(Err(anyhow!("Qwen35Runner on {device:?} failed: {e}"))),
     }
 }
 
@@ -485,6 +531,18 @@ impl RlxTextRunner {
         // `--features llm-rlx-metal`. Honour `config.rlx_device` here. Falls back
         // to the CPU `auto_runner` path if the GPU build fails.
         if let Some(runner) = try_qwen3_runner_with_device(model_path, config) {
+            return Ok(Self {
+                family: runner.family(),
+                runner,
+                weights_path: model_path.to_path_buf(),
+                explicit_tokenizer: None,
+            });
+        }
+
+        // Qwen3.5 / 3.6: must not fall through to auto_runner's SpecRunner
+        // (MTP GGUFs OOM on unified-memory Macs during graph warm).
+        if let Some(result) = try_qwen35_runner(model_path, mmproj, config) {
+            let runner = result?;
             return Ok(Self {
                 family: runner.family(),
                 runner,

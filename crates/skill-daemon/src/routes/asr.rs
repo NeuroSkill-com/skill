@@ -27,18 +27,69 @@ pub fn router() -> Router<AppState> {
         .route("/asr/status", get(asr_status))
         .route("/asr/ptt", post(asr_ptt))
         .route("/asr/speaking", post(asr_speaking))
+        .route("/asr/engines", get(asr_engines))
+        .route("/tts/engines", get(tts_engines))
         .route("/settings/asr", get(asr_settings_get).post(asr_settings_set))
+}
+
+/// Catalog of ASR backends the UI can pick (Whisper, Qwen3-ASR, Voxtral, FunASR, …).
+async fn asr_engines() -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "available": skill_asr::voice_asr_available(),
+        "engines": skill_asr::list_asr_engines(),
+    }))
+}
+
+/// Catalog of TTS backends the UI can pick (driven by skill-tts / rlx-tts-bench).
+async fn tts_engines() -> Json<Value> {
+    Json(json!({
+        "ok": true,
+        "available": skill_tts::voice_tts_available(),
+        "engines": skill_tts::list_tts_engines(),
+    }))
 }
 
 /// Read the persisted `settings.asr` (the source of truth for voice defaults +
 /// engine/model — replaces the UI's localStorage mirror).
 async fn asr_settings_get(State(state): State<AppState>) -> Json<Value> {
-    let s = crate::routes::settings_io::load_user_settings(&state);
+    let mut s = crate::routes::settings_io::load_user_settings(&state);
+    let normalized = skill_asr::normalize_asr_engine_id(&s.asr.engine);
+    if normalized != s.asr.engine {
+        let engine = normalized.clone();
+        crate::routes::settings_io::patch_settings(&state, move |settings| {
+            settings.asr.engine = engine;
+        })
+        .await;
+        s.asr.engine = normalized;
+    }
+    // Unknown legacy ids fall back to Whisper so the UI never shows a dead chip.
+    if !skill_asr::is_known_asr_engine(&s.asr.engine) {
+        s.asr.engine = "whisper".into();
+        s.asr.model = skill_constants::WHISPER_ASR_HF_REPO.to_string();
+        let engine = s.asr.engine.clone();
+        let model = s.asr.model.clone();
+        crate::routes::settings_io::patch_settings(&state, move |settings| {
+            settings.asr.engine = engine;
+            settings.asr.model = model;
+        })
+        .await;
+    }
     Json(json!({ "ok": true, "asr": s.asr }))
 }
 
 /// Write `settings.asr` back to settings.json (atomic load-modify-save).
-async fn asr_settings_set(State(state): State<AppState>, Json(cfg): Json<skill_settings::AsrConfig>) -> Json<Value> {
+async fn asr_settings_set(
+    State(state): State<AppState>,
+    Json(mut cfg): Json<skill_settings::AsrConfig>,
+) -> Json<Value> {
+    cfg.engine = skill_asr::normalize_asr_engine_id(&cfg.engine);
+    if !skill_asr::is_known_asr_engine(&cfg.engine) {
+        return Json(json!({
+            "ok": false,
+            "error": format!("unknown ASR engine '{}'", cfg.engine),
+        }));
+    }
     crate::routes::settings_io::patch_settings(&state, move |s| s.asr = cfg).await;
     Json(json!({ "ok": true }))
 }

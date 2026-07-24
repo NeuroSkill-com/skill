@@ -1,16 +1,17 @@
 name: Checkout RLX
 description: >-
-  Build the workspace against MIT-RLX/rlx + rlx-models from git instead of
-  crates.io. Each repo is a STANDALONE unit: its ref is resolved to a commit SHA
-  (cheap `git ls-remote`, no clone) and cached under its OWN key, so a push to
+  Optionally overlay MIT-RLX/rlx + rlx-models sibling clones onto Skill's
+  GitHub git dependencies (Cargo.toml already points at those repos). Each
+  repo is a STANDALONE unit: its ref is resolved to a commit SHA (cheap
+  `git ls-remote`, no clone) and cached under its OWN key, so a push to
   rlx-models never invalidates the rlx cache (and vice-versa). Only the changed
-  repo re-clones. After both are present, wires a cargo `[patch.crates-io]`
-  override and refreshes Cargo.lock so `--locked` build/test steps still pass.
+  repo re-clones. After both are present, wires cargo `[patch."<git-url>"]`
+  overrides and refreshes Cargo.lock so `--locked` build/test steps still pass.
 
   Both repos are public, so no token is needed. Default ref is `main` (the most
   recent commit); the resolved SHA feeds each cache key, so unchanged upstream =
   instant restore. Pin a job by passing rlx-ref / rlx-models-ref a tag or SHA,
-  or set enabled=false to fall back to the crates.io build.
+  or set enabled=false to let Cargo fetch the git URLs from Cargo.toml directly.
 
 inputs:
   rlx-ref:
@@ -22,7 +23,7 @@ inputs:
     required: false
     default: main
   enabled:
-    description: When "false", no-op and build rlx/rlx-models from crates.io.
+    description: When "false", no-op — Cargo fetches rlx* from GitHub via Cargo.toml.
     required: false
     default: "true"
 
@@ -114,10 +115,10 @@ runs:
         echo "cloned rlx-models -> $dst"
 
     # ── Wire the [patch] override + refresh Cargo.lock ────────────────────────
-    # Runs once, after BOTH checkouts exist (ensure-rlx.sh writes a single
-    # [patch.crates-io] block spanning both repos and refreshes the lock once).
-    # RLX_CI_PATCH=1 tells ensure-rlx.sh to skip its "CI uses crates.io"
-    # short-circuit and run `cargo metadata` (no --locked) so the on-disk
+    # Runs once, after BOTH checkouts exist (ensure-rlx.sh writes
+    # `[patch."https://github.com/MIT-RLX/…"]` blocks and refreshes the lock).
+    # RLX_CI_PATCH=1 tells ensure-rlx.sh to skip its "CI uses Cargo.lock git
+    # deps" short-circuit and run `cargo metadata` (no --locked) so the on-disk
     # Cargo.lock matches the patched sources before any --locked cargo step.
     - name: Wire cargo [patch] override
       if: inputs.enabled == 'true'
@@ -128,7 +129,7 @@ runs:
         RLX_MODELS_ROOT: ${{ steps.rev.outputs.mdl_dir }}
       run: bash scripts/ensure-rlx.sh
 
-    - name: RLX from crates.io (disabled)
+    - name: RLX from Cargo.toml git deps (checkout disabled)
       if: inputs.enabled != 'true'
       shell: bash
-      run: echo "checkout-rlx enabled=false - building rlx/rlx-models from crates.io"
+      run: echo "checkout-rlx enabled=false - Cargo fetches MIT-RLX/rlx* from GitHub via Cargo.toml"

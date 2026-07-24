@@ -60,6 +60,20 @@ pub fn init(
     log_buf: LlmLogBuffer,
     skill_dir: &std::path::Path,
 ) -> Option<Arc<LlmServerState>> {
+    if !cfg!(feature = "llm-rlx") {
+        push_log(
+            &app,
+            &log_buf,
+            "error",
+            "skill-llm built without a backend feature (enable llm-rlx / llm-rlx-metal)",
+        );
+        app.emit_event(
+            "llm:status",
+            json!({"status":"stopped","error":"no LLM backend compiled in"}),
+        );
+        return None;
+    }
+
     if !config.enabled {
         push_log(&app, &log_buf, "info", "LLM server disabled — skipping init");
         return None;

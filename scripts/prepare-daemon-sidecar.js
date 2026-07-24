@@ -56,6 +56,12 @@ for (const c of cratesToBuild) {
 if (triple) {
   cargoArgs.push("--target", triple);
 }
+// Match tauri-build.js: `llm` alone has no inference backend.
+if (triple.includes("apple-darwin") || platform() === "darwin") {
+  cargoArgs.push("--features", "llm-rlx-metal,llm-rlx-mlx,llm-rlx-wgpu");
+} else {
+  cargoArgs.push("--features", "llm-rlx-cpu");
+}
 
 runOrThrow("cargo", cargoArgs);
 

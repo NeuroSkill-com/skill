@@ -1,25 +1,22 @@
-# オンデバイス音声ガイダンス（TTS）
+# On-device Voice (TTS + ASR)
 
-## オンデバイス音声ガイダンス（TTS）
-NeuroSkill™には完全にオンデバイスの英語テキスト読み上げエンジンが搭載されています。キャリブレーションフェーズ（アクションラベル、休憩、完了）を音声で案内し、WebSocketまたはHTTP API経由で任意のスクリプトからリモートでトリガーできます。約30 MBのモデルを一度ダウンロードした後は、すべての合成がローカルで実行されます — インターネットは不要です。
+## Overview
+NeuroSkill™ speaks and listens fully on-device. **Text-to-speech (TTS)** announces calibration phases and can be triggered from scripts or chat. **Speech recognition (ASR)** powers the chat microphone (continuous or push-to-talk). After the first model download, synthesis and transcription run locally — no cloud round-trip.
 
-## 仕組み
-テキスト前処理 → 文チャンキング（400文字以下）→ libespeak-ng（Cライブラリ、インプロセス、en-usボイス）による音素化 → トークン化（IPA → 整数ID）→ ONNX推論（KittenTTSモデル: input_ids + style + speed → f32波形）→ 1秒の無音パディング → rodioがシステムデフォルトの音声出力で再生。
+## Choosing engines
+Open **Settings → Voice** or the **LLM / Chat** voice sections. Engine chips come from the daemon catalog (`/v1/tts/engines`, `/v1/asr/engines`), which mirrors every backend Skill wires from rlx-models.
 
-## モデル
-HuggingFace HubのKittenML/kitten-tts-mini-0.8。ボイス: Jasper（英語 en-us）。サンプルレート: 24,000 Hz モノラル float32。INT8 ONNX量子化 — CPU専用、GPU不要。初回ダウンロード後は~/.cache/huggingface/hub/にキャッシュされます。
+- **TTS** — KittenTTS (default, small ONNX), NeuTTS, RLX-TTS, Qwen3-TTS, Piper, StyleTTS2, and many experimental Hub engines (Orpheus, Kyutai, MetaVoice, MiraTTS, …). Chips marked **exp** may download large checkpoints; **bundle** engines need a one-time local export (Inflect-Nano / MeloTTS). Engines unavailable in this build (for example on Windows) are greyed out.
+- **ASR** — Whisper (default), Qwen3-ASR, Voxtral, FunASR (**SenseVoice** default; Paraformer-zh optional), Nemotron-ASR, and RLX-ASR. First use auto-downloads Hub weights; chat shows download progress while loading.
 
-## 要件
-espeak-ngがインストールされPATH上にある必要があります — インプロセスIPA音素化を提供します（サブプロセスとして起動されるのではなく、Cライブラリとしてリンクされます）。macOS: brew install espeak-ng。Ubuntu/Debian: apt install libespeak-ng-dev。Alpine: apk add espeak-ng-dev。Fedora: dnf install espeak-ng-devel。
+## How TTS works
+Text preprocessing → sentence chunking → engine-specific phonemisation / tokenizer → local inference → playback on the system default output. KittenTTS uses libespeak-ng + an INT8 ONNX model (~30 MB). Larger RLX engines pull HuggingFace packs (`.rlx` / `.rlxp` / GGUF) into `~/.skill/models/`.
 
-## キャリブレーション連携
-キャリブレーションセッションが開始されると、エンジンがバックグラウンドでプリウォームされます（必要に応じてモデルをダウンロード）。各フェーズでキャリブレーションウィンドウがtts_speakを呼び出し、アクションラベル、休憩案内、完了メッセージ、またはキャンセル通知を発話します。音声がキャリブレーションをブロックすることはありません — すべてのTTS呼び出しはファイア・アンド・フォーゲットです。
+## How ASR works
+Microphone capture (cpal) → Silero VAD segmentation → selected ASR backend → transcript events on the daemon WebSocket. In voice-loop mode the daemon sends the transcript to the LLM and speaks the reply.
 
-## API — sayコマンド
-外部スクリプト、自動化ツール、またはLLMエージェントから音声をトリガーします。コマンドは音声が再生される間、即座にレスポンスを返します。WebSocket: {"command":"say","text":"メッセージ"}。HTTP: POST /say、ボディは{"text":"メッセージ"}。CLI (curl): curl -X POST http://localhost:<port>/say -d '{"text":"hello"}' -H 'Content-Type: application/json'。
+## API — say command
+Trigger speech from any external script or agent. WebSocket: `{"command":"say","text":"your message"}`. HTTP: `POST /say` with `{"text":"your message"}`.
 
-## デバッグログ
-設定 → 音声でTTS合成ログを有効にすると、イベント（発話テキスト、サンプル数、推論レイテンシー）がNeuroSkill™のログファイルに書き込まれます。レイテンシーの測定や問題の診断に役立ちます。
-
-## ここでテスト
-下のウィジェットを使用して、このヘルプウィンドウから直接TTSエンジンをテストできます。
+## Debug
+Enable TTS logging in Settings → Voice. Use the widget below to test synthesis from this help window.

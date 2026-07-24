@@ -8,6 +8,7 @@ pub mod core;
 pub mod history;
 pub(crate) mod iroh;
 pub mod labels;
+pub mod models_validate;
 pub mod search;
 pub mod settings;
 pub(crate) mod settings_calibration;

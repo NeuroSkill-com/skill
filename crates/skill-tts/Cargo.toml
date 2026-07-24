@@ -10,16 +10,15 @@ build = "build.rs"
 default     = []
 tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio"]
 tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
-# Pluggable RLX TTS engines (Qwen3-TTS, Orpheus, Kyutai-TTS, Inflect-Nano,
-# TinyTTS). Enabled on Linux, Windows, and macOS via `tts_engines_active`
-# (see build.rs). Inflect-Nano and TinyTTS are lightweight English single-speaker
-# models loaded from a one-time exported bundle (no Hub auto-download).
+# Pluggable RLX TTS engines. Legacy HF paths (Qwen3/Orpheus/Kyutai/Inflect) stay
+# for auto-download UX; the full native catalog routes through `rlx-tts-bench`
+# (no ONNX Runtime — `ort` features are never enabled).
 tts-engines = [
     "dep:rlx-qwen3-tts",
     "dep:rlx-orpheus",
     "dep:rlx-kyutai-tts",
     "dep:rlx-inflect-nano",
-    # "dep:rlx-tiny-tts",  # DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX)
+    "dep:rlx-tts-bench",
     "dep:rlx-runtime",
     "dep:rodio",
     "dep:hound",
@@ -52,11 +51,9 @@ rlx-runtime   = { workspace = true, features = ["cpu", "cuda", "gpu"], optional 
 rlx-qwen3-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
 rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "cuda", "gpu"], optional = true }
 rlx-kyutai-tts = { workspace = true, features = ["hf-download", "cuda", "gpu"], optional = true }
-# Single-speaker English bundles loaded from a one-time export (rlx-graph → CPU
-# base; cuda/gpu add accelerated vocoder graphs).
 rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "cuda", "gpu"], optional = true }
-# DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX):
-# rlx-tiny-tts  = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }
+# Native catalog (no ort). `matrix-native` + AR + LM + kyutai + rlx-tts.
+rlx-tts-bench = { workspace = true, features = ["rlx-tts", "matrix-onnx", "matrix-ar", "lm-tts", "kyutai", "cuda", "gpu"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 neutts = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
@@ -67,8 +64,8 @@ rlx-qwen3-tts = { workspace = true, features = ["hf-download", "metal"], optiona
 rlx-orpheus   = { workspace = true, features = ["llama", "hf-download", "metal", "coreml"], optional = true }
 rlx-kyutai-tts = { workspace = true, features = ["hf-download", "metal"], optional = true }
 rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "metal"], optional = true }
-# DISABLED FOR NOW — rlx-tiny-tts reshape bug (Metal + MLX):
-# rlx-tiny-tts  = { workspace = true, features = ["cpu", "metal"], optional = true }
+# `matrix-onnx` is a deprecated alias for native RLX engines (no `ort`).
+rlx-tts-bench = { workspace = true, features = ["rlx-tts", "matrix-onnx", "matrix-ar", "lm-tts", "kyutai", "metal"], optional = true }
 
 [lints]
 workspace = true

@@ -13,10 +13,10 @@ default = []
 # optional rlx deps are non-Windows only, so build.rs emits `asr_active` only when
 # the feature is on AND the target ships those deps. Windows builds keep the
 # feature (UX parity) but compile the no-op stubs.
-asr = ["dep:cpal", "dep:hf-hub", "dep:rlx-whisper", "dep:rlx-vad", "dep:rlx-runtime", "dep:rlx-qwen3-asr", "dep:rlx-voxtral"]
+asr = ["dep:cpal", "dep:hf-hub", "dep:rlx-whisper", "dep:rlx-vad", "dep:rlx-runtime", "dep:rlx-qwen3-asr", "dep:rlx-voxtral", "dep:rlx-funasr", "dep:rlx-nemotron-asr", "dep:rlx-asr"]
 # Route GPU-capable engines through Metal on Apple Silicon (Whisper encoder;
-# Qwen3-ASR / Voxtral F32 encoder+decoder). Inert unless `asr` is also on.
-asr-metal = ["asr", "rlx-whisper?/metal", "rlx-vad?/metal", "rlx-runtime?/metal", "rlx-qwen3-asr?/metal", "rlx-voxtral?/metal"]
+# Qwen3-ASR / Voxtral / FunASR / Nemotron F32 graphs). Inert unless `asr` is also on.
+asr-metal = ["asr", "rlx-whisper?/metal", "rlx-vad?/metal", "rlx-runtime?/metal", "rlx-qwen3-asr?/metal", "rlx-voxtral?/metal", "rlx-funasr?/metal", "rlx-nemotron-asr?/metal", "rlx-asr?/metal"]
 
 [dependencies]
 anyhow          = { workspace = true }
@@ -39,6 +39,9 @@ rlx-vad       = { workspace = true, features = ["silero", "metal"], optional = t
 rlx-runtime   = { workspace = true, features = ["cpu", "metal"], optional = true }
 rlx-qwen3-asr = { workspace = true, features = ["tokenizer", "metal"], optional = true }
 rlx-voxtral   = { workspace = true, features = ["tokenizer", "metal"], optional = true }
+rlx-funasr    = { workspace = true, features = ["metal"], optional = true }
+rlx-nemotron-asr = { workspace = true, features = ["tokenizer", "metal"], optional = true }
+rlx-asr       = { workspace = true, features = ["metal"], optional = true }
 
 # Other non-Windows (Linux): CPU baseline; GPU via the opt-in `asr-metal`/etc.
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "macos")))'.dependencies]
@@ -47,6 +50,9 @@ rlx-vad       = { workspace = true, features = ["silero"], optional = true }
 rlx-runtime   = { workspace = true, features = ["cpu"], optional = true }
 rlx-qwen3-asr = { workspace = true, features = ["tokenizer"], optional = true }
 rlx-voxtral   = { workspace = true, features = ["tokenizer"], optional = true }
+rlx-funasr    = { workspace = true, optional = true }
+rlx-nemotron-asr = { workspace = true, features = ["tokenizer"], optional = true }
+rlx-asr       = { workspace = true, optional = true }
 
 [lints]
 workspace = true

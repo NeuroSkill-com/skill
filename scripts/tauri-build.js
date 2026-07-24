@@ -930,6 +930,12 @@ const DEV_DAEMON_PORT = 18445;
 if (subcommand === "dev" && !process.env.SKILL_DAEMON_ADDR) {
   process.env.SKILL_DAEMON_ADDR = `127.0.0.1:${DEV_DAEMON_PORT}`;
 }
+// Dev already owns the daemon process (spawned below). Never install a
+// LaunchAgent/systemd unit from ensure_daemon_running — that second copy
+// double-loads models and OOMs.
+if (subcommand === "dev" && !process.env.SKILL_DAEMON_SKIP_SERVICE) {
+  process.env.SKILL_DAEMON_SKIP_SERVICE = "1";
+}
 
 // ── VS Code extension auto-install (dev mode only) ────────────────────────
 if (subcommand === "dev") {
@@ -1015,6 +1021,17 @@ if (subcommand === "dev" && !tuiTauriPane) {
     // hot-reloads the daemon). Windows doesn't use the PTY proxy.
     const daemonBuildArgs = ["build", "-p", "skill-daemon"];
     const isWin = process.platform === "win32" || (explicitTarget || "").includes("windows");
+    // Default skill-daemon features include `llm` but not an inference backend.
+    // Without llm-rlx-* the actor stub never sets ready → UI stuck on "loading".
+    if (isMac) {
+      daemonBuildArgs.push("--features", "llm-rlx-metal,llm-rlx-mlx,llm-rlx-wgpu");
+    } else if (isLinux) {
+      daemonBuildArgs.push("--features", "llm-rlx-cpu");
+    } else if (isWin) {
+      daemonBuildArgs.push("--features", "llm-rlx-cpu");
+    } else {
+      daemonBuildArgs.push("--features", "llm-rlx-cpu");
+    }
     if (!isWin) daemonBuildArgs.push("-p", "skill-tty");
     if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
     execFileSync("cargo", daemonBuildArgs, { cwd: root, stdio: "inherit", env: process.env });

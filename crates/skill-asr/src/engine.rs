@@ -53,9 +53,12 @@ fn run(mode: &AsrMode, on_event: &EventSink, ptt: &Arc<AtomicBool>, stop_rx: &Re
     on_event(AsrEvent::Loading);
 
     // ── ASR engine (download on first use) ───────────────────────────────────
-    // Dispatch on `mode.engine`: "whisper" (default) or "qwen3-asr". Unknown
-    // engines fall through to Whisper.
-    let mut transcriber = build_transcriber(&mode.engine, &mode.model, &mode.language)?;
+    let mut transcriber = build_transcriber(&mode.engine, &mode.model, &mode.language, on_event).map_err(|e| {
+        on_event(AsrEvent::Error {
+            message: format!("ASR engine load failed: {e:#}"),
+        });
+        e
+    })?;
 
     // ── Silero streaming VAD (weights embedded — no download) ─────────────────
     let mut session = SileroSession::new(SileroWeights::embedded(), SileroConfig::default());
@@ -64,10 +67,21 @@ fn run(mode: &AsrMode, on_event: &EventSink, ptt: &Arc<AtomicBool>, stop_rx: &Re
 
     // ── Microphone (cpal owns a non-Send stream; keep it on this thread) ──────
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .context("no default audio input device (microphone)")?;
-    let default_cfg = device.default_input_config().context("query default input config")?;
+    let device = host.default_input_device().context(
+        "no default audio input device (microphone) — plug in a mic or grant Microphone \
+         permission to NeuroSkill / skill-daemon in System Settings → Privacy & Security",
+    )?;
+    let default_cfg = device.default_input_config().with_context(|| {
+        let name = device
+            .description()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|_| "<unknown>".into());
+        format!(
+            "cannot open microphone '{name}' (no usable input format). On machines with \
+             speakers only this usually means no mic is connected; otherwise check \
+             System Settings → Privacy & Security → Microphone"
+        )
+    })?;
     let sample_format = default_cfg.sample_format();
     let stream_cfg: cpal::StreamConfig = default_cfg.into();
     let channels = stream_cfg.channels.max(1) as usize;
@@ -227,12 +241,43 @@ impl Transcriber for VoxtralTranscriber {
     }
 }
 
+struct FunAsrTranscriber(rlx_funasr::pipeline::AsrModel);
+impl Transcriber for FunAsrTranscriber {
+    fn transcribe(&mut self, pcm16k: &[f32]) -> Result<String> {
+        self.0.transcribe(pcm16k)
+    }
+}
+
+struct NemotronAsrTranscriber(rlx_nemotron_asr::NemotronAsr);
+impl Transcriber for NemotronAsrTranscriber {
+    fn transcribe(&mut self, pcm16k: &[f32]) -> Result<String> {
+        self.0.transcribe(pcm16k)
+    }
+}
+
+struct RlxAsrTranscriber(rlx_asr::AsrSession);
+impl Transcriber for RlxAsrTranscriber {
+    fn transcribe(&mut self, pcm16k: &[f32]) -> Result<String> {
+        let t = self.0.transcribe(pcm16k, TARGET_HZ as u32)?;
+        Ok(t.text)
+    }
+}
+
 /// Construct the ASR backend for `engine` (`"whisper"` | `"qwen3-asr"` |
-/// `"voxtral"`; unknown falls back to Whisper). `model` is the engine-specific
-/// model id (HF repo).
-fn build_transcriber(engine: &str, model: &str, language: &str) -> Result<Box<dyn Transcriber>> {
-    match engine.trim().to_ascii_lowercase().as_str() {
-        "qwen3-asr" | "qwen3_asr" => {
+/// `"voxtral"` | `"funasr"` | `"nemotron-asr"` | `"rlx-asr"`; unknown falls back
+/// to Whisper). `model` is the engine-specific model id (HF repo).
+fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &EventSink) -> Result<Box<dyn Transcriber>> {
+    let engine = crate::normalize_asr_engine_id(engine);
+    let progress = |label: String, downloaded: u64, total: u64| {
+        on_event(AsrEvent::Download {
+            label,
+            downloaded,
+            total,
+        });
+    };
+    match engine.as_str() {
+        "qwen3-asr" => {
+            progress("Qwen3-ASR weights…".into(), 0, 0);
             let dir = ensure_qwen3_asr_model(model)?;
             let runner = rlx_qwen3_asr::AsrRunner::builder()
                 .weights(&dir)
@@ -242,6 +287,7 @@ fn build_transcriber(engine: &str, model: &str, language: &str) -> Result<Box<dy
             Ok(Box::new(Qwen3AsrTranscriber(runner)))
         }
         "voxtral" => {
+            progress("Voxtral weights…".into(), 0, 0);
             let dir = ensure_voxtral_model(model)?;
             let runner = rlx_voxtral::VoxtralRunner::builder()
                 .weights(&dir)
@@ -258,7 +304,33 @@ fn build_transcriber(engine: &str, model: &str, language: &str) -> Result<Box<dy
                 language: lang,
             }))
         }
-        _ => Ok(Box::new(WhisperTranscriber(build_runner(model, language)?))),
+        "funasr" => {
+            progress("FunASR / SenseVoice weights…".into(), 0, 0);
+            let dir = ensure_funasr_model(model)?;
+            let asr = rlx_funasr::runner::open_asr(&dir, asr_device()).context("open FunASR model")?;
+            Ok(Box::new(FunAsrTranscriber(asr)))
+        }
+        "nemotron-asr" => {
+            progress("Nemotron-ASR .nemo (large download)…".into(), 0, 0);
+            let nemo = ensure_nemotron_asr_model(model)?;
+            let mut asr = rlx_nemotron_asr::NemotronAsr::open(&nemo, asr_device()).context("open Nemotron ASR")?;
+            let lang = match language.trim() {
+                "" | "auto" => "en-US",
+                l => l,
+            };
+            let _ = asr.set_language(lang);
+            Ok(Box::new(NemotronAsrTranscriber(asr)))
+        }
+        "rlx-asr" => {
+            progress("RLX-ASR pack…".into(), 0, 0);
+            let dir = ensure_rlx_asr_model(model)?;
+            let session = rlx_asr::AsrSession::load(&dir).context("load RLX-ASR session")?;
+            Ok(Box::new(RlxAsrTranscriber(session)))
+        }
+        _ => {
+            progress("Whisper weights…".into(), 0, 0);
+            Ok(Box::new(WhisperTranscriber(build_runner(model, language)?)))
+        }
     }
 }
 
@@ -304,6 +376,14 @@ pub fn transcribe_pcm_16k(pcm16k: &[f32], language: &str) -> Result<Vec<String>>
         push_transcript(&mut runner, &buf, &mut out);
     }
     Ok(out)
+}
+
+/// Load (and optionally download) an ASR engine then drop it — for smoke tests.
+/// Does not open the microphone.
+pub fn smoke_ensure_engine(engine: &str, model: &str) -> Result<()> {
+    let sink: EventSink = Arc::new(|_| {});
+    let _ = build_transcriber(engine, model, "en", &sink)?;
+    Ok(())
 }
 
 /// Load a mono WAV (any sample rate; resampled to 16 kHz) and [`transcribe_pcm_16k`].
@@ -444,6 +524,176 @@ fn ensure_voxtral_model(model: &str) -> Result<PathBuf> {
         rlx_voxtral::HF_MODEL_ID_MINI_3B
     };
     ensure_hf_model_dir(repo, "models/voxtral/hf-cache")
+}
+
+/// FunASR / SenseVoice / Paraformer: download Hub snapshot into `~/.skill/models/funasr/`.
+fn ensure_funasr_model(model: &str) -> Result<PathBuf> {
+    if let Ok(dir) = std::env::var("SKILL_ASR_FUNASR_DIR") {
+        let p = PathBuf::from(dir);
+        if p.join("config.yaml").is_file() {
+            return Ok(p);
+        }
+    }
+    let repo = {
+        let m = model.trim();
+        if m.is_empty() || m.to_ascii_lowercase().contains("whisper") {
+            "FunAudioLLM/SenseVoiceSmall"
+        } else {
+            m
+        }
+    };
+    let dest = crate::skill_dir().join("models/funasr").join(
+        repo.rsplit('/')
+            .next()
+            .unwrap_or("SenseVoiceSmall")
+            .replace([' ', ':'], "_"),
+    );
+    if dest.join("config.yaml").is_file()
+        && (dest.join("model.pt").is_file() || dest.join("model.safetensors").is_file())
+    {
+        return Ok(dest);
+    }
+    // SenseVoiceSmall needs these; Paraformer-zh uses a similar set.
+    let files: &[&str] = if repo.to_ascii_lowercase().contains("paraformer") {
+        &["config.yaml", "model.pt", "am.mvn", "tokens.json"]
+    } else {
+        &[
+            "config.yaml",
+            "model.pt",
+            "chn_jpn_yue_eng_ko_spectok.bpe.model",
+            "am.mvn",
+        ]
+    };
+    materialize_named_files(repo, files, &dest, "models/funasr/hf-cache")?;
+    Ok(dest)
+}
+
+/// Nemotron streaming ASR: download the `.nemo` into `~/.skill/models/nemotron-asr/`.
+fn ensure_nemotron_asr_model(model: &str) -> Result<PathBuf> {
+    if let Ok(p) = std::env::var("SKILL_ASR_NEMOTRON_NEMO") {
+        let path = PathBuf::from(p);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    let repo = {
+        let m = model.trim();
+        if m.is_empty() || !m.to_ascii_lowercase().contains("nemotron") {
+            "nvidia/nemotron-3.5-asr-streaming-0.6b"
+        } else {
+            m
+        }
+    };
+    let dest_dir = crate::skill_dir().join("models/nemotron-asr");
+    let nemo_name = "nemotron-3.5-asr-streaming-0.6b.nemo";
+    let nemo_path = dest_dir.join(nemo_name);
+    if nemo_path.is_file() {
+        return Ok(nemo_path);
+    }
+    std::fs::create_dir_all(&dest_dir).with_context(|| format!("create {}", dest_dir.display()))?;
+    let cache = crate::skill_dir().join("models/nemotron-asr/hf-cache");
+    std::fs::create_dir_all(&cache).ok();
+    use hf_hub::api::sync::ApiBuilder;
+    let api = ApiBuilder::new()
+        .with_cache_dir(cache)
+        .build()
+        .context("init hf-hub api")?;
+    let src = api
+        .model(repo.to_string())
+        .get(nemo_name)
+        .with_context(|| format!("download {repo}/{nemo_name}"))?;
+    if src != nemo_path {
+        std::fs::copy(&src, &nemo_path).with_context(|| format!("copy {} → {}", src.display(), nemo_path.display()))?;
+    }
+    Ok(nemo_path)
+}
+
+/// RLX packed ASR (`model.rlxp` / legacy `model.gguf`) from eugenehp/rlx-asr.
+fn ensure_rlx_asr_model(model: &str) -> Result<PathBuf> {
+    if let Ok(dir) = std::env::var("RLX_ASR_DIR").or_else(|_| std::env::var("SKILL_ASR_RLX_DIR")) {
+        let p = PathBuf::from(dir);
+        if p.join(rlx_asr::DEFAULT_RLXP_NAME).is_file()
+            || p.join(rlx_asr::DEFAULT_GGUF_NAME).is_file()
+            || rlx_asr::resolve_pack_path(&p).is_some()
+        {
+            return Ok(p);
+        }
+    }
+    let repo = {
+        let m = model.trim();
+        if m.is_empty() || m.to_ascii_lowercase().contains("whisper") {
+            rlx_asr::HF_REPO
+        } else {
+            m
+        }
+    };
+    let dest = crate::skill_dir().join("models/rlx-asr");
+    for name in [rlx_asr::DEFAULT_RLXP_NAME, rlx_asr::DEFAULT_GGUF_NAME] {
+        if dest.join(name).is_file() {
+            return Ok(dest);
+        }
+    }
+    std::fs::create_dir_all(&dest).with_context(|| format!("create {}", dest.display()))?;
+    use hf_hub::api::sync::ApiBuilder;
+    let api = ApiBuilder::new()
+        .with_cache_dir(crate::skill_dir().join("models/rlx-asr/hf-cache"))
+        .build()
+        .context("init hf-hub api")?;
+    let hf = api.model(repo.to_string());
+    let mut last_err: Option<anyhow::Error> = None;
+    for name in [rlx_asr::DEFAULT_RLXP_NAME, rlx_asr::DEFAULT_GGUF_NAME] {
+        match hf.get(name) {
+            Ok(src) => {
+                let out = dest.join(name);
+                if src != out {
+                    std::fs::copy(&src, &out).with_context(|| format!("copy {} → {}", src.display(), out.display()))?;
+                }
+                return Ok(dest);
+            }
+            Err(e) => last_err = Some(e.into()),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| {
+        anyhow::anyhow!(
+            "no pack in {repo} ({}/{})",
+            rlx_asr::DEFAULT_RLXP_NAME,
+            rlx_asr::DEFAULT_GGUF_NAME
+        )
+    }))
+}
+
+/// Download named files from an HF repo into `dest`, using `cache_subdir` under skill dir.
+fn materialize_named_files(repo: &str, files: &[&str], dest: &Path, cache_subdir: &str) -> Result<()> {
+    use hf_hub::api::sync::ApiBuilder;
+    std::fs::create_dir_all(dest).with_context(|| format!("create {}", dest.display()))?;
+    let cache = crate::skill_dir().join(cache_subdir);
+    std::fs::create_dir_all(&cache).ok();
+    let api = ApiBuilder::new()
+        .with_cache_dir(cache)
+        .build()
+        .context("init hf-hub api")?;
+    let hf = api.model(repo.to_string());
+    for name in files {
+        match hf.get(name) {
+            Ok(src) => {
+                let out = dest.join(name);
+                if let Some(parent) = out.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if src != out {
+                    std::fs::copy(&src, &out).with_context(|| format!("copy {} → {}", src.display(), out.display()))?;
+                }
+            }
+            Err(e) => {
+                // Optional sidecars (am.mvn / tokens) shouldn't hard-fail SenseVoice.
+                if *name == "am.mvn" || *name == "tokens.json" {
+                    continue;
+                }
+                return Err(e).with_context(|| format!("download {repo}/{name}"));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Write 16 kHz mono f32 PCM as a 16-bit WAV (for engines that only take a file).

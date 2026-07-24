@@ -18,6 +18,13 @@ import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import TtsTestWidget from "$lib/help/TtsTestWidget.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
+import {
+  fetchTtsEngines,
+  TTS_ENGINE_FALLBACK_LIST,
+  ttsEngineLabelKey,
+  type TtsEngineInfo,
+} from "$lib/llm/voice-catalog";
+import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -219,33 +226,27 @@ const PRESET_VOICES: PresetVoice[] = [
 ];
 
 // ── Engine registry ─────────────────────────────────────────────────────────
-// Single source of truth is the daemon's `tts_engine` setting (get/set_tts_engine),
-// mirrored here so the Voice tab and the LLM tab offer the same engines.
-// (tiny-tts is disabled for now — rlx-tiny-tts reshape bug on Metal + MLX.)
-const TTS_ENGINES: { id: string; label: string }[] = [
-  { id: "kitten", label: "KittenTTS" },
-  { id: "neutts", label: "NeuTTS" },
-  { id: "qwen3-tts", label: "Qwen3-TTS" },
-  { id: "orpheus", label: "Orpheus" },
-  { id: "kyutai-tts", label: "Kyutai-TTS" },
-  { id: "inflect-nano", label: "Inflect-Nano" },
-];
+// Filled from `/v1/tts/engines` on mount (skill-tts / rlx-tts-bench catalog).
+let ttsEngines = $state<TtsEngineInfo[]>([...TTS_ENGINE_FALLBACK_LIST]);
 
-const MODELS_BY_ENGINE: Record<string, string[]> = {
-  "qwen3-tts": ["Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"],
-};
-const DEFAULT_MODEL_BY_ENGINE: Record<string, string> = {
-  "qwen3-tts": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
-};
-const DEFAULT_VOICE_BY_ENGINE: Record<string, string> = {
-  "qwen3-tts": "vivian",
-  orpheus: "tara",
-};
-/** Fallback preset voices when the daemon hasn't returned `voices` yet. */
-const VOICES_BY_ENGINE: Record<string, string[]> = {
-  "qwen3-tts": ["vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee"],
-  orpheus: ["tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"],
-};
+const MODELS_BY_ENGINE = $derived(
+  Object.fromEntries(ttsEngines.map((e) => [e.id, e.models])) as Record<string, string[]>,
+);
+const DEFAULT_MODEL_BY_ENGINE = $derived(
+  Object.fromEntries(ttsEngines.map((e) => [e.id, e.default_model])) as Record<string, string>,
+);
+const DEFAULT_VOICE_BY_ENGINE = $derived(
+  Object.fromEntries(ttsEngines.map((e) => [e.id, e.default_voice])) as Record<string, string>,
+);
+const VOICES_BY_ENGINE = $derived(
+  Object.fromEntries(ttsEngines.map((e) => [e.id, e.voices])) as Record<string, string[]>,
+);
+
+function ttsEngineLabel(eng: TtsEngineInfo): string {
+  const key = ttsEngineLabelKey(eng.id);
+  const translated = t(key);
+  return translated === key ? eng.label : translated;
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -303,12 +304,13 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 /** Which engine's config panel to show — driven by the canonical selection. */
 const activeBackend = $derived(ttsCfg.engine || "kitten");
 const isNewEngine = $derived(activeBackend !== "kitten" && activeBackend !== "neutts");
-const engineLabel = $derived(TTS_ENGINES.find((e) => e.id === activeBackend)?.label ?? activeBackend);
+const activeEngineMeta = $derived(ttsEngines.find((e) => e.id === activeBackend));
+const engineLabel = $derived(activeEngineMeta ? ttsEngineLabel(activeEngineMeta) : activeBackend);
 const knownModels = $derived(MODELS_BY_ENGINE[activeBackend] ?? []);
 const hasModelPicker = $derived(knownModels.length > 0);
 const knownVoices = $derived(ttsCfg.voices?.length ? ttsCfg.voices : (VOICES_BY_ENGINE[activeBackend] ?? []));
 const hasVoicePicker = $derived(knownVoices.length > 0);
-const needsBundleExport = $derived(activeBackend === "inflect-nano");
+const needsBundleExport = $derived(Boolean(activeEngineMeta?.needs_bundle));
 
 function selectedModel(): BackboneModel | undefined {
   return BACKBONE_MODELS.find((m) => m.repo === neuttsConfig.backbone_repo);
@@ -319,6 +321,8 @@ function selectedModel(): BackboneModel | undefined {
  *  the right legacy backend. New engines route via the pluggable framework. */
 async function selectEngine(id: string) {
   if (id === ttsCfg.engine) return;
+  const meta = ttsEngines.find((e) => e.id === id);
+  if (meta && meta.available === false) return;
 
   // NEUTTS_ENABLED is what use_neutts() checks for the kitten↔neutts split.
   const wantNeutts = id === "neutts";
@@ -379,6 +383,9 @@ onMount(async () => {
   } catch (e) {}
   try {
     ttsCfg = await fetchTtsEngine();
+  } catch (e) {}
+  try {
+    ttsEngines = await fetchTtsEngines();
   } catch (e) {}
   try {
     ttsPreload = await daemonInvoke<boolean>("get_tts_preload");
@@ -497,18 +504,13 @@ async function toggleTtsLog() {
 
     <SettingsCard>
       <CardContent class="flex flex-col gap-2 px-4 py-3.5">
-        <div class="flex items-center gap-1.5 flex-wrap">
-          {#each TTS_ENGINES as opt}
-            <button
-              onclick={() => selectEngine(opt.id)}
-              class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
-                     {activeBackend === opt.id
-                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
-                       : 'border-border dark:border-white/[0.08] bg-muted dark:bg-surface-2 text-muted-foreground hover:text-foreground'}">
-              {opt.label}
-            </button>
-          {/each}
-        </div>
+        <VoiceEnginePicker
+          kind="tts"
+          engines={ttsEngines}
+          selectedId={activeBackend}
+          accent="indigo"
+          onSelect={selectEngine}
+        />
 
         {#if activeBackend === "kitten"}
           <span class="text-ui-sm text-muted-foreground/60 leading-relaxed">{t("ttsTab.backendKittenDesc")}</span>
@@ -523,6 +525,9 @@ async function toggleTtsLog() {
         {/if}
         {#if needsBundleExport}
           <p class="text-ui-sm text-amber-600 dark:text-amber-400">{t("chat.tts.bundleExportHint")}</p>
+        {/if}
+        {#if activeEngineMeta?.downloadable === false && !needsBundleExport}
+          <p class="text-ui-sm text-muted-foreground">{t("chat.tts.manualWeightsHint")}</p>
         {/if}
       </CardContent>
     </SettingsCard>

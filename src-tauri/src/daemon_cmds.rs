@@ -196,6 +196,20 @@ fn daemon_rollback_bin_path() -> Result<PathBuf, String> {
 /// (LaunchAgent on macOS, systemd user unit on Linux, Windows service).
 /// Best-effort: failures are logged but never block app startup.
 fn install_daemon_service_best_effort(base_url: &str) {
+    // `tauri-build.js` / `npm run tauri -- dev` already spawns skill-daemon.
+    // Installing a LaunchAgent (or systemd unit) on top creates a second
+    // process that races for the same port and double-loads Metal models —
+    // this OOMed a 64GB Mac when both loaded Qwen3.5.
+    if std::env::var("SKILL_DAEMON_SKIP_SERVICE")
+        .map(|v| {
+            let v = v.to_ascii_lowercase();
+            v == "1" || v == "true" || v == "yes" || v == "on"
+        })
+        .unwrap_or(false)
+    {
+        eprintln!("[daemon] SKILL_DAEMON_SKIP_SERVICE set — not installing OS service");
+        return;
+    }
     let status_url = format!("{base_url}/service/status");
     let install_url = format!("{base_url}/service/install");
     let token = load_daemon_token().ok();
@@ -1627,6 +1641,18 @@ pub async fn get_tts_engine() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn set_tts_engine(config: serde_json::Value) -> Result<serde_json::Value, String> {
     daemon_post_async("/v1/settings/tts-engine", config).await
+}
+
+/// Catalog of TTS engines the UI can pick (skill-tts / rlx-tts-bench).
+#[tauri::command]
+pub async fn get_tts_engines() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/tts/engines").await
+}
+
+/// Catalog of ASR engines the UI can pick (Whisper, Qwen3-ASR, FunASR, …).
+#[tauri::command]
+pub async fn get_asr_engines() -> Result<serde_json::Value, String> {
+    daemon_get_async("/v1/asr/engines").await
 }
 
 // ── EXG model proxies ───────────────────────────────────────────────────────

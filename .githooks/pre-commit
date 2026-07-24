@@ -14,10 +14,10 @@ if [ -z "$STAGED_FILES" ]; then
 fi
 
 # ── rlx source guard ──────────────────────────────────────────────────────────
-# Commits must always carry the DEPLOYED rlx (crates.io); ../rlx is local-dev
-# only. Safety net for when the Cargo.lock skip-worktree bit is bypassed (fresh
-# clone, `git add -A`, GUI clients, etc. — see scripts/ensure-rlx.sh).
-RLX_REGISTRY='^source = "registry+https://github.com/rust-lang/crates.io-index"'
+# Commits must never carry a local ../rlx path patch in Cargo.toml, and
+# Cargo.lock must pin `rlx` to the MIT-RLX/rlx GitHub git source (not a
+# path+file checkout). Safety net when Cargo.lock skip-worktree is bypassed
+# (fresh clone, `git add -A`, GUI clients, etc. — see scripts/ensure-rlx.sh).
 
 # 1) Cargo.toml must not reintroduce a ../rlx path patch (hard block).
 if ! git diff --cached --quiet -- Cargo.toml 2>/dev/null; then
@@ -29,14 +29,23 @@ if ! git diff --cached --quiet -- Cargo.toml 2>/dev/null; then
 fi
 
 # 2) Cargo.lock (as it will be committed = the index blob) must pin rlx to
-#    crates.io, not a local ../rlx checkout. Content-based, so it catches a
-#    locally-patched lock however it got staged (and even if HEAD is poisoned).
+#    GitHub MIT-RLX/rlx, not a local path checkout.
+#    Disable pipefail for the early-exit awk: git show gets SIGPIPE (141) when
+#    awk closes the pipe after the first `source =` line.
 if git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1; then
-  if ! git show :Cargo.lock 2>/dev/null | grep -A3 '^name = "rlx"$' | grep -q "$RLX_REGISTRY"; then
-    echo "❌ Cargo.lock pins rlx to a LOCAL ../rlx checkout, not crates.io — refusing to commit." >&2
-    echo "   ../rlx is local-dev only; CI and published builds resolve rlx from crates.io." >&2
-    echo "   Fix: run 'scripts/rlx deployed' (restores the registry lock), then commit." >&2
+  set +o pipefail
+  rlx_blob="$(git show :Cargo.lock 2>/dev/null | awk '/^name = "rlx"$/{p=1} p{print; if(/^source =/ || (/^\[\[package\]\]/ && ++n>1)){exit}}')"
+  set -o pipefail
+  if printf '%s\n' "$rlx_blob" | grep -qE 'source = "path\+'; then
+    echo "❌ Cargo.lock pins rlx to a LOCAL path checkout — refusing to commit." >&2
+    echo "   Fix: run 'scripts/rlx deployed' (restores the GitHub-pinned lock), then commit." >&2
     echo "        Run 'scripts/rlx local' afterward to resume local development." >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$rlx_blob" | grep -qE 'source = "git\+https://github\.com/MIT-RLX/rlx(\.git)?'; then
+    echo "❌ Cargo.lock does not pin rlx to git+https://github.com/MIT-RLX/rlx — refusing to commit." >&2
+    echo "   Expected a GitHub git source (see Cargo.toml workspace.dependencies)." >&2
+    echo "   Fix: run 'scripts/rlx deployed', then 'cargo update -p rlx', then commit." >&2
     exit 1
   fi
 fi

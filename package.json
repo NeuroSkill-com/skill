@@ -32,6 +32,12 @@
     "test:pre-commit": "bash scripts/test-all.sh pre-commit",
     "test:pre-push": "bash scripts/test-all.sh pre-push",
     "test:e2e": "bash scripts/test-all.sh e2e",
+    "test:e2e:models-ui": "playwright test src/tests/models-ui-e2e.spec.ts --reporter=list",
+    "test:e2e:models-ui:headed": "HEADED=1 playwright test src/tests/models-ui-e2e.spec.ts --headed --reporter=list",
+    "test:e2e:models-validate": "playwright test src/tests/models-validate-api.spec.ts --reporter=list",
+    "test:e2e:chat-ui": "playwright test src/tests/chat-ui-e2e.spec.ts --reporter=list",
+    "test:e2e:chat-ui:headed": "HEADED=1 playwright test src/tests/chat-ui-e2e.spec.ts --headed --reporter=list",
+    "test:e2e:models": "playwright test src/tests/models-ui-e2e.spec.ts src/tests/models-validate-api.spec.ts src/tests/chat-ui-e2e.spec.ts --reporter=list",
     "test:mlx-e2e": "bash scripts/test-all.sh mlx-e2e",
     "test:llm:e2e": "cargo test -p skill-llm --features llm --test llm_e2e -- --nocapture",
     "preview": "vite preview",
@@ -110,7 +116,8 @@
     "format": "npx biome format --write src/ scripts/",
     "format:check": "npx biome format src/ scripts/",
     "audit:a11y": "node scripts/audit-a11y.js",
-    "audit:a11y:check": "node scripts/audit-a11y.js --check"
+    "audit:a11y:check": "node scripts/audit-a11y.js --check",
+    "check:tts-catalog": "node scripts/check-tts-catalog-parity.js"
   },
   "license": "GPL-3.0-only",
   "dependencies": {

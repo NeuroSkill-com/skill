@@ -241,10 +241,19 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
         }
 
         if cat.active_model_path().or_else(|| cfg.model_path.clone()).is_none() {
+            let error = if !cat.active_model.is_empty() {
+                format!(
+                    "selected model '{}' is not downloaded — download it in Settings → LLM \
+                     (or pick another downloaded model)",
+                    cat.active_model
+                )
+            } else {
+                "no model selected (choose a downloaded model in Settings → LLM)".to_string()
+            };
             return Json(serde_json::json!({
                 "ok": false,
                 "result": "failed",
-                "error": "no model selected (choose a downloaded model in Settings → LLM)",
+                "error": error,
             }));
         }
 

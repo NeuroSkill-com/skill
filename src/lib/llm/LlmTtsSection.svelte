@@ -3,13 +3,9 @@
 <!--
   Voice output (TTS) engine selection — surfaced in the LLM/chat settings tab.
 
-  The daemon speaks the voice-loop reply itself (headless-friendly). This picks the
-  engine: KittenTTS / NeuTTS use the legacy backends; Qwen3-TTS and Orpheus route
-  through the pluggable engine abstraction. Kyutai-TTS is experimental (CPU eager;
-  first run downloads ~4 GB).
-
-  `fetchTtsEngine` reads settings.json on mount; `saveTtsEngine` writes through on
-  every change (with a localStorage cache for instant first paint).
+  Engine chips come from the daemon catalog (`/v1/tts/engines` → skill-tts /
+  rlx-tts-bench) so every supported backend is selectable; first use downloads
+  Hub weights when the engine is marked downloadable.
 -->
 <script lang="ts">
 import { onMount } from "svelte";
@@ -17,11 +13,20 @@ import { Card, CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
 import { t } from "$lib/i18n/index.svelte";
 import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
+import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
+import {
+  fetchTtsEngines,
+  TTS_ENGINE_FALLBACK_LIST,
+  type TtsEngineInfo,
+} from "$lib/llm/voice-catalog";
 
 let cfg = $state<TtsEngineConfig>(loadTtsEngine());
+let engines = $state<TtsEngineInfo[]>([...TTS_ENGINE_FALLBACK_LIST]);
 
 onMount(async () => {
-  cfg = await fetchTtsEngine();
+  const [nextCfg, nextEngines] = await Promise.all([fetchTtsEngine(), fetchTtsEngines()]);
+  cfg = nextCfg;
+  engines = nextEngines;
 });
 
 function update(patch: Partial<TtsEngineConfig>) {
@@ -29,47 +34,23 @@ function update(patch: Partial<TtsEngineConfig>) {
   saveTtsEngine(cfg);
 }
 
-const engineOptions: { val: string; label: string; experimental?: boolean }[] = [
-  { val: "kitten", label: "KittenTTS" },
-  { val: "neutts", label: "NeuTTS" },
-  { val: "qwen3-tts", label: "Qwen3-TTS" },
-  { val: "orpheus", label: "Orpheus" },
-  { val: "kyutai-tts", label: "Kyutai-TTS", experimental: true },
-  { val: "inflect-nano", label: "Inflect-Nano", experimental: true },
-  // DISABLED FOR NOW — rlx-tiny-tts reshape bug on Metal + MLX:
-  // { val: "tiny-tts", label: "TinyTTS", experimental: true },
-];
-
-const MODELS_BY_ENGINE: Record<string, string[]> = {
-  "qwen3-tts": ["Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"],
-};
-const DEFAULT_MODEL_BY_ENGINE: Record<string, string> = {
-  "qwen3-tts": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
-};
-const DEFAULT_VOICE_BY_ENGINE: Record<string, string> = {
-  "qwen3-tts": "vivian",
-  orpheus: "tara",
-};
-/** Fallback when the daemon has not yet returned `voices`. */
-const VOICES_BY_ENGINE: Record<string, string[]> = {
-  "qwen3-tts": ["vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee"],
-  orpheus: ["tara", "leah", "jess", "leo", "dan", "mia", "zac", "zoe"],
-};
-
-const hasModelPicker = $derived((MODELS_BY_ENGINE[cfg.engine] ?? []).length > 0);
-const knownVoices = $derived(cfg.voices?.length ? cfg.voices : (VOICES_BY_ENGINE[cfg.engine] ?? []));
-const knownModels = $derived(MODELS_BY_ENGINE[cfg.engine] ?? []);
+const activeMeta = $derived(engines.find((e) => e.id === cfg.engine));
+const knownModels = $derived(activeMeta?.models ?? []);
+const hasModelPicker = $derived(knownModels.length > 0);
+const knownVoices = $derived(
+  cfg.voices?.length ? cfg.voices : (activeMeta?.voices ?? []),
+);
 const hasVoicePicker = $derived(knownVoices.length > 0);
 const isKyutai = $derived(cfg.engine === "kyutai-tts");
 const isOrpheus = $derived(cfg.engine === "orpheus");
-/** Inflect-Nano loads from a one-time exported bundle (no auto-download). */
-const needsBundleExport = $derived(cfg.engine === "inflect-nano");
+const needsBundleExport = $derived(Boolean(activeMeta?.needs_bundle));
 
 function onEngineSelect(engine: string) {
-  const models = MODELS_BY_ENGINE[engine] ?? [];
-  const model = models.includes(cfg.model) ? cfg.model : (DEFAULT_MODEL_BY_ENGINE[engine] ?? "");
-  const voices = cfg.voices?.length ? cfg.voices : (VOICES_BY_ENGINE[engine] ?? []);
-  const defaultVoice = DEFAULT_VOICE_BY_ENGINE[engine] ?? "";
+  const meta = engines.find((e) => e.id === engine);
+  const models = meta?.models ?? [];
+  const model = models.includes(cfg.model) ? cfg.model : (meta?.default_model ?? "");
+  const voices = meta?.voices?.length ? meta.voices : (cfg.voices ?? []);
+  const defaultVoice = meta?.default_voice ?? "";
   const voice = voices.includes(cfg.voice)
     ? cfg.voice
     : defaultVoice && voices.includes(defaultVoice)
@@ -91,19 +72,12 @@ function onEngineSelect(engine: string) {
           <span class="text-ui-lg font-semibold text-foreground">{t("chat.tts.engineLabel")}</span>
           <p class="text-ui-base text-muted-foreground">{t("chat.tts.engineDesc")}</p>
         </div>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          {#each engineOptions as opt}
-            <button
-              onclick={() => onEngineSelect(opt.val)}
-              class="rounded-lg border px-2.5 py-1.5 text-ui-base font-semibold transition-all cursor-pointer
-                   {cfg.engine === opt.val
-                     ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                     : 'border-border bg-muted text-muted-foreground hover:text-foreground'}"
-            >
-              {opt.label}
-            </button>
-          {/each}
-        </div>
+        <VoiceEnginePicker
+          kind="tts"
+          {engines}
+          selectedId={cfg.engine}
+          onSelect={onEngineSelect}
+        />
         {#if isKyutai}
           <p class="text-ui-base text-amber-600 dark:text-amber-400">{t("chat.tts.kyutaiExperimental")}</p>
         {/if}
@@ -112,6 +86,9 @@ function onEngineSelect(engine: string) {
         {/if}
         {#if needsBundleExport}
           <p class="text-ui-base text-amber-600 dark:text-amber-400">{t("chat.tts.bundleExportHint")}</p>
+        {/if}
+        {#if activeMeta?.downloadable === false && !needsBundleExport}
+          <p class="text-ui-base text-muted-foreground">{t("chat.tts.manualWeightsHint")}</p>
         {/if}
       </div>
 

@@ -152,6 +152,7 @@ for suite in "${SUITES[@]}"; do
       ;;
     ci)
       run_suite "ci.mjs self-test" node scripts/ci.mjs self-test || { $STOP_ON_FAIL && break; }
+      run_suite "tts catalog parity" node scripts/check-tts-catalog-parity.js || { $STOP_ON_FAIL && break; }
       ;;
     types)
       run_suite "svelte-check" npx svelte-check --tsconfig ./tsconfig.json || { $STOP_ON_FAIL && break; }

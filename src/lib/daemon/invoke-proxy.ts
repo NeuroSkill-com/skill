@@ -148,8 +148,8 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   cancel_weights_download: [P, "/v1/models/cancel-weights-download"],
   estimate_reembed: [G, "/v1/models/estimate-reembed"],
   get_stale_label_count: [G, "/v1/models/estimate-reembed"], // alias
-  estimate_screenshot_reembed: [G, "/v1/models/estimate-reembed"], // alias
-  rebuild_screenshot_embeddings: [P, "/v1/models/rebuild-index"],
+  estimate_screenshot_reembed: [G, "/v1/settings/screenshot/estimate-reembed"],
+  rebuild_screenshot_embeddings: [P, "/v1/settings/screenshot/rebuild-embeddings"],
 
   // Filter / overlap / inference
   get_filter_config: [G, "/v1/settings/filter-config"],
@@ -214,6 +214,8 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   set_neutts_config: [P, "/v1/settings/neutts-config"],
   get_tts_preload: [G, "/v1/settings/tts-preload"],
   set_tts_preload: [P, "/v1/settings/tts-preload"],
+  get_tts_engines: [G, "/v1/tts/engines"],
+  get_asr_engines: [G, "/v1/asr/engines"],
   get_umap_config: [G, "/v1/settings/umap-config"],
   set_umap_config: [P, "/v1/settings/umap-config"],
   get_umap_backends: [G, "/v1/settings/umap-backends"],
@@ -277,6 +279,10 @@ const DAEMON_ONLY_COMMANDS = new Set<string>([
   "create_calibration_profile",
   "update_calibration_profile",
   "delete_calibration_profile",
+  "rebuild_screenshot_embeddings",
+  "trigger_reembed",
+  "set_embedding_model",
+  "benchmark_label_index",
 ]);
 
 // Active search abort controller — allows cancel from UI.
@@ -508,7 +514,18 @@ export async function daemonInvoke<T>(cmd: string, args?: AnyArgs): Promise<T> {
   const route = ROUTES[cmd];
   if (route) {
     try {
-      return route[0] === "GET" ? await daemonGet<T>(route[1]) : await daemonPost<T>(route[1], args ?? {});
+      // Screenshot rebuild / UMAP-class work can run minutes; default 10s is too short.
+      const longMs =
+        cmd === "rebuild_screenshot_embeddings"
+          ? 600_000
+          : cmd === "benchmark_label_index"
+            ? 120_000
+            : cmd === "set_embedding_model"
+              ? 120_000
+              : undefined;
+      return route[0] === "GET"
+        ? await daemonGet<T>(route[1])
+        : await daemonPost<T>(route[1], args ?? {}, longMs);
     } catch (daemonErr) {
       if (DAEMON_ONLY_COMMANDS.has(cmd)) {
         throw daemonErr;

@@ -34,6 +34,13 @@ use serde::{Deserialize, Serialize};
 #[cfg(asr_active)]
 mod engine;
 
+pub mod catalog;
+
+pub use catalog::{
+    is_known_engine as is_known_asr_engine, list_engines as list_asr_engines,
+    normalize_engine_id as normalize_asr_engine_id, voice_asr_available, AsrEngineInfo,
+};
+
 // Pure segmentation state machine — always compiled so it unit-tests without the
 // `asr` feature (no cpal / rlx dependency). Its only non-test consumer is the
 // feature-gated `engine`, so allow dead code when the engine is compiled out.
@@ -115,6 +122,8 @@ impl Default for AsrMode {
 pub enum AsrEvent {
     /// Model is downloading / initializing.
     Loading,
+    /// Hub / pack download progress (bytes when known).
+    Download { label: String, downloaded: u64, total: u64 },
     /// Microphone is open; the engine is listening.
     Listening,
     /// VAD detected the onset of speech (or push-to-talk pressed).
@@ -153,15 +162,40 @@ static SKILL_DIR: OnceLock<PathBuf> = OnceLock::new();
 pub fn init_asr_dirs(dir: &Path) {
     let _ = SKILL_DIR.set(dir.to_path_buf());
     let _ = std::fs::create_dir_all(skill_dir().join("models/whisper/hf-cache"));
+    let _ = std::fs::create_dir_all(skill_dir().join("models/qwen3-asr/hf-cache"));
+    let _ = std::fs::create_dir_all(skill_dir().join("models/voxtral/hf-cache"));
+    let _ = std::fs::create_dir_all(skill_dir().join("models/funasr"));
+    let _ = std::fs::create_dir_all(skill_dir().join("models/nemotron-asr/hf-cache"));
+    let _ = std::fs::create_dir_all(skill_dir().join("models/rlx-asr/hf-cache"));
 }
 
 /// Resolve the skill directory (falls back to a platform default).
+///
+/// Matches [`skill_settings::default_skill_dir`]: `~/.skill` on macOS/Linux,
+/// `%LOCALAPPDATA%\NeuroSkill` on Windows. Using `data_local_dir()/NeuroSkill`
+/// on Unix previously cached Whisper under `~/Library/Application Support/NeuroSkill`
+/// while the daemon looked in `~/.skill`, so ASR looked "not downloaded".
 pub fn skill_dir() -> PathBuf {
-    SKILL_DIR.get().cloned().unwrap_or_else(|| {
+    SKILL_DIR.get().cloned().unwrap_or_else(default_skill_dir_fallback)
+}
+
+fn default_skill_dir_fallback() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
         dirs::data_local_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+            .unwrap_or_else(|| {
+                std::env::var("APPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| std::env::temp_dir())
+            })
             .join("NeuroSkill")
-    })
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(skill_constants::SKILL_DIR)
+    }
 }
 
 /// Whether this build ships the real engine (feature `asr`, non-Windows).
@@ -194,7 +228,7 @@ pub fn is_speaking() -> bool {
 /// Transcribe a 16 kHz mono PCM buffer through the same Silero-VAD segmentation +
 /// Whisper path as the live engine. One transcript per detected utterance.
 #[cfg(asr_active)]
-pub use engine::{transcribe_pcm_16k, transcribe_wav};
+pub use engine::{smoke_ensure_engine, transcribe_pcm_16k, transcribe_wav};
 
 /// Unavailable without the `asr` feature.
 #[cfg(not(asr_active))]
@@ -205,6 +239,12 @@ pub fn transcribe_pcm_16k(_pcm16k: &[f32], _language: &str) -> anyhow::Result<Ve
 /// Unavailable without the `asr` feature.
 #[cfg(not(asr_active))]
 pub fn transcribe_wav(_path: &std::path::Path, _language: &str) -> anyhow::Result<Vec<String>> {
+    anyhow::bail!("ASR engine not available in this build")
+}
+
+/// Unavailable without the `asr` feature.
+#[cfg(not(asr_active))]
+pub fn smoke_ensure_engine(_engine: &str, _model: &str) -> anyhow::Result<()> {
     anyhow::bail!("ASR engine not available in this build")
 }
 

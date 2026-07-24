@@ -116,6 +116,8 @@ export const EXEMPT_KEY_PREFIXES = [
   "helpRef.doi",
   "helpApi.cmd", // API command names are code identifiers
   "onboarding.models.", // model product names (Qwen3.5, NeuTTS, Kitten TTS)
+  "chat.tts.engine.", // TTS engine product names
+  "chat.voice.engine.", // ASR engine product names (Whisper, FunASR, …)
   "ttsTab.backend", // TTS engine names (KittenTTS, NeuTTS)
   "ttsTab.voice", // voice names (Juliette, Jasper)
   "ttsTab.kittenModel", // model spec string

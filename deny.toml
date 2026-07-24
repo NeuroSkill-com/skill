@@ -358,4 +358,6 @@ allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/eugenehp/btleplug.git",
     "https://github.com/eugenehp/gtk-rs-core.git",
+    "https://github.com/MIT-RLX/rlx.git",
+    "https://github.com/MIT-RLX/rlx-models.git",
 ]
