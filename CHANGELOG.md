@@ -5690,6 +5690,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - updated CI
 
+## [0.0.131-rc.15] — 2026-07-24
+
+### Features
+
+- rlx core models
+
 ## [0.0.131-rc.2] — 2026-05-31
 
 ### Features
