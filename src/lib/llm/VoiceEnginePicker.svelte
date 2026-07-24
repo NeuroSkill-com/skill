@@ -26,10 +26,11 @@ interface Props {
 
 let { kind, engines, selectedId, onSelect, accent = "violet" }: Props = $props();
 
-const selectedClass =
+const selectedClass = $derived(
   accent === "indigo"
     ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
-    : "border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400";
+    : "border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400",
+);
 
 function labelFor(eng: Engine): string {
   const key = kind === "tts" ? ttsEngineLabelKey(eng.id) : asrEngineLabelKey(eng.id);
