@@ -525,7 +525,9 @@ export async function daemonInvoke<T>(cmd: string, args?: AnyArgs): Promise<T> {
               : undefined;
       return route[0] === "GET"
         ? await daemonGet<T>(route[1])
-        : await daemonPost<T>(route[1], args ?? {}, longMs);
+        : longMs !== undefined
+          ? await daemonPost<T>(route[1], args ?? {}, longMs)
+          : await daemonPost<T>(route[1], args ?? {});
     } catch (daemonErr) {
       if (DAEMON_ONLY_COMMANDS.has(cmd)) {
         throw daemonErr;
