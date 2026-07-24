@@ -165,7 +165,7 @@ onMount(async () => {
                        {filter.notch === val
                          ? 'border-violet-500/50 bg-violet-500/10'
                          : 'border-border dark:border-white/[0.08] bg-muted dark:bg-surface-2 hover:bg-accent dark:hover:bg-white/[0.04]'}">
-                <span class="text-[1rem]">{flag}</span>
+                <span class="text-ui-lg">{flag}</span>
                 <span class="text-ui-md font-semibold leading-tight
                              {filter.notch === val ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}">
                   {label}
@@ -183,7 +183,7 @@ onMount(async () => {
                      {filter.notch === null
                        ? 'border-slate-400/40 bg-slate-100 dark:bg-white/[0.04]'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-surface-2 hover:bg-accent dark:hover:bg-white/[0.04]'}">
-              <span class="text-[1rem]">🔕</span>
+              <span class="text-ui-lg">🔕</span>
               <span class="text-ui-md font-semibold text-muted-foreground leading-tight">{t("common.off")}</span>
               <span class="text-ui-sm text-muted-foreground">{t("settings.noNotch")}</span>
               {#if filter.notch === null}

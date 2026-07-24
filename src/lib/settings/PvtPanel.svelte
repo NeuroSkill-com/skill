@@ -169,15 +169,15 @@ let resultsSummary = $derived.by(() => {
   <div class="w-[480px] rounded-lg border bg-background p-8 shadow-xl">
     {#if phase === "intro"}
       <div class="flex flex-col gap-3">
-        <h2 class="text-lg font-semibold leading-tight">{t("validation.pvt.task.title")}</h2>
-        <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.pvt.task.intro")}</p>
+        <h2 class="text-ui-xl font-semibold leading-tight">{t("validation.pvt.task.title")}</h2>
+        <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.pvt.task.intro")}</p>
       </div>
       <div class="mt-8 flex justify-end gap-3">
         <Button variant="outline" onclick={cancel}>{t("validation.pvt.task.cancel")}</Button>
         <Button onclick={start}>{t("validation.pvt.task.start")}</Button>
       </div>
     {:else if phase === "running"}
-      <div class="mb-4 text-xs text-muted-foreground">
+      <div class="mb-4 text-ui-xs text-muted-foreground">
         {t("validation.pvt.task.elapsed", {
           0: Math.floor(elapsed / 1000),
           1: Math.floor(TASK_DURATION_MS / 1000),
@@ -194,7 +194,7 @@ let resultsSummary = $derived.by(() => {
             <div class="h-12 w-12 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
           </div>
         {:else}
-          <div class="flex h-full items-center justify-center text-sm text-muted-foreground">
+          <div class="flex h-full items-center justify-center text-ui-base text-muted-foreground">
             {feedback === "tooFast"
               ? t("validation.pvt.task.tooFast")
               : t("validation.pvt.task.wait")}
@@ -206,8 +206,8 @@ let resultsSummary = $derived.by(() => {
         <Button variant="outline" onclick={cancel}>{t("validation.pvt.task.cancel")}</Button>
       </div>
     {:else if phase === "done" && resultsSummary}
-      <h2 class="text-lg font-semibold leading-tight">{t("validation.pvt.task.results")}</h2>
-      <dl class="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+      <h2 class="text-ui-xl font-semibold leading-tight">{t("validation.pvt.task.results")}</h2>
+      <dl class="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-ui-base">
         <dt class="text-muted-foreground">{t("validation.pvt.task.meanRt")}</dt>
         <dd class="font-mono tabular-nums">{resultsSummary.meanRt.toFixed(1)} ms</dd>
 

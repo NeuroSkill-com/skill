@@ -58,6 +58,8 @@
   --text-ui-md:  0.9375rem;  /* 15px — primary form labels                    */
   --text-ui-lg:  1rem;       /* 16px — card / section headings                */
   --text-ui-xl:  1.125rem;   /* 18px — page-level titles                      */
+  --text-ui-2xl: 1.25rem;    /* 20px — large titles / hero stats               */
+  --text-ui-3xl: 1.5rem;     /* 24px — display / KPI numbers                   */
 }
 
 /* ── Light theme (day) ─────────────────────────────────────────────────────── */

@@ -185,7 +185,7 @@ const notifStatus: StatusLevel = "unknown";
         <!-- Status row -->
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">⌨️</span>
+            <span class="text-ui-lg">⌨️</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.accessibility")}</span>
           </div>
           <div class="flex items-center gap-2">
@@ -248,7 +248,7 @@ const notifStatus: StatusLevel = "unknown";
 
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">🖥️</span>
+            <span class="text-ui-lg">🖥️</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.screenRecording")}</span>
           </div>
           <div class="flex items-center gap-2">
@@ -304,7 +304,7 @@ const notifStatus: StatusLevel = "unknown";
 
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">🔒</span>
+            <span class="text-ui-lg">🔒</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.fullDiskAccess")}</span>
           </div>
         </div>
@@ -345,7 +345,7 @@ const notifStatus: StatusLevel = "unknown";
 
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">🗓️</span>
+            <span class="text-ui-lg">🗓️</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.calendar")}</span>
           </div>
           <div class="flex items-center gap-2">
@@ -391,7 +391,7 @@ const notifStatus: StatusLevel = "unknown";
 
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">📍</span>
+            <span class="text-ui-lg">📍</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.location")}</span>
           </div>
           <div class="flex items-center gap-2">
@@ -453,7 +453,7 @@ const notifStatus: StatusLevel = "unknown";
 
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">📶</span>
+            <span class="text-ui-lg">📶</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.bluetooth")}</span>
           </div>
           <StatusBadge status="not_required" label={t("perm.systemManaged")} />
@@ -486,7 +486,7 @@ const notifStatus: StatusLevel = "unknown";
 
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-base">🔔</span>
+            <span class="text-ui-lg">🔔</span>
             <span class="text-ui-lg font-semibold text-foreground">{t("perm.notifications")}</span>
           </div>
           <StatusBadge status="not_required" label={t("perm.systemManaged")} />

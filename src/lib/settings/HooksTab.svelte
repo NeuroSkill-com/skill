@@ -462,8 +462,8 @@ function logDistance(row: HookLogRow): string {
   <CardContent class="space-y-4 p-4">
     <div class="flex items-center justify-between gap-3">
       <div>
-        <h3 class="text-sm font-semibold text-foreground">{t("settingsTabs.hooks")}</h3>
-        <p class="text-xs text-muted-foreground">{t("hooks.subtitle")}</p>
+        <h3 class="text-ui-base font-semibold text-foreground">{t("settingsTabs.hooks")}</h3>
+        <p class="text-ui-xs text-muted-foreground">{t("hooks.subtitle")}</p>
       </div>
       <div class="flex items-center gap-2">
         <Button variant="outline" size="sm" onclick={addHook}>{t("hooks.addHook")}</Button>
@@ -490,22 +490,22 @@ function logDistance(row: HookLogRow): string {
     </div>
 
     {#if loading}
-      <p class="text-xs text-muted-foreground">{t("hooks.loading")}</p>
+      <p class="text-ui-xs text-muted-foreground">{t("hooks.loading")}</p>
     {:else if hooks.length === 0}
-      <p class="text-xs text-muted-foreground">{t("hooks.empty")}</p>
+      <p class="text-ui-xs text-muted-foreground">{t("hooks.empty")}</p>
     {:else}
       <div class="space-y-3">
         {#each hooks as hook, i}
           <div class="rounded-lg border border-border/60 bg-card/50 p-3 space-y-3">
             <div class="grid grid-cols-12 gap-2 items-center">
               <input
-                class="col-span-7 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                class="col-span-7 rounded-md border border-border bg-background px-2 py-1.5 text-ui-xs text-foreground"
                 aria-label={t("hooks.name")}
                 placeholder={t("hooks.name")}
                 value={hook.name}
                 oninput={(e) => updateHook(i, { name: (e.currentTarget as HTMLInputElement).value })}
               />
-              <label class="col-span-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <label class="col-span-3 flex items-center gap-2 text-ui-xs text-muted-foreground">
                 <input
                   type="checkbox"
                   class="accent-violet-500"
@@ -547,7 +547,7 @@ function logDistance(row: HookLogRow): string {
 
             <div class="grid grid-cols-12 gap-2 items-center">
               <input
-                class="col-span-9 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                class="col-span-9 rounded-md border border-border bg-background px-2 py-1.5 text-ui-xs text-foreground"
                 aria-label={t("hooks.addKeywordPlaceholder")}
                 placeholder={t("hooks.addKeywordPlaceholder")}
                 value={keywordDrafts[i] ?? ""}
@@ -585,10 +585,10 @@ function logDistance(row: HookLogRow): string {
             {/if}
 
             <div class="grid grid-cols-12 gap-2 items-center">
-              <span class="col-span-4 text-xs text-muted-foreground">{t("hooks.scenarioLabel")}</span>
+              <span class="col-span-4 text-ui-xs text-muted-foreground">{t("hooks.scenarioLabel")}</span>
               <div class="col-span-8 relative">
                 <select
-                  class="w-full appearance-none rounded-md border border-border bg-background px-2 py-1.5 pr-7 text-xs text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2"
+                  class="w-full appearance-none rounded-md border border-border bg-background px-2 py-1.5 pr-7 text-ui-xs text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2"
                   aria-label={t("hooks.scenarioLabel")}
                   value={hook.scenario ?? "any"}
                   onchange={(e) => updateHook(i, { scenario: (e.currentTarget as HTMLSelectElement).value })}
@@ -621,14 +621,14 @@ function logDistance(row: HookLogRow): string {
 
             <div class="grid grid-cols-12 gap-2">
               <input
-                class="col-span-6 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                class="col-span-6 rounded-md border border-border bg-background px-2 py-1.5 text-ui-xs text-foreground"
                 aria-label={t("hooks.command")}
                 placeholder={t("hooks.command")}
                 value={hook.command}
                 oninput={(e) => updateHook(i, { command: (e.currentTarget as HTMLInputElement).value })}
               />
               <input
-                class="col-span-6 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+                class="col-span-6 rounded-md border border-border bg-background px-2 py-1.5 text-ui-xs text-foreground"
                 aria-label={t("hooks.text")}
                 placeholder={t("hooks.text")}
                 value={hook.text}
@@ -638,14 +638,14 @@ function logDistance(row: HookLogRow): string {
 
             <!-- Distance threshold row + suggest button -->
             <div class="grid grid-cols-12 gap-2 items-center">
-              <label class="col-span-5 flex items-center gap-2 text-xs text-muted-foreground">
+              <label class="col-span-5 flex items-center gap-2 text-ui-xs text-muted-foreground">
                 {t("hooks.distance")}
                 <input
                   type="number"
                   min="0.01"
                   max="1"
                   step="0.01"
-                  class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  class="w-20 rounded-md border border-border bg-background px-2 py-1 text-ui-xs text-foreground"
                   value={hook.distance_threshold}
                   oninput={(e) => updateHook(i, { distance_threshold: Number((e.currentTarget as HTMLInputElement).value || 0.1) })}
                 />
@@ -661,14 +661,14 @@ function logDistance(row: HookLogRow): string {
                   {suggestingIdx === i ? t("hooks.suggesting") : t("hooks.suggest")}
                 </Button>
               </div>
-              <label class="col-span-3 flex items-center gap-2 text-xs text-muted-foreground">
+              <label class="col-span-3 flex items-center gap-2 text-ui-xs text-muted-foreground">
                 {t("hooks.recent")}
                 <input
                   type="number"
                   min="10"
                   max="20"
                   step="1"
-                  class="w-16 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  class="w-16 rounded-md border border-border bg-background px-2 py-1 text-ui-xs text-foreground"
                   value={hook.recent_limit}
                   oninput={(e) => updateHook(i, { recent_limit: Number((e.currentTarget as HTMLInputElement).value || 12) })}
                 />
@@ -746,7 +746,7 @@ function logDistance(row: HookLogRow): string {
     <!-- ── Hook fire history ──────────────────────────────────────────────── -->
     <div class="border-t border-border/40 pt-3">
       <button
-        class="flex w-full items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+        class="flex w-full items-center gap-2 text-ui-xs font-medium text-muted-foreground hover:text-foreground"
         onclick={() => { showLog = !showLog; if (showLog && logRows.length === 0) loadLog(); }}
       >
         <svg class="h-3.5 w-3.5 transition-transform {showLog ? 'rotate-90' : ''}" viewBox="0 0 20 20" fill="currentColor">
@@ -761,9 +761,9 @@ function logDistance(row: HookLogRow): string {
       {#if showLog}
         <div class="mt-3 space-y-2">
           {#if logLoading}
-            <p class="text-xs text-muted-foreground">{t("hooks.historyLoading")}</p>
+            <p class="text-ui-xs text-muted-foreground">{t("hooks.historyLoading")}</p>
           {:else if logRows.length === 0}
-            <p class="text-xs text-muted-foreground">{t("hooks.historyEmpty")}</p>
+            <p class="text-ui-xs text-muted-foreground">{t("hooks.historyEmpty")}</p>
           {:else}
             <div class="space-y-1.5">
               {#each logRows as row}

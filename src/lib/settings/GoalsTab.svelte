@@ -388,7 +388,7 @@ const streak = $derived.by(() => {
     <div class="flex items-center justify-center w-11 h-11 rounded-xl
                 bg-gradient-to-br from-blue-500 to-indigo-500
                 shadow-lg shadow-blue-500/25 dark:shadow-blue-500/40 shrink-0">
-      <span class="text-xl leading-none">🎯</span>
+      <span class="text-ui-2xl leading-none">🎯</span>
     </div>
     <div class="flex flex-col gap-0.5">
       <span class="text-ui-lg font-bold">{t("goals.title")}</span>
@@ -398,7 +398,7 @@ const streak = $derived.by(() => {
     </div>
     <span class="flex-1"></span>
     <div class="flex flex-col items-end gap-0.5">
-      <span class="text-2xl font-extrabold tabular-nums tracking-tight
+      <span class="text-ui-3xl font-extrabold tabular-nums tracking-tight
                    bg-gradient-to-r from-blue-500 to-indigo-500
                    bg-clip-text text-transparent">
         {dailyGoalMin}m
@@ -817,7 +817,7 @@ const streak = $derived.by(() => {
                   {scoreAbove ? t("dnd.untilActivation") : t("dnd.buildingLabel")}
                 </span>
                 {#if countingDown}
-                  <span class="text-[1.1rem] font-black tabular-nums leading-none
+                  <span class="text-ui-xl font-black tabular-nums leading-none
                                text-violet-500 ml-auto"
                         style="font-variant-numeric: tabular-nums;">
                     {String(amm).padStart(2, "0")}:{String(ass).padStart(2, "0")}
@@ -894,7 +894,7 @@ const streak = $derived.by(() => {
                   {isCounting ? t("dnd.untilExit") : t("dnd.exitHeld", { ago: String(dndConfig.focus_lookback_secs) })}
                 </span>
                 {#if isCounting}
-                  <span class="text-[1.1rem] font-black tabular-nums leading-none
+                  <span class="text-ui-xl font-black tabular-nums leading-none
                                text-amber-500 dark:text-amber-400 ml-auto"
                         style="font-variant-numeric: tabular-nums;">
                     {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}

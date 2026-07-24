@@ -3,21 +3,19 @@
 // check-settings-font-sizes.js — guard against font-size drift in
 // src/lib/settings/*.svelte.
 //
-// Settings tabs should size text via the `text-ui-{xs,sm,base,md,lg,xl}` scale
-// only. Bare Tailwind sizes (`text-xs`, `text-base`, `text-lg`, `text-2xl`,
-// `text-[10px]`, …) cause visual inconsistency between tabs and were the
-// motivation for introducing the `text-ui-*` system.
+// Settings tabs should size text via the `text-ui-*` scale only. Bare Tailwind
+// sizes (`text-xs`, `text-base`, `text-lg`, `text-2xl`, `text-[10px]`, …) cause
+// visual inconsistency between tabs and were the motivation for introducing
+// the `text-ui-*` system.
 //
-// We don't fix the existing 200+ pre-existing violations — that's a separate
-// cleanup pass. Instead this script snapshots the current per-file violation
-// counts in `check-settings-font-sizes.baseline.json` and fails if any file's
-// count grows or a previously-clean file gains a violation. New files must
-// start at zero.
+// This script snapshots per-file violation counts in
+// `check-settings-font-sizes.baseline.json` and fails if any file's count grows
+// or a previously-clean file gains a violation. New files must start at zero.
 //
-// Refresh the baseline after an intentional cleanup with:
+// Refresh the baseline after an intentional change with:
 //   node scripts/check-settings-font-sizes.js --update
 //
-// Allowed:   text-ui-xs | text-ui-sm | text-ui-base | text-ui-md | text-ui-lg | text-ui-xl
+// Allowed:   text-ui-{2xs,xs,sm,base,md,lg,xl,2xl,3xl}
 // Violation: text-(xs|sm|base|lg|xl|<digit>xl|[<arbitrary>])
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";

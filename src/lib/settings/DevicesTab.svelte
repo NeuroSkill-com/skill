@@ -774,7 +774,7 @@ onDestroy(() => {
     </div>
     <span class="flex-1"></span>
     <div class="flex flex-col items-end gap-0.5">
-      <span class="text-lg font-extrabold tabular-nums tracking-tight
+      <span class="text-ui-xl font-extrabold tabular-nums tracking-tight
                    bg-gradient-to-r from-cyan-500 to-blue-500
                    bg-clip-text text-transparent">
         {pairedDevices.length}
@@ -792,7 +792,7 @@ onDestroy(() => {
     <SettingsCard>
       {#if pairedDevices.length === 0}
         <CardContent class="flex flex-col items-center gap-2 py-8 text-center">
-          <span class="text-3xl">📡</span>
+          <span class="text-ui-3xl">📡</span>
           <p class="text-ui-lg text-foreground/70">{t("devices.noPaired")}</p>
           <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[260px]">
             {t("devices.noPairedHint")}
@@ -824,7 +824,7 @@ onDestroy(() => {
       <div class="flex items-start gap-2.5 rounded-xl
                   border border-amber-400/40 bg-amber-50/80 dark:bg-amber-950/25
                   px-3 py-2.5">
-        <span class="text-[1rem] shrink-0 mt-0.5">📡</span>
+        <span class="text-ui-lg shrink-0 mt-0.5">📡</span>
         <div class="flex flex-col gap-0.5 flex-1 min-w-0">
           <span class="text-ui-md font-semibold text-amber-800 dark:text-amber-300 leading-tight">
             {t("settings.newDeviceNotice")}
@@ -839,7 +839,7 @@ onDestroy(() => {
     <SettingsCard>
       {#if discoveredDevices.length === 0}
         <CardContent class="flex flex-col items-center gap-2 py-6 text-center">
-          <span class="text-2xl">🔍</span>
+          <span class="text-ui-3xl">🔍</span>
           <p class="text-ui-md text-muted-foreground/70">{t("devices.noDiscovered")}</p>
           <p class="text-ui-sm text-muted-foreground/50 leading-relaxed max-w-[260px]">
             {t("devices.noDiscoveredHint")}
@@ -1741,7 +1741,7 @@ onDestroy(() => {
       </div>
     {:else}
       <div class="w-12 h-12 rounded-lg shrink-0 bg-muted/40 dark:bg-white/[0.04]
-                  flex items-center justify-center text-2xl
+                  flex items-center justify-center text-ui-3xl
                   {!dev.is_paired ? 'opacity-50' : ''}">🧠</div>
     {/if}
 
@@ -1749,7 +1749,7 @@ onDestroy(() => {
       <div class="flex items-center gap-1.5 min-w-0">
         <span class="text-ui-lg font-semibold text-foreground truncate">{dev.name}</span>
         {#if dev.is_preferred}
-          <span class="text-yellow-500 dark:text-yellow-400 shrink-0 text-sm">★</span>
+          <span class="text-yellow-500 dark:text-yellow-400 shrink-0 text-ui-base">★</span>
         {/if}
         {#if dev.is_paired}
           <Badge variant="outline"

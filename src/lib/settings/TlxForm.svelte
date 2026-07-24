@@ -125,23 +125,23 @@ async function submit() {
 <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 backdrop-blur-sm">
   <div class="m-6 w-[560px] rounded-lg border bg-background p-8 shadow-xl">
     <div class="flex flex-col gap-2">
-      <h2 class="text-lg font-semibold leading-tight">{t("validation.tlx.form.title")}</h2>
-      <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.tlx.form.subtitle")}</p>
+      <h2 class="text-ui-xl font-semibold leading-tight">{t("validation.tlx.form.title")}</h2>
+      <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.tlx.form.subtitle")}</p>
     </div>
 
     <div class="mt-7 flex flex-col gap-7">
       {#each scales as scale (scale.key)}
         <div class="flex flex-col gap-2">
           <div class="flex items-baseline justify-between gap-3">
-            <label for="tlx-{scale.key}" class="text-sm font-medium">
+            <label for="tlx-{scale.key}" class="text-ui-base font-medium">
               {t(scale.labelKey)}
             </label>
-            <span class="font-mono text-xs tabular-nums text-muted-foreground">
+            <span class="font-mono text-ui-xs tabular-nums text-muted-foreground">
               {Math.round(scale.bind())}
             </span>
           </div>
           {#if scale.descKey}
-            <p class="text-xs leading-relaxed text-muted-foreground">{t(scale.descKey)}</p>
+            <p class="text-ui-xs leading-relaxed text-muted-foreground">{t(scale.descKey)}</p>
           {/if}
           <input
             id="tlx-{scale.key}"
@@ -166,7 +166,7 @@ async function submit() {
     </div>
 
     {#if error}
-      <div class="mt-5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm">
+      <div class="mt-5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-ui-base">
         {t("validation.save.failed", { 0: error })}
       </div>
     {/if}

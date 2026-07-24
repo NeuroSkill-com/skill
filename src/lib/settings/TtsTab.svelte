@@ -738,7 +738,7 @@ async function toggleTtsLog() {
                            {neuttsConfig.voice_preset === pv.id
                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40'
                              : 'border-border dark:border-white/[0.06] bg-muted/40 dark:bg-surface-2/60 hover:border-indigo-300 dark:hover:border-indigo-700'}">
-                    <span class="text-base leading-none">{pv.flag}</span>
+                    <span class="text-ui-lg leading-none">{pv.flag}</span>
                     <span class="text-ui-base font-semibold leading-tight mt-1
                                  {neuttsConfig.voice_preset === pv.id
                                    ? 'text-indigo-700 dark:text-indigo-300'
@@ -758,7 +758,7 @@ async function toggleTtsLog() {
                          {neuttsConfig.voice_preset === ''
                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40'
                            : 'border-dashed border-border dark:border-white/[0.06] bg-transparent hover:border-indigo-300 dark:hover:border-indigo-700'}">
-                  <span class="text-base leading-none">📁</span>
+                  <span class="text-ui-lg leading-none">📁</span>
                   <span class="text-ui-base font-semibold leading-tight mt-1
                                {neuttsConfig.voice_preset === ''
                                  ? 'text-indigo-700 dark:text-indigo-300'

@@ -549,7 +549,7 @@ onDestroy(() => {
   </div>
 
   <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] px-3 py-2.5 flex items-start gap-2.5">
-    <span class="text-base shrink-0 mt-0.5">🔒</span>
+    <span class="text-ui-lg shrink-0 mt-0.5">🔒</span>
     <p class="text-ui-sm text-muted-foreground leading-relaxed">
       {t("settings.activityTrackingIntro")}
     </p>

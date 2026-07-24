@@ -984,7 +984,7 @@ onDestroy(() => {
         <div
           class="flex flex-col items-center gap-3 py-6 text-center"
         >
-          <div class="text-[1.5rem] opacity-20">📡</div>
+          <div class="text-ui-3xl opacity-20">📡</div>
           <div class="flex flex-col gap-1">
             <span class="text-ui-base font-medium text-muted-foreground/70">{t("lsl.noStreams")}</span>
             <span class="text-ui-xs text-muted-foreground/40 max-w-[28rem] leading-relaxed">

@@ -148,7 +148,7 @@ function arcPath(startAngle: number, endAngle: number, r: number): string {
     <div class="flex items-center justify-center w-11 h-11 rounded-xl
                 bg-gradient-to-br from-indigo-500 to-purple-500
                 shadow-lg shadow-indigo-500/25 dark:shadow-indigo-500/40 shrink-0">
-      <span class="text-xl leading-none">🌙</span>
+      <span class="text-ui-2xl leading-none">🌙</span>
     </div>
     <div class="flex flex-col gap-0.5">
       <span class="text-ui-lg font-bold">{t("sleepSettings.title")}</span>
@@ -158,7 +158,7 @@ function arcPath(startAngle: number, endAngle: number, r: number): string {
     </div>
     <span class="flex-1"></span>
     <div class="flex flex-col items-end gap-0.5">
-      <span class="text-2xl font-extrabold tabular-nums tracking-tight
+      <span class="text-ui-3xl font-extrabold tabular-nums tracking-tight
                    bg-gradient-to-r from-indigo-500 to-purple-500
                    bg-clip-text text-transparent">
         {durationLabel(duration.total)}

@@ -500,12 +500,12 @@ let heatmapMax = $state(1);
             {#if insights.test_failure_by_focus?.test_failure_by_focus?.length > 0}
               {@const tfb = insights.test_failure_by_focus.test_failure_by_focus}
               <div>
-                <div class="text-xs font-semibold mb-1">Test Failure Rate by Focus Level</div>
-                <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="text-ui-xs font-semibold mb-1">Test Failure Rate by Focus Level</div>
+                <div class="grid grid-cols-3 gap-2 text-ui-xs">
                   {#each tfb as row}
                     <div class="rounded-md bg-muted/30 px-3 py-2 text-center">
                       <div class="text-ui-2xs text-muted-foreground capitalize">{row.focus_level} focus</div>
-                      <div class="text-lg font-bold tabular-nums {row.fail_rate > 0.3 ? 'text-red-400' : row.fail_rate > 0.1 ? 'text-yellow-400' : 'text-green-400'}">{Math.round(row.fail_rate * 100)}%</div>
+                      <div class="text-ui-xl font-bold tabular-nums {row.fail_rate > 0.3 ? 'text-red-400' : row.fail_rate > 0.1 ? 'text-yellow-400' : 'text-green-400'}">{Math.round(row.fail_rate * 100)}%</div>
                       <div class="text-ui-2xs text-muted-foreground">fail rate ({row.passes + row.fails} runs)</div>
                     </div>
                   {/each}
@@ -517,10 +517,10 @@ let heatmapMax = $state(1);
             {#if insights.focus_by_language?.focus_by_language?.length > 0}
               {@const fbl = insights.focus_by_language.focus_by_language}
               <div>
-                <div class="text-xs font-semibold mb-1">Focus by Language</div>
+                <div class="text-ui-xs font-semibold mb-1">Focus by Language</div>
                 <div class="space-y-1">
                   {#each fbl.slice(0, 6) as row}
-                    <div class="flex items-center gap-2 text-xs">
+                    <div class="flex items-center gap-2 text-ui-xs">
                       <span class="w-16 font-medium">{row.language}</span>
                       <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                         <div class="h-full rounded-full {row.avg_focus >= 70 ? 'bg-green-400' : row.avg_focus >= 40 ? 'bg-yellow-400' : 'bg-red-400'}" style="width: {row.avg_focus}%"></div>
@@ -537,9 +537,9 @@ let heatmapMax = $state(1);
             {#if insights.ai_impact?.ai_impact?.length > 0}
               {@const ai = insights.ai_impact}
               <div>
-                <div class="text-xs font-semibold mb-1">AI Tool Impact on Focus</div>
+                <div class="text-ui-xs font-semibold mb-1">AI Tool Impact on Focus</div>
                 {#each ai.ai_impact as row}
-                  <div class="flex items-center gap-2 text-xs rounded-md bg-muted/30 px-3 py-2">
+                  <div class="flex items-center gap-2 text-ui-xs rounded-md bg-muted/30 px-3 py-2">
                     <span class="font-medium capitalize">{row.app}</span>
                     <span class="ml-auto tabular-nums font-bold {row.delta > 0 ? 'text-green-400' : row.delta < -5 ? 'text-red-400' : 'text-yellow-400'}">{row.delta > 0 ? '+' : ''}{row.delta.toFixed(1)}</span>
                     <span class="text-muted-foreground text-ui-2xs">vs {Math.round(ai.baseline_focus)} baseline ({row.message_count} msgs)</span>
@@ -552,10 +552,10 @@ let heatmapMax = $state(1);
             {#if insights.tool_impact?.tool_focus_impact?.length > 0}
               {@const ti = insights.tool_impact.tool_focus_impact}
               <div>
-                <div class="text-xs font-semibold mb-1">Focus Level by Tool Category</div>
+                <div class="text-ui-xs font-semibold mb-1">Focus Level by Tool Category</div>
                 <div class="grid grid-cols-2 gap-1">
                   {#each ti.slice(0, 8) as row}
-                    <div class="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/20">
+                    <div class="flex items-center justify-between text-ui-xs px-2 py-1 rounded bg-muted/20">
                       <span class="capitalize">{row.category}</span>
                       <span class="font-bold tabular-nums {row.avg_focus >= 70 ? 'text-green-400' : row.avg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}">{Math.round(row.avg_focus)}</span>
                     </div>
@@ -568,7 +568,7 @@ let heatmapMax = $state(1);
             {#if insights.hourly_productivity?.hourly_productivity?.length > 0}
               {@const hp = insights.hourly_productivity.hourly_productivity}
               <div>
-                <div class="text-xs font-semibold mb-1">Productivity by Hour</div>
+                <div class="text-ui-xs font-semibold mb-1">Productivity by Hour</div>
                 <div class="flex items-end gap-[2px] h-12">
                   {#each hp as row}
                     {@const maxChurn = Math.max(1, ...hp.map((r: any) => r.churn))}
@@ -670,7 +670,7 @@ let heatmapMax = $state(1);
         <CardContent class="py-3">
           <div class="flex items-center gap-4">
             <div class="flex flex-col items-center">
-              <span class="text-2xl font-bold tabular-nums
+              <span class="text-ui-3xl font-bold tabular-nums
                 {score.score >= 70 ? 'text-emerald-500' : score.score >= 40 ? 'text-amber-500' : 'text-red-400'}">
                 {score.score.toFixed(0)}
               </span>
@@ -1024,7 +1024,7 @@ let heatmapMax = $state(1);
         <CardContent class="py-0 px-0">
           <div class="divide-y divide-border dark:divide-white/[0.04] max-h-64 overflow-y-auto">
             {#each terminalCommands.slice(0, 30) as cmd}
-              <div class="flex items-center gap-2 px-4 py-1.5 text-xs font-mono">
+              <div class="flex items-center gap-2 px-4 py-1.5 text-ui-xs font-mono">
                 <span class="w-14 shrink-0 text-muted-foreground tabular-nums">{new Date(cmd.started_at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"})}</span>
                 <span class="w-4 text-center">
                   {#if cmd.exit_code === null}<span class="text-yellow-400">~</span>
@@ -1052,7 +1052,7 @@ let heatmapMax = $state(1);
       <SettingsCard>
         <SectionHeader title="Terminal Impact on Focus" description="How different command categories affect your EEG focus score." />
         <CardContent>
-          <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="grid grid-cols-2 gap-2 text-ui-xs">
             {#each terminalImpact as row}
               {@const delta = row.avg_focus_delta ?? 0}
               {@const total = row.pass_count + row.fail_count}
@@ -1080,7 +1080,7 @@ let heatmapMax = $state(1);
       <SettingsCard>
         <SectionHeader title="Context Switch Cost" description="Your EEG focus level at the moment you switch between editor, terminal, and panels." />
         <CardContent>
-          <div class="space-y-1 text-xs">
+          <div class="space-y-1 text-ui-xs">
             {#each contextCost as row}
               <div class="flex items-center justify-between">
                 <span class="capitalize">{row.from_zone} → {row.to_zone}</span>
@@ -1108,7 +1108,7 @@ let heatmapMax = $state(1);
           <div class="space-y-2">
             {#each devLoops as loop}
               {@const passRate = (loop.passes + loop.fails) > 0 ? Math.round((loop.passes / (loop.passes + loop.fails)) * 100) : null}
-              <div class="rounded-md bg-muted/30 px-3 py-2 text-xs {loop.fails > loop.passes ? 'border-l-2 border-red-400' : ''}">
+              <div class="rounded-md bg-muted/30 px-3 py-2 text-ui-xs {loop.fails > loop.passes ? 'border-l-2 border-red-400' : ''}">
                 <div class="flex items-center justify-between mb-1">
                   <span class="font-mono font-medium truncate" title={loop.command}>{loop.command.slice(0, 40)}</span>
                   <span class="text-muted-foreground">{loop.loop_type}</span>
@@ -1143,15 +1143,15 @@ let heatmapMax = $state(1);
       <SettingsCard>
         <SectionHeader title="AI Coding Assistants" description="Copilot, Codeium, and other AI suggestion acceptance rates today." />
         <CardContent>
-          <div class="space-y-2 text-sm">
+          <div class="space-y-2 text-ui-base">
             {#if aiUsage.suggestions_shown > 0}
               <div class="flex items-center gap-3">
                 <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                   <div class="h-full bg-green-400 rounded-full" style="width: {Math.round(aiUsage.acceptance_rate * 100)}%"></div>
                 </div>
-                <span class="text-xs font-bold">{Math.round(aiUsage.acceptance_rate * 100)}% accepted</span>
+                <span class="text-ui-xs font-bold">{Math.round(aiUsage.acceptance_rate * 100)}% accepted</span>
               </div>
-              <div class="flex gap-4 text-xs text-muted-foreground">
+              <div class="flex gap-4 text-ui-xs text-muted-foreground">
                 <span>{aiUsage.suggestions_shown} shown</span>
                 <span>{aiUsage.accepted} accepted</span>
                 <span>{aiUsage.chat_sessions} chats</span>
@@ -1160,7 +1160,7 @@ let heatmapMax = $state(1);
             {#if aiUsage.by_source?.length > 0}
               <div class="flex gap-2 flex-wrap">
                 {#each aiUsage.by_source as s}
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-muted">{s.source} ({s.count})</span>
+                  <span class="text-ui-xs px-2 py-0.5 rounded-full bg-muted">{s.source} ({s.count})</span>
                 {/each}
               </div>
             {/if}
@@ -1179,11 +1179,11 @@ let heatmapMax = $state(1);
         <CardContent class="py-0 px-0">
           <div class="divide-y divide-border dark:divide-white/[0.04] max-h-80 overflow-y-auto">
             {#each conversations.slice(0, 30) as msg}
-              <div class="flex items-start gap-2 px-4 py-1.5 text-xs {msg.role === 'user' ? 'bg-blue-500/[0.03]' : ''}">
+              <div class="flex items-start gap-2 px-4 py-1.5 text-ui-xs {msg.role === 'user' ? 'bg-blue-500/[0.03]' : ''}">
                 <span class="w-12 shrink-0 text-muted-foreground tabular-nums mt-0.5">{new Date(msg.at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
                 <span class="w-4 shrink-0 text-center mt-0.5 {msg.role === 'user' ? 'text-blue-400' : msg.role === 'tool' ? 'text-muted-foreground' : ''}">{msg.role === "user" ? "\u276F" : msg.role === "tool" ? "\u2699" : "\u2190"}</span>
                 <span class="shrink-0 text-ui-2xs text-muted-foreground mt-0.5">{msg.app}</span>
-                <span class="flex-1 text-xs leading-relaxed {msg.role === 'user' ? 'font-medium' : 'text-muted-foreground'}" title={msg.text}>{msg.text?.slice(0, 120) ?? ""}</span>
+                <span class="flex-1 text-ui-xs leading-relaxed {msg.role === 'user' ? 'font-medium' : 'text-muted-foreground'}" title={msg.text}>{msg.text?.slice(0, 120) ?? ""}</span>
                 {#if msg.eeg_focus != null}
                   <span class="shrink-0 text-ui-2xs tabular-nums mt-0.5 {msg.eeg_focus >= 70 ? 'text-emerald-400' : msg.eeg_focus >= 40 ? 'text-yellow-400' : 'text-red-400'}" title="EEG focus at this moment">{Math.round(msg.eeg_focus)}</span>
                 {/if}
@@ -1205,19 +1205,19 @@ let heatmapMax = $state(1);
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-sm font-medium">{t("activity.browserDistraction")}</span>
+              <span class="text-ui-base font-medium">{t("activity.browserDistraction")}</span>
               <Badge variant={browserDistraction.score > 70 ? "destructive" : browserDistraction.score > 40 ? "secondary" : "default"}>
                 {browserDistraction.score > 70 ? t("activity.distractionHigh") : browserDistraction.score > 40 ? t("activity.distractionMedium") : t("activity.distractionLow")}
                 {Math.round(browserDistraction.score)}/100
               </Badge>
             </div>
-            <div class="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
+            <div class="grid grid-cols-3 gap-3 text-ui-xs text-muted-foreground">
               <div><span class="font-medium text-foreground">{browserDistraction.tab_switches_per_min}</span> {t("activity.tabSwitchesPerMin")}</div>
               <div><span class="font-medium text-foreground">{browserDistraction.productive_pct}%</span> {t("activity.productivePct")}</div>
               <div><span class="font-medium text-foreground">{browserDistraction.social_pct}%</span> {t("activity.socialPct")}</div>
             </div>
             <div class="flex items-center justify-between mt-2">
-              <p class="text-xs text-muted-foreground">{browserDistraction.suggestion}</p>
+              <p class="text-ui-xs text-muted-foreground">{browserDistraction.suggestion}</p>
               {#if !feedbackSent["distraction"]}
                 <div class="flex gap-1 shrink-0 ml-2">
                   <button class="px-1.5 py-0.5 text-ui-2xs rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("distraction", true, browserDistraction?.score)} title="Accurate">&#x1F44D;</button>
@@ -1235,11 +1235,11 @@ let heatmapMax = $state(1);
       {#if browserContent.length > 0}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">{t("activity.browserContent")}</span>
+            <span class="text-ui-base font-medium mb-2 block">{t("activity.browserContent")}</span>
             <div class="space-y-1.5">
               {#each browserContent.slice(0, 8) as ct}
                 {@const maxSecs = Math.max(...browserContent.map(c => c.total_secs), 1)}
-                <div class="flex items-center gap-2 text-xs">
+                <div class="flex items-center gap-2 text-ui-xs">
                   <span class="w-16 shrink-0 font-medium">{ct.content_type}</span>
                   <div class="flex-1 h-4 bg-muted rounded-sm overflow-hidden dark:bg-white/[0.04]">
                     <div class="h-full rounded-sm {ct.content_type === 'social' || ct.content_type === 'shopping' ? 'bg-yellow-500/60' : 'bg-primary/60'}"
@@ -1261,11 +1261,11 @@ let heatmapMax = $state(1);
         <SettingsCard>
           <CardContent class="py-0 px-0">
             <div class="px-4 pt-3.5 pb-2">
-              <span class="text-sm font-medium">{t("activity.browserFocus")}</span>
+              <span class="text-ui-base font-medium">{t("activity.browserFocus")}</span>
             </div>
             <div class="divide-y divide-border dark:divide-white/[0.04]">
               {#each browserFocus.slice(0, 10) as df}
-                <div class="flex items-center gap-3 px-4 py-2 text-xs">
+                <div class="flex items-center gap-3 px-4 py-2 text-ui-xs">
                   <span class="flex-1 font-medium truncate">{df.domain}</span>
                   <span class="text-muted-foreground">{df.category}</span>
                   <span class="w-8 text-right tabular-nums">{df.visits}</span>
@@ -1286,8 +1286,8 @@ let heatmapMax = $state(1);
       {#if browserResearch && browserResearch.total_searches > 0}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">{t("activity.browserResearch")}</span>
-            <div class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+            <span class="text-ui-base font-medium mb-2 block">{t("activity.browserResearch")}</span>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-ui-xs">
               <div><span class="font-medium text-foreground">{browserResearch.total_searches}</span> <span class="text-muted-foreground">{t("activity.searches")}</span></div>
               <div><span class="font-medium text-foreground">{browserResearch.refinement_rate}%</span> <span class="text-muted-foreground">{t("activity.refinementRate")}</span></div>
               <div><span class="font-medium text-foreground">{browserResearch.revisit_count}</span> <span class="text-muted-foreground">{t("activity.revisits")}</span></div>
@@ -1314,13 +1314,13 @@ let heatmapMax = $state(1);
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
             <div class="flex items-center justify-between mb-1">
-              <span class="text-sm font-medium">Procrastination</span>
+              <span class="text-ui-base font-medium">Procrastination</span>
               <Badge variant={browserProcrast.procrastinating ? "destructive" : "secondary"}>
                 {Math.round(browserProcrast.score)}/100
               </Badge>
             </div>
             <div class="flex items-center justify-between">
-              <p class="text-xs text-muted-foreground">{browserProcrast.suggestion}</p>
+              <p class="text-ui-xs text-muted-foreground">{browserProcrast.suggestion}</p>
               {#if !feedbackSent["procrastination"]}
                 <div class="flex gap-1 shrink-0 ml-2">
                   <button class="px-1.5 py-0.5 text-ui-2xs rounded bg-muted hover:bg-green-500/20 transition-colors" onclick={() => sendFeedback("procrastination", true, browserProcrast?.score)} title="Accurate">&#x1F44D;</button>
@@ -1339,11 +1339,11 @@ let heatmapMax = $state(1);
         <SettingsCard>
           <CardContent class="py-0 px-0">
             <div class="px-4 pt-3.5 pb-2">
-              <span class="text-sm font-medium">Learning Efficiency</span>
+              <span class="text-ui-base font-medium">Learning Efficiency</span>
             </div>
             <div class="divide-y divide-border dark:divide-white/[0.04]">
               {#each browserLearning.slice(0, 8) as lr}
-                <div class="flex items-center gap-3 px-4 py-2 text-xs">
+                <div class="flex items-center gap-3 px-4 py-2 text-ui-xs">
                   <span class="flex-1 font-medium truncate">{lr.domain}</span>
                   <span class="text-muted-foreground">{lr.pages} pages</span>
                   <span class="w-12 text-right tabular-nums font-semibold {lr.efficiency_score > 60 ? 'text-green-500' : lr.efficiency_score > 30 ? 'text-yellow-500' : 'text-red-500'}">{lr.efficiency_score.toFixed(0)}</span>
@@ -1359,11 +1359,11 @@ let heatmapMax = $state(1);
         <SettingsCard>
           <CardContent class="py-0 px-0">
             <div class="px-4 pt-3.5 pb-2">
-              <span class="text-sm font-medium">Deep Reading Sessions</span>
+              <span class="text-ui-base font-medium">Deep Reading Sessions</span>
             </div>
             <div class="divide-y divide-border dark:divide-white/[0.04]">
               {#each browserDeepReading.slice(0, 6) as dr}
-                <div class="flex items-center gap-2 px-4 py-2 text-xs">
+                <div class="flex items-center gap-2 px-4 py-2 text-ui-xs">
                   <span class="w-12 shrink-0 text-muted-foreground tabular-nums">{new Date(dr.at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
                   <span class="flex-1 truncate font-medium">{dr.title || dr.domain}</span>
                   <span class="text-muted-foreground">{Math.round(dr.reading_secs / 60)}m</span>
@@ -1381,10 +1381,10 @@ let heatmapMax = $state(1);
       {#if browserAiEff.length > 0}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">AI Chat Effectiveness</span>
+            <span class="text-ui-base font-medium mb-2 block">AI Chat Effectiveness</span>
             <div class="space-y-2">
               {#each browserAiEff as ai}
-                <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center justify-between text-ui-xs">
                   <span class="font-medium">{ai.provider}</span>
                   <div class="flex items-center gap-3">
                     <span class="text-muted-foreground">{ai.interactions} chats</span>
@@ -1403,8 +1403,8 @@ let heatmapMax = $state(1);
       {#if browserOptimalHours && browserOptimalHours.best_hours.length > 0}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Optimal Research Hours</span>
-            <div class="text-xs space-y-1">
+            <span class="text-ui-base font-medium mb-2 block">Optimal Research Hours</span>
+            <div class="text-ui-xs space-y-1">
               <div>Best: <span class="font-medium text-green-500">{browserOptimalHours.best_hours.map(h => `${h}:00`).join(", ")}</span></div>
               <div>Worst: <span class="font-medium text-red-500">{browserOptimalHours.worst_hours.map(h => `${h}:00`).join(", ")}</span></div>
             </div>
@@ -1416,18 +1416,18 @@ let heatmapMax = $state(1);
       {#if browserVideoRoi && browserVideoRoi.total_watched_secs > 60}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Video Learning ROI</span>
-            <div class="grid grid-cols-3 gap-3 text-xs text-center">
+            <span class="text-ui-base font-medium mb-2 block">Video Learning ROI</span>
+            <div class="grid grid-cols-3 gap-3 text-ui-xs text-center">
               <div>
-                <div class="text-lg font-semibold">{Math.round(browserVideoRoi.total_watched_secs / 60)}m</div>
+                <div class="text-ui-xl font-semibold">{Math.round(browserVideoRoi.total_watched_secs / 60)}m</div>
                 <div class="text-muted-foreground">watched</div>
               </div>
               <div>
-                <div class="text-lg font-semibold {browserVideoRoi.focus_ratio > 0.5 ? 'text-green-500' : 'text-yellow-500'}">{Math.round(browserVideoRoi.focus_ratio * 100)}%</div>
+                <div class="text-ui-xl font-semibold {browserVideoRoi.focus_ratio > 0.5 ? 'text-green-500' : 'text-yellow-500'}">{Math.round(browserVideoRoi.focus_ratio * 100)}%</div>
                 <div class="text-muted-foreground">focused</div>
               </div>
               <div>
-                <div class="text-lg font-semibold">{browserVideoRoi.avg_focus?.toFixed(0) ?? "--"}</div>
+                <div class="text-ui-xl font-semibold">{browserVideoRoi.avg_focus?.toFixed(0) ?? "--"}</div>
                 <div class="text-muted-foreground">avg focus</div>
               </div>
             </div>
@@ -1439,13 +1439,13 @@ let heatmapMax = $state(1);
       {#if browserEmailImpact && browserEmailImpact.email_sessions > 0}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Email Impact</span>
-            <div class="grid grid-cols-2 gap-3 text-xs">
+            <span class="text-ui-base font-medium mb-2 block">Email Impact</span>
+            <div class="grid grid-cols-2 gap-3 text-ui-xs">
               <div>During email: <span class="font-medium">{browserEmailImpact.avg_focus_during_email?.toFixed(0) ?? "--"}</span></div>
               <div>Outside email: <span class="font-medium">{browserEmailImpact.avg_focus_outside_email?.toFixed(0) ?? "--"}</span></div>
             </div>
             {#if browserEmailImpact.focus_delta != null}
-              <p class="text-xs mt-1 {browserEmailImpact.focus_delta < -5 ? 'text-red-500' : 'text-muted-foreground'}">
+              <p class="text-ui-xs mt-1 {browserEmailImpact.focus_delta < -5 ? 'text-red-500' : 'text-muted-foreground'}">
                 Focus {browserEmailImpact.focus_delta > 0 ? "+" : ""}{browserEmailImpact.focus_delta.toFixed(0)} during email
               </p>
             {/if}
@@ -1457,18 +1457,18 @@ let heatmapMax = $state(1);
       {#if browserSwitchTax && browserSwitchTax.total_switches > 0}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Context Switch Tax</span>
-            <div class="grid grid-cols-3 gap-3 text-xs text-center">
+            <span class="text-ui-base font-medium mb-2 block">Context Switch Tax</span>
+            <div class="grid grid-cols-3 gap-3 text-ui-xs text-center">
               <div>
-                <div class="text-lg font-semibold">{browserSwitchTax.total_switches}</div>
+                <div class="text-ui-xl font-semibold">{browserSwitchTax.total_switches}</div>
                 <div class="text-muted-foreground">switches</div>
               </div>
               <div>
-                <div class="text-lg font-semibold text-red-500">{browserSwitchTax.estimated_lost_minutes}m</div>
+                <div class="text-ui-xl font-semibold text-red-500">{browserSwitchTax.estimated_lost_minutes}m</div>
                 <div class="text-muted-foreground">lost</div>
               </div>
               <div>
-                <div class="text-lg font-semibold">{browserSwitchTax.avg_focus_at_switch?.toFixed(0) ?? "--"}</div>
+                <div class="text-ui-xl font-semibold">{browserSwitchTax.avg_focus_at_switch?.toFixed(0) ?? "--"}</div>
                 <div class="text-muted-foreground">focus at switch</div>
               </div>
             </div>
@@ -1480,7 +1480,7 @@ let heatmapMax = $state(1);
       {#if browserTabLoad.length > 3}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Tab Count vs Focus</span>
+            <span class="text-ui-base font-medium mb-2 block">Tab Count vs Focus</span>
             <div class="flex items-end gap-0.5 h-16">
               {#each browserTabLoad as tl}
                 {@const maxFocus = Math.max(...browserTabLoad.map(t => t.avg_focus), 1)}
@@ -1502,7 +1502,7 @@ let heatmapMax = $state(1);
       {#if browserNightOwl.length > 6}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Focus by Hour</span>
+            <span class="text-ui-base font-medium mb-2 block">Focus by Hour</span>
             <div class="flex items-end gap-0.5 h-12">
               {#each browserNightOwl as hn}
                 {@const maxF = Math.max(...browserNightOwl.map(h => h.avg_focus), 1)}
@@ -1522,19 +1522,19 @@ let heatmapMax = $state(1);
       {#if browserWeekday && browserWeekday.weekday_avg_focus != null}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Weekday vs Weekend</span>
-            <div class="grid grid-cols-2 gap-4 text-xs text-center">
+            <span class="text-ui-base font-medium mb-2 block">Weekday vs Weekend</span>
+            <div class="grid grid-cols-2 gap-4 text-ui-xs text-center">
               <div>
-                <div class="text-lg font-semibold">{browserWeekday.weekday_avg_focus?.toFixed(0) ?? "--"}</div>
+                <div class="text-ui-xl font-semibold">{browserWeekday.weekday_avg_focus?.toFixed(0) ?? "--"}</div>
                 <div class="text-muted-foreground">weekday focus</div>
               </div>
               <div>
-                <div class="text-lg font-semibold">{browserWeekday.weekend_avg_focus?.toFixed(0) ?? "--"}</div>
+                <div class="text-ui-xl font-semibold">{browserWeekday.weekend_avg_focus?.toFixed(0) ?? "--"}</div>
                 <div class="text-muted-foreground">weekend focus</div>
               </div>
             </div>
             {#if browserWeekday.delta != null}
-              <p class="text-xs text-center mt-1 text-muted-foreground">
+              <p class="text-ui-xs text-center mt-1 text-muted-foreground">
                 {browserWeekday.delta > 0 ? "Weekday" : "Weekend"} focus is {Math.abs(browserWeekday.delta).toFixed(0)} points higher
               </p>
             {/if}
@@ -1547,11 +1547,11 @@ let heatmapMax = $state(1);
         <SettingsCard>
           <CardContent class="py-0 px-0">
             <div class="px-4 pt-3.5 pb-2">
-              <span class="text-sm font-medium">Post-Meeting Browsing</span>
+              <span class="text-ui-base font-medium">Post-Meeting Browsing</span>
             </div>
             <div class="divide-y divide-border dark:divide-white/[0.04]">
               {#each browserPostMeeting as pm}
-                <div class="flex items-center gap-2 px-4 py-2 text-xs">
+                <div class="flex items-center gap-2 px-4 py-2 text-ui-xs">
                   <span class="flex-1 truncate">{pm.meeting_title || pm.platform}</span>
                   {#if pm.post_meeting_focus != null}
                     <span class="tabular-nums {pm.post_meeting_focus < 40 ? 'text-red-500' : 'text-muted-foreground'}">focus {pm.post_meeting_focus.toFixed(0)}</span>
@@ -1570,13 +1570,13 @@ let heatmapMax = $state(1);
       {#if browserCopyPaste && (browserCopyPaste.copies > 0 || browserCopyPaste.pastes > 0)}
         <SettingsCard>
           <CardContent class="px-4 py-3.5">
-            <span class="text-sm font-medium mb-2 block">Copy-Paste Workflow</span>
-            <div class="grid grid-cols-2 gap-3 text-xs">
+            <span class="text-ui-base font-medium mb-2 block">Copy-Paste Workflow</span>
+            <div class="grid grid-cols-2 gap-3 text-ui-xs">
               <div><span class="font-medium text-foreground">{browserCopyPaste.copies}</span> copies</div>
               <div><span class="font-medium text-foreground">{browserCopyPaste.pastes}</span> pastes</div>
             </div>
             {#if browserCopyPaste.top_domains.length > 0}
-              <div class="mt-2 text-xs text-muted-foreground">
+              <div class="mt-2 text-ui-xs text-muted-foreground">
                 Top: {browserCopyPaste.top_domains.map(([d, n]) => `${d} (${n})`).join(", ")}
               </div>
             {/if}
@@ -1608,7 +1608,7 @@ let heatmapMax = $state(1);
     <SettingsCard>
       <CardContent class="py-3">
         {#if weeklyError}
-          <div class="mb-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+          <div class="mb-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-ui-xs text-red-400">
             {weeklyError}
           </div>
         {/if}

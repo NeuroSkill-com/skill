@@ -245,7 +245,7 @@ async function startCalibrationWeek() {
 
   <!-- Disclaimer banner -->
   <div
-    class="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-700 dark:text-amber-400"
+    class="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-ui-base leading-relaxed text-amber-700 dark:text-amber-400"
     role="note"
   >
     <span class="mt-0.5 flex-shrink-0" aria-hidden="true">⚠️</span>
@@ -253,7 +253,7 @@ async function startCalibrationWeek() {
   </div>
 
   {#if loadError}
-    <div class="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
+    <div class="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-ui-base">
       Failed to load validation config: {loadError}
     </div>
   {/if}
@@ -262,7 +262,7 @@ async function startCalibrationWeek() {
     <!-- ── Master gates ─────────────────────────────────────────────── -->
     <SettingsCard>
       <CardContent class="flex flex-col gap-5 p-6">
-        <h3 class="text-base font-medium leading-tight">{t("validation.master.title")}</h3>
+        <h3 class="text-ui-lg font-medium leading-tight">{t("validation.master.title")}</h3>
 
         <ToggleRow
           checked={config.respect_flow}
@@ -273,29 +273,29 @@ async function startCalibrationWeek() {
 
         <div class="grid grid-cols-2 gap-4">
           <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">{t("validation.master.quietBefore")}</span>
+            <span class="text-ui-base font-medium">{t("validation.master.quietBefore")}</span>
             <input
               type="number"
               min="0"
               max="23"
               value={config.quiet_before_hour}
               onchange={setQuietBefore}
-              class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
             />
           </label>
           <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">{t("validation.master.quietAfter")}</span>
+            <span class="text-ui-base font-medium">{t("validation.master.quietAfter")}</span>
             <input
               type="number"
               min="0"
               max="23"
               value={config.quiet_after_hour}
               onchange={setQuietAfter}
-              class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
             />
           </label>
         </div>
-        <p class="text-xs leading-relaxed text-muted-foreground">{t("validation.master.quietDesc")}</p>
+        <p class="text-ui-xs leading-relaxed text-muted-foreground">{t("validation.master.quietDesc")}</p>
       </CardContent>
     </SettingsCard>
 
@@ -303,8 +303,8 @@ async function startCalibrationWeek() {
     <SettingsCard>
       <CardContent class="flex flex-col gap-5 p-6">
         <div class="flex flex-col gap-1.5">
-          <h3 class="text-base font-medium leading-tight">{t("validation.kss.title")}</h3>
-          <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.kss.desc")}</p>
+          <h3 class="text-ui-lg font-medium leading-tight">{t("validation.kss.title")}</h3>
+          <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.kss.desc")}</p>
         </div>
 
         <ToggleRow
@@ -317,25 +317,25 @@ async function startCalibrationWeek() {
           <div class="ml-1 flex flex-col gap-5 border-l-2 border-border pl-5">
             <div class="grid grid-cols-2 gap-4">
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm">{t("validation.kss.maxPerDay")}</span>
+                <span class="text-ui-base">{t("validation.kss.maxPerDay")}</span>
                 <input
                   type="number"
                   min="1"
                   max="20"
                   value={config.kss.max_per_day}
                   onchange={bindNumber("kss", "max_per_day")}
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
                 />
               </label>
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm">{t("validation.kss.minInterval")}</span>
+                <span class="text-ui-base">{t("validation.kss.minInterval")}</span>
                 <input
                   type="number"
                   min="5"
                   max="600"
                   value={config.kss.min_interval_min}
                   onchange={bindNumber("kss", "min_interval_min")}
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
                 />
               </label>
             </div>
@@ -354,7 +354,7 @@ async function startCalibrationWeek() {
 
             {#if config.kss.trigger_random}
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm">{t("validation.kss.randomWeight")}</span>
+                <span class="text-ui-base">{t("validation.kss.randomWeight")}</span>
                 <input
                   type="number"
                   min="0"
@@ -362,7 +362,7 @@ async function startCalibrationWeek() {
                   step="0.05"
                   value={config.kss.random_weight}
                   onchange={bindNumber("kss", "random_weight")}
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
                 />
               </label>
             {/if}
@@ -375,8 +375,8 @@ async function startCalibrationWeek() {
     <SettingsCard>
       <CardContent class="flex flex-col gap-5 p-6">
         <div class="flex flex-col gap-1.5">
-          <h3 class="text-base font-medium leading-tight">{t("validation.tlx.title")}</h3>
-          <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.tlx.desc")}</p>
+          <h3 class="text-ui-lg font-medium leading-tight">{t("validation.tlx.title")}</h3>
+          <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.tlx.desc")}</p>
         </div>
 
         <ToggleRow
@@ -389,25 +389,25 @@ async function startCalibrationWeek() {
           <div class="ml-1 flex flex-col gap-5 border-l-2 border-border pl-5">
             <div class="grid grid-cols-2 gap-4">
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm">{t("validation.tlx.maxPerDay")}</span>
+                <span class="text-ui-base">{t("validation.tlx.maxPerDay")}</span>
                 <input
                   type="number"
                   min="1"
                   max="10"
                   value={config.tlx.max_per_day}
                   onchange={bindNumber("tlx", "max_per_day")}
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
                 />
               </label>
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm">{t("validation.tlx.minTaskMin")}</span>
+                <span class="text-ui-base">{t("validation.tlx.minTaskMin")}</span>
                 <input
                   type="number"
                   min="5"
                   max="300"
                   value={config.tlx.min_task_min}
                   onchange={bindNumber("tlx", "min_task_min")}
-                  class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
                 />
               </label>
             </div>
@@ -430,8 +430,8 @@ async function startCalibrationWeek() {
     <SettingsCard>
       <CardContent class="flex flex-col gap-5 p-6">
         <div class="flex flex-col gap-1.5">
-          <h3 class="text-base font-medium leading-tight">{t("validation.pvt.title")}</h3>
-          <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.pvt.desc")}</p>
+          <h3 class="text-ui-lg font-medium leading-tight">{t("validation.pvt.title")}</h3>
+          <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.pvt.desc")}</p>
         </div>
 
         <ToggleRow
@@ -462,8 +462,8 @@ async function startCalibrationWeek() {
     <SettingsCard>
       <CardContent class="flex flex-col gap-5 p-6">
         <div class="flex flex-col gap-1.5">
-          <h3 class="text-base font-medium leading-tight">{t("validation.eeg.title")}</h3>
-          <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.eeg.desc")}</p>
+          <h3 class="text-ui-lg font-medium leading-tight">{t("validation.eeg.title")}</h3>
+          <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.eeg.desc")}</p>
         </div>
 
         <ToggleRow
@@ -475,19 +475,19 @@ async function startCalibrationWeek() {
         {#if config.eeg_fatigue.enabled}
           <div class="ml-1 grid grid-cols-2 gap-4 border-l-2 border-border pl-5">
             <label class="flex flex-col gap-1.5">
-              <span class="text-sm">{t("validation.eeg.windowSecs")}</span>
+              <span class="text-ui-base">{t("validation.eeg.windowSecs")}</span>
               <input
                 type="number"
                 min="5"
                 max="300"
                 value={config.eeg_fatigue.window_secs}
                 onchange={bindNumber("eeg_fatigue", "window_secs")}
-                class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                class="w-full rounded-md border bg-background px-3 py-2 text-ui-base"
               />
             </label>
             <div class="flex flex-col gap-1.5">
-              <span class="text-sm">{t("validation.eeg.current")}</span>
-              <div class="rounded-md border bg-muted px-3 py-2 text-sm font-mono">
+              <span class="text-ui-base">{t("validation.eeg.current")}</span>
+              <div class="rounded-md border bg-muted px-3 py-2 text-ui-base font-mono">
                 {fatigueIndex !== null ? fatigueIndex.toFixed(2) : t("validation.eeg.noHeadset")}
               </div>
             </div>
@@ -500,8 +500,8 @@ async function startCalibrationWeek() {
     <SettingsCard>
       <CardContent class="flex flex-col gap-4 p-6">
         <div class="flex flex-col gap-1.5">
-          <h3 class="text-base font-medium leading-tight">{t("validation.calibrationWeek.title")}</h3>
-          <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.calibrationWeek.desc")}</p>
+          <h3 class="text-ui-lg font-medium leading-tight">{t("validation.calibrationWeek.title")}</h3>
+          <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.calibrationWeek.desc")}</p>
         </div>
         <div>
           <Button onclick={startCalibrationWeek} variant="default">
@@ -514,20 +514,20 @@ async function startCalibrationWeek() {
     <!-- ── Recent results ──────────────────────────────────────────── -->
     <SettingsCard>
       <CardContent class="flex flex-col gap-3 p-6">
-        <h3 class="text-base font-medium leading-tight">{t("validation.results.title")}</h3>
+        <h3 class="text-ui-lg font-medium leading-tight">{t("validation.results.title")}</h3>
         {#if recentKssCount > 0}
-          <p class="text-sm text-muted-foreground">
+          <p class="text-ui-base text-muted-foreground">
             {t("validation.results.kssCount", { 0: recentKssCount })}
           </p>
         {:else}
-          <p class="text-sm leading-relaxed text-muted-foreground">{t("validation.results.empty")}</p>
+          <p class="text-ui-base leading-relaxed text-muted-foreground">{t("validation.results.empty")}</p>
         {/if}
       </CardContent>
     </SettingsCard>
 
     <!-- Save status footer -->
     {#if saveStatus !== "idle"}
-      <div class="px-1 text-xs text-muted-foreground">
+      <div class="px-1 text-ui-xs text-muted-foreground">
         {#if saveStatus === "saving"}{t("validation.save.saving")}{/if}
         {#if saveStatus === "saved"}{t("validation.save.saved")}{/if}
         {#if saveStatus === "error"}{t("validation.save.failed", { 0: saveError })}{/if}

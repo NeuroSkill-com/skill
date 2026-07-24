@@ -408,7 +408,7 @@ onDestroy(() => clearInterval(nowTimer));
                   class="flex flex-col items-start gap-0.5 rounded-xl border px-2.5 py-2
                          text-left transition-all border-border dark:border-white/[0.06]
                          bg-muted/20 hover:bg-muted/40">
-            <span class="text-sm">{preset.icon}</span>
+            <span class="text-ui-base">{preset.icon}</span>
             <span class="text-ui-sm font-semibold leading-tight text-foreground/80">
               {t(`calibration.preset.${preset.key}`)}
             </span>

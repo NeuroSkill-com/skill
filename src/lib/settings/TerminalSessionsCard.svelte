@@ -301,7 +301,7 @@ function toggleDay(key: string) {
 
 <SettingsCard>
   <SectionHeader>Terminal Sessions</SectionHeader>
-  <p class="-mt-1 mb-1 px-0.5 text-sm text-muted-foreground">
+  <p class="-mt-1 mb-1 px-0.5 text-ui-base text-muted-foreground">
     Each shell from launch to exit. Click a row to see every command and its output.
     Search keyword (FTS) or by meaning (embeddings).
   </p>
@@ -314,9 +314,9 @@ function toggleDay(key: string) {
         bind:value={searchQuery}
         onkeydown={(e) => { if (e.key === "Enter") runSearch(); }}
         placeholder="Search command output…"
-        class="flex-1 min-w-[12rem] rounded-md border border-border/60 bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        class="flex-1 min-w-[12rem] rounded-md border border-border/60 bg-background px-3 py-1.5 text-ui-base focus:outline-none focus:ring-1 focus:ring-ring"
       />
-      <div class="flex rounded-md border border-border/60 text-xs">
+      <div class="flex rounded-md border border-border/60 text-ui-xs">
         <button
           class="px-2 py-1 transition-colors {searchMode === 'keyword' ? 'bg-muted font-medium' : 'hover:bg-muted/50'}"
           onclick={() => { searchMode = "keyword"; if (searchQuery) runSearch(); }}
@@ -337,14 +337,14 @@ function toggleDay(key: string) {
     </div>
 
     {#if error}
-      <div class="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">{error}</div>
+      <div class="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-ui-xs text-red-400">{error}</div>
     {/if}
 
     <!-- Scope summary so the user can see the full capture surface at a glance. -->
     {#if !loading}
       {@const totalCmds = sessions.reduce((acc, s) => acc + s.command_count, 0)}
       {@const backfilled = sessions.filter((s) => s.has_session_text).length}
-      <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-ui-xs text-muted-foreground">
         <span>{sessions.length} session{sessions.length === 1 ? "" : "s"}</span>
         <span>{totalCmds} command{totalCmds === 1 ? "" : "s"} linked</span>
         {#if backfilled > 0}
@@ -363,11 +363,11 @@ function toggleDay(key: string) {
     <!-- Search results override the session list when active -->
     {#if searchResults}
       <div class="space-y-1.5">
-        <p class="text-xs text-muted-foreground">
+        <p class="text-ui-xs text-muted-foreground">
           {searchResults.length} match{searchResults.length === 1 ? "" : "es"} ({searchMode})
         </p>
         {#each searchResults as r}
-          <div class="rounded-md border border-border/40 px-3 py-2 text-xs">
+          <div class="rounded-md border border-border/40 px-3 py-2 text-ui-xs">
             <div class="flex items-center justify-between gap-2 text-muted-foreground">
               <span>cmd #{r.id}</span>
               {#if r.score !== undefined}
@@ -378,7 +378,7 @@ function toggleDay(key: string) {
           </div>
         {/each}
         {#if searchResults.length === 0}
-          <p class="text-xs italic text-muted-foreground">No matches.</p>
+          <p class="text-ui-xs italic text-muted-foreground">No matches.</p>
         {/if}
       </div>
 
@@ -386,7 +386,7 @@ function toggleDay(key: string) {
       <div class="flex justify-center py-6"><Spinner /></div>
 
     {:else if sessions.length === 0}
-      <p class="text-sm italic text-muted-foreground">
+      <p class="text-ui-base italic text-muted-foreground">
         No sessions yet. Open a new terminal — recording starts automatically.
       </p>
 
@@ -401,7 +401,7 @@ function toggleDay(key: string) {
           ["live", "Live", sessions.filter((s) => s.ended_at == null).length],
         ] as const as [kind, label, count]}
           <button
-            class="rounded-full border px-2 py-0.5 text-[11px] transition-colors {filter === kind ? 'border-primary bg-primary/15 text-primary' : 'border-border/50 text-muted-foreground hover:border-border hover:bg-muted/40'}"
+            class="rounded-full border px-2 py-0.5 text-ui-2xs transition-colors {filter === kind ? 'border-primary bg-primary/15 text-primary' : 'border-border/50 text-muted-foreground hover:border-border hover:bg-muted/40'}"
             onclick={() => (filter = kind as FilterKind)}
             data-filter={kind}
           >
@@ -411,7 +411,7 @@ function toggleDay(key: string) {
       </div>
 
       {#if filtered.length === 0}
-        <p class="py-3 text-sm italic text-muted-foreground">
+        <p class="py-3 text-ui-base italic text-muted-foreground">
           No sessions match this filter.
         </p>
       {:else}
@@ -425,7 +425,7 @@ function toggleDay(key: string) {
                 onclick={() => toggleDay(bucket.key)}
               >
                 <span class="text-ui-2xs font-mono text-muted-foreground/70">{collapsed ? "▸" : "▾"}</span>
-                <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <span class="text-ui-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {bucket.label}
                 </span>
                 <span class="text-ui-2xs text-muted-foreground/70">
@@ -450,10 +450,10 @@ function toggleDay(key: string) {
                         onclick={() => toggleSession(s)}
                       >
                         <div class="flex min-w-0 flex-1 items-center gap-3">
-                          <span class="text-muted-foreground text-xs font-mono shrink-0 w-4">
+                          <span class="text-muted-foreground text-ui-xs font-mono shrink-0 w-4">
                             {isOpen ? "▾" : "▸"}
                           </span>
-                          <span class="font-mono text-xs tabular-nums text-muted-foreground shrink-0 w-12 text-right">
+                          <span class="font-mono text-ui-xs tabular-nums text-muted-foreground shrink-0 w-12 text-right">
                             {fmtTime(s.started_at)}
                           </span>
                           <!-- Duration bar — log-scaled so 10 s and 4 h both show. -->
@@ -467,8 +467,8 @@ function toggleDay(key: string) {
                             ></div>
                           </div>
                           <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-                              <span class="text-xs text-muted-foreground">
+                            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-ui-base">
+                              <span class="text-ui-xs text-muted-foreground">
                                 {s.shell || "(legacy)"} · {fmtDuration(s.started_at, s.ended_at)}
                                 {#if s.command_count > 0}
                                   · {s.command_count} cmd{s.command_count === 1 ? "" : "s"}
@@ -489,14 +489,14 @@ function toggleDay(key: string) {
                               {/if}
                             </div>
                             {#if s.initial_cwd}
-                              <div class="truncate text-xs text-muted-foreground" title={s.initial_cwd}>
+                              <div class="truncate text-ui-xs text-muted-foreground" title={s.initial_cwd}>
                                 {s.initial_cwd}
                               </div>
                             {/if}
                           </div>
                         </div>
                         {#if showEegColumns}
-                          <div class="flex shrink-0 items-center gap-3 text-xs" data-testid="eeg-cols">
+                          <div class="flex shrink-0 items-center gap-3 text-ui-xs" data-testid="eeg-cols">
                             <span class="text-muted-foreground" title="Avg focus">
                               <span class="opacity-60">F</span> {fmtFocus(s.avg_focus)}
                             </span>
@@ -515,22 +515,22 @@ function toggleDay(key: string) {
                           {:else if exp.kind === "commands" && exp.commands}
                             {#each exp.commands as cmd}
                               <details class="group rounded border border-border/30 px-2 py-1">
-                                <summary class="cursor-pointer list-none text-xs">
+                                <summary class="cursor-pointer list-none text-ui-xs">
                                   <span class="text-muted-foreground font-mono">#{cmd.command_id}</span>
                                   <span class="ml-2 text-foreground/80">{snippet(cmd.stripped_text, 80)}</span>
                                 </summary>
-                                <pre class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-snug text-foreground/90">{cmd.stripped_text}</pre>
+                                <pre class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap font-mono text-ui-2xs leading-snug text-foreground/90">{cmd.stripped_text}</pre>
                               </details>
                             {/each}
 
                           {:else if exp.kind === "session_text" && exp.text !== undefined}
-                            <p class="text-[11px] text-muted-foreground">
+                            <p class="text-ui-2xs text-muted-foreground">
                               Stripped session text ({exp.textBytes ?? exp.text.length} chars). No per-command slicing — the source .log.zst predates timing-index sidecars.
                             </p>
-                            <pre class="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-border/30 bg-muted/30 p-2 font-mono text-[11px] leading-snug text-foreground/90">{exp.text || "(empty after ANSI strip)"}</pre>
+                            <pre class="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-border/30 bg-muted/30 p-2 font-mono text-ui-2xs leading-snug text-foreground/90">{exp.text || "(empty after ANSI strip)"}</pre>
 
                           {:else}
-                            <p class="py-2 text-xs italic text-muted-foreground">
+                            <p class="py-2 text-ui-xs italic text-muted-foreground">
                               No output captured. The shell ran but its output stream wasn't recorded.
                             </p>
                           {/if}

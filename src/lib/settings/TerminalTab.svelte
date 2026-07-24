@@ -190,10 +190,10 @@ function categoryColor(cat: string): string {
 
   <!-- Status messages -->
   {#if error}
-    <div class="rounded-md border border-red-500/30 bg-red-500/5 px-4 py-2 text-sm text-red-400">{error}</div>
+    <div class="rounded-md border border-red-500/30 bg-red-500/5 px-4 py-2 text-ui-base text-red-400">{error}</div>
   {/if}
   {#if success}
-    <div class="rounded-md border border-green-500/30 bg-green-500/5 px-4 py-2 text-xs text-green-400 whitespace-pre-line break-all font-mono leading-relaxed">{success}</div>
+    <div class="rounded-md border border-green-500/30 bg-green-500/5 px-4 py-2 text-ui-xs text-green-400 whitespace-pre-line break-all font-mono leading-relaxed">{success}</div>
   {/if}
 
   <!-- Shell hooks -->
@@ -206,12 +206,12 @@ function categoryColor(cat: string): string {
       {#each shells as s}
         <div class="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-4 py-3">
           <div class="flex min-w-0 flex-1 items-center gap-3">
-            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-ui-xs font-bold">
               {s.label.slice(0, 2)}
             </div>
             <div class="min-w-0 flex-1">
-              <div class="text-sm font-medium">{s.label}</div>
-              <div class="truncate text-xs text-muted-foreground" title={s.rcFile}>
+              <div class="text-ui-base font-medium">{s.label}</div>
+              <div class="truncate text-ui-xs text-muted-foreground" title={s.rcFile}>
                 {#if s.installed}
                   <span class="text-green-400">Installed</span> &middot; {s.rcFile}
                 {:else if !s.available}
@@ -262,7 +262,7 @@ function categoryColor(cat: string): string {
       description="Shell hooks run a background curl on every command — no delay to your prompt."
     />
     <CardContent>
-      <div class="space-y-2 text-sm text-muted-foreground">
+      <div class="space-y-2 text-ui-base text-muted-foreground">
         <p>When you press Enter in your terminal, the hook sends the command text, working directory, and exit code to the NeuroSkill daemon. This enables:</p>
         <ul class="ml-4 list-disc space-y-1">
           <li>Build/test failure detection correlated with your brain state</li>
@@ -286,7 +286,7 @@ function categoryColor(cat: string): string {
       {#if recentCommands.length > 0}
         <div class="space-y-1">
           {#each recentCommands as cmd}
-            <div class="flex min-w-0 items-center gap-2 rounded px-2 py-1 text-xs font-mono hover:bg-muted/50">
+            <div class="flex min-w-0 items-center gap-2 rounded px-2 py-1 text-ui-xs font-mono hover:bg-muted/50">
               <span class="w-16 shrink-0 text-muted-foreground">{fmtTime(cmd.started_at)}</span>
               <span class="w-5 shrink-0 text-center">
                 {#if cmd.exit_code === null}
@@ -303,7 +303,7 @@ function categoryColor(cat: string): string {
           {/each}
         </div>
       {:else}
-        <p class="text-sm text-muted-foreground italic">No commands tracked yet. Install a shell hook and open a new terminal.</p>
+        <p class="text-ui-base text-muted-foreground italic">No commands tracked yet. Install a shell hook and open a new terminal.</p>
       {/if}
     </CardContent>
   </SettingsCard>

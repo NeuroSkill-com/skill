@@ -286,7 +286,7 @@ $effect(() => {
       <CardContent class="py-0 px-0">
         <div class="divide-y divide-border dark:divide-white/[0.04]">
           {#if vsForks.length === 0}
-            <p class="px-4 py-3 text-sm text-muted-foreground">
+            <p class="px-4 py-3 text-ui-base text-muted-foreground">
               {t("extensions.noIdeDetected")}
             </p>
           {/if}
@@ -300,13 +300,13 @@ $effect(() => {
                 </div>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium">{fork.name}</span>
+                    <span class="text-ui-base font-medium">{fork.name}</span>
                     {#if fork.installed}
                       <Badge variant="default">{t("extensions.installed")}</Badge>
                     {/if}
                   </div>
                   {#if extMessage[fork.id]}
-                    <p class="mt-1 text-xs {extMessage[fork.id].type === 'success' ? 'text-green-500' : 'text-red-500'}">
+                    <p class="mt-1 text-ui-xs {extMessage[fork.id].type === 'success' ? 'text-green-500' : 'text-red-500'}">
                       {extMessage[fork.id].text}
                     </p>
                   {/if}
@@ -338,7 +338,7 @@ $effect(() => {
   <!-- Browser Extensions -->
   <section class="flex flex-col gap-2">
     <SectionHeader>{t("extensions.browserTitle")}</SectionHeader>
-    <p class="text-sm text-muted-foreground -mt-1 mb-1">{t("extensions.browserDesc")}</p>
+    <p class="text-ui-base text-muted-foreground -mt-1 mb-1">{t("extensions.browserDesc")}</p>
     <SettingsCard>
       <CardContent class="py-0 px-0">
         <div class="divide-y divide-border dark:divide-white/[0.04]">
@@ -352,14 +352,14 @@ $effect(() => {
                 </div>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="font-medium text-sm">{t(ext.nameKey)}</span>
+                    <span class="font-medium text-ui-base">{t(ext.nameKey)}</span>
                     {#if ext.installed}
                       <Badge variant="default">{t("extensions.installed")}</Badge>
                     {/if}
                   </div>
-                  <p class="text-xs text-muted-foreground mt-0.5 truncate">{t(ext.descKey)}</p>
+                  <p class="text-ui-xs text-muted-foreground mt-0.5 truncate">{t(ext.descKey)}</p>
                   {#if extMessage[ext.id]}
-                    <p class="text-xs mt-1 {extMessage[ext.id].type === 'success' ? 'text-green-500' : 'text-red-500'}">
+                    <p class="text-ui-xs mt-1 {extMessage[ext.id].type === 'success' ? 'text-green-500' : 'text-red-500'}">
                       {extMessage[ext.id].text}
                     </p>
                   {/if}
@@ -409,14 +409,14 @@ $effect(() => {
   <!-- Pairing Token -->
   <section class="flex flex-col gap-2">
     <SectionHeader>{t("extensions.pairingTitle")}</SectionHeader>
-    <p class="text-sm text-muted-foreground -mt-1 mb-1">{t("extensions.pairingDesc")}</p>
+    <p class="text-ui-base text-muted-foreground -mt-1 mb-1">{t("extensions.pairingDesc")}</p>
     <SettingsCard>
       <CardContent class="px-4 py-3.5 flex flex-col gap-3">
         <div class="flex items-center gap-2">
           <Button size="sm" variant="default" onclick={copyPairingToken}>
             {t("extensions.copyPairingToken")}
           </Button>
-          <span class="text-xs text-muted-foreground">{t("extensions.copyPairingTokenHint")}</span>
+          <span class="text-ui-xs text-muted-foreground">{t("extensions.copyPairingTokenHint")}</span>
         </div>
         <div class="flex items-center gap-2">
           <Button size="sm" variant="outline" onclick={pairViaBrowser} disabled={pairingInProgress}>
@@ -426,16 +426,16 @@ $effect(() => {
               {t("extensions.pairViaBrowser")}
             {/if}
           </Button>
-          <span class="text-xs text-muted-foreground">{t("extensions.pairViaBrowserHint")}</span>
+          <span class="text-ui-xs text-muted-foreground">{t("extensions.pairViaBrowserHint")}</span>
         </div>
         <div class="flex items-center gap-2">
           <Button size="sm" variant="outline" onclick={copyAuthToken}>
             {t("extensions.copyToken")}
           </Button>
-          <span class="text-xs text-muted-foreground">{t("extensions.copyTokenHint")}</span>
+          <span class="text-ui-xs text-muted-foreground">{t("extensions.copyTokenHint")}</span>
         </div>
         {#if statusMessage}
-          <span class="text-xs {statusType === 'success' ? 'text-green-500' : 'text-red-500'}">
+          <span class="text-ui-xs {statusType === 'success' ? 'text-green-500' : 'text-red-500'}">
             {statusMessage}
           </span>
         {/if}

@@ -694,7 +694,7 @@ onDestroy(() => {
         </div>
         <div class="flex flex-col gap-0.5 shrink-0 items-end">
           <SectionHeader>{t("model.embeddingsToday")}</SectionHeader>
-          <span class="text-[1rem] font-bold tabular-nums text-foreground leading-none">
+          <span class="text-ui-lg font-bold tabular-nums text-foreground leading-none">
             {modelStatus.embeddings_today}
           </span>
         </div>

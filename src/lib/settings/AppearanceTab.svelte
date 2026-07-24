@@ -73,7 +73,7 @@ const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
                      {getTheme() === opt.value
                        ? 'border-violet-500/50 bg-violet-500/10'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-surface-2 hover:bg-accent dark:hover:bg-white/[0.04]'}">
-              <span class="text-[1rem]">{opt.icon}</span>
+              <span class="text-ui-lg">{opt.icon}</span>
               <span class="text-ui-md font-semibold leading-tight
                            {getTheme() === opt.value ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}">
                 {t(opt.labelKey)}

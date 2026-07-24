@@ -342,7 +342,7 @@ onDestroy(() => stopPolling());
       <div class="p-4 border-b border-border dark:border-white/[0.06]">
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-sm font-semibold">Permissions — {editingClient.name}</h3>
+            <h3 class="text-ui-base font-semibold">Permissions — {editingClient.name}</h3>
             <p class="text-ui-xs text-muted-foreground font-mono mt-0.5">{editingClient.endpoint_id}</p>
           </div>
           <Button variant="ghost" size="sm" class="h-7 w-7 p-0" onclick={closePermissions}>
@@ -360,7 +360,7 @@ onDestroy(() => stopPolling());
           <div class="flex gap-2 mt-1.5">
             {#each [["read", "Read Only", ""], ["custom", "Custom", ""], ["full", "Full Access", "text-red-600"]] as [val, label, cls]}
               <button
-                class="px-3 py-1.5 text-xs rounded-md border transition-colors
+                class="px-3 py-1.5 text-ui-xs rounded-md border transition-colors
                        {editScope === val
                   ? val === 'full'
                     ? 'bg-red-600 text-white border-red-600'
@@ -390,7 +390,7 @@ onDestroy(() => stopPolling());
                   d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
                 />
               </svg>
-              <span class="text-xs font-bold text-red-700 dark:text-red-300">Full Access Warning</span>
+              <span class="text-ui-xs font-bold text-red-700 dark:text-red-300">Full Access Warning</span>
             </div>
             <p class="text-ui-sm text-red-600 dark:text-red-400 leading-relaxed">
               Complete control: manage hooks, LLM, credentials, other clients' permissions, and system settings.
@@ -414,7 +414,7 @@ onDestroy(() => stopPolling());
                     class="mt-0.5 rounded accent-primary"
                   />
                   <div class="flex-1 min-w-0">
-                    <div class="text-xs font-medium">{g.label}</div>
+                    <div class="text-ui-xs font-medium">{g.label}</div>
                     <div class="text-ui-xs text-muted-foreground leading-relaxed">{g.description}</div>
                   </div>
                 </label>
@@ -469,7 +469,7 @@ onDestroy(() => stopPolling());
                     />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-1.5">
-                        <span class="text-xs font-medium">{g.label}</span>
+                        <span class="text-ui-xs font-medium">{g.label}</span>
                         <Badge variant="destructive" class="text-ui-2xs px-1 py-0">dangerous</Badge>
                       </div>
                       <div class="text-ui-xs text-muted-foreground leading-relaxed">{g.description}</div>
@@ -493,14 +493,14 @@ onDestroy(() => stopPolling());
         <Button
           variant="outline"
           size="sm"
-          class="text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+          class="text-ui-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
           onclick={() => revokeDevice(editingClient!.id)}
         >
           Revoke Device
         </Button>
         <div class="flex gap-2">
-          <Button variant="outline" size="sm" class="text-xs" onclick={closePermissions}>Cancel</Button>
-          <Button size="sm" class="text-xs" disabled={saving} onclick={savePermissions}>
+          <Button variant="outline" size="sm" class="text-ui-xs" onclick={closePermissions}>Cancel</Button>
+          <Button size="sm" class="text-ui-xs" disabled={saving} onclick={savePermissions}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -516,16 +516,16 @@ onDestroy(() => stopPolling());
   <SettingsCard>
     <CardContent class="p-4">
       {#if loading}
-        <p class="text-xs text-muted-foreground">Loading…</p>
+        <p class="text-ui-xs text-muted-foreground">Loading…</p>
       {:else if !online}
         <div class="flex items-center gap-2">
           <span class="h-2 w-2 rounded-full bg-red-400 animate-pulse"></span>
-          <span class="text-xs text-muted-foreground">iroh tunnel is offline</span>
+          <span class="text-ui-xs text-muted-foreground">iroh tunnel is offline</span>
         </div>
       {:else}
         <div class="flex items-center gap-2">
           <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-          <span class="text-xs font-medium">Online</span>
+          <span class="text-ui-xs font-medium">Online</span>
           <Badge variant="secondary" class="text-ui-2xs">
             {devices.length} device{devices.length !== 1 ? "s" : ""}
           </Badge>
@@ -559,7 +559,7 @@ onDestroy(() => stopPolling());
                 <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Device paired</p>
+            <p class="text-ui-base font-semibold text-emerald-600 dark:text-emerald-400">Device paired</p>
           </div>
         {:else if qr}
           <div class="flex flex-col items-center gap-3">
@@ -609,7 +609,7 @@ onDestroy(() => stopPolling());
               <Button
                 variant="outline"
                 size="sm"
-                class="text-xs"
+                class="text-ui-xs"
                 onclick={() => {
                   qr = null;
                   inviteLink = null;
@@ -659,7 +659,7 @@ onDestroy(() => stopPolling());
             {/if}
           </div>
 
-          <Button size="sm" class="text-xs self-start" disabled={creating} onclick={createInvite}>
+          <Button size="sm" class="text-ui-xs self-start" disabled={creating} onclick={createInvite}>
             {creating ? "Generating…" : "Generate QR Code"}
           </Button>
         {/if}
@@ -775,7 +775,7 @@ onDestroy(() => stopPolling());
 
 {#if err}
   <div
-    class="rounded-lg border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-900/10 px-3 py-2 text-xs text-red-700 dark:text-red-400"
+    class="rounded-lg border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-900/10 px-3 py-2 text-ui-xs text-red-700 dark:text-red-400"
   >
     {err}
   </div>

@@ -352,7 +352,7 @@ onDestroy(() => {
     <div class="flex items-center justify-center w-11 h-11 rounded-xl
                 bg-gradient-to-br from-sky-500 to-blue-600
                 shadow-lg shadow-blue-500/25 dark:shadow-blue-500/40 shrink-0">
-      <span class="text-xl leading-none">⬆</span>
+      <span class="text-ui-2xl leading-none">⬆</span>
     </div>
     <div class="flex flex-col gap-0.5">
       <span class="text-ui-lg font-bold">{t("updates.title")}</span>
@@ -384,7 +384,7 @@ onDestroy(() => {
         {#if phase === "ready"}
           <!-- ── Installed, waiting for user to restart ── -->
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-xl shrink-0">
+            <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-ui-2xl shrink-0">
               ✅
             </div>
             <div class="flex flex-col gap-0.5 flex-1">
@@ -410,7 +410,7 @@ onDestroy(() => {
 
           {#if sessionBlockWarning}
             <div class="rounded-lg border border-amber-400/30 bg-amber-50 dark:bg-[#1a1508] px-3 py-2 flex items-start gap-2">
-              <span class="text-base shrink-0">⚠</span>
+              <span class="text-ui-lg shrink-0">⚠</span>
               <span class="text-ui-base text-amber-700 dark:text-amber-400 leading-relaxed">
                 {t("updates.sessionLiveBlocked")}
               </span>
@@ -442,7 +442,7 @@ onDestroy(() => {
           <div class="flex items-center gap-3">
             {#if phase === "error" && available}
               <!-- Update was found but download/install failed -->
-              <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-xl shrink-0">
+              <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-ui-2xl shrink-0">
                 ⚠
               </div>
               <div class="flex flex-col gap-0.5 flex-1">
@@ -455,7 +455,7 @@ onDestroy(() => {
               </div>
             {:else if phase === "idle" && available && !autoUpdateEnabled}
               <!-- Auto-update is off: announce + offer manual install. -->
-              <div class="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-xl shrink-0">
+              <div class="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-ui-2xl shrink-0">
                 ⬆
               </div>
               <div class="flex flex-col gap-0.5 flex-1">
