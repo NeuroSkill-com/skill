@@ -143,15 +143,23 @@ avail_crates() {
 }
 
 # rlx-family crate names skill actually depends on — from committed + working lock.
+# Only [[package]] entries (not [[patch.unused]]), so unused redirects don't get
+# re-emitted into the local overlay and trip cargo "patch was not used" warnings.
 needed_rlx="$({
   git -C "${REPO_ROOT}" show HEAD:Cargo.lock 2>/dev/null || true
   cat "${REPO_ROOT}/Cargo.lock" 2>/dev/null || true
-} | awk -F'"' '/^name = "/ { print $2 }' | grep -i rlx | sort -u)"
-# Sidecar / bake / runtime crates — pulled transitively even when absent from HEAD lock.
-# Keep in sync with Cargo.toml [patch.crates-io] rlx* → git redirects.
+} | awk '
+  /^\[\[package\]\]/ { inpkg = 1; next }
+  /^\[\[/ { inpkg = 0 }
+  inpkg && /^name = "/ {
+    sub(/^name = "/, ""); sub(/".*/, ""); print
+  }
+' | grep -i rlx | sort -u)"
+# Runtime stack crates — keep in sync with Cargo.toml [patch.crates-io] rlx* → git
+# (transitive crates.io pins from rlx-models). Omit unused-only crates (bake/optim).
 for extra in \
-  rlx rlx-ir rlx-flow rlx-runtime rlx-driver rlx-opt rlx-optim rlx-autodiff \
-  rlx-compile rlx-fusion rlx-cpu rlx-gguf rlx-pkg rlx-bake rlx-text rlx-metal \
+  rlx rlx-ir rlx-flow rlx-runtime rlx-driver rlx-opt rlx-autodiff \
+  rlx-compile rlx-fusion rlx-cpu rlx-gguf rlx-pkg rlx-text rlx-metal \
   rlx-mlx rlx-cuda rlx-wgpu rlx-rocm rlx-onnx-import rlx-nemo rlx-umap rlx-tensor \
   rlx-macros rlx-funasr rlx-nemotron-asr rlx-asr rlx-tts-bench rlx-whisper rlx-vad
 do

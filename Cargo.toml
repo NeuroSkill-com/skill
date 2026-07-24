@@ -86,14 +86,12 @@ rlx-flow         = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-runtime      = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-driver       = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-opt          = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-optim        = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-autodiff     = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-compile      = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-fusion       = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-cpu          = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-gguf         = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-pkg          = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-bake         = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-text         = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-metal        = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-mlx          = { git = "https://github.com/MIT-RLX/rlx.git" }

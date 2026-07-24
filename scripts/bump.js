@@ -213,7 +213,9 @@ function extractWarnings(output) {
         !/packages contain code that will be rejected by a future version of Rust/i.test(
           line,
         ) &&
-        !/use the option `--future-incompat-report`/i.test(line),
+        !/use the option `--future-incompat-report`/i.test(line) &&
+        // Unused [patch] entries (local rlx overlay may list extras not in the graph)
+        !/patch `.+` was not used in the crate graph/i.test(line),
     );
 }
 
