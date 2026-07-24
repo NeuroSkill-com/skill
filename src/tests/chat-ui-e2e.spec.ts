@@ -13,7 +13,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 function readToken(): string {
   const p =
@@ -219,7 +219,11 @@ async function openChatReady(page: Page) {
   await page.waitForLoadState("domcontentloaded");
 
   const startBtn = page.getByRole("button", { name: /Start LLM server|Start/i }).first();
-  const alreadyRunning = await page.locator("textarea").first().isEnabled().catch(() => false);
+  const alreadyRunning = await page
+    .locator("textarea")
+    .first()
+    .isEnabled()
+    .catch(() => false);
   if (!alreadyRunning) {
     if (await startBtn.isVisible().catch(() => false)) {
       await startBtn.click();
@@ -267,7 +271,7 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
       headers: { Authorization: `Bearer ${TOKEN}` },
       signal: AbortSignal.timeout(2000),
     }).catch(() => null);
-    test.skip(!r || !r.ok, `skill-daemon not reachable on :${PORT}`);
+    test.skip(!r?.ok, `skill-daemon not reachable on :${PORT}`);
 
     await fetch(`http://127.0.0.1:${PORT}/v1/test/begin`, {
       method: "POST",
@@ -329,7 +333,7 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
     await page.getByRole("button", { name: /Send message/i }).click();
 
     const resp = await chatReq;
-    const body = await resp.json().catch(() => ({} as Record<string, unknown>));
+    const body = await resp.json().catch(() => ({}) as Record<string, unknown>);
     expect(resp.status(), `chat-completions HTTP ${resp.status}: ${JSON.stringify(body)}`).toBeLessThan(500);
     await expect(page.getByText(/Reply with exactly the single word PONG/i).first()).toBeVisible({
       timeout: 15_000,
@@ -339,9 +343,9 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
       await expect(page.getByText(/\bPONG\b/i).nth(1)).toBeVisible({ timeout: 180_000 });
     } else {
       // Accept assistant text or a surfaced error — not a silent hang.
-      await expect(
-        page.locator("text=/\\bPONG\\b|Error:|aborted|failed|timeout/i").first(),
-      ).toBeVisible({ timeout: 180_000 });
+      await expect(page.locator("text=/\\bPONG\\b|Error:|aborted|failed|timeout/i").first()).toBeVisible({
+        timeout: 180_000,
+      });
     }
 
     expect(consoleErrors.filter((e) => !/ResizeObserver|favicon|WebSocket/i.test(e))).toEqual([]);
@@ -440,11 +444,7 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
       return;
     }
 
-    const embed = await daemonPost(
-      "/v1/llm/embed-image",
-      { png_base64: redPng.toString("base64") },
-      180_000,
-    );
+    const embed = await daemonPost("/v1/llm/embed-image", { png_base64: redPng.toString("base64") }, 180_000);
     expect(embed.error, JSON.stringify(embed)).toBeFalsy();
     expect(Array.isArray(embed.embedding) ? embed.embedding.length : 0).toBeGreaterThan(0);
 
@@ -457,8 +457,7 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
     await expect(page.locator('img[alt="solid-red.png"]').first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/vision projector|images will be ignored/i)).toHaveCount(0);
 
-    const prompt =
-      "Look at the attached image. Reply with exactly one word: RED if it is mostly red, else OTHER.";
+    const prompt = "Look at the attached image. Reply with exactly one word: RED if it is mostly red, else OTHER.";
     const chatReq = page.waitForResponse(
       async (r) => {
         if (!r.url().includes("/v1/llm/chat-completions") || r.request().method() !== "POST") {
@@ -474,7 +473,7 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
     await page.getByRole("button", { name: /Send message/i }).click();
 
     const resp = await chatReq;
-    const body = await resp.json().catch(() => ({} as Record<string, unknown>));
+    const body = await resp.json().catch(() => ({}) as Record<string, unknown>);
     expect(resp.status(), `vision chat HTTP ${resp.status}: ${JSON.stringify(body)}`).toBeLessThan(500);
     expect(resp.request().postData() || "").toMatch(/data:image\/png;base64,/);
     await expect(page.getByText(/Look at the attached image/i).first()).toBeVisible({ timeout: 15_000 });
@@ -482,7 +481,9 @@ test.describe("Chat UI LLM modalities (live daemon)", () => {
     if (EXPECT_REPLY) {
       await expect(page.getByText(/\bRED\b/i).nth(1)).toBeVisible({ timeout: 240_000 });
     } else {
-      await expect(page.locator("text=/\\bRED\\b|\\bOTHER\\b|Error:|aborted|failed|timeout|vision/i").first()).toBeVisible({
+      await expect(
+        page.locator("text=/\\bRED\\b|\\bOTHER\\b|Error:|aborted|failed|timeout|vision/i").first(),
+      ).toBeVisible({
         timeout: 240_000,
       });
     }

@@ -35,7 +35,6 @@ jobs:
         with:
           fetch-depth: 0
 
-
       - name: Validate Windows app manifest
         shell: bash
         run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
@@ -100,71 +99,20 @@ jobs:
             }
           }
 
-      # ── Rust toolchain ────────────────────────────────────────────────────────
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      # ── Release setup: Rust + rust-cache + Node ──────────────────────────────
+      - name: Release setup (Rust + Node)
+        uses: ./.github/actions/release-setup
         with:
-          targets: x86_64-pc-windows-msvc
-
-      # ── Cargo cache ───────────────────────────────────────────────────────────
-      - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.1
-        with:
-          workspaces: ". -> src-tauri/target"
-          shared-key: windows-release-x86_64-msvc-v2
-          # Save cache even when the job fails (e.g. a post-build step
-          # errors out).  Without this, a late-stage failure means the
-          # 57-min compile output is discarded and the next run starts
-          # from scratch — a vicious cycle.
-          save-if: "always()"
-          # Don't cache final compiled artifacts — registry + incremental
-          # data is enough; target/ artifacts recompile quickly from it.
-          cache-targets: false
-          cache-on-failure: false
+          target: x86_64-pc-windows-msvc
+          cache-key: windows-release-x86_64-msvc-v2
+          cache-save-if: always()
+          windows-protoc: "true"
 
       # ── ONNX Runtime — not needed on Windows ──────────────────────────────
       # KittenTTS (the only `ort` consumer) is gated to non-Windows targets in
       # src-tauri / skill-tts Cargo.toml, so Windows builds don't link or ship
       # onnxruntime.dll. Add the install/cache steps back here if a Windows
       # TTS backend that needs ONNX Runtime is reintroduced.
-
-      # ── Build cache (sccache) ─────────────────────────────────────────────────
-      - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
-
-      - name: Configure sccache for GitHub Actions cache
-        shell: bash
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-          echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
-          # Version the sccache GHA cache so it can be busted manually by
-          # incrementing this value (e.g. after a toolchain or LLVM upgrade).
-          echo "SCCACHE_GHA_VERSION=2" >> "$GITHUB_ENV"
-
-          # Verify sccache is working
-          sccache --show-stats
-          echo "[ok] RUSTC_WRAPPER=${RUSTC_WRAPPER:-<not set>}"
-
-      # ── Node.js + frontend build ─────────────────────────────────────────────
-      # Moved before SDK installs so the frontend compiles while heavy SDKs
-      # (Vulkan, LLVM, espeak) are set up afterwards — no dependency between
-      # the two.  On cache-warm runs the frontend finishes in < 30 s, so the
-      # wall-clock saving comes from not blocking the SDK steps behind it.
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Update npm to latest
-        run: npm install -g npm@latest
-
-      - name: Install JS dependencies
-        run: npm ci
-
-      - name: Install protoc (Windows)
-        run: node scripts/ci.mjs install-protoc-windows
-
 
       - name: Build frontend
         run: npm run build
@@ -377,10 +325,6 @@ jobs:
           echo "have_windows_cert=$HAVE_CERT" >> "$GITHUB_OUTPUT"
           echo "HAVE_WINDOWS_CERT=$HAVE_CERT" >> "$GITHUB_ENV"
 
-      # ── espeak-ng MSVC static library ─────────────────────────────────────────
-      # Cache keyed on the build script; a script change busts the cache.
-      # The PS1 script requires MSVC tools (lib.exe) — set up above via
-      # ilammy/msvc-dev-cmd before this step runs.
       # ── Import Windows code-signing certificate (optional) ───────────────────
       # Skipped when WINDOWS_CERTIFICATE is not set (unsigned build).
       # When present: imports the .pfx into the Current User certificate store,
@@ -486,44 +430,24 @@ jobs:
         env:
           VULKAN_SDK:        ${{ env.VULKAN_SDK }}
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
-          # RUSTC_WRAPPER is set automatically by sccache-action.
-          SCCACHE_GHA_ENABLED: "true"
-          SCCACHE_CACHE_SIZE:  "10G"
           # Dynamic CRT: native deps (DirectML, ONNX Runtime, Vulkan loader)
           # ship as pre-built /MD DLLs.  Using /MD everywhere avoids CRT
           # mismatch.  The NSIS installer bundles the VC++ Redist DLLs
           # app-locally so end users don't need a separate install.
           CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreadedDLL
-          # Let sccache cache C/C++ compilations from cmake-based -sys crates
-          # (espeak-ng, etc.).  Without these, only rustc
-          # invocations go through sccache — the heavy cmake builds are
-          # re-done from scratch every time.
-          CMAKE_C_COMPILER_LAUNCHER:   sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           set -euo pipefail
 
-          # Diagnostic: verify sccache is reachable by cargo
-          echo "[diag] RUSTC_WRAPPER=${RUSTC_WRAPPER:-<not set>}"
-          if [ -n "${RUSTC_WRAPPER:-}" ]; then
-            "$RUSTC_WRAPPER" --version || echo "[warn] RUSTC_WRAPPER binary not executable"
-          fi
-          sccache --show-stats || true
-
-          # Build both packages in a single cargo invocation so feature
-          # unification happens once and shared dependencies compile only once.
-          # NOTE: `|| return $?` is required — `set -e` is inhibited inside a
-          # function called via `if ! cmd`, so a failing cargo build would
-          # silently fall through and run_cmd would still return 0.
+          # Separate daemon vs app builds so `--features windows` only applies to
+          # skill-daemon (skill uses `custom-protocol`).
           run_cmd() {
-            cargo build -p skill-daemon -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings || return $?
+            cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features windows --timings || return $?
+            cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings || return $?
           }
 
           if ! run_cmd; then
             exit 1
           fi
-
-          sccache --show-stats || true
 
       # rlx-cpu and turbovec resolve cblas_sgemm via openblas.dll at runtime.
       # Bundle it next to skill.exe / skill_daemon.exe so the installed app

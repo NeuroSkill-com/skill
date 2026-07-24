@@ -1021,16 +1021,13 @@ if (subcommand === "dev" && !tuiTauriPane) {
     // hot-reloads the daemon). Windows doesn't use the PTY proxy.
     const daemonBuildArgs = ["build", "-p", "skill-daemon"];
     const isWin = process.platform === "win32" || (explicitTarget || "").includes("windows");
-    // Default skill-daemon features include `llm` but not an inference backend.
-    // Without llm-rlx-* the actor stub never sets ready → UI stuck on "loading".
+    // Default has no GPU backend — pass the OS umbrella so inference is wired.
     if (isMac) {
-      daemonBuildArgs.push("--features", "llm-rlx-metal,llm-rlx-mlx,llm-rlx-wgpu");
+      daemonBuildArgs.push("--features", "apple");
     } else if (isLinux) {
-      daemonBuildArgs.push("--features", "llm-rlx-cpu");
-    } else if (isWin) {
-      daemonBuildArgs.push("--features", "llm-rlx-cpu");
+      daemonBuildArgs.push("--features", "linux");
     } else {
-      daemonBuildArgs.push("--features", "llm-rlx-cpu");
+      daemonBuildArgs.push("--features", "windows");
     }
     if (!isWin) daemonBuildArgs.push("-p", "skill-tty");
     if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);

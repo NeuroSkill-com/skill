@@ -282,10 +282,8 @@ fn render_chat(
                     .filter_map(|p| {
                         if let Some(t) = p.get("text").and_then(|t| t.as_str()) {
                             Some(t.to_string())
-                        } else if let Some(s) = p.as_str() {
-                            Some(s.to_string())
                         } else {
-                            None
+                            p.as_str().map(|s| s.to_string())
                         }
                     })
                     .collect::<Vec<_>>()

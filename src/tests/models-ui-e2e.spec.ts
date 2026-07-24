@@ -19,7 +19,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 function readToken(): string {
   const p =
@@ -249,7 +249,7 @@ test.describe("Models UI E2E (live daemon)", () => {
       headers: { Authorization: `Bearer ${TOKEN}` },
       signal: AbortSignal.timeout(2000),
     }).catch(() => null);
-    test.skip(!r || !r.ok, `skill-daemon not reachable on :${PORT}`);
+    test.skip(!r?.ok, `skill-daemon not reachable on :${PORT}`);
 
     // Pause idle re-embed / scanner so Settings clicks don't OOM the host.
     await fetch(`http://127.0.0.1:${PORT}/v1/test/begin`, {
@@ -278,10 +278,9 @@ test.describe("Models UI E2E (live daemon)", () => {
     await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
 
     // Speak through the test widget (bridged to POST /v1/say).
-    const sayReq = page.waitForResponse(
-      (r) => r.url().includes("/v1/say") && r.request().method() === "POST",
-      { timeout: 20_000 },
-    );
+    const sayReq = page.waitForResponse((r) => r.url().includes("/v1/say") && r.request().method() === "POST", {
+      timeout: 20_000,
+    });
     // Prefer the Speak button — sample chips can race with "speaking" lock.
     const speakBtn = page.getByRole("button", { name: /^Speak$/i });
     await expect(speakBtn).toBeEnabled({ timeout: 5_000 });
@@ -362,7 +361,10 @@ test.describe("Models UI E2E (live daemon)", () => {
       (r) => r.url().includes("/v1/models/text-embedding") && r.request().method() === "POST",
       { timeout: 60_000 },
     );
-    await page.getByRole("button", { name: /^Apply$/i }).first().click();
+    await page
+      .getByRole("button", { name: /^Apply$/i })
+      .first()
+      .click();
     const applyResp = await applyReq;
     expect(applyResp.ok()).toBeTruthy();
     const applyBody = await applyResp.json();
@@ -434,9 +436,7 @@ test.describe("Models UI E2E (live daemon)", () => {
     }
 
     const rebuildReq = page.waitForResponse(
-      (r) =>
-        r.url().includes("/v1/settings/screenshot/rebuild-embeddings") &&
-        r.request().method() === "POST",
+      (r) => r.url().includes("/v1/settings/screenshot/rebuild-embeddings") && r.request().method() === "POST",
       { timeout: 240_000 },
     );
     await btn.click();
@@ -496,10 +496,9 @@ test.describe("Models UI E2E (live daemon)", () => {
 
     // Drive ASR through the same bridge the UI uses once the LLM is up, so we
     // still validate Whisper load + mic failure on this machine.
-    const asrStart = page.waitForResponse(
-      (r) => r.url().includes("/v1/asr/start") && r.request().method() === "POST",
-      { timeout: 20_000 },
-    );
+    const asrStart = page.waitForResponse((r) => r.url().includes("/v1/asr/start") && r.request().method() === "POST", {
+      timeout: 20_000,
+    });
     await page.evaluate(async () => {
       // @ts-expect-error test bridge
       await window.__TAURI_INTERNALS__.invoke("asr_start", {

@@ -14,11 +14,7 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { t } from "$lib/i18n/index.svelte";
 import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
 import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
-import {
-  fetchTtsEngines,
-  TTS_ENGINE_FALLBACK_LIST,
-  type TtsEngineInfo,
-} from "$lib/llm/voice-catalog";
+import { fetchTtsEngines, TTS_ENGINE_FALLBACK_LIST, type TtsEngineInfo } from "$lib/llm/voice-catalog";
 
 let cfg = $state<TtsEngineConfig>(loadTtsEngine());
 let engines = $state<TtsEngineInfo[]>([...TTS_ENGINE_FALLBACK_LIST]);
@@ -37,9 +33,7 @@ function update(patch: Partial<TtsEngineConfig>) {
 const activeMeta = $derived(engines.find((e) => e.id === cfg.engine));
 const knownModels = $derived(activeMeta?.models ?? []);
 const hasModelPicker = $derived(knownModels.length > 0);
-const knownVoices = $derived(
-  cfg.voices?.length ? cfg.voices : (activeMeta?.voices ?? []),
-);
+const knownVoices = $derived(cfg.voices?.length ? cfg.voices : (activeMeta?.voices ?? []));
 const hasVoicePicker = $derived(knownVoices.length > 0);
 const isKyutai = $derived(cfg.engine === "kyutai-tts");
 const isOrpheus = $derived(cfg.engine === "orpheus");

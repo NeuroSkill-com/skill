@@ -1,0 +1,123 @@
+name: Release setup
+description: >-
+  Shared release-job bootstrap: Rust toolchain + rust-cache, Node 22 + npm ci,
+  and platform hooks (mac tools, Windows protoc, Linux Vulkan/apt/bootstrap).
+
+inputs:
+  target:
+    description: Rust target triple to install (e.g. aarch64-apple-darwin).
+    required: true
+  cache-key:
+    description: Optional Swatinem/rust-cache shared-key (platform-specific).
+    required: false
+    default: ""
+  cache-save-if:
+    description: Passed to rust-cache save-if (use "always()" on Windows).
+    required: false
+    default: "true"
+  skip-rust-toolchain:
+    description: >-
+      When "true", skip dtolnay/rust-toolchain. Implied when linux-deps is true
+      (uses setup-rust-bootstrap-linux instead).
+    required: false
+    default: "false"
+  macos-tools:
+    description: When "true", brew-install protobuf + GNU ar and export AR.
+    required: false
+    default: "false"
+  windows-protoc:
+    description: When "true", install protoc via scripts/ci.mjs.
+    required: false
+    default: "false"
+  linux-deps:
+    description: >-
+      When "true", install Vulkan apt repo + Tauri/system apt packages, then
+      run setup-rust-bootstrap-linux (skips dtolnay/rust-toolchain).
+    required: false
+    default: "false"
+  linux-apt-version:
+    description: cache-apt-pkgs-action version key (bump to bust apt cache).
+    required: false
+    default: tauri-release-linux-v7
+
+runs:
+  using: composite
+  steps:
+    # ── Linux: Vulkan repo + apt (before Rust) ────────────────────────────────
+    - name: Setup Vulkan SDK repository
+      if: inputs.linux-deps == 'true'
+      uses: ./.github/actions/setup-vulkan-linux
+
+    - name: Cache + install system dependencies (Linux)
+      if: inputs.linux-deps == 'true'
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: >-
+          libwebkit2gtk-4.1-dev
+          libappindicator3-dev
+          librsvg2-dev
+          patchelf
+          libssl-dev
+          libudev-dev
+          libdbus-1-dev
+          pkg-config
+          libasound2-dev
+          libpipewire-0.3-dev
+          libgbm-dev
+          cmake
+          binutils
+          rpm
+          mold
+          clang
+          protobuf-compiler
+          libopenblas-dev
+          vulkan-sdk
+        version: ${{ inputs.linux-apt-version }}
+
+    - name: Setup Rust bootstrap (Linux)
+      if: inputs.linux-deps == 'true'
+      uses: ./.github/actions/setup-rust-bootstrap-linux
+      with:
+        targets: ${{ inputs.target }}
+
+    - name: Install Rust stable
+      if: inputs.linux-deps != 'true' && inputs.skip-rust-toolchain != 'true'
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+
+    - name: Cache Cargo registry + build artifacts
+      uses: Swatinem/rust-cache@v2.9.1
+      with:
+        workspaces: ". -> src-tauri/target"
+        shared-key: ${{ inputs.cache-key }}
+        save-if: ${{ inputs.cache-save-if }}
+        cache-targets: false
+        cache-on-failure: false
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: "22"
+        cache: npm
+
+    - name: Update npm to latest
+      shell: bash
+      run: npm install -g npm@latest
+
+    - name: Install JS dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Install protoc + GNU ar (macOS)
+      if: inputs.macos-tools == 'true'
+      shell: bash
+      run: |
+        brew install protobuf binutils
+        # Use GNU ar to suppress "illegal option -- D" from Apple's system ar
+        echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
+
+    - name: Install protoc (Windows)
+      if: inputs.windows-protoc == 'true'
+      shell: bash
+      run: node scripts/ci.mjs install-protoc-windows

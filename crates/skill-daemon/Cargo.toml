@@ -5,7 +5,22 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [features]
-default = ["llm", "llm-rlx-metal", "llm-rlx-mlx", "llm-rlx-wgpu", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx", "asr", "voice-tts"]
+# Common product surface only — no GPU backend. Release/dev scripts pass exactly
+# one OS umbrella (`apple` / `linux` / `windows`) so we don't compile Metal+MLX+wgpu
+# on every platform (Windows was pulling rlx-mlx via the old bloated default).
+default = ["llm", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx", "asr", "voice-tts"]
+apple = [
+    "llm-rlx-metal", "llm-rlx-mlx", "embed-exg-metal",
+    "text-embeddings-rlx-metal", "text-embeddings-rlx-mlx", "asr-metal",
+]
+linux = [
+    "llm-rlx-wgpu", "llm-rlx-cuda", "embed-exg-gpu", "embed-exg-cuda",
+    "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",
+]
+windows = [
+    "llm-rlx-wgpu", "llm-rlx-cuda", "embed-exg-gpu", "embed-exg-cuda",
+    "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",
+]
 # Voice input for the LLM chat: Whisper ASR + Silero VAD + cpal mic capture
 # (skill-asr). `asr-metal` additionally routes the Whisper encoder through Metal
 # on Apple Silicon (decoder stays on CPU). Inert on Windows (no-op stubs).

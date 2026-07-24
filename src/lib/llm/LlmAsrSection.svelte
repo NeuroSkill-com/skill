@@ -22,20 +22,13 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { ToggleRow } from "$lib/components/ui/toggle-row";
 import { t } from "$lib/i18n/index.svelte";
 import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
-import {
-  ASR_ENGINE_FALLBACK_LIST,
-  fetchAsrEngines,
-  type AsrEngineInfo,
-} from "$lib/llm/voice-catalog";
+import { ASR_ENGINE_FALLBACK_LIST, type AsrEngineInfo, fetchAsrEngines } from "$lib/llm/voice-catalog";
 
 let defaults = $state<AsrDefaults>(loadAsrDefaults());
 let engines = $state<AsrEngineInfo[]>([...ASR_ENGINE_FALLBACK_LIST]);
 
 onMount(async () => {
-  const [nextDefaults, nextEngines] = await Promise.all([
-    fetchAsrDefaults(),
-    fetchAsrEngines(),
-  ]);
+  const [nextDefaults, nextEngines] = await Promise.all([fetchAsrDefaults(), fetchAsrEngines()]);
   defaults = nextDefaults;
   engines = nextEngines;
 });
@@ -63,9 +56,7 @@ const CUSTOM_SENTINEL = "__custom__";
 function onEngineSelect(engine: string) {
   const meta = engines.find((e) => e.id === engine);
   const models = meta?.models ?? [];
-  const model = models.includes(defaults.model)
-    ? defaults.model
-    : (meta?.default_model ?? defaults.model);
+  const model = models.includes(defaults.model) ? defaults.model : (meta?.default_model ?? defaults.model);
   update({ engine, model });
 }
 

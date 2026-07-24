@@ -29,7 +29,6 @@ jobs:
         with:
           fetch-depth: 0   # full history so git tag --format can read the annotation
 
-
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       # Catches "forgot to bump the version" before wasting 20 min on a build.
       - name: Resolve version
@@ -40,51 +39,11 @@ jobs:
           GITHUB_REF_NAME:   ${{ github.ref_name }}
         run: node scripts/ci.mjs resolve-version
 
-      # ── Rust toolchain ────────────────────────────────────────────────────────
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Release setup (Rust + Node)
+        uses: ./.github/actions/release-setup
         with:
-          targets: aarch64-apple-darwin
-
-      # ── Cargo cache ───────────────────────────────────────────────────────────
-      # Swatinem/rust-cache is purpose-built for Rust: it strips test artifacts,
-      # stale deps, and other bloat before saving, keeping the cache lean.
-      - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.1
-        with:
-          workspaces: ". -> src-tauri/target"
-          cache-targets: false
-          cache-on-failure: false
-
-      # ── Build cache (sccache) ─────────────────────────────────────────────────
-      - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
-
-      - name: Configure sccache for GitHub Actions cache
-        shell: bash
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-          echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
-          echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
-
-      # ── Node.js ───────────────────────────────────────────────────────────────
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Update npm to latest
-        run: npm install -g npm@latest
-
-      - name: Install JS dependencies
-        run: npm ci
-
-      - name: Install protoc + GNU ar (macOS)
-        run: |
-          brew install protobuf binutils
-          # Use GNU ar to suppress "illegal option -- D" warnings from Apple's system ar
-          echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
+          target: aarch64-apple-darwin
+          macos-tools: "true"
 
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
@@ -127,7 +86,6 @@ jobs:
           APPLE_TEAM_ID:  ${{ secrets.APPLE_TEAM_ID }}
         run: node scripts/ci.mjs validate-notarization
 
-      # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Apple Developer certificate → temporary keychain ─────────────────────
       #
       # Secrets required:
@@ -190,10 +148,6 @@ jobs:
       # bypass the CLI here to avoid its post-compilation SIGILL.
       - name: Compile (frontend + Rust + sidecar)
         shell: bash
-        env:
-          RUSTC_WRAPPER: sccache
-          CMAKE_C_COMPILER_LAUNCHER:   sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           set -euo pipefail
           npm run build
@@ -203,7 +157,7 @@ jobs:
           # captured exit code, so without explicit `|| return` a failing
           # cargo build would silently continue and run_cmd would still return 0.
           run_cmd() {
-            cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --timings || return $?
+            cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --features apple --timings || return $?
             cargo build -p skill-tty --release --locked --target aarch64-apple-darwin --timings || return $?
             cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol --timings || return $?
           }

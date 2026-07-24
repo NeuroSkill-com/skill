@@ -1,15 +1,11 @@
 name: Setup Rust bootstrap (Linux)
-description: Install Rust toolchain and configure sccache for Linux jobs
+description: Install Rust toolchain for Linux jobs (rust-cache is configured by the caller).
 
 inputs:
   targets:
     description: Optional rustup targets (comma-separated or single target)
     required: false
     default: ""
-  use-sccache:
-    description: Whether to install/configure sccache action
-    required: false
-    default: "true"
 
 runs:
   using: composite
@@ -23,16 +19,3 @@ runs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ inputs.targets }}
-
-    - name: Setup sccache
-      if: inputs.use-sccache == 'true'
-      uses: Mozilla-Actions/sccache-action@v0.0.9
-
-    - name: Configure sccache (GitHub Actions backend)
-      if: inputs.use-sccache == 'true'
-      shell: bash
-      run: |
-        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-        echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
-        # Bump to invalidate all remote sccache entries after major toolchain changes.
-        echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"

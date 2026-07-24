@@ -6,12 +6,7 @@
 -->
 <script lang="ts">
 import { t } from "$lib/i18n/index.svelte";
-import {
-  asrEngineLabelKey,
-  ttsEngineLabelKey,
-  type AsrEngineInfo,
-  type TtsEngineInfo,
-} from "$lib/llm/voice-catalog";
+import { type AsrEngineInfo, asrEngineLabelKey, type TtsEngineInfo, ttsEngineLabelKey } from "$lib/llm/voice-catalog";
 
 type Engine = TtsEngineInfo | AsrEngineInfo;
 

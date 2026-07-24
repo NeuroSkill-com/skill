@@ -657,8 +657,14 @@ function cmdDryRunRelease(args) {
 
   log("Step 3/6: cargo build");
   if (!skipCompile) {
+    // Daemon OS umbrella — dry-run defaults to macOS target.
+    const daemonFeatures = target.includes("apple")
+      ? "apple"
+      : target.includes("windows")
+        ? "windows"
+        : "linux";
+    run(["cargo", "build", "--release", "--target", target, "-p", "skill-daemon", "--features", daemonFeatures], { check: true });
     run(["cargo", "build", "--release", "--target", target, "-p", "skill", "--features", "custom-protocol"], { check: true, cwd: "src-tauri" });
-    run(["cargo", "build", "--release", "--target", target, "-p", "skill-daemon", "--features", "llm"], { check: true, cwd: "src-tauri" });
   } else log("(skipped)");
 
   log("Step 4/6: assemble .app bundle");

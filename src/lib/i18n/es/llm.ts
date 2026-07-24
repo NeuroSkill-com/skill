@@ -575,7 +575,8 @@ const llm: Record<string, string> = {
   "chat.tts.engine.miratts": "MiraTTS",
   "chat.tts.engine.melotts": "MeloTTS",
   "chat.tts.engine.voxtral-tts": "Voxtral-TTS",
-  "chat.voice.engineExperimental": "Este motor de reconocimiento puede descargar un checkpoint grande en el primer uso.",
+  "chat.voice.engineExperimental":
+    "Este motor de reconocimiento puede descargar un checkpoint grande en el primer uso.",
   "chat.voice.engine.whisper": "Whisper",
   "chat.voice.engine.qwen3-asr": "Qwen3-ASR",
   "chat.voice.engine.voxtral": "Voxtral",

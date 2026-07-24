@@ -56,11 +56,13 @@ for (const c of cratesToBuild) {
 if (triple) {
   cargoArgs.push("--target", triple);
 }
-// Match tauri-build.js: `llm` alone has no inference backend.
+// OS umbrella features (see skill-daemon Cargo.toml). Default has no GPU backend.
 if (triple.includes("apple-darwin") || platform() === "darwin") {
-  cargoArgs.push("--features", "llm-rlx-metal,llm-rlx-mlx,llm-rlx-wgpu");
+  cargoArgs.push("--features", "apple");
+} else if (triple.includes("linux") || platform() === "linux") {
+  cargoArgs.push("--features", "linux");
 } else {
-  cargoArgs.push("--features", "llm-rlx-cpu");
+  cargoArgs.push("--features", "windows");
 }
 
 runOrThrow("cargo", cargoArgs);

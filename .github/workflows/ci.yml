@@ -38,7 +38,6 @@ concurrency:
 # Opt into Node.js 24 now so we surface any action incompatibilities before
 # GitHub forces the switch on June 2, 2026.
 # ilammy/msvc-dev-cmd, KyleMayes/install-llvm-action and
-# Mozilla-Actions/sccache-action are all still on node20 in their latest
 # releases — update these pins when node24 builds ship.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -100,7 +99,6 @@ jobs:
       - name: Fetch skills submodule
         run: git submodule update --init --depth=1 skills
 
-
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
 
@@ -134,7 +132,6 @@ jobs:
       # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         shell: bash
@@ -153,12 +150,8 @@ jobs:
       # clippy (app crate — needs espeak + Vulkan)
       - name: cargo clippy (app)
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Cache cmake-based -sys crate builds (espeak-ng-sys, etc.)
-          CMAKE_C_COMPILER_LAUNCHER:   sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         shell: bash
         run: |
           set -euo pipefail
@@ -240,7 +233,6 @@ jobs:
         id: rust_unit_tests
         if: steps.changed.outputs.skip != 'true'
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         shell: bash
@@ -273,7 +265,6 @@ jobs:
         id: rust_integration_tests
         if: steps.changed.outputs.skip_int != 'true'
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         shell: bash
@@ -323,32 +314,6 @@ jobs:
             echo "## Rust health metrics"
             echo "- Unit test duration: ${UNIT_SEC}s"
             echo "- Integration test duration: ${INT_SEC}s"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Capture sccache stats
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p ci-metrics
-          sccache --show-stats > ci-metrics/rust-sccache-stats.txt || true
-
-      - name: Summarize sccache hit rate (Rust job)
-        if: always()
-        shell: bash
-        run: |
-          STATS=ci-metrics/rust-sccache-stats.txt
-          if [[ ! -f "$STATS" ]]; then
-            echo "- sccache stats: unavailable" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          TOTAL_HIT_RATE="$(awk '/^Cache hits rate[[:space:]]/{print $(NF-1)" "$NF; exit}' "$STATS")"
-          RUST_HIT_RATE="$(awk '/^Cache hits rate \(Rust\)/{print $(NF-1)" "$NF; exit}' "$STATS")"
-          CACHE_LOCATION="$(awk -F'Cache location[[:space:]]+' '/^Cache location/{print $2; exit}' "$STATS")"
-          {
-            echo "## sccache metrics (Rust job)"
-            echo "- Cache location: ${CACHE_LOCATION:-unknown}"
-            echo "- Total hit rate: ${TOTAL_HIT_RATE:-unknown}"
-            echo "- Rust hit rate: ${RUST_HIT_RATE:-unknown}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Rust health metrics
@@ -474,7 +439,6 @@ jobs:
         with:
           fetch-depth: 1
 
-
       - name: Validate Windows app manifest
         shell: bash
         run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
@@ -538,37 +502,6 @@ jobs:
           shared-key: windows-ci-x86_64-pc-windows-msvc-v1
           cache-targets: false
           cache-on-failure: false
-
-      # ── Build cache (sccache) ───────────────────────────────────────────────
-      - name: Setup sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
-
-      - name: Configure sccache for GitHub Actions cache
-        shell: bash
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-          echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
-          echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
-
-          # Ensure cargo.exe can always resolve sccache on Windows.
-          if [ -n "${SCCACHE_PATH:-}" ]; then
-            SCCACHE_DIR="$(dirname "$SCCACHE_PATH")"
-            if [ -f "$SCCACHE_DIR/sccache.exe" ]; then
-              SCCACHE_NATIVE="$(cygpath -w "$SCCACHE_DIR/sccache.exe")"
-              echo "RUSTC_WRAPPER=$SCCACHE_NATIVE" >> "$GITHUB_ENV"
-              echo "$SCCACHE_DIR" >> "$GITHUB_PATH"
-              echo "[ok] RUSTC_WRAPPER=$SCCACHE_NATIVE"
-            elif [ -f "$SCCACHE_PATH.exe" ]; then
-              SCCACHE_NATIVE="$(cygpath -w "$SCCACHE_PATH.exe")"
-              echo "RUSTC_WRAPPER=$SCCACHE_NATIVE" >> "$GITHUB_ENV"
-              echo "$(dirname "$SCCACHE_PATH.exe")" >> "$GITHUB_PATH"
-              echo "[ok] RUSTC_WRAPPER=$SCCACHE_NATIVE"
-            else
-              echo "[warn] sccache binary not found via SCCACHE_PATH=$SCCACHE_PATH"
-            fi
-          else
-            echo "[warn] SCCACHE_PATH not set; relying on PATH resolution"
-          fi
 
       - name: Install protoc (Windows)
         run: node scripts/ci.mjs install-protoc-windows
@@ -700,28 +633,6 @@ jobs:
           }
           run_cmd
 
-      - name: Capture + summarize sccache hit rate (Windows job)
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p ci-metrics
-          sccache --show-stats > ci-metrics/windows-sccache-stats.txt || true
-          STATS=ci-metrics/windows-sccache-stats.txt
-          if [[ ! -f "$STATS" ]]; then
-            echo "- sccache stats: unavailable" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          TOTAL_HIT_RATE="$(awk '/^Cache hits rate[[:space:]]/{print $(NF-1)" "$NF; exit}' "$STATS")"
-          RUST_HIT_RATE="$(awk '/^Cache hits rate \(Rust\)/{print $(NF-1)" "$NF; exit}' "$STATS")"
-          CACHE_LOCATION="$(awk -F'Cache location[[:space:]]+' '/^Cache location/{print $2; exit}' "$STATS")"
-          {
-            echo "## sccache metrics (Windows job)"
-            echo "- Cache location: ${CACHE_LOCATION:-unknown}"
-            echo "- Total hit rate: ${TOTAL_HIT_RATE:-unknown}"
-            echo "- Rust hit rate: ${RUST_HIT_RATE:-unknown}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ── LLM end-to-end integration test ──────────────────────────────────────────
   llm-e2e:
     name: LLM — E2E integration test
     runs-on: ubuntu-latest
@@ -736,7 +647,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
-
 
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
@@ -777,12 +687,8 @@ jobs:
 
       - name: Run LLM E2E test
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          # Cache cmake-based -sys crate builds (espeak-ng-sys, etc.)
-          CMAKE_C_COMPILER_LAUNCHER:   sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           cargo test -p skill-llm --locked --target x86_64-unknown-linux-gnu \
             --features llm \
@@ -844,7 +750,6 @@ jobs:
         with:
           fetch-depth: 1
 
-
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
 
@@ -873,7 +778,6 @@ jobs:
 
       - name: Run LSL E2E test
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         run: |
@@ -920,8 +824,6 @@ jobs:
     needs: rust-check
     timeout-minutes: 90
     if: github.event_name == 'workflow_dispatch' && inputs.run_coverage == true
-    env:
-      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v6
         with:
@@ -929,7 +831,6 @@ jobs:
 
       - name: Fetch skills submodule
         run: git submodule update --init --depth=1 skills
-
 
       - name: Free disk space
         run: node scripts/ci.mjs free-disk-space
@@ -1010,13 +911,10 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
-    env:
-      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
-
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

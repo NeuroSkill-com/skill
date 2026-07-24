@@ -431,7 +431,7 @@ fn try_qwen35_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> 
     let packed = std::fs::metadata(path)
         .map(|m| m.len() >= 256 * 1024 * 1024)
         .unwrap_or(true);
-    let max_seq = config.rlx_max_seq.max(32).min(4096);
+    let max_seq = config.rlx_max_seq.clamp(32, 4096);
 
     let build = |mm: Option<&Path>| {
         eprintln!(
@@ -502,12 +502,8 @@ pub(super) struct RlxTextRunner {
 }
 
 impl RlxTextRunner {
-    pub(super) fn load(model_path: &Path, config: &LlmConfig) -> Result<Self> {
-        Self::load_with_mmproj(model_path, None, config)
-    }
-
-    /// Like [`load`] but attaches an mmproj vision encoder (e.g. for
-    /// Qwen3.5-VL). When `mmproj` is `None` the runner is text-only.
+    /// Attach an optional mmproj vision encoder (e.g. for Qwen3.5-VL).
+    /// When `mmproj` is `None` the runner is text-only.
     pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
         if let Some(result) = try_catalog_runner(model_path, config) {
             let runner = result?;

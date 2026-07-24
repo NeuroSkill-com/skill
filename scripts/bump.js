@@ -1,14 +1,6 @@
 #!/usr/bin/env node
 import { execSync, spawn } from "node:child_process";
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  readSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
 import { bumpVersion, validateVersion } from "./version-utils.mjs";
@@ -277,24 +269,24 @@ function formatDuration(ms) {
  * fixable here until upstream migrates off the unmaintained `objc`/`block` stack.
  */
 function extractWarnings(output) {
-  return output
-    .split("\n")
-    .filter(
-      (line) =>
-        /\bwarning\b/i.test(line) &&
-        !/0 warnings/i.test(line) &&
-        !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
-        !/^warning: \S+@\S+:/i.test(line.trim()) &&
-        !/^warning: build failed/i.test(line.trim()) &&
-        !/DeprecationWarning|--trace-deprecation/i.test(line) &&
-        // Cargo future-incompat report (deps), not a project clippy/rustc warning
-        !/packages contain code that will be rejected by a future version of Rust/i.test(
-          line,
-        ) &&
-        !/use the option `--future-incompat-report`/i.test(line) &&
-        // Unused [patch] entries (local rlx overlay may list extras not in the graph)
-        !/patch `.+` was not used in the crate graph/i.test(line),
-    );
+  return output.split("\n").filter(
+    (line) =>
+      /\bwarning\b/i.test(line) &&
+      !/0 warnings/i.test(line) &&
+      !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
+      !/^warning: \S+@\S+:/i.test(line.trim()) &&
+      !/^warning: build failed/i.test(line.trim()) &&
+      !/DeprecationWarning|--trace-deprecation/i.test(line) &&
+      // Cargo future-incompat report (deps), not a project clippy/rustc warning
+      !/packages contain code that will be rejected by a future version of Rust/i.test(line) &&
+      !/use the option `--future-incompat-report`/i.test(line) &&
+      // Unused [patch] entries (local rlx overlay may list extras not in the graph)
+      !/patch `.+` was not used in the crate graph/i.test(line) &&
+      // Local overlay + git pins: cargo discovers both path and git checkouts
+      !/skipping duplicate package/i.test(line) &&
+      !/^\s+\/.+\.toml$/i.test(line.trim()) &&
+      !/in favor of /i.test(line),
+  );
 }
 
 /**

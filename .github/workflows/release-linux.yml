@@ -38,7 +38,6 @@ jobs:
         with:
           fetch-depth: 0   # full history for git tag --format and changelog generation
 
-
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       - name: Resolve version
         id: version_meta
@@ -48,55 +47,12 @@ jobs:
           GITHUB_REF_NAME:   ${{ github.ref_name }}
         run: node scripts/ci.mjs resolve-version
 
-      # ── Vulkan SDK repo ─────────────────────────────────────────────────────
-      # Add the LunarG apt repository BEFORE the cached apt install step so
-      # that vulkan-sdk is resolvable by apt in the cache-apt-pkgs-action.
-      - name: Setup Vulkan SDK repository
-        uses: ./.github/actions/setup-vulkan-linux
-
-      # ── System dependencies ───────────────────────────────────────────────────
-      # Linux compile + system package flow requires WebKit2GTK and supporting
-      # libraries for tauri/wry compilation. vulkan-sdk is included here so
-      # all apt packages are cached in a single cache-apt-pkgs-action call.
-      - name: Cache + install system dependencies (incl. mold + clang + Vulkan)
-        uses: awalsh128/cache-apt-pkgs-action@v1
+      - name: Release setup (Linux deps + Rust + Node)
+        uses: ./.github/actions/release-setup
         with:
-          packages: >-
-            libwebkit2gtk-4.1-dev
-            libappindicator3-dev
-            librsvg2-dev
-            patchelf
-            libssl-dev
-            libudev-dev
-            libdbus-1-dev
-            pkg-config
-            libasound2-dev
-            libpipewire-0.3-dev
-            libgbm-dev
-            cmake
-            binutils
-            rpm
-            mold
-            clang
-            protobuf-compiler
-            libopenblas-dev
-            vulkan-sdk
-          version: tauri-release-linux-v7
-
-      # ── Rust toolchain + build cache bootstrap ───────────────────────────────
-      - name: Setup Rust bootstrap (Linux)
-        uses: ./.github/actions/setup-rust-bootstrap-linux
-        with:
-          targets: x86_64-unknown-linux-gnu
-
-      # ── Cargo cache ───────────────────────────────────────────────────────────
-      - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.1
-        with:
-          workspaces: ". -> src-tauri/target"
-          shared-key: linux-release-x86_64-unknown-linux-gnu-v1
-          cache-targets: false
-          cache-on-failure: false
+          target: x86_64-unknown-linux-gnu
+          linux-deps: "true"
+          cache-key: linux-release-x86_64-unknown-linux-gnu-v1
 
       # ── ONNX Runtime binary cache ──────────────────────────────────────────
       # ort-sys downloads ~200 MB static libs from cdn.pyke.io during build.
@@ -108,20 +64,6 @@ jobs:
           key: linux-ort-${{ hashFiles('Cargo.lock') }}
           restore-keys: linux-ort-
 
-
-      # ── Node.js ───────────────────────────────────────────────────────────────
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Update npm to latest
-        run: npm install -g npm@latest
-
-      - name: Install JS dependencies
-        run: npm ci
-
       # ── Pre-flight: verify every required secret is set ──────────────────────
       # Linux builds don't need platform code-signing credentials (there is no
       # Linux equivalent of Apple notarization or Windows Authenticode), but the
@@ -131,7 +73,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: node scripts/ci.mjs verify-secrets TAURI_SIGNING_PRIVATE_KEY
 
-      # ── espeak-ng static library ──────────────────────────────────────────────
       # ── Build frontend ────────────────────────────────────────────────────────
       - name: Build frontend
         run: npm run build
@@ -156,16 +97,13 @@ jobs:
       # ── Compile (frontend + Rust + daemon) ───────────────────────────────
       - name: Compile (frontend + Rust + daemon)
         env:
-          RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-          CMAKE_C_COMPILER_LAUNCHER:   sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         shell: bash
         run: |
           set -euo pipefail
           # Build the daemon first for consistent feature unification, then the app.
-          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --timings
+          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --features linux --timings
           cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol --timings
 
       # ── Stage files for packaging ─────────────────────────────────────---

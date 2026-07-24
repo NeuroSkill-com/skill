@@ -30,11 +30,7 @@ mustContain(
   "list_engine_ids()",
   "skill-tts catalog must build from engines::list_engine_ids()",
 );
-mustContain(
-  "src/lib/llm/voice-catalog.ts",
-  "fetchTtsEngines",
-  "UI voice-catalog must fetch daemon TTS engines",
-);
+mustContain("src/lib/llm/voice-catalog.ts", "fetchTtsEngines", "UI voice-catalog must fetch daemon TTS engines");
 mustContain(
   "src/lib/llm/VoiceEnginePicker.svelte",
   "available",

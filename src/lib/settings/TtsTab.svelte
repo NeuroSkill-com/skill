@@ -18,13 +18,13 @@ import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import TtsTestWidget from "$lib/help/TtsTestWidget.svelte";
 import { t } from "$lib/i18n/index.svelte";
 import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
+import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
 import {
   fetchTtsEngines,
   TTS_ENGINE_FALLBACK_LIST,
-  ttsEngineLabelKey,
   type TtsEngineInfo,
+  ttsEngineLabelKey,
 } from "$lib/llm/voice-catalog";
-import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

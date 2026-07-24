@@ -75,37 +75,37 @@ glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 # tribev2: using crates.io 0.1.0 (no patch needed — restore path dep when developing locally)
 # eegdino 0.2.0: device_label missing OneApi/Hexagon arms for rlx 0.2.10
 eegdino          = { path = "patches/eegdino-0.2.0" }
-# rlx-models still pins the MIT-RLX/rlx runtime stack from crates.io (`version =
-# "^0.2.13"`). Redirect those registry deps onto the same GitHub repo Skill uses
-# for direct deps, so builds work without crates.io publishing every crate.
-# Local sibling overlays: `scripts/rlx local` (writes an override OUTSIDE the
-# repo; never commit `../` paths here). CI uses Cargo.lock git pins only.
-rlx              = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-ir           = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-flow         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-runtime      = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-driver       = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-opt          = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-autodiff     = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-compile      = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-fusion       = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-cpu          = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-gguf         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-pkg          = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-text         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-metal        = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-mlx          = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-cuda         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-wgpu         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-rocm         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-onnx-import  = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-nemo         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git" }
-rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git" }
-# Transitive crates.io pins (e.g. tribev2 → rlx-models-core 0.2.1) must not
-# mix with git-patched rlx (LayerKvCache API). Force the git package.
-rlx-models-core  = { git = "https://github.com/MIT-RLX/rlx-models.git" }
+# Minimal [patch] set that keeps crates.io out of the lock (verified): rlx-models
+# still declares `version = "^0.2.x"` registry deps on the runtime stack, and
+# third-party crates (tribev2, …) pull registry `rlx-models-*`. Dropping any of
+# these reintroduces dual git+crates.io packages. Local: `scripts/rlx local`.
+rlx              = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-ir           = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-flow         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-runtime      = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-driver       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-opt          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-autodiff     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-compile      = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-fusion       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-cpu          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-gguf         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-pkg          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-text         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-metal        = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-mlx          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-cuda         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-wgpu         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-rocm         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-onnx-import  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-nemo         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-models-core   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-llama32       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-vjepa2        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-wav2vec2-bert = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #
@@ -132,42 +132,42 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # to unpack a .nsis.zip built with standard Deflate (method 8).
 zip = { version = "7", features = ["deflate"] }
 
-# RLX — from GitHub (Cargo.lock pins the resolved commit).
+# RLX — from GitHub (`branch = "main"`; Cargo.lock pins the resolved commit).
 #   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR (+ rlx-runtime, rlx-umap, …)
 #   rlx-models — https://github.com/MIT-RLX/rlx-models — model loaders / runners
 # Local sibling checkouts: `bash scripts/ensure-rlx.sh` / `scripts/rlx local`
 # (writes `[patch."<git-url>"]` outside the repo; never commit `../` paths).
-# CI fetches these git URLs directly from the lockfile — no sibling clone.
-rlx          = { git = "https://github.com/MIT-RLX/rlx.git", default-features = false }
-rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", default-features = false }
-rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", default-features = false }
+# CI fetches these git URLs from main (commit pinned in Cargo.lock) — no sibling clone.
+rlx          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
+rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
+rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 
-rlx-models   = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-minicpm5 = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-minimax  = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-nemotron = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-gemma    = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-neutts   = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-kittentts = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-inflect-nano = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-tiny-tts  = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-whisper   = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-vad       = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-qwen3-asr = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-qwen3-tts = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-kyutai-tts = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-orpheus   = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-voxtral   = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-funasr    = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-nemotron-asr = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
-rlx-asr       = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
+rlx-models   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-minicpm5 = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-minimax  = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-nemotron = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-gemma    = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-neutts   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-kittentts = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-inflect-nano = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-tiny-tts  = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-whisper   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-vad       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-qwen3-asr = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-qwen3-tts = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-kyutai-tts = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-orpheus   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-voxtral   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-funasr    = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-nemotron-asr = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
+rlx-asr       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 # Unified native TTS adapter catalog (publish = false). Never enable `ort`.
-rlx-tts-bench = { git = "https://github.com/MIT-RLX/rlx-models.git", default-features = false }
+rlx-tts-bench = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 # Bonsai-27B (prism-ml/Bonsai-27B-gguf) is a qwen35-arch GGUF: it routes through
 # rlx-models' auto_runner → rlx-qwen35 Qwen35Runner (packed Q1_0), same as the
 # other Bonsai catalog families — no direct rlx-bonsai/rlx-qwen35 dep needed.
 # rlx-ocr keeps its default features (rlx + tensor-ops); consumers add `convert-rten`.
-rlx-ocr       = { git = "https://github.com/MIT-RLX/rlx-models.git" }
+rlx-ocr       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 
 # ── Workspace lints ────────────────────────────────────────────────────────────
 #
