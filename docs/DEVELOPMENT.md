@@ -107,11 +107,11 @@ Optional env vars:
 | `RLX_URL`  | `https://github.com/MIT-RLX/rlx.git` | Clone URL                    |
 | `RLX_REF`  | `main`                          | Branch to fetch/checkout         |
 
-You do **not** need RLX for a normal dev build unless you enable `llm-rlx` / `text-embeddings-rlx` features. Cargo still needs `../rlx/rlx/Cargo.toml` to exist when those crates are in the workspace graph (CI always fetches RLX for that reason).
+You do **not** need a local RLX checkout for a normal build. Cargo resolves `rlx*` from GitHub (`MIT-RLX/rlx` + `rlx-models`) via `Cargo.toml`, with commits pinned in `Cargo.lock`. Use `scripts/rlx local` only when iterating on sibling checkouts.
 
 ### CI
 
-GitHub Actions use [`.github/actions/checkout-rlx`](../.github/actions/checkout-rlx), which clones `MIT-RLX/rlx` + `rlx-models` next to the workspace and runs `scripts/ensure-rlx.sh` with `RLX_CI_PATCH=1` to overlay those clones onto Skill's GitHub git dependencies. With `enabled=false`, Cargo fetches the same git URLs from `Cargo.toml` directly (no sibling clone). The same step is wired into `ci.yml`, release workflows, and `pr-build.yml`.
+CI does not clone RLX separately. Jobs use the committed `Cargo.lock` git pins; Cargo fetches `https://github.com/MIT-RLX/rlx.git` and `rlx-models.git` as needed.
 
 ## Data health check
 

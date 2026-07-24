@@ -29,8 +29,6 @@ jobs:
         with:
           fetch-depth: 0   # full history so git tag --format can read the annotation
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       # Catches "forgot to bump the version" before wasting 20 min on a build.

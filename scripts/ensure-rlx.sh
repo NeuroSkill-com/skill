@@ -4,9 +4,8 @@
 # Skill resolves all rlx* crates from GitHub in Cargo.toml:
 #   https://github.com/MIT-RLX/rlx.git
 #   https://github.com/MIT-RLX/rlx-models.git
-# Cargo.lock pins the resolved commits. This script does NOT clone anything
-# in CI by itself — `.github/actions/checkout-rlx` does that and sets
-# RLX_CI_PATCH=1 so we wire path overrides onto those clones.
+# Cargo.lock pins the resolved commits. CI uses those pins directly (no
+# sibling clone / path overlay).
 #
 # Locally, this generates cargo `[patch."<git-url>"]` overrides so builds
 # resolve rlx AND rlx-models from your sibling checkouts:
@@ -64,9 +63,8 @@ disable_override() {
   echo "ensure-rlx: building against GitHub git deps (Cargo.lock); lock un-skipped"
 }
 
-# CI without checkout-rlx: Cargo.toml already points at GitHub — nothing to do.
-# The checkout-rlx action sets RLX_CI_PATCH=1 so we fall through and patch.
-if [[ "${GITHUB_ACTIONS:-}" == "true" && "${RLX_CI_PATCH:-}" != "1" ]]; then
+# CI: Cargo.toml / Cargo.lock already point at GitHub — never write path overlays.
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   echo "ensure-rlx: CI — using GitHub rlx* from Cargo.toml / Cargo.lock (no sibling patch)"
   exit 0
 fi
@@ -221,14 +219,3 @@ echo "ensure-rlx: local [patch] override -> ${CONFIG} (${count} rlx crates)"
 [[ "${have_rlx}" -eq 1 ]] && echo "  from ${RLX_ROOT}  (patch ${RLX_GIT})"
 [[ "${have_models}" -eq 1 ]] && echo "  from ${RLX_MODELS_ROOT}  (patch ${RLX_MODELS_GIT})"
 echo "ensure-rlx: Cargo.lock marked skip-worktree — committed git-pinned lock protected from local churn"
-
-# CI checkout-rlx mode: materialise the patched lock so later --locked steps pass.
-if [[ "${RLX_CI_PATCH:-}" == "1" ]]; then
-  if command -v cargo >/dev/null 2>&1; then
-    echo "ensure-rlx: refreshing Cargo.lock against patched sibling sources (CI)…"
-    ( cd "${REPO_ROOT}" && cargo metadata --format-version=1 >/dev/null )
-    echo "ensure-rlx: Cargo.lock now matches patched sources — --locked builds will pass"
-  else
-    echo "ensure-rlx: WARNING cargo not on PATH; --locked steps will fail until Cargo.lock is refreshed" >&2
-  fi
-fi

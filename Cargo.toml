@@ -78,8 +78,8 @@ eegdino          = { path = "patches/eegdino-0.2.0" }
 # rlx-models still pins the MIT-RLX/rlx runtime stack from crates.io (`version =
 # "^0.2.13"`). Redirect those registry deps onto the same GitHub repo Skill uses
 # for direct deps, so builds work without crates.io publishing every crate.
-# Local/CI sibling overlays: `scripts/rlx local` / checkout-rlx patch the git
-# URLs to path (never commit `../` paths here).
+# Local sibling overlays: `scripts/rlx local` (writes an override OUTSIDE the
+# repo; never commit `../` paths here). CI uses Cargo.lock git pins only.
 rlx              = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-ir           = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-flow         = { git = "https://github.com/MIT-RLX/rlx.git" }
@@ -134,8 +134,7 @@ zip = { version = "7", features = ["deflate"] }
 #   rlx-models — https://github.com/MIT-RLX/rlx-models — model loaders / runners
 # Local sibling checkouts: `bash scripts/ensure-rlx.sh` / `scripts/rlx local`
 # (writes `[patch."<git-url>"]` outside the repo; never commit `../` paths).
-# CI `checkout-rlx` does the same with cached clones; without it Cargo fetches
-# these git URLs directly.
+# CI fetches these git URLs directly from the lockfile — no sibling clone.
 rlx          = { git = "https://github.com/MIT-RLX/rlx.git", default-features = false }
 rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", default-features = false }
 rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", default-features = false }

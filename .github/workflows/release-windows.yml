@@ -35,8 +35,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Validate Windows app manifest
         shell: bash

@@ -167,8 +167,6 @@ jobs:
           ref:         ${{ steps.meta.outputs.ref }}
           fetch-depth: 0
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       # ── Build label (version string used in artifact names + PR comment) ────
       - name: Compute build label

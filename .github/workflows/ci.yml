@@ -100,8 +100,6 @@ jobs:
       - name: Fetch skills submodule
         run: git submodule update --init --depth=1 skills
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
@@ -476,8 +474,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Validate Windows app manifest
         shell: bash
@@ -741,8 +737,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
@@ -850,8 +844,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Setup Rust bootstrap (Linux)
         uses: ./.github/actions/setup-rust-bootstrap-linux
@@ -938,8 +930,6 @@ jobs:
       - name: Fetch skills submodule
         run: git submodule update --init --depth=1 skills
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Free disk space
         run: node scripts/ci.mjs free-disk-space
@@ -1027,8 +1017,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Checkout RLX
-        uses: ./.github/actions/checkout-rlx
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
