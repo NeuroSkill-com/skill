@@ -5710,6 +5710,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - Simplify release CI setup and pin rlx git patches.
 - Fold Linux Vulkan/apt into a shared release-setup action, drop sccache from CI, scope daemon features per OS, and keep Cargo.lock on GitHub rlx main.
 
+## [0.0.131-rc.17] — 2026-07-24
+
+### Features
+
+- Minor updates and improvements
+
 ## [0.0.131-rc.2] — 2026-05-31
 
 ### Features
