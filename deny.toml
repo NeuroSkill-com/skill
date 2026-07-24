@@ -41,7 +41,7 @@ ignore = [
     # these advisories, so cargo-deny warns `advisory-not-detected`. Re-enable
     # both lines together with rlx-tiny-tts in crates/skill-tts/Cargo.toml.
     #   protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2 (build-only, never shipped)
-    # { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
     #   remove_dir_all 0.5.3 — TOCTOU, fixed in >=0.8.0 (build-only, via tempdir 0.3.7)
     # { id = "RUSTSEC-2023-0018", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
 ]
@@ -210,13 +210,43 @@ exceptions = [
     # local ../rlx-models checkout (not the published crates.io graph), so this
     # exception keeps the local pre-push `cargo deny` green; unused (harmless) in CI.
     { allow = ["GPL-3.0-only"], crate = "rlx-assets" },
-    # rlx-tiny-tts disabled (reshape bug on Metal + MLX) — out of the graph, so
-    # its exception is unused; re-enable with the engine in skill-tts/Cargo.toml.
-    # { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
+    # rlx-tiny-tts re-entered the graph (via rlx-tts-bench / TTS catalog); keep
+    # the GPL exception. protobuf advisory for its onnx codegen is ignored above.
+    { allow = ["GPL-3.0-only"], crate = "rlx-tiny-tts" },
     { allow = ["GPL-3.0-only"], crate = "rlx-kyutai-tts" },
     { allow = ["GPL-3.0-only"], crate = "rlx-mimi" },
     { allow = ["GPL-3.0-only"], crate = "rlx-orpheus" },
     { allow = ["GPL-3.0-only"], crate = "rlx-qwen3-asr" },
+    # Additional rlx-models TTS/ASR crates pulled via skill-tts / git main.
+    { allow = ["GPL-3.0-only"], crate = "kitten_tts_mini_rlx" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-asr" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-chatterbox" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-dac" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-encodec" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-f5tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-funasr" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-kokoro" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-luxtts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-melotts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-metavoice" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-miotts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-miratts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-moss-nano" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-nanocodec" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-nemo" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-nemotron-asr" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-parlertts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-piper" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-pkg" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-pocket-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-sesame" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-soprano" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-styletts2" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-supertonic" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-tts" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-tts-bench" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-xcodec" },
+    { allow = ["GPL-3.0-only"], crate = "rlx-zonos" },
     # EEG encoder (Mamba-family) pulled by skill-exg, GPL-3.0-only.
     { allow = ["GPL-3.0-only"], crate = "lumamba" },
 ]
