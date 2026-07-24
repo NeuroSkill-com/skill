@@ -106,6 +106,11 @@ rlx-models-core   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch 
 rlx-llama32       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 rlx-vjepa2        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 rlx-wav2vec2-bert = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+# rc.15 still pulled these from crates.io (API skew vs git rlx-flow `mask` field).
+rlx-qwen3         = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-qwen35        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-cli           = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-llada2        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #

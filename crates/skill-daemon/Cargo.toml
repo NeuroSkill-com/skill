@@ -18,8 +18,12 @@ linux = [
     "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",
 ]
 windows = [
-    "llm-rlx-wgpu", "llm-rlx-cuda", "embed-exg-gpu", "embed-exg-cuda",
-    "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",
+    # CUDA only — wgpu 30 + gpu-allocator 0.28 resolve onto different windows-rs
+    # majors (0.62 vs 0.61) and break D3D12 (`ResourceCategory` / `ID3D12Heap`).
+    # Re-enable llm-rlx-wgpu / embed-exg-gpu / text-embeddings-rlx-wgpu once
+    # gpu-allocator publishes a windows-0.62-aligned release.
+    "llm-rlx-cuda", "embed-exg-cuda",
+    "text-embeddings-rlx-cuda",
 ]
 # Voice input for the LLM chat: Whisper ASR + Silero VAD + cpal mic capture
 # (skill-asr). `asr-metal` additionally routes the Whisper encoder through Metal
