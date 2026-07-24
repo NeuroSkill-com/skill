@@ -931,7 +931,7 @@ mod tests {
 
     fn mk_state() -> (tempfile::TempDir, AppState) {
         let td = tempfile::tempdir().unwrap();
-        let st = AppState::new("t".into(), td.path().to_path_buf());
+        let st = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         (td, st)
     }
 

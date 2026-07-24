@@ -456,7 +456,7 @@ mod tests {
 
     fn test_state() -> (TempDir, AppState) {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("test-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("test-token".to_string(), td.path().to_path_buf());
         (td, state)
     }
 

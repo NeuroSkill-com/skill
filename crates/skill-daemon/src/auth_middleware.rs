@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn auth_decision_missing_invalid_and_query_bearer() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("default-token".to_string(), td.path().to_path_buf());
         let headers = HeaderMap::new();
 
         let req_missing = Request::builder().uri("/v1/status").body(Body::empty()).unwrap();
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn auth_decision_forbidden_when_acl_denies_endpoint() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("default-token".to_string(), td.path().to_path_buf());
 
         let stream_secret = {
             let mut store = state.token_store.lock().unwrap();
@@ -259,7 +259,7 @@ mod tests {
     fn auth_decision_iroh_registered_peer_allowed() {
         use std::net::SocketAddr;
         let td = TempDir::new().unwrap();
-        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("default-token".to_string(), td.path().to_path_buf());
 
         // Register a client in iroh_auth
         let peer_id = "aabbccdd1122334455667788aabbccdd1122334455667788aabbccdd11223344";
@@ -302,7 +302,7 @@ mod tests {
     fn auth_decision_iroh_unregistered_peer_registration_only() {
         use std::net::SocketAddr;
         let td = TempDir::new().unwrap();
-        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("default-token".to_string(), td.path().to_path_buf());
 
         // Register port for an unknown/unregistered peer
         state
@@ -392,7 +392,7 @@ mod tests {
         }
 
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
         let app = Router::new()
             .route("/v1/echo", get(ok).post(ok))
             .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))

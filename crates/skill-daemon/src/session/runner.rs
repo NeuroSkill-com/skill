@@ -471,7 +471,7 @@ mod tests {
 
     fn test_state(dir: &std::path::Path) -> AppState {
         std::fs::create_dir_all(dir).unwrap();
-        AppState::new("test".to_string(), dir.to_path_buf())
+        AppState::new_for_tests("test".to_string(), dir.to_path_buf())
     }
 
     fn eeg_desc(kind: &'static str, ch: usize, rate: f64) -> DeviceDescriptor {

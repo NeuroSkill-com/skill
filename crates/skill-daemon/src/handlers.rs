@@ -1797,7 +1797,7 @@ mod tests {
     #[tokio::test]
     async fn scanner_start_stop_race_is_safe() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
 
         let start = control_scanner_start(State(state.clone())).await.0;
         assert!(start.running);
@@ -1820,7 +1820,7 @@ mod tests {
     #[tokio::test]
     async fn scanner_stop_without_start_is_safe() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
 
         let stop = control_scanner_stop(State(state.clone())).await.0;
         assert!(!stop.running);
@@ -1830,7 +1830,7 @@ mod tests {
     #[tokio::test]
     async fn scanner_config_roundtrip_wifi_and_cortex() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
 
         let wifi = ScannerWifiConfigRequest {
             wifi_shield_ip: "192.168.4.1".into(),
@@ -1862,7 +1862,7 @@ mod tests {
     #[test]
     fn ws_client_tracker_add_remove_is_consistent() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("ws-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("ws-token".to_string(), td.path().to_path_buf());
 
         add_client(&state, "127.0.0.1:10001");
         add_client(&state, "127.0.0.1:10002");

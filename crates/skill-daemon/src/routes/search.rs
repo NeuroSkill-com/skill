@@ -1242,7 +1242,7 @@ mod tests {
     #[tokio::test]
     async fn global_index_stats_reports_path_and_ready() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = global_index_stats(State(state)).await;
         assert_eq!(v["ready"], true);
         assert!(v["path"].as_str().unwrap_or("").contains("global"));
@@ -1251,7 +1251,7 @@ mod tests {
     #[tokio::test]
     async fn compare_search_returns_a_and_b_keys() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = compare_search(
             State(state),
             Json(CompareSearchRequest {
@@ -1397,7 +1397,7 @@ mod tests {
     #[tokio::test]
     async fn search_eeg_empty_query_returns_empty() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = search_eeg(
             State(state),
             Json(SearchRequest {
@@ -1426,7 +1426,7 @@ mod tests {
     #[tokio::test]
     async fn search_eeg_no_params_returns_empty() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = search_eeg(
             State(state),
             Json(SearchRequest {
@@ -1456,7 +1456,7 @@ mod tests {
     #[tokio::test]
     async fn search_eeg_time_range_returns_json() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = search_eeg(
             State(state),
             Json(SearchRequest {

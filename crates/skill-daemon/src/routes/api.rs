@@ -188,7 +188,7 @@ mod tests {
     #[tokio::test]
     async fn api_status_shape_is_stable() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = api_status(State(state)).await;
         assert_eq!(v["command"], "status");
         assert_eq!(v["ok"], true);
@@ -214,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn api_create_label_persists_row() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let Json(v) = api_create_label(State(state.clone()), Json(serde_json::json!({"text": "focus marker"}))).await;
         assert_eq!(v["ok"], true);
@@ -233,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn api_sessions_empty_dir_returns_empty_array() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = api_sessions(State(state)).await;
         assert_eq!(v["command"], "sessions");
         assert_eq!(v["ok"], true);

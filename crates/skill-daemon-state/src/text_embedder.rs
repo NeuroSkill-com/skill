@@ -172,12 +172,18 @@ impl SharedTextEmbedder {
     /// Embed a search **query** (prepends `search_query:` for nomic models).
     /// Use this for the text the user is searching *with*.
     pub fn embed_query(&self, text: &str) -> Option<Vec<f32>> {
+        if text.trim().is_empty() {
+            return None;
+        }
         self.embed(&self.with_prefix(text, "search_query"))
     }
 
     /// Embed an indexed **document** (prepends `search_document:` for nomic
     /// models). Use this for text being stored/indexed for later retrieval.
     pub fn embed_document(&self, text: &str) -> Option<Vec<f32>> {
+        if text.trim().is_empty() {
+            return None;
+        }
         self.embed(&self.with_prefix(text, "search_document"))
     }
 

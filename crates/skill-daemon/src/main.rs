@@ -668,7 +668,7 @@ mod tests {
     #[tokio::test]
     async fn router_e2e_healthz_public_and_version_protected() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("test-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("test-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
 
         let res = app
@@ -695,7 +695,7 @@ mod tests {
     #[tokio::test]
     async fn router_e2e_forbidden_acl_and_ws_auth_gate() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("default-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
 
         let stream_secret = {
@@ -761,7 +761,7 @@ mod tests {
     #[tokio::test]
     async fn router_e2e_forbidden_body_shape() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("default-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("default-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
 
         let stream_secret = {
@@ -797,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn ws_receives_broadcast_and_tracks_clients() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("ws-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("ws-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
         let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
 
@@ -842,7 +842,7 @@ mod tests {
     #[tokio::test]
     async fn ws_non_text_frame_does_not_break_stream() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("ws-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("ws-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
         let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
 
@@ -900,7 +900,7 @@ mod tests {
         use tokio_tungstenite::tungstenite::Message;
 
         let td = TempDir::new().unwrap();
-        let state = AppState::new("flood-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("flood-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
         let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
 
@@ -989,7 +989,7 @@ mod tests {
         use tokio_tungstenite::tungstenite::Message;
 
         let td = TempDir::new().unwrap();
-        let state = AppState::new("filter-token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("filter-token".to_string(), td.path().to_path_buf());
         let app = test_app(state.clone());
         let (addr, shutdown_tx, handle) = spawn_test_server(app).await;
 

@@ -434,7 +434,7 @@ mod tests {
             "TestMuse".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         );
         assert!(result.is_ok());
         let pipe = result.unwrap();
@@ -463,7 +463,7 @@ mod tests {
             "TestDevice".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
 
@@ -492,7 +492,7 @@ mod tests {
             "TestDevice".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
 
@@ -531,7 +531,7 @@ mod tests {
             "Test".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
 
@@ -561,7 +561,7 @@ mod tests {
             "RollDevice".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
 
@@ -623,7 +623,7 @@ mod tests {
             "PartialDevice".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
 
@@ -683,7 +683,7 @@ mod tests {
             "RollPartial".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
         pipe.device_kind = "test".into();
@@ -724,7 +724,7 @@ mod tests {
             "PrewarmDevice".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
         pipe.device_kind = "muse".into();
@@ -793,7 +793,7 @@ mod tests {
             "LossDevice".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
         pipe.device_kind = "muse".into();
@@ -844,7 +844,7 @@ mod tests {
             "Sub".into(),
             tx,
             Vec::new(),
-            crate::text_embedder::SharedTextEmbedder::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
         )
         .unwrap();
 

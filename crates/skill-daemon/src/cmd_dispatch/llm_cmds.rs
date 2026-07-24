@@ -678,7 +678,7 @@ mod tests {
     #[tokio::test]
     async fn cmd_llm_status_returns_expected_shape() {
         let td = tempfile::TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         let result = cmd_llm_status(&state).await.unwrap();
         // Should have server_running or enabled field
         assert!(result.is_object());
@@ -687,7 +687,7 @@ mod tests {
     #[tokio::test]
     async fn cmd_llm_catalog_returns_entries() {
         let td = tempfile::TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         let result = cmd_llm_catalog(&state).await.unwrap();
         assert!(result.get("entries").is_some());
     }
@@ -695,7 +695,7 @@ mod tests {
     #[tokio::test]
     async fn cmd_llm_downloads_returns_array() {
         let td = tempfile::TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         let result = cmd_llm_downloads(&state).await.unwrap();
         assert!(result.get("downloads").is_some());
     }

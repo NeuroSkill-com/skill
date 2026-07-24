@@ -294,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn embedding_count_empty_dir_is_zero() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(v) = embedding_count(
             State(state),
             Json(TimeRangeRequest {
@@ -309,7 +309,7 @@ mod tests {
     #[tokio::test]
     async fn session_location_filters_points_and_sorts() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let csv = td.path().join("dummy.csv");
         std::fs::write(&csv, "").unwrap();

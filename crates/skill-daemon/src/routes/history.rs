@@ -239,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn list_sessions_empty_dir_returns_empty() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let Json(rows) = list_sessions(State(state)).await;
         assert!(rows.is_empty());
     }
@@ -247,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn daily_recording_mins_respects_days_and_shape() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let Json(v) = daily_recording_mins(State(state), Json(DailyRecordingMinsRequest { days: Some(3) })).await;
 

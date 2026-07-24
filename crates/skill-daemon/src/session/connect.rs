@@ -595,7 +595,7 @@ mod tests {
     #[test]
     fn paired_name_lookup_uses_status_paired_devices() {
         let td = tempfile::tempdir().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         if let Ok(mut s) = state.status.lock() {
             s.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
                 id: "ble:abc".into(),
@@ -611,7 +611,7 @@ mod tests {
     #[test]
     fn push_device_log_static_caps_to_256() {
         let td = tempfile::tempdir().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         for i in 0..300 {
             push_device_log_static(&state, "session", &format!("m{i}"));

@@ -71,7 +71,7 @@ mod tests {
     #[tokio::test]
     async fn test_begin_end_toggles_mode() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         assert!(!state.test_mode.load(std::sync::atomic::Ordering::Relaxed));
 
@@ -87,7 +87,7 @@ mod tests {
     #[tokio::test]
     async fn test_begin_cancels_reembed() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         state
             .idle_reembed_cancel

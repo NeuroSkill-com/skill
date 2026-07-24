@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn request_log_is_capped_under_abuse() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
 
         for i in 0..1200 {
             record_request(&state, "127.0.0.1".into(), format!("/bad/{i}"), false);
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn device_log_is_capped_at_256_entries() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
 
         for i in 0..400 {
             push_device_log(&state, "test", &format!("msg-{i}"));
@@ -419,7 +419,7 @@ mod tests {
     #[test]
     fn is_paired_target_checks_id_and_name() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         if let Ok(mut status) = state.status.lock() {
             status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
                 id: "ble:abc".into(),
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn resolve_target_fields_id_like_target() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         if let Ok(mut status) = state.status.lock() {
             status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
                 id: "ble:abc".into(),
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn resolve_target_fields_name_like_target() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         if let Ok(mut status) = state.status.lock() {
             status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
                 id: "ble:abc".into(),
@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn resolve_target_fields_none_target() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         let (id, display) = resolve_target_fields(&state, None);
         assert!(id.is_none());
         assert!(display.is_none());
@@ -476,7 +476,7 @@ mod tests {
     #[test]
     fn resolve_target_fields_unknown_id_uses_id_as_display() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         let (id, display) = resolve_target_fields(&state, Some("ble:unknown"));
         assert_eq!(id, Some("ble:unknown".into()));
         assert_eq!(display, Some("ble:unknown".into()));
@@ -494,7 +494,7 @@ mod tests {
     #[tokio::test]
     async fn persist_paired_devices_writes_json_file() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         if let Ok(mut status) = state.status.lock() {
             status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
                 id: "ble:test".into(),

@@ -962,7 +962,7 @@ mod tests {
     #[test]
     fn manual_hints_include_usb_serial_and_wifi() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("test".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("test".to_string(), td.path().to_path_buf());
         let hints = detect_manual_device_hints(&state);
 
         assert!(hints.iter().any(|d| d.id == "neurosky" && d.transport == "usb_serial"));
@@ -974,7 +974,7 @@ mod tests {
     #[test]
     fn ble_cache_filters_stale_and_unknown_devices() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("test".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("test".to_string(), td.path().to_path_buf());
         let now = now_unix_secs();
 
         {
@@ -997,7 +997,7 @@ mod tests {
     #[test]
     fn ble_cache_large_scan_is_fast() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("test".to_string(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("test".to_string(), td.path().to_path_buf());
         let now = now_unix_secs();
 
         {

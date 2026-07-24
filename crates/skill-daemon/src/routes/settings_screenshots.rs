@@ -412,7 +412,7 @@ mod tests {
 
     fn mk_state() -> (TempDir, AppState) {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         (td, state)
     }
 
@@ -447,7 +447,7 @@ mod tests {
             config: skill_settings::ScreenshotConfig::default(),
             state: None,
             events_tx: tx,
-            text_embedder: crate::text_embedder::SharedTextEmbedder::new(),
+            text_embedder: crate::text_embedder::SharedTextEmbedder::new_noop(),
         };
         let _cfg = ctx.config();
     }
@@ -460,7 +460,7 @@ mod tests {
             config: skill_settings::ScreenshotConfig::default(),
             state: None,
             events_tx: tx,
-            text_embedder: crate::text_embedder::SharedTextEmbedder::new(),
+            text_embedder: crate::text_embedder::SharedTextEmbedder::new_noop(),
         };
         assert!(!ctx.is_session_active());
     }

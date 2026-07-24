@@ -1803,7 +1803,7 @@ mod tests {
 
     fn mk_state() -> (TempDir, AppState) {
         let td = TempDir::new().unwrap();
-        let st = AppState::new("t".into(), td.path().to_path_buf());
+        let st = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         (td, st)
     }
 
@@ -2441,10 +2441,11 @@ mod tests {
     #[cfg(feature = "text-embeddings-rlx")]
     async fn set_text_embedding_model_valid_persists() {
         let (td, st) = mk_state();
-        // Set to bge-small
+        // Force CPU — Metal/MPS can abort the whole test process on reshape bugs
+        // in some embedding graphs when the default device picks GPU.
         let Json(_) = set_text_embedding_model(
             State(st.clone()),
-            Json(serde_json::json!({ "model": "BAAI/bge-small-en-v1.5" })),
+            Json(serde_json::json!({ "model": "BAAI/bge-small-en-v1.5", "rlx_device": "cpu" })),
         )
         .await;
         // Model load may fail in test env (no weights), but the code should be set.
@@ -2461,7 +2462,7 @@ mod tests {
         let (_td, st) = mk_state();
         let Json(v) = set_text_embedding_model(
             State(st),
-            Json(serde_json::json!({ "model": "nonexistent/fake-model" })),
+            Json(serde_json::json!({ "model": "nonexistent/fake-model", "rlx_device": "cpu" })),
         )
         .await;
         assert_eq!(v["ok"], false);

@@ -337,6 +337,15 @@ impl AppState {
         }
     }
 
+    /// Like [`Self::new`], but installs a noop text embedder that never loads
+    /// model weights. Unit tests must use this — on macOS, a real Metal/MPS
+    /// embed can abort the whole process on known reshape bugs.
+    pub fn new_for_tests(auth_token: String, skill_dir: PathBuf) -> Self {
+        let mut state = Self::new(auth_token, skill_dir);
+        state.text_embedder = SharedTextEmbedder::new_noop();
+        state
+    }
+
     /// Record a heartbeat for a background task. Call once per tick after
     /// the work for that tick completes. `duration_ms` is how long this tick
     /// took; pass 0 if not measured.

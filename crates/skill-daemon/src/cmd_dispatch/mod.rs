@@ -238,7 +238,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_missing_command_fails() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let v = dispatch(state, json!({"foo":"bar"})).await;
         assert_eq!(v["ok"], false);
         assert_eq!(v["error"], "missing command field");
@@ -247,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_unknown_command_fails() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let v = dispatch(state, json!({"command":"nope"})).await;
         assert_eq!(v["command"], "nope");
         assert_eq!(v["ok"], false);
@@ -257,7 +257,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_status_returns_command_and_ok() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         let v = dispatch(state, json!({"command":"status"})).await;
         assert_eq!(v["command"], "status");
         assert_eq!(v["ok"], true);
@@ -267,7 +267,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_devices_and_sessions_have_expected_shape() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let v1 = dispatch(state.clone(), json!({"command":"devices"})).await;
         assert_eq!(v1["ok"], true);
@@ -281,7 +281,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_validation_errors_for_missing_required_fields() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let m1 = dispatch(state.clone(), json!({"command":"session_metrics"})).await;
         assert_eq!(m1["ok"], false);
@@ -307,7 +307,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_hooks_and_iroh_info_paths() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let set = dispatch(
             state.clone(),
@@ -346,7 +346,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_sleep_schedule_roundtrip_and_stub_command() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let before = dispatch(state.clone(), json!({"command":"sleep_schedule"})).await;
         assert_eq!(before["ok"], true);
@@ -371,7 +371,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_dnd_and_dnd_set_paths() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let dnd = dispatch(state.clone(), json!({"command":"dnd"})).await;
         assert_eq!(dnd["ok"], true);
@@ -390,7 +390,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_hooks_suggest_and_log_empty_paths() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let suggest = dispatch(state.clone(), json!({"command":"hooks_suggest","keywords":["focus"]})).await;
         assert_eq!(suggest["ok"], true);
@@ -405,7 +405,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_calibration_crud_roundtrip() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let created = dispatch(
             state.clone(),
@@ -445,7 +445,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_family_router_handles_known_groups() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let hooks = dispatch_family_commands(&state, &json!({}), "hooks_status").await;
         assert!(hooks.is_some());
@@ -466,7 +466,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_command_matrix_has_no_unknowns() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let cases = vec![
             json!({"command":"status"}),

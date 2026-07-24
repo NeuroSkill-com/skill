@@ -158,9 +158,10 @@ mod tests {
 
     #[test]
     fn embed_text_empty_is_none() {
-        let embedder = crate::text_embedder::SharedTextEmbedder::new();
-        assert!(embedder.embed("   ").is_none() || embedder.embed("   ").is_some());
-        // Model may or may not be available in CI — just verify no panic.
+        // Use noop — SharedTextEmbedder::new() may load a real Metal graph and
+        // abort the process on known reshape bugs (not a panic Rust can catch).
+        let embedder = crate::text_embedder::SharedTextEmbedder::new_noop();
+        assert!(embedder.embed("   ").is_none());
     }
 
     #[test]
@@ -180,7 +181,7 @@ mod tests {
     #[tokio::test]
     async fn list_labels_empty_then_create_and_delete_label() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let Json(v0) = list_labels(State(state.clone())).await;
         assert!(v0.is_empty());
@@ -213,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn search_and_index_stats_paths_are_stable() {
         let td = TempDir::new().unwrap();
-        let state = AppState::new("t".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
 
         let Json(stats0) = label_index_stats(State(state.clone())).await;
         assert!(stats0.get("text_nodes").is_some());

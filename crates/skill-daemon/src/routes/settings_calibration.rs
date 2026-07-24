@@ -209,7 +209,7 @@ mod tests {
             std::fs::create_dir_all(p).unwrap();
         }
         std::fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
-        let state = AppState::new("token".into(), td.path().to_path_buf());
+        let state = AppState::new_for_tests("token".into(), td.path().to_path_buf());
         (td, state)
     }
 
