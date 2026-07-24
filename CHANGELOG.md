@@ -5677,6 +5677,13 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - update deps
 
+## [0.0.131-rc.13] — 2026-07-24
+
+### Features
+
+- fixed CI
+- simplified CI
+
 ## [0.0.131-rc.2] — 2026-05-31
 
 ### Features
