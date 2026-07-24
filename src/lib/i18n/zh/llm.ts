@@ -110,7 +110,7 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} GB",
   "llm.localPath": "本地路径",
   "llm.inference.gpuLayers": "GPU 层数",
-  "llm.inference.gpuLayersDesc": "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要 llm-metal / llm-cuda 功能。",
+  "llm.inference.gpuLayersDesc": "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要启用 GPU 的 daemon 构建（apple / linux / windows）。",
   "llm.inference.ctxSize": "上下文大小",
   "llm.inference.ctxSizeDesc": "KV-cache 大小（以 token 为单位）。自动选择适合您 GPU/RAM 的最大上下文。",
   "llm.inference.parallel": "最大并发请求数",
@@ -457,7 +457,7 @@ const llm: Record<string, string> = {
   "llm.hfSearch.hideReadme": "隐藏 README",
   "llm.noFeature": "未编译 LLM 支持。",
   "llm.noFeatureHint":
-    "使用 --features llm（以及可选的 llm-metal / llm-cuda / llm-mtmd）重新构建以启用嵌入式 OpenAI 兼容推理服务器。",
+    "使用 GPU 启用的 daemon（--features apple|linux|windows）重新构建以启用嵌入式 OpenAI 兼容推理服务器。",
   "llm.endpoints.title": "OpenAI 兼容端点",
   "llm.endpoints.hint": "所有端点与 WebSocket / REST API 在同一端口上提供服务。",
 

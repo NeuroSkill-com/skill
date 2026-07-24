@@ -111,7 +111,7 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} GB",
   "llm.localPath": "Lokaler Pfad",
   "llm.inference.gpuLayers": "GPU-Ebenen",
-  "llm.inference.gpuLayersDesc": "Auf die GPU auszulagernde Ebenen (0 = nur CPU). Erfordert llm-metal / llm-cuda.",
+  "llm.inference.gpuLayersDesc": "Auf die GPU auszulagernde Ebenen (0 = nur CPU). Erfordert einen GPU-fähigen Daemon-Build (apple / linux / windows).",
   "llm.inference.ctxSize": "Kontextgröße",
   "llm.inference.ctxSizeDesc": "KV-Cache-Größe in Token (leer = Modellstandard).",
   "llm.inference.parallel": "Maximale Anzahl gleichzeitiger Anfragen",
@@ -300,7 +300,7 @@ const llm: Record<string, string> = {
   "llm.hfSearch.hideReadme": "README ausblenden",
   "llm.noFeature": "LLM-Unterstützung ist nicht einkompiliert.",
   "llm.noFeatureHint":
-    "Mit --features llm neu erstellen, um den eingebetteten OpenAI-kompatiblen Server zu aktivieren.",
+    "Mit einem GPU-fähigen Daemon (--features apple|linux|windows) neu erstellen, um den eingebetteten OpenAI-kompatiblen Server zu aktivieren.",
   "llm.endpoints.title": "OpenAI-kompatible Endpunkte",
   "llm.endpoints.hint": "Alle Endpunkte werden über denselben Port wie die WebSocket-/REST-API bedient.",
   "llm.mmproj.autoload": "Visions-Encoder automatisch geladen",

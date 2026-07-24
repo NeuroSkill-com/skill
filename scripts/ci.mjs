@@ -7,7 +7,7 @@
 //   node scripts/ci.mjs <command> [args...]
 //
 // Commands:
-//   resolve-version          Resolve version from tauri.conf.json, validate tag
+//   resolve-version          Resolve version from VERSION, validate tag + derived files
 //   verify-secrets V1 V2 ... Check env vars are non-empty
 //   prepare-changelog VER OUT [RANGE]  Generate release notes markdown
 //   update-latest-json ...   Merge platform entry into Tauri updater manifest
@@ -19,6 +19,7 @@
 //   validate-apple-signing-identity   Assert APPLE_SIGNING_IDENTITY is a Developer ID Application cert
 //   free-disk-space          Remove unused toolchains on Linux runners
 //   install-protoc-windows   Install protoc via choco or direct download (Windows)
+//   compile-product          Shared daemon+tty+app cargo recipe (release CI)
 //   self-test                Validate all commands + workflow references
 //   dry-run-release          Local release dry-run
 
@@ -27,6 +28,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync
 import { basename, join, dirname } from "path";
 import { tmpdir } from "os";
 import { createHash } from "crypto";
+import {
+  compileProduct,
+  daemonOsFeature,
+  parseCompileProductArgs,
+  printCompileProductHelp,
+} from "./lib/compile-product.mjs";
 
 // ── Globals ──────────────────────────────────────────────────────────────────
 
@@ -65,11 +72,46 @@ function warning(msg) {
   console.log(`::warning::[${CMD}] ${msg}`);
 }
 
+/** Product version from repo-root VERSION (source of truth). */
 function confVersion() {
-  const text = readFileSync("src-tauri/tauri.conf.json", "utf8");
-  const m = text.match(/"version"\s*:\s*"([^"]+)"/);
-  if (!m) throw new Error("Could not find version in src-tauri/tauri.conf.json");
-  return m[1];
+  const raw = readFileSync("VERSION", "utf8").trim();
+  const version = raw.split(/\r?\n/)[0]?.trim() ?? "";
+  if (!version) throw new Error("VERSION file is empty");
+  if (!/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(version)) {
+    throw new Error(`Invalid VERSION "${version}" (expected x.y.z or x.y.z-rc.N)`);
+  }
+
+  // Derived consumers must stay in sync with VERSION (bump.js writes all of them).
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  if (pkg.version !== version) {
+    throw new Error(`package.json version (${pkg.version}) does not match VERSION (${version})`);
+  }
+  const tauriText = readFileSync("src-tauri/tauri.conf.json", "utf8");
+  const tauriMatch = tauriText.match(/"version"\s*:\s*"([^"]+)"/);
+  if (!tauriMatch) throw new Error("Could not find version in src-tauri/tauri.conf.json");
+  if (tauriMatch[1] !== version) {
+    throw new Error(
+      `src-tauri/tauri.conf.json version (${tauriMatch[1]}) does not match VERSION (${version})`,
+    );
+  }
+  const cargoText = readFileSync("src-tauri/Cargo.toml", "utf8");
+  const cargoMatch = cargoText.match(/^version\s*=\s*"([^"]+)"/m);
+  if (!cargoMatch) throw new Error("Could not find package version in src-tauri/Cargo.toml");
+  if (cargoMatch[1] !== version) {
+    throw new Error(
+      `src-tauri/Cargo.toml version (${cargoMatch[1]}) does not match VERSION (${version})`,
+    );
+  }
+  for (const path of ["crates/skill-daemon/Cargo.toml", "crates/skill-tty/Cargo.toml"]) {
+    const text = readFileSync(path, "utf8");
+    const m = text.match(/^version\s*=\s*"([^"]+)"/m);
+    if (!m) throw new Error(`Could not find package version in ${path}`);
+    if (m[1] !== version) {
+      throw new Error(`${path} version (${m[1]}) does not match VERSION (${version})`);
+    }
+  }
+
+  return version;
 }
 
 function run(cmd, opts = {}) {
@@ -134,14 +176,14 @@ function cmdResolveVersion() {
 
   if (dryRun === "true") {
     tag = `v${version}`;
-    log(`[dry-run] Using version from tauri.conf.json: ${version}`);
+    log(`[dry-run] Using version from VERSION: ${version}`);
   } else if (event === "push" && ref.startsWith("refs/tags/v")) {
     isRelease = "true";
     tag = refName;
     const tagVer = tag.replace(/^v/, "");
     if (tagVer !== version) {
-      error(`Tag version (${tagVer}) does not match tauri.conf.json version (${version}).`);
-      error("Bump the version in src-tauri/tauri.conf.json and src-tauri/Cargo.toml, then re-tag.");
+      error(`Tag version (${tagVer}) does not match VERSION (${version}).`);
+      error("Run npm run bump (writes VERSION + derived files), then re-tag.");
       process.exit(1);
     }
   }
@@ -593,6 +635,15 @@ function cmdInstallProtocWindows() {
   run(["protoc", "--version"]);
 }
 
+function cmdCompileProduct() {
+  const opts = parseCompileProductArgs(process.argv.slice(3));
+  if (opts.help) {
+    printCompileProductHelp();
+    return;
+  }
+  compileProduct(opts);
+}
+
 function cmdSelfTest() {
   const errors = [];
   const commandMap = {
@@ -605,6 +656,7 @@ function cmdSelfTest() {
     "validate-notarization": cmdValidateNotarization,
     "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
     "free-disk-space": cmdFreeDiskSpace, "install-protoc-windows": cmdInstallProtocWindows,
+    "compile-product": cmdCompileProduct,
     "self-test": cmdSelfTest, "dry-run-release": cmdDryRunRelease,
     "update-cask": cmdUpdateCask,
   };
@@ -635,6 +687,24 @@ function cmdSelfTest() {
     errors.push(`  confVersion(): ${e.message}`);
   }
 
+  // OS umbrella mapping
+  try {
+    const cases = [
+      ["aarch64-apple-darwin", "apple"],
+      ["x86_64-unknown-linux-gnu", "linux"],
+      ["x86_64-pc-windows-msvc", "windows"],
+    ];
+    for (const [triple, want] of cases) {
+      const got = daemonOsFeature(triple);
+      if (got !== want) {
+        errors.push(`  daemonOsFeature(${triple}): got ${got}, want ${want}`);
+      }
+    }
+    log("✓ daemonOsFeature OS mapping");
+  } catch (e) {
+    errors.push(`  daemonOsFeature(): ${e.message}`);
+  }
+
   if (errors.length) {
     error("self-test failed:");
     errors.forEach((e) => console.log(e));
@@ -655,16 +725,17 @@ function cmdDryRunRelease(args) {
   if (!skipCompile) run(["npm", "run", "build"], { check: true });
   else log("(skipped)");
 
-  log("Step 3/6: cargo build");
+  log("Step 3/6: cargo build (compile-product)");
   if (!skipCompile) {
-    // Daemon OS umbrella — dry-run defaults to macOS target.
-    const daemonFeatures = target.includes("apple")
-      ? "apple"
-      : target.includes("windows")
-        ? "windows"
-        : "linux";
-    run(["cargo", "build", "--release", "--target", target, "-p", "skill-daemon", "--features", daemonFeatures], { check: true });
-    run(["cargo", "build", "--release", "--target", target, "-p", "skill", "--features", "custom-protocol"], { check: true, cwd: "src-tauri" });
+    compileProduct({
+      target,
+      release: true,
+      locked: false,
+      timings: false,
+      daemon: true,
+      app: true,
+      tty: "auto",
+    });
   } else log("(skipped)");
 
   log("Step 4/6: assemble .app bundle");
@@ -713,6 +784,7 @@ const COMMANDS = {
   "validate-apple-signing-identity": cmdValidateAppleSigningIdentity,
   "free-disk-space": cmdFreeDiskSpace,
   "install-protoc-windows": cmdInstallProtocWindows,
+  "compile-product": cmdCompileProduct,
   "self-test": cmdSelfTest,
   "dry-run-release": (a) => cmdDryRunRelease(a),
   "update-cask": cmdUpdateCask,

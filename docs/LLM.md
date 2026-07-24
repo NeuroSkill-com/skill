@@ -2,51 +2,62 @@
 
 ## Architecture Overview
 
-The LLM engine is a **local inference server** built on top of **llama.cpp** (via the `llama-cpp-4` Rust crate). It follows an **actor pattern**:
+The LLM engine is a **local inference server** owned by **`skill-daemon`**, built on the
+**RLX** runtime (`llm-rlx`). The UI is a thin client: it talks to the daemon over
+localhost HTTP/WS (via `daemonInvoke` / typed clients in `src/lib/daemon/`), not
+via Tauri business-logic commands.
 
 ```
-Frontend (Svelte)  ⇄  Tauri IPC commands  ⇄  Axum HTTP server  ⇄  Actor thread (owns model)
-                                              (OpenAI-compatible API)
+Frontend (SvelteKit)
+  └─ daemon HTTP / WS  ⇄  skill-daemon
+                              ├─ skill-llm actor (owns model + sampling)
+                              ├─ OpenAI-compatible /v1/chat/completions (in-process)
+                              └─ skill-tools (bash/FS/web, approval hooks)
 ```
 
-A single dedicated OS thread ("llm-actor") owns the `LlamaBackend`, `LlamaModel`, and `LlamaContext`. Axum HTTP handlers and Tauri commands communicate with it via an unbounded mpsc channel (`InferRequest` → actor → `InferToken` stream back).
+A dedicated actor owns the loaded model and streams tokens. Daemon routes under
+`/v1/llm/*` and `/v1/settings/llm-*` start/stop the engine, manage downloads, and
+persist chat history. Product builds enable one OS umbrella
+(`apple` / `linux` / `windows`) via `scripts/compile-product.mjs`.
 
 ## Key Files
 
 | File | Role |
 |---|---|
-| `src-tauri/src/llm/mod.rs` | Thin re-export layer over `skill-llm`; Tauri AppHandle adapter |
-| `src-tauri/src/llm/cmds.rs` | Tauri commands: start/stop server, download/delete models, chat history |
-| `crates/skill-llm/src/engine.rs` | Actor thread, inference loop, tool orchestration, Axum routes, image decoding |
-| `crates/skill-llm/src/catalog.rs` | Model catalog (bundled JSON + HF Hub cache discovery + download logic) |
-| `crates/skill-llm/src/chat_store.rs` | SQLite persistence for chat sessions |
-| `crates/skill-tools/src/parse.rs` | Tool call parsing, extraction, validation, prompt injection |
-| `crates/skill-tools/src/defs.rs` | Built-in tool definitions (JSON Schema specs) |
-| `crates/skill-tools/src/exec.rs` | Tool execution (each tool's runtime implementation) |
-| `crates/skill-tools/src/context.rs` | Context-aware history trimming |
-| `crates/skill-tools/src/types.rs` | `LlmToolConfig`, `ToolExecutionMode` |
-| `src-tauri/llm_catalog.json` | **Canonical model list** — add new models here only, no Rust changes needed |
-| `src-tauri/src/settings.rs` | `LlmConfig` struct (all config knobs) |
+| `crates/skill-llm/` | Catalog, downloads, chat store, RLX engine, OpenAI-ish handlers |
+| `crates/skill-daemon/src/routes/settings_llm*.rs` | Daemon HTTP surface for LLM config / runtime / chat |
+| `crates/skill-tools/` | Tool defs, parsing, execution + safety hooks |
+| `src-tauri/llm_catalog.json` | **Canonical model list** — add models here; no Rust changes needed |
+| `src-tauri/src/llm/` | Thin shell adapters only (no domain ownership) |
+| `src/lib/daemon/` | Frontend HTTP clients (`invoke-proxy.ts` transitional; prefer typed modules) |
 
 ## Feature Flags
 
 | Flag | Effect |
 |---|---|
-| `llm` | Core: model loading + inference |
-| `llm-metal` | Metal GPU offload (macOS) |
-| `llm-cuda` | CUDA GPU offload (NVIDIA) |
-| `llm-vulkan` | Vulkan GPU offload (cross-platform, used on Linux/Windows) |
-| `llm-mtmd` | Multimodal: vision/audio via libmtmd |
+| `llm` / `llm-rlx` | Core: model loading + inference via RLX |
+| `apple` | macOS umbrella → Metal + MLX |
+| `linux` | Linux product → CUDA + wgpu (runtime: CUDA → wgpu → CPU) |
+| `windows` | Windows product → CUDA + wgpu (runtime: CUDA → wgpu → CPU) |
+| `llm-rlx-metal` / `llm-rlx-mlx` / `llm-rlx-cuda` / `llm-rlx-wgpu` / `llm-rlx-rocm` | Leaf GPU backends |
 
-## API Endpoints (localhost)
+Product builds always compile both CUDA and wgpu on Linux/Windows so missing
+NVIDIA drivers fall back to wgpu automatically — not a separate build.
+
+## API Endpoints (daemon)
+
+Primary control plane (bearer auth):
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Liveness + model ready state |
-| `GET` | `/v1/models` | List loaded model |
-| `POST` | `/v1/chat/completions` | Chat (streaming SSE + JSON) |
-| `POST` | `/v1/completions` | Raw text completion |
-| `POST` | `/v1/embeddings` | Dense embeddings (mean pool) |
+| `GET` | `/v1/llm/server/status` | Engine status / hardware fit |
+| `POST` | `/v1/llm/server/start` | Start / load model |
+| `POST` | `/v1/llm/server/stop` | Stop engine |
+| `GET`/`POST` | `/v1/llm/catalog` (+ refresh/download/*) | Catalog + HF downloads |
+| `POST` | `/v1/llm/chat/*` | Chat session CRUD + persistence |
+
+OpenAI-compatible inference routes are also served by the daemon/engine for
+local clients (`/v1/chat/completions`, `/v1/models`, embeddings where enabled).
 
 ---
 
@@ -54,7 +65,7 @@ A single dedicated OS thread ("llm-actor") owns the `LlamaBackend`, `LlamaModel`
 
 ### From the UI
 
-Go to **Settings → LLM** tab. The model catalog is displayed with families (Qwen3.5 4B/9B/27B, Gemma3, Phi4, Ministral, etc.) and quant options (Q2_K through Q8_0/BF16). Click **Download** on any entry.
+Go to **Settings → LLM**. The catalog lists families and quants. Click **Download**.
 
 ### From the Downloads Window
 
@@ -62,24 +73,24 @@ Tray menu → **Downloads…** shows active/completed downloads with progress, p
 
 ### Programmatic Flow
 
-1. `download_llm_model(filename)` Tauri command → spawns a blocking HF Hub download task
-2. Downloads use `hf_hub` crate to fetch from HuggingFace repos (e.g. `bartowski/Qwen_Qwen3.5-4B-GGUF`)
-3. Files are cached in the standard HF Hub cache dir (`~/.cache/huggingface/hub/`)
-4. Progress is tracked via shared `DownloadProgress` Arc + polled by the frontend every ~2s
-5. Tray icon gets a progress ring overlay during downloads
-6. Supports **pause/resume/cancel**
+1. UI calls `download_llm_model` → daemon `POST /v1/llm/download/start`
+2. `skill-llm` fetches from HuggingFace into the local model cache under `~/.skill/`
+3. Progress is polled via `/v1/llm/downloads` and mirrored in the tray
+4. Supports **pause/resume/cancel**
 
 ### Auto-Selection
 
-After downloading, if no model is active, the first downloaded recommended model is auto-selected. The catalog persists to `~/.skill/llm_catalog.json`.
+After downloading, if no model is active, a recommended downloaded model is
+auto-selected. Catalog state persists under `~/.skill/`.
 
 ### External Downloads
 
-If you download a GGUF file externally into the HF Hub cache, click **Refresh** in the LLM settings — `refresh_llm_catalog` re-probes the disk cache.
+If you place weights into the cache yourself, click **Refresh** in LLM settings
+(`refresh_llm_catalog`) to re-probe disk.
 
 ## Available Model Families
 
-From `src-tauri/llm_catalog.json`:
+From `src-tauri/llm_catalog.json` (see also `docs/AI.md`):
 
 - **Qwen3.5** — 4B, 9B, 27B, 35B-A3B (MoE) + distilled/fine-tuned variants
 - **Qwen3 VL 30B** — vision-language model
@@ -95,29 +106,21 @@ To add a new model, **only edit `llm_catalog.json`** — no Rust code changes re
 
 ## Vision (Multimodal)
 
-Vision requires the `llm-mtmd` feature flag at compile time and a **multimodal projector (mmproj)** file.
-
-### Downloading an mmproj
-
-In the catalog, mmproj files are marked with `"is_mmproj": true` and tagged `["vision", "multimodal"]`. They're available for Qwen3.5, Qwen3 VL, Ministral, LFM2.5 VL families. Download one alongside the matching text model (same repo).
+Vision uses a **multimodal projector (mmproj)** paired with a VLM/text model
+(catalog entries tagged `vision` / `is_mmproj`).
 
 ### Activation
 
-- **Auto-load (default)**: `autoload_mmproj` defaults to `true` in `LlmConfig`. When the server starts, it automatically resolves the best downloaded mmproj from the same repo as the active text model.
-- **Manual**: Set the active mmproj via **Settings → LLM** or `set_llm_active_mmproj(filename)`. The system validates repo compatibility — it rejects mmproj files from a different repo than the active model.
-
-### How It Loads
-
-1. `run_actor()` loads the mmproj via `MtmdContext::init_from_file()` after loading the main model
-2. On Linux, mmproj GPU offload is disabled by default for stability (CPU projector); set `SKILL_FORCE_MMPROJ_GPU=1` to override
-3. Loading is wrapped in `catch_unwind` to survive native crashes from incompatible files
+- **Auto-load (default)**: `autoload_mmproj` defaults to `true` in `LlmConfig`.
+  On start, the engine resolves the best downloaded mmproj from the same repo.
+- **Manual**: set the active mmproj in **Settings → LLM** / daemon switch-mmproj
+  APIs. Repo compatibility is validated.
 
 ### Using Vision in Chat
 
-- In the Chat window, images can be included as base64 data-URLs in message content (OpenAI-compatible multipart content format: `{"type": "image_url", "image_url": {"url": "data:image/png;base64,…"}}`)
-- `extract_images_from_messages()` decodes all base64 images before passing to the actor
-- The actor uses `MtmdContext` to encode images into embeddings interleaved with text tokens
-- Status is reported: `get_llm_server_status()` returns `supports_vision: true` when mmproj is loaded
+- Chat accepts OpenAI-style multipart image content (`image_url` data URLs)
+- The daemon/engine decodes images and feeds them through the vision path
+- Status reports `supports_vision: true` when a projector is loaded
 
 ---
 
@@ -125,60 +128,50 @@ In the catalog, mmproj files are marked with `"is_mmproj": true` and tagged `["v
 
 ### From the UI
 
-**Settings → LLM tab**: Toggle the **Enable** switch. Select a model. Click **Start**.
+**Settings → LLM**: enable, pick a model, **Start**.
 
-### Tauri Commands
+### Daemon commands (via UI proxy / typed client)
 
-- `start_llm_server()` — spawns background model load, returns immediately (`"starting"`)
-- `stop_llm_server()` — gracefully shuts down actor thread
-- `get_llm_server_status()` — returns `Stopped | Loading | Running`, plus `n_ctx`, `supports_vision`, `supports_tools`, `start_error`
+- `start_llm_server` → `POST /v1/llm/server/start`
+- `stop_llm_server` → `POST /v1/llm/server/stop`
+- `get_llm_server_status` → `GET /v1/llm/server/status`
 
 ### Startup Sequence
 
-1. Validates model file exists
-2. Resolves mmproj (auto or explicit)
-3. Spawns `run_actor` on a dedicated thread with 8MB stack
-4. Actor: init backend → load model → create context → warmup → load mmproj → set `ready` flag
-5. Emits `llm:status` events for frontend progress tracking
+1. Validate model file exists
+2. Resolve mmproj (auto or explicit)
+3. Load model on the RLX backend for the active OS umbrella / device
+4. Warmup + ready; emit status events for the UI
+5. Autolaunch may be blocked when hardware-fit is `too_tight`
 
 ### Default Bootstrap Model + Minimum Memory
 
-When no local model is ready, the app now defaults to:
+When no local model is ready, the app prefers a small instruct model (see
+catalog / UI defaults; historically LFM2.5-class Q4).
 
-- **`LFM2.5 1.2B Instruct`** (prefers `Q4_K_M`, then `Q4_0`)
+Autolaunch safety:
 
-Approximate requirements for this default model:
+- Hardware-fit estimate runs before auto-launch
+- Blocked when fit is `too_tight` or free memory is below required
 
-- **GGUF file size**: `~0.73 GB` (`Q4_K_M`)
-- **Estimated runtime memory @ 4K context**: `~1.2–1.3 GB` (weights + KV cache + runtime overhead)
-- **Practical minimum (Windows)**: at least **4 GB free RAM/VRAM**
-- **Recommended for stable use**: **8 GB+ free memory**
+### Config Knobs (`LlmConfig`)
 
-Autolaunch safety guard:
+Persisted via daemon settings (`/v1/settings/llm-config`). Typical fields:
 
-- Before auto-launch, the backend computes a hardware-fit estimate.
-- Auto-launch is blocked when fit is `too_tight` or available memory is below required memory.
-- In that case, startup returns a descriptive `start_error` with required vs available memory.
-
-### Config Knobs (`LlmConfig` in `src-tauri/src/settings.rs`)
-
-| Setting | Description | Default |
-|---|---|---|
-| `enabled` | Master switch | `false` |
-| `n_gpu_layers` | Layers on GPU (0 = CPU, `u32::MAX` = all) | `0` |
-| `ctx_size` | Context window in tokens | `4096` |
-| `parallel` | Max concurrent inference requests | `1` |
-| `api_key` | Optional Bearer auth for API | `None` |
-| `autoload_mmproj` | Auto-load vision projector on start | `true` |
-| `mmproj_n_threads` | Threads for vision encoder | `4` |
-| `no_mmproj_gpu` | Force CPU for mmproj | `false` |
-| `verbose` | Show raw llama.cpp logs | `false` |
+| Setting | Description |
+|---|---|
+| `enabled` | Master switch |
+| `n_gpu_layers` / device prefs | GPU offload / backend selection |
+| `ctx_size` | Context window |
+| `autoload_mmproj` | Auto-load vision projector |
+| sampling knobs | temperature, top-p, etc. |
 
 ---
 
 ## Built-in Tools
 
-The chat supports **9 built-in tools** that the LLM can invoke:
+Chat can invoke built-in tools implemented in `skill-tools` and executed **inside
+the daemon** (with OS approval dialogs when hooks are installed):
 
 | Tool | Description |
 |---|---|
@@ -186,37 +179,11 @@ The chat supports **9 built-in tools** that the LLM can invoke:
 | `location` | IP-based geolocation |
 | `web_search` | DuckDuckGo search |
 | `web_fetch` | Fetch URL content |
-| `bash` | Execute shell commands (with safety checks + approval dialogs for dangerous ops) |
-| `read_file` | Read file contents (with offset/limit pagination) |
-| `write_file` | Create/overwrite files |
-| `edit_file` | Surgical find-and-replace edits |
-| `search_output` | Regex search over bash output files |
+| `bash` | Shell commands (safety checks + approval) |
+| `read_file` / `write_file` / `edit_file` | Filesystem tools |
+| `search_output` | Regex over bash output files |
 
-Tools are individually toggleable via `LlmToolConfig` in Settings → LLM. Dangerous bash commands (`rm`, `sudo`, etc.) and writes to sensitive paths (`/etc/`, `/usr/`, etc.) trigger a user approval dialog.
+Tools are toggleable via `LlmToolConfig` in Settings. Dangerous bash patterns and
+sensitive Unix paths trigger approval; missing approval hooks **deny** bash-edit.
 
-### Tool Execution Flow
-
-1. Model generates `<tool_call>` XML blocks in its output
-2. `tools.rs` parses the blocks into `ToolCall` structs
-3. `execute_builtin_tool_call()` dispatches by tool name
-4. Results are injected back as `"tool"` role messages (mapped to `"user"` role with `[Tool Result]` wrapper for template compatibility)
-5. Model continues generation with the tool results in context
-
-### Context Management
-
-- **Context-aware trimming**: `trim_messages_to_fit()` drops oldest messages to stay within 75% of `n_ctx`
-- **Tool result truncation**: Long tool outputs are capped at 2 KB in history
-- **Compact tool prompt**: Smaller prompt for contexts ≤4096 tokens
-- **Think budget**: `thinking_budget` limits tokens in `<think>…</think>` blocks (default: 512)
-
----
-
-## Chat History Persistence
-
-Chat sessions are stored in SQLite (`~/.skill/chats/chat.db`):
-
-- `chat_sessions` table — session metadata
-- `chat_messages` table — role + content per message
-- `chat_tool_calls` table — tool name, status, args, result per invocation
-
-Managed by `src-tauri/src/llm/chat_store.rs`. Sessions are created/loaded via `get_last_chat_session`, `create_chat_session`, `save_chat_message` Tauri commands.
+See `crates/skill-llm/README.md` and `docs/architecture.md` for the daemon boundary.

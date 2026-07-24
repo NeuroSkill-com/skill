@@ -64,6 +64,7 @@ import {
 } from "$lib/chat/chat-types";
 import { parseAssistantOutput } from "$lib/chat/chat-utils";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { cancelToolCall, renameChatSession } from "$lib/daemon/chat";
 import { type DaemonEvent, onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
@@ -476,7 +477,7 @@ $effect(() => {
 async function cancelToolCall(msgId: number, tuIdx: number, toolCallId: string | undefined) {
   if (!toolCallId) return;
   try {
-    await daemonInvoke("cancel_tool_call", { toolCallId });
+    await cancelToolCall(toolCallId);
   } catch (e) {}
   messages = messages.map((m) => {
     if (m.id !== msgId) return m;
@@ -745,7 +746,7 @@ async function sendMessage() {
   const isFirstUserMsg = !messages.some((m) => m.role === "user" && m.content.trim());
   if (isFirstUserMsg && text && sessionId > 0) {
     const autoTitle = text.slice(0, 60).replace(/\n+/g, " ").trim();
-    daemonInvoke("rename_chat_session", { id: sessionId, title: autoTitle }).catch((_e) => {});
+    renameChatSession(sessionId, autoTitle).catch((_e) => {});
     sidebarRef?.updateTitle(sessionId, autoTitle);
   }
 
@@ -1396,7 +1397,7 @@ onMount(async () => {
         web_search: cfg.tools.web_search ?? true,
         web_fetch: cfg.tools.web_fetch ?? true,
         bash: cfg.tools.bash ?? false,
-        require_bash_edit: cfg.tools.require_bash_edit ?? false,
+        require_bash_edit: cfg.tools.require_bash_edit ?? true,
         read_file: cfg.tools.read_file ?? false,
         write_file: cfg.tools.write_file ?? false,
         edit_file: cfg.tools.edit_file ?? false,

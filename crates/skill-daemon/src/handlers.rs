@@ -606,7 +606,10 @@ pub(crate) async fn version() -> Json<VersionResponse> {
     Json(VersionResponse {
         daemon: DAEMON_NAME.to_string(),
         protocol_version: PROTOCOL_VERSION,
-        daemon_version: env!("CARGO_PKG_VERSION").to_string(),
+        // Prefer repo-root VERSION (injected by build.rs); fall back to crate version.
+        daemon_version: option_env!("SKILL_PRODUCT_VERSION")
+            .unwrap_or(env!("CARGO_PKG_VERSION"))
+            .to_string(),
     })
 }
 

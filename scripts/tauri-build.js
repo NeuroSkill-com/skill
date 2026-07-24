@@ -26,6 +26,7 @@ import {
   resolveTargetTriple,
   rewriteTargetArgs,
 } from "./lib/target-triples.mjs";
+import { compileProduct } from "./lib/compile-product.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -432,9 +433,9 @@ if (isMingwTarget) {
     platformFlags = ["--no-bundle"];
   }
 
-  // LLM inference runs in skill-daemon (not the Tauri app), so no
-  // --features llm-vulkan is injected here.  The Vulkan SDK is still
-  // installed above for the daemon build in release workflows.
+  // LLM inference runs in skill-daemon (OS umbrella: windows / linux / apple),
+  // so no GPU Cargo features are injected on the Tauri app. The Vulkan SDK is
+  // still installed above for optional native tooling / daemon-adjacent builds.
 } else {
   // Linux native.
 
@@ -453,8 +454,8 @@ if (isMingwTarget) {
     env: process.env,
   });
 
-  // LLM inference runs in skill-daemon (not the Tauri app), so no
-  // --features llm-vulkan is injected here.
+  // LLM inference runs in skill-daemon (OS umbrella: linux) — no GPU features
+  // on the Tauri app.
 
   // ── Linux: skip Tauri bundling for default local builds ───────────────────
   //
@@ -872,17 +873,34 @@ function assembleMacOsApp() {
   return true;
 }
 
-// ── Daemon: build for release / build+spawn for dev ────────────────────────────
+// ── Product compile: daemon + tty + app (shared recipe) ───────────────────────
 if (subcommand === "build") {
-  console.log("\n🔧 Building daemon sidecar for release…");
+  console.log("\n🔧 Compiling product (daemon + tty + app)…");
+  const allowMissingDaemon =
+    process.env.SKILL_ALLOW_MISSING_DAEMON === "1" ||
+    rawSubArgs.includes("--allow-missing-daemon");
+  const isDebug = rawSubArgs.includes("--debug");
   try {
-    execFileSync(process.execPath, ["scripts/prepare-daemon-sidecar.js"], {
-      cwd: root,
-      stdio: "inherit",
-      env: process.env,
+    compileProduct({
+      release: !isDebug,
+      app: true,
+      daemon: true,
+      tty: "auto",
+      stageSidecar: true,
+      target: explicitTarget || undefined,
+      verifyFeatures: !isDebug,
     });
   } catch (e) {
-    console.warn(`⚠ Daemon sidecar build failed: ${e.message}`);
+    const msg = e?.message || String(e);
+    if (allowMissingDaemon) {
+      console.warn(`⚠ Product compile failed (continuing): ${msg}`);
+    } else {
+      console.error(`✗ Product compile failed: ${msg}`);
+      console.error(
+        "  Pass --allow-missing-daemon or set SKILL_ALLOW_MISSING_DAEMON=1 to override.",
+      );
+      process.exit(typeof e?.status === "number" ? e.status : 1);
+    }
   }
 }
 
@@ -1016,26 +1034,16 @@ let daemonChild = null;
 if (subcommand === "dev" && !tuiTauriPane) {
   console.log("\n🔧 Building skill-daemon + skill-tty…");
   try {
-    // skill-tty is the sibling PTY proxy; build it alongside the daemon so
-    // dev shells exec into a separate process (and aren't killed when Tauri
-    // hot-reloads the daemon). Windows doesn't use the PTY proxy.
-    const daemonBuildArgs = ["build", "-p", "skill-daemon"];
-    const isWin = process.platform === "win32" || (explicitTarget || "").includes("windows");
-    // Default has no GPU backend — pass the OS umbrella so inference is wired.
-    if (isMac) {
-      daemonBuildArgs.push("--features", "apple");
-    } else if (isLinux) {
-      daemonBuildArgs.push("--features", "linux");
-    } else {
-      daemonBuildArgs.push("--features", "windows");
-    }
-    if (!isWin) daemonBuildArgs.push("-p", "skill-tty");
-    if (explicitTarget) daemonBuildArgs.push("--target", explicitTarget);
-    execFileSync("cargo", daemonBuildArgs, { cwd: root, stdio: "inherit", env: process.env });
+    // Shared recipe: daemon OS umbrella + skill-tty (unix). App is built by Tauri.
+    const compiled = compileProduct({
+      release: false,
+      app: false,
+      target: explicitTarget || undefined,
+    });
 
     // Find the built binary (target-dir = src-tauri/target per .cargo/config.toml)
     const targetDir = resolve(root, "src-tauri", "target");
-    const triple = explicitTarget || "";
+    const triple = compiled.triple || "";
     const candidates = [
       resolve(targetDir, triple, "debug", "skill-daemon"),
       resolve(targetDir, "debug", "skill-daemon"),

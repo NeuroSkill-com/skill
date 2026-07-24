@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { daemonGet, daemonPost, getDaemonPort } from "./http";
 
 export interface DiscoveredDevice {
@@ -83,8 +82,8 @@ export function listSerialPorts(): Promise<string[]> {
   return daemonGet<string[]>("/v1/device/serial-ports");
 }
 
-export async function forgetDevice(id: string): Promise<void> {
-  await daemonPost("/v1/devices/forget", { id });
+export async function forgetDevice<T = void>(id: string): Promise<T> {
+  return daemonPost<T>("/v1/devices/forget", { id });
 }
 
 export function getWsPort(): Promise<number> {
@@ -100,7 +99,7 @@ export function pairDevice<T>(id: string): Promise<T[]> {
 }
 
 export function getCortexWsState<T>(): Promise<T> {
-  return daemonInvoke<T>("get_cortex_ws_state");
+  return daemonGet<T>("/v1/status");
 }
 
 export function getDeviceStatus<T>(): Promise<T> {

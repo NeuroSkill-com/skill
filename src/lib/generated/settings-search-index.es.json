@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "capas de GPU",
-    "desc": "Capas para descargar a GPU (0 = solo CPU, alto = GPU). Requiere la función llm-metal/llm-cuda."
+    "desc": "Capas para descargar a GPU (0 = solo CPU, alto = GPU). Requiere un build del daemon con GPU (apple / linux / windows)."
   },
   {
     "tab": "llm",

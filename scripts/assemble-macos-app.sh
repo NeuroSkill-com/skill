@@ -176,8 +176,9 @@ TTYPLIST
 
   echo "  ✓ skill-tty.app"
 else
-  echo "WARNING: missing skill-tty sidecar: $TTY_SRC" >&2
-  echo "Terminal session recording will fall back to skill-daemon's in-process shim." >&2
+  echo "ERROR: missing skill-tty sidecar: $TTY_SRC" >&2
+  echo "Build with: node scripts/compile-product.mjs --target $TARGET --release" >&2
+  exit 1
 fi
 
 # ── Info.plist ────────────────────────────────────────────────────────────

@@ -40,8 +40,8 @@ jobs:
         run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
 
       # ── Resolve version ─────────────────────────────────────────────────────
-      # Tag push: verify tag matches tauri.conf.json.
-      # workflow_dispatch: read version from tauri.conf.json directly.
+      # Tag push: verify tag matches VERSION (and derived package.json /
+      # tauri.conf.json / Cargo.toml). workflow_dispatch: read VERSION.
       - name: Resolve version
         id: version_meta
         shell: bash
@@ -99,14 +99,15 @@ jobs:
             }
           }
 
-      # ── Release setup: Rust + rust-cache + Node ──────────────────────────────
-      - name: Release setup (Rust + Node)
+      # ── Release setup: Rust + rust-cache + Node + frontend ───────────────────
+      - name: Release setup (Rust + Node + frontend)
         uses: ./.github/actions/release-setup
         with:
           target: x86_64-pc-windows-msvc
           cache-key: windows-release-x86_64-msvc-v2
           cache-save-if: always()
           windows-protoc: "true"
+          build-frontend: "true"
 
       # ── ONNX Runtime — not needed on Windows ──────────────────────────────
       # KittenTTS (the only `ort` consumer) is gated to non-Windows targets in
@@ -114,28 +115,9 @@ jobs:
       # onnxruntime.dll. Add the install/cache steps back here if a Windows
       # TTS backend that needs ONNX Runtime is reintroduced.
 
-      - name: Build frontend
-        run: npm run build
-
-      - name: Verify Tauri frontend bundle structure
-        run: npm run -s verify:tauri:frontend
-
-      # ── NSIS + Vulkan SDK (parallel install) ─────────────────────────────────
-      # NSIS and the Vulkan SDK are independent of each other and of the Rust
-      # toolchain.  Installing them in a single step via background jobs cuts
-      # ~1-2 min of sequential wait time on cache-miss runs.
-      - name: Cache Vulkan SDK
-        # Don't fail the job on transient cache-service errors (actions/cache@v5
-        # occasionally returns "failure" instead of "miss"). The install step
-        # below handles a missing SDK by downloading it on the spot.
-        continue-on-error: true
-        uses: actions/cache@v5
-        with:
-          path: C:\VulkanSDK
-          # Bump the suffix when upgrading the Vulkan SDK version, since the
-          # install script downloads "latest" and the cache would serve stale files.
-          key: windows-vulkan-sdk-v1-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
-
+      # ── NSIS installer tooling ───────────────────────────────────────────────
+      # Product Windows builds ship CUDA + wgpu (runtime falls back without NVIDIA).
+      # LunarG Vulkan SDK is not required.
       - name: Cache NSIS
         uses: actions/cache@v5
         with:
@@ -144,18 +126,13 @@ jobs:
             C:\nsis
           key: windows-nsis-v1
 
-      - name: Install NSIS + Vulkan SDK (parallel)
+      - name: Install NSIS
         shell: powershell
         run: |
-          # ── NSIS (background) ────────────────────────────────────────────────
-          $nsisJob = Start-Job -ScriptBlock {
-            $makensis = Get-Command makensis -ErrorAction SilentlyContinue
-            if ($makensis) {
-              Write-Output "[ok] NSIS already on PATH: $($makensis.Source)"
-              return
-            }
-
-            # Try Chocolatey first, fall back to direct download
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if ($makensis) {
+            Write-Output "[ok] NSIS already on PATH: $($makensis.Source)"
+          } else {
             $installed = $false
             for ($i = 1; $i -le 2; $i++) {
               try {
@@ -176,10 +153,8 @@ jobs:
               $dest = "C:\nsis"
               Invoke-WebRequest -Uri $url -OutFile $zip -UserAgent "Mozilla/5.0" -MaximumRedirection 10
               Expand-Archive -Path $zip -DestinationPath $dest -Force
-              # The zip extracts into a subdirectory
               $innerDir = Get-ChildItem -Path $dest -Directory | Select-Object -First 1
               if ($innerDir) {
-                # Move contents up so makensis.exe is at C:\nsis\makensis.exe
                 Get-ChildItem -Path $innerDir.FullName | Move-Item -Destination $dest -Force
                 Remove-Item $innerDir.FullName -Recurse -Force -ErrorAction SilentlyContinue
               }
@@ -188,23 +163,6 @@ jobs:
               }
               Write-Output "[ok] Installed NSIS $nsisVer via direct download to $dest"
             }
-          }
-
-          # ── Vulkan SDK (foreground — needs env export) ───────────────────────
-          & .\scripts\install-vulkan-sdk.ps1
-          if (-not $env:VULKAN_SDK) {
-            Write-Error "VULKAN_SDK was not set by install-vulkan-sdk.ps1"
-            exit 1
-          }
-          "VULKAN_SDK=$env:VULKAN_SDK" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
-
-          # ── Wait for NSIS ────────────────────────────────────────────────────
-          $nsisJob | Wait-Job | Receive-Job
-          if ($nsisJob.State -eq 'Failed') {
-            Write-Error "NSIS background install failed"
-            exit 1
           }
 
           # Locate makensis and export NSIS_DIR
@@ -418,36 +376,23 @@ jobs:
             Write-Host "[info] lld-link not found; falling back to MSVC link.exe"
           }
 
-      # ── Compile Rust (cargo build only) ──────────────────────────────────────
+      # ── Compile Rust (shared compile-product recipe) ─────────────────────────
       #
-      # Split from packaging so CI timing shows compile vs NSIS separately.
-      #
-      # --features custom-protocol: required — without it Tauri compiles in
-      #   dev mode and loads UI from localhost:1420 instead of the embedded
-      #   SvelteKit build output.
+      # Daemon gets `--features windows` (CUDA + wgpu); app gets `custom-protocol` only.
       - name: Compile (Rust)
         shell: bash
         env:
-          VULKAN_SDK:        ${{ env.VULKAN_SDK }}
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
-          # Dynamic CRT: native deps (DirectML, ONNX Runtime, Vulkan loader)
+          # Dynamic CRT: native deps (DirectML, ONNX Runtime)
           # ship as pre-built /MD DLLs.  Using /MD everywhere avoids CRT
           # mismatch.  The NSIS installer bundles the VC++ Redist DLLs
           # app-locally so end users don't need a separate install.
           CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreadedDLL
         run: |
           set -euo pipefail
-
-          # Separate daemon vs app builds so `--features windows` only applies to
-          # skill-daemon (skill uses `custom-protocol`).
-          run_cmd() {
-            cargo build -p skill-daemon --release --locked --target x86_64-pc-windows-msvc --features windows --timings || return $?
-            cargo build -p skill --release --locked --target x86_64-pc-windows-msvc --features custom-protocol --timings || return $?
-          }
-
-          if ! run_cmd; then
-            exit 1
-          fi
+          node scripts/compile-product.mjs \
+            --target x86_64-pc-windows-msvc \
+            --release --locked --timings
 
       # rlx-cpu and turbovec resolve cblas_sgemm via openblas.dll at runtime.
       # Bundle it next to skill.exe / skill_daemon.exe so the installed app

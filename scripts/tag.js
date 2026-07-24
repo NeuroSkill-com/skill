@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readVersionFile } from "./version-utils.mjs";
 
-const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-const tag = `v${pkg.version}`;
+const tag = `v${readVersionFile()}`;
 
 try {
   execSync(`git tag ${tag}`, { stdio: "inherit" });

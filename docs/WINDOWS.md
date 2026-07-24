@@ -98,32 +98,19 @@ The standalone NSIS script generates header/welcome images from the app icon.
 py -m pip install Pillow
 ```
 
-### 5a. Vulkan SDK (GPU support)
+### 5a. CUDA + wgpu (GPU)
 
-The Windows build compiles llama.cpp with Vulkan GPU offloading (`llm-vulkan`
-feature), which enables LLM inference on NVIDIA, AMD, and Intel Arc GPUs
-without requiring vendor-specific SDKs (no CUDA toolkit, no ROCm).
+Product Windows builds compile **both** CUDA and wgpu into the daemon
+(`--features windows`). No CUDA toolkit is needed on the build machine
+(rlx-cuda / cudarc dynamic-loading).
 
-Download and install the **Vulkan SDK** from https://vulkan.lunarg.com  
-(choose the latest stable "SDK" installer, not just the runtime).
+**At runtime:**
+1. NVIDIA driver (+ CUDA 12.3+ runtime libs) present → **CUDA**
+2. Otherwise → **wgpu (DX12)** when a GPU is available
+3. Otherwise → **CPU**
 
-The installer sets `VULKAN_SDK` and adds the SDK `bin\` to your `PATH`
-automatically.  CMake's `find_package(Vulkan)` inside llama.cpp picks this up.
-
-At **runtime** any Vulkan-capable GPU driver works; llama.cpp falls back to
-CPU automatically when no Vulkan device is found, so the binary runs on
-machines without a discrete GPU.
-
-⚠️ **Important**: If you see garbage/random output instead of readable text
-when running LLM inference with Vulkan on Windows:
-
-1. Verify the Vulkan SDK is installed at `C:\Program Files\Vulkan SDK`
-2. Set the environment variable for this session:
-   ```powershell
-   $env:VULKAN_SDK = "C:\Program Files\Vulkan SDK"
-   ```
-3. Rebuild after installation or ensure PATH includes the SDK's bin directory
-4. For more details, see [WINDOWS-VULKAN-FIX.md](../WINDOWS-VULKAN-FIX.md)
+That fallback is automatic (`rlx_device: "auto"`). You do not need a special
+build flag for machines without NVIDIA.
 
 ### 6. Git
 

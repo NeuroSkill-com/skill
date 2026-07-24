@@ -124,6 +124,13 @@ pub fn get_daemon_token_path() -> String {
 }
 
 fn resolve_daemon_bin_path() -> String {
+    if let Ok(override_bin) = std::env::var("SKILL_DAEMON_BIN") {
+        let p = std::path::PathBuf::from(&override_bin);
+        if p.exists() {
+            return override_bin;
+        }
+    }
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             // Production: sidecar next to app binary (Tauri bundles it)
@@ -154,18 +161,59 @@ fn resolve_daemon_bin_path() -> String {
         }
     }
 
-    // Dev: look in target dir
-    let target_candidates = [
-        "src-tauri/target/debug/skill-daemon",
-        "src-tauri/target/debug/skill-daemon.exe",
-        "src-tauri/target/aarch64-apple-darwin/debug/skill-daemon",
-        "src-tauri/target/x86_64-pc-windows-msvc/debug/skill-daemon.exe",
-        "target/debug/skill-daemon",
-        "target/debug/skill-daemon.exe",
-    ];
+    // Dev: look under Cargo target dir (honors CARGO_TARGET_DIR) for host triple
+    // and legacy host-dir layouts used by older builds without --target.
+    let target_root = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("src-tauri/target"));
+    let host = std::env::var("TARGET")
+        .ok()
+        .or_else(|| std::env::var("CARGO_BUILD_TARGET").ok())
+        .unwrap_or_else(|| {
+            if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+                "aarch64-apple-darwin".into()
+            } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+                "x86_64-apple-darwin".into()
+            } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+                "aarch64-unknown-linux-gnu".into()
+            } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+                "x86_64-unknown-linux-gnu".into()
+            } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+                "aarch64-pc-windows-msvc".into()
+            } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+                "x86_64-pc-windows-msvc".into()
+            } else {
+                String::new()
+            }
+        });
+
+    let mut target_candidates: Vec<std::path::PathBuf> = Vec::new();
+    for profile in ["debug", "release"] {
+        if !host.is_empty() {
+            let name = if cfg!(windows) {
+                "skill-daemon.exe"
+            } else {
+                "skill-daemon"
+            };
+            target_candidates.push(target_root.join(&host).join(profile).join(name));
+        }
+        target_candidates.push(target_root.join(profile).join(if cfg!(windows) {
+            "skill-daemon.exe"
+        } else {
+            "skill-daemon"
+        }));
+    }
+    // Legacy relative paths (cwd-dependent) kept as last resort.
+    target_candidates.extend([
+        std::path::PathBuf::from("src-tauri/target/debug/skill-daemon"),
+        std::path::PathBuf::from("src-tauri/target/debug/skill-daemon.exe"),
+        std::path::PathBuf::from("target/debug/skill-daemon"),
+        std::path::PathBuf::from("target/debug/skill-daemon.exe"),
+    ]);
+
     for c in &target_candidates {
-        if std::path::Path::new(c).exists() {
-            return c.to_string();
+        if c.exists() {
+            return c.display().to_string();
         }
     }
 

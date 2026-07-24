@@ -38,7 +38,7 @@ jobs:
         with:
           fetch-depth: 0   # full history for git tag --format and changelog generation
 
-      # ── Verify tag matches tauri.conf.json version ────────────────────────────
+      # ── Verify tag matches VERSION ────────────────────────────────────────────
       - name: Resolve version
         id: version_meta
         env:
@@ -47,12 +47,13 @@ jobs:
           GITHUB_REF_NAME:   ${{ github.ref_name }}
         run: node scripts/ci.mjs resolve-version
 
-      - name: Release setup (Linux deps + Rust + Node)
+      - name: Release setup (Linux deps + Rust + Node + frontend)
         uses: ./.github/actions/release-setup
         with:
           target: x86_64-unknown-linux-gnu
           linux-deps: "true"
           cache-key: linux-release-x86_64-unknown-linux-gnu-v1
+          build-frontend: "true"
 
       # ── ONNX Runtime binary cache ──────────────────────────────────────────
       # ort-sys downloads ~200 MB static libs from cdn.pyke.io during build.
@@ -73,13 +74,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: node scripts/ci.mjs verify-secrets TAURI_SIGNING_PRIVATE_KEY
 
-      # ── Build frontend ────────────────────────────────────────────────────────
-      - name: Build frontend
-        run: npm run build
-
-      - name: Verify Tauri frontend bundle structure
-        run: npm run -s verify:tauri:frontend
-
       # ── Clean cached outputs that can mask stale release artifacts ──────────
       # rust-cache restores target/dist directories between runs. If a previous
       # job left bundle outputs behind, later fallback checks can accidentally
@@ -94,17 +88,19 @@ jobs:
           rm -rf "dist/linux/x86_64-unknown-linux-gnu"
           echo "✓ Cleared stale target/dist outputs before Linux release build"
 
-      # ── Compile (frontend + Rust + daemon) ───────────────────────────────
-      - name: Compile (frontend + Rust + daemon)
+      # ── Compile (Rust + daemon via shared recipe) ───────────────────────────
+      - name: Compile (Rust + daemon)
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         shell: bash
         run: |
           set -euo pipefail
-          # Build the daemon first for consistent feature unification, then the app.
-          cargo build -p skill-daemon --release --locked --target x86_64-unknown-linux-gnu --features linux --timings
-          cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol --timings
+          # Shared recipe: daemon (linux = CUDA+wgpu) → tty → app (custom-protocol).
+          # Frontend was built in release-setup (build-frontend: true).
+          node scripts/compile-product.mjs \
+            --target x86_64-unknown-linux-gnu \
+            --release --locked --timings
 
       # ── Stage files for packaging ─────────────────────────────────────---
       # The daemon binary sits next to the app binary.  At runtime the
@@ -122,12 +118,14 @@ jobs:
           cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill "$PKGROOT/opt/NeuroSkill/skill"
           chmod +x "$PKGROOT/opt/NeuroSkill/skill"
 
-          # Copy daemon binary next to the app binary
+          # Copy daemon + tty next to the app binary (same layout as macOS / deb/rpm)
           cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill-daemon "$PKGROOT/opt/NeuroSkill/skill-daemon"
           chmod +x "$PKGROOT/opt/NeuroSkill/skill-daemon"
+          cp src-tauri/target/x86_64-unknown-linux-gnu/release/skill-tty "$PKGROOT/opt/NeuroSkill/skill-tty"
+          chmod +x "$PKGROOT/opt/NeuroSkill/skill-tty"
 
-          # Verify both binaries are present
-          ls -la "$PKGROOT/opt/NeuroSkill/skill" "$PKGROOT/opt/NeuroSkill/skill-daemon"
+          # Verify product binaries are present
+          ls -la "$PKGROOT/opt/NeuroSkill/skill" "$PKGROOT/opt/NeuroSkill/skill-daemon" "$PKGROOT/opt/NeuroSkill/skill-tty"
 
           # Show staged files
           find "$PKGROOT"

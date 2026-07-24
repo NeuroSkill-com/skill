@@ -26,6 +26,8 @@
 ## Transport
 - Localhost HTTP API (`/v1/*`) with bearer token auth
 - WebSocket event stream (`/v1/events`) with same auth
+- Default bind: `127.0.0.1:18444` (`SKILL_DAEMON_ADDR`)
+- Non-loopback binds require `SKILL_DAEMON_ALLOW_LAN=1` (CORS remains open; token is the gate)
 - Future optional transport adapter: UDS/Named Pipe
 
 ## Compatibility
@@ -56,4 +58,20 @@ Rollback snapshot location:
 - ✅ All daemon-owned commands (126) routed through `daemonInvoke()` → daemon HTTP
 - ✅ Only native/OS commands (101) remain on Tauri `invoke()`
 - ✅ Tauri `generate_handler!` pruned from 181 → 134 entries
-- ✅ Frontend daemon client layer: 10 files, ~860 lines (`src/lib/daemon/`)
+- ✅ Frontend daemon client layer: typed modules + transitional `invoke-proxy.ts` (`src/lib/daemon/`)
+
+## Routes crate extraction (`skill-daemon-routes`)
+
+HTTP modules move into `crates/skill-daemon-routes` when they depend only on
+`skill-daemon-state::AppState` and leaf crates (no `crate::handlers`).
+
+- ✅ `iroh` — first extracted module (`skill_daemon_routes::iroh::router`)
+- ⏳ Remaining: settings/search/brain/core/etc. (blocked on settings_exg/embed
+  decoupling and handler extraction)
+
+## Frontend API rule
+
+Prefer typed clients in `src/lib/daemon/*.ts` (`tokens`, `devices`, `chat`,
+`iroh`, `lsl`, …). Use `daemonInvoke()` only for commands not yet wrapped.
+`npm run check:typed-daemon-clients` fails if `daemonInvoke("…")` is used for a
+command that already has a typed wrapper.

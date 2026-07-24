@@ -101,9 +101,8 @@ csv = "1"
 # Model weights are downloaded from HuggingFace Hub on first use (voices/config +
 # RLX bundle from eugenehp/kitten-tts-mini-0.8-rlx).
 #
-# espeak feature: active on macOS and Linux. Windows skips KittenTTS entirely;
-# the tts-kitten feature becomes a no-op on Windows because skill-tts gates the
-# optional rlx-kittentts dep to non-Windows targets.
+# KittenTTS (`tts-kitten`) is active on macOS, Linux, and Windows via
+# rlx-kittentts (espeak + native RLX graph; CUDA/wgpu on Win/Linux, Metal on macOS).
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
 # 0.1.0: backbone is llama-cpp-4.  This means neutts
@@ -112,7 +111,7 @@ csv = "1"
 #         that existed with 0.0.4 is fully resolved.
 # backbone: GGUF LLM via llama-cpp-4 (requires cmake + C++ at build time).
 # espeak:   raw text → IPA → model (requires espeak-ng at runtime).
-#           Active on all platforms — see kittentts note above.
+#           Active on all platforms.
 # wgpu:     GPU-accelerated NeuCodec decoder via Burn/wgpu backend.
 # fast:     polynomial-approximation RoPE caching (6-12× fewer cycles).
 # metal:    macOS Metal GPU for the backbone (llama-cpp-4?/metal).
@@ -201,8 +200,8 @@ dispatch2        = "0.3.1"
 # 30–120 s, making TTS appear broken.
 neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features = ["espeak", "metal"], optional = true }
 
-# KittenTTS lives behind skill-tts (rlx-kittentts, non-Windows only).
-# Windows: tts-kitten feature is enabled for UX parity but synthesis is skipped.
+# KittenTTS lives behind skill-tts (rlx-kittentts on macOS / Linux / Windows).
+# Windows builds use the cuda+gpu feature set on rlx-kittentts (runtime fallback).
 tempfile = "3"
 
 # ── [patch] and [profile] ──────────────────────────────────────────────────────

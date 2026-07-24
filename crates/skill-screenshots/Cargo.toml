@@ -54,8 +54,22 @@ objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplicat
 # text-embeddings-rlx — RlxVisionModel from rlx-embed (NomicEmbedVisionV15).
 # When it's off the capture pipeline still works (no embeddings emitted).
 # OCR (rlx-ocr) stays compiled in regardless.
+# Product builds: enable one OS umbrella (`apple` / `linux` / `windows`)
+# for embeddings + OCR GPU backends together.
 default = ["capture", "text-embeddings-rlx"]
 capture = ["xcap"]
+apple = [
+    "text-embeddings-rlx-metal", "text-embeddings-rlx-mlx",
+    "ocr-metal", "ocr-mlx",
+]
+linux = [
+    "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",
+    "ocr-wgpu", "ocr-cuda",
+]
+windows = [
+    "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",
+    "ocr-wgpu", "ocr-cuda",
+]
 text-embeddings-rlx = ["dep:rlx", "dep:hf-hub"]
 text-embeddings-rlx-metal = ["text-embeddings-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models/metal"]
 text-embeddings-rlx-mlx   = ["text-embeddings-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models/mlx"]

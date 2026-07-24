@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "Couches GPU",
-    "desc": "Couches à décharger sur le GPU (0 = CPU uniquement). Nécessite llm-metal / llm-cuda."
+    "desc": "Couches à décharger sur le GPU (0 = CPU uniquement). Nécessite un build daemon GPU (apple / linux / windows)."
   },
   {
     "tab": "llm",

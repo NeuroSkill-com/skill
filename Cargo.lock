@@ -12997,7 +12997,7 @@ dependencies = [
 
 [[package]]
 name = "skill-daemon"
-version = "0.1.0"
+version = "0.0.131-rc.17"
 dependencies = [
  "antneuro",
  "anyhow",
@@ -13044,6 +13044,7 @@ dependencies = [
  "skill-commands",
  "skill-constants",
  "skill-daemon-common",
+ "skill-daemon-routes",
  "skill-daemon-state",
  "skill-data",
  "skill-devices",
@@ -13094,8 +13095,11 @@ dependencies = [
 name = "skill-daemon-routes"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "axum",
+ "serde_json",
  "skill-daemon-state",
- "skill-llm",
+ "skill-iroh",
 ]
 
 [[package]]
@@ -13326,6 +13330,7 @@ dependencies = [
  "base64 0.22.1",
  "either",
  "glob",
+ "hex",
  "hf-hub",
  "image",
  "log",
@@ -13338,6 +13343,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "skill-constants",
  "skill-data",
  "skill-skills",
@@ -13509,6 +13515,7 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "ureq 3.3.0",
+ "url",
  "urlencoding",
 ]
 
@@ -13546,7 +13553,7 @@ dependencies = [
 
 [[package]]
 name = "skill-tty"
-version = "0.1.0"
+version = "0.0.131-rc.17"
 dependencies = [
  "anyhow",
  "chrono",

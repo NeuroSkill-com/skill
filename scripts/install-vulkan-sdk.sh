@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # install-vulkan-sdk.sh
 #
-# Ensures the LunarG Vulkan SDK development packages are present on Linux
-# before a build that uses the `llm-vulkan` feature flag.
+# Ensures the LunarG Vulkan SDK development packages are present on Linux.
+# Optional for most Skill builds — LLM GPU backends are selected via the
+# skill-daemon OS umbrella (`--features linux`), not a Tauri `llm-vulkan` flag.
 #
 # Detection order (first hit wins -- the script exits immediately if found):
 #   1. VULKAN_SDK environment variable points to a directory that contains

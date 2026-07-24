@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "שכבות GPU",
-    "desc": "שכבות לפריקה ל-GPU (0 = CPU בלבד). דורש llm-metal / llm-cuda."
+    "desc": "שכבות לפריקה ל-GPU (0 = CPU בלבד). דורש בניית daemon עם GPU (apple / linux / windows)."
   },
   {
     "tab": "llm",

@@ -7,25 +7,19 @@ import { Card, CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { SettingsCard } from "$lib/components/ui/settings-card";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import {
+  type ApiToken,
+  type TokenAcl as Acl,
+  type TokenExpiry as Expiry,
+  createAuthToken,
+  deleteAuthToken,
+  listAuthTokens,
+  refreshDefaultToken as refreshDefaultTokenApi,
+  revokeAuthToken,
+} from "$lib/daemon/tokens";
 import { t } from "$lib/i18n/index.svelte";
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface ApiToken {
-  id: string;
-  name: string;
-  token: string;
-  token_preview?: string;
-  acl: string;
-  created_at: number;
-  expires_at: number | null;
-  last_used_at: number | null;
-  revoked: boolean;
-}
-
-type Acl = "admin" | "read_only" | "data" | "stream";
-type Expiry = "week" | "month" | "quarter" | "never";
+// ── Options ────────────────────────────────────────────────────────────────
 
 const ACL_OPTIONS: { key: Acl; label: string; desc: string }[] = [
   { key: "admin", label: "tokens.aclAdmin", desc: "tokens.aclAdminDesc" },
@@ -59,7 +53,7 @@ let copied = $state(false);
 
 async function refresh() {
   try {
-    tokens = await daemonInvoke<ApiToken[]>("list_auth_tokens");
+    tokens = await listAuthTokens();
   } catch {
     tokens = [];
   }
@@ -69,7 +63,7 @@ async function refresh() {
 async function refreshDefaultToken() {
   refreshing = true;
   try {
-    const r = await daemonInvoke<{ ok: boolean; token?: string }>("refresh_default_token");
+    const r = await refreshDefaultTokenApi();
     if (r.ok && r.token) {
       defaultToken = r.token;
       defaultTokenRevealed = true;
@@ -88,11 +82,7 @@ async function createToken() {
   if (!newName.trim()) return;
   creating = true;
   try {
-    const token = await daemonInvoke<ApiToken>("create_auth_token", {
-      name: newName.trim(),
-      acl: newAcl,
-      expiry: newExpiry,
-    });
+    const token = await createAuthToken(newName.trim(), newAcl, newExpiry);
     justCreated = token;
     newName = "";
     await refresh();
@@ -104,13 +94,13 @@ async function createToken() {
 }
 
 async function revokeToken(id: string) {
-  await daemonInvoke("revoke_auth_token", { id });
+  await revokeAuthToken(id);
   await refresh();
 }
 
 async function deleteToken(id: string) {
   if (id === "default") return; // safety: never delete default
-  await daemonInvoke("delete_auth_token", { id });
+  await deleteAuthToken(id);
   justCreated = null;
   await refresh();
 }

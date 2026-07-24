@@ -43,6 +43,24 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  version-gate:
+    name: VERSION sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      # Source of truth: repo-root VERSION. Fails if package.json /
+      # tauri.conf.json / src-tauri/Cargo.toml drift (bump.js keeps them synced).
+      - name: Verify VERSION matches derived version files
+        run: node scripts/ci.mjs resolve-version
+
   changelog-gate:
     name: Changelog fragments gate
     runs-on: ubuntu-latest
@@ -69,9 +87,10 @@ jobs:
   # compilation AND runs lint passes.  Running both wastes a full compile
   # cycle (~3-5 min).  We therefore run clippy only.
   #
-  # `--workspace --exclude skill` covers all library crates without the
-  # espeak/Vulkan deps; a second clippy pass covers the app crate with
-  # those features enabled.
+  # `--workspace --exclude skill` covers library crates. Product GPU backends
+  # are OS umbrellas on skill-daemon (`apple` / `linux` / `windows`); PR CI
+  # keeps defaults / cpu leaves so we do not need CUDA toolkits here.
+  # Full Tauri + daemon OS builds run on release tags / Preview Build.
   #
   # mold (fast linker) is installed to match the release-linux workflow and
   # shave 30-60 s off every link-heavy operation.
@@ -115,7 +134,7 @@ jobs:
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
 
-      - name: Cache + install Tauri system deps (incl. mold + clang + Vulkan)
+      - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -129,7 +148,7 @@ jobs:
             vulkan-sdk
           version: tauri-rust-check-v7
 
-      # clippy (workspace crates — no espeak/Vulkan deps needed)
+      # clippy (workspace crates — no Tauri app / espeak link)
       - name: cargo clippy (workspace crates)
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -147,7 +166,7 @@ jobs:
           }
           run_cmd
 
-      # clippy (app crate — needs espeak + Vulkan)
+      # clippy (Tauri app crate — needs espeak; GPU LLM lives in skill-daemon)
       - name: cargo clippy (app)
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -444,8 +463,7 @@ jobs:
         run: node scripts/check-windows-manifest.mjs src-tauri/manifest.xml
 
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
-      # Required for the espeak-ng static library build (lib.exe) and for
-      # the Vulkan SDK CMake integration used by wgpu/rlx-gpu features.
+      # Required for the espeak-ng static library build (lib.exe).
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -542,35 +560,6 @@ jobs:
           if ($failed) { exit 1 }
           Write-Host "[ok] All PowerShell scripts parse cleanly."
 
-      # Cache the Vulkan SDK installation directory so the ~200 MB download
-      # only happens once per change to the install script.  On cache hit the
-      # install script detects the SDK via filesystem and skips the download.
-      - name: Cache Vulkan SDK
-        # Don't fail the job on transient cache-service errors (actions/cache@v5
-        # occasionally returns "failure" instead of "miss"). The install script
-        # below handles a missing SDK by downloading it on the spot.
-        continue-on-error: true
-        uses: actions/cache@v5
-        with:
-          path: C:\VulkanSDK
-          key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
-
-      # Run install script (no-op on cache hit) then propagate the SDK path
-      # to subsequent steps via GITHUB_ENV.  Without this, cargo/cmake can't
-      # find the Vulkan headers when the SDK was restored from cache rather
-      # than freshly installed (the machine-level env var isn't in the cache).
-      - name: Install Vulkan SDK + export VULKAN_SDK
-        shell: powershell
-        run: |
-          .\scripts\install-vulkan-sdk.ps1
-          if (-not $env:VULKAN_SDK) {
-            Write-Error "VULKAN_SDK was not set by install-vulkan-sdk.ps1"
-            exit 1
-          }
-          "VULKAN_SDK=$env:VULKAN_SDK" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
-
       # ── Standalone LLVM 19 for bindgen ──────────────────────────────────────
       # VS2022's bundled Clang 19 is an MSVC-compat build (clang-cl) whose
       # mmintrin.h references __builtin_ia32_* GCC-style intrinsics that
@@ -618,11 +607,12 @@ jobs:
 
       # clippy replaces check — clippy performs the same compilation plus lint
       # passes, so running both wastes a full compile cycle.
+      # Only the Tauri UI crate (`skill`) — daemon GPU backends are exercised on
+      # release/`windows` builds, not PR CI (avoids CUDA + Vulkan SDK here).
       - name: cargo clippy
         shell: bash
         env:
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
-          VULKAN_SDK:    ${{ env.VULKAN_SDK }}
           LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
         run: |
           set -euo pipefail
@@ -948,7 +938,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e, coverage]
+    needs: [version-gate, rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e, coverage]
     if: always()
     # Secret is empty for Dependabot PRs (separate secret store) and forks.
     # Hoist to job-level env so the step's `if` can gate on it.
@@ -977,6 +967,7 @@ jobs:
           if [ "${#COMMIT_MSG}" -gt 500 ]; then
             COMMIT_MSG="${COMMIT_MSG:0:500}…"
           fi
+          VERSION="${{ needs.version-gate.result }}"
           RUST="${{ needs.rust-check.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
@@ -985,9 +976,9 @@ jobs:
           LSL_E2E="${{ needs.lsl-e2e.result }}"
           COVERAGE="${{ needs.coverage.result }}"
 
-          # Determine overall status — Rust (Linux), Windows, and Frontend are
-          # required gates.  Audit and LLM E2E are advisory.
-          if [[ "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
+          # Determine overall status — VERSION, Rust (Linux), Windows, and Frontend
+          # are required gates.  Audit and LLM E2E are advisory.
+          if [[ "$VERSION" == "success" && "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
             COLOR=3066993   # green
             STATUS="✅ Passed"
           else
@@ -995,6 +986,7 @@ jobs:
             STATUS="❌ Failed"
           fi
 
+          EMOJI_VERSION=$([ "$VERSION" = "success" ] && echo "✅" || echo "❌")
           EMOJI_RUST=$([ "$RUST" = "success" ] && echo "✅" || echo "❌")
           EMOJI_WINDOWS=$([ "$WINDOWS" = "success" ] && echo "✅" || echo "❌")
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
@@ -1024,7 +1016,8 @@ jobs:
                   {\"name\": \"Commit\",    \"value\": \"[\`${SHA:0:8}\`]($COMMIT_URL)\", \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
                   {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false},
-                  {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
+                  {\"name\": \"VERSION\", \"value\": \"$EMOJI_VERSION $VERSION\", \"inline\": true},
+                  {\"name\": \"Rust (Linux)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
                   {\"name\": \"Frontend\", \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
                   {\"name\": \"Audit\", \"value\": \"$EMOJI_AUDIT $AUDIT\", \"inline\": true},

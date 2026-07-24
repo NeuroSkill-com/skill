@@ -172,12 +172,24 @@ pub(crate) async fn set_ws_config(
             serde_json::json!({"ok": false, "error": format!("port {} is reserved; use 1024–65535", req.port)}),
         );
     }
+    let lan_warning = if host == "0.0.0.0" {
+        Some(
+            "0.0.0.0 advertises a LAN-reachable API host; the daemon itself only \
+             binds non-loopback when SKILL_DAEMON_ADDR is set and SKILL_DAEMON_ALLOW_LAN=1",
+        )
+    } else {
+        None
+    };
     patch_settings(&state, move |s| {
         s.ws_host = host;
         s.ws_port = req.port;
     })
     .await;
-    Json(serde_json::json!({"ok": true, "port": req.port}))
+    Json(serde_json::json!({
+        "ok": true,
+        "port": req.port,
+        "warning": lan_warning,
+    }))
 }
 
 // --- Location / Token ---
@@ -650,6 +662,7 @@ mod tests {
         };
         let res = set_ws_config(State(state.clone()), Json(req)).await.0;
         assert_eq!(res["ok"], true);
+        assert!(res["warning"].as_str().unwrap().contains("LAN"));
     }
 
     #[tokio::test]

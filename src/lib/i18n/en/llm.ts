@@ -131,7 +131,7 @@ const llm: Record<string, string> = {
   "llm.localPath": "Local path",
   "llm.inference.gpuLayers": "GPU layers",
   "llm.inference.gpuLayersDesc":
-    "Layers to offload to GPU (0 = CPU only, high = GPU). Requires llm-metal / llm-cuda feature.",
+    "Layers to offload to GPU (0 = CPU only, high = GPU). Requires a GPU-enabled daemon build (`apple` / `linux` / `windows`).",
   "llm.inference.ctxSize": "Context size",
   "llm.inference.ctxSizeDesc": "KV-cache size in tokens. Auto picks the largest context that fits your GPU/RAM.",
   "llm.inference.parallel": "Max concurrent requests",
@@ -562,7 +562,7 @@ const llm: Record<string, string> = {
 
   "llm.noFeature": "LLM support is not compiled in.",
   "llm.noFeatureHint":
-    "Rebuild with --features llm (and optionally llm-metal / llm-cuda / llm-mtmd) to enable the embedded OpenAI-compatible inference server.",
+    "Rebuild with a GPU-enabled daemon (`--features apple|linux|windows`) to enable the embedded OpenAI-compatible inference server.",
   "llm.endpoints.title": "OpenAI-compatible endpoints",
   "llm.endpoints.hint": "All endpoints are served on the same port as the WebSocket / REST API.",
 };

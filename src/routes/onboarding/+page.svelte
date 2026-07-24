@@ -19,6 +19,7 @@ import { Progress } from "$lib/components/ui/progress";
 import { ToggleRow } from "$lib/components/ui/toggle-row";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonPost } from "$lib/daemon/http";
+import { getDeviceStatus, retryConnect } from "$lib/daemon/devices";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
   getActiveWindowTracking,
@@ -788,7 +789,7 @@ onMount(async () => {
     onboardingStatus = await invoke<OnboardingStatus>("get_onboarding_status");
   } catch {}
 
-  status = await daemonInvoke<DeviceStatus>("get_status");
+  status = await getDeviceStatus<DeviceStatus>();
   unsubs.push(
     await listen<DeviceStatus>("status", (ev) => {
       status = ev.payload;
@@ -991,7 +992,7 @@ function onArrowKey(e: KeyboardEvent) {
   else prev();
 }
 async function startScan() {
-  await daemonInvoke("retry_connect");
+  await retryConnect();
 }
 async function finish() {
   await invoke("complete_onboarding");

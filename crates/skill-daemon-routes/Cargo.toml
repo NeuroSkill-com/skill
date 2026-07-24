@@ -3,15 +3,18 @@ name = "skill-daemon-routes"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "HTTP routes and handlers for skill-daemon — extracted for parallel compilation"
+description = "HTTP route modules extracted from skill-daemon for parallel compilation"
 
 [features]
-default = ["llm"]
-llm = ["skill-daemon-state/llm", "skill-llm/llm"]
+default = []
 
 [dependencies]
-skill-daemon-state = { path = "../skill-daemon-state" }
-skill-llm = { path = "../skill-llm" }
+anyhow = { workspace = true }
+axum = { version = "0.8", default-features = false, features = ["json", "tokio"] }
+serde_json = { workspace = true }
+
+skill-daemon-state = { path = "../skill-daemon-state", default-features = false }
+skill-iroh = { path = "../skill-iroh" }
 
 [lints]
 workspace = true

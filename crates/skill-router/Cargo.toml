@@ -9,9 +9,10 @@ build = "build.rs"
 [features]
 # `default` is intentionally empty: skill-router builds a CPU-only UMAP path
 # with no rlx-runtime accelerator and pulls in no GPU SDK. Consumers opt into
-# exactly the backend(s) their platform supports — macOS uses `metal` / `mlx`
-# (or the `gpu-apple` bundle); Linux/Windows use `cuda`, `rocm`, or `wgpu`.
-# No backend implies another, so e.g. a macOS build never drags in CUDA.
+# exactly the backend(s) their platform supports — prefer OS umbrellas
+# (`apple` / `linux` / `windows`); leaf `metal` / `mlx` / `cuda` / … remain
+# for targeted tests. No backend implies another, so e.g. a macOS build never
+# drags in CUDA.
 default = []
 
 # Internal umbrella: switches the source onto the rlx-runtime device-resolution
@@ -27,8 +28,11 @@ cuda  = ["accel", "rlx-umap/cuda",  "rlx-runtime/cuda"]
 rocm  = ["accel", "rlx-umap/rocm",  "rlx-runtime/rocm"]
 wgpu  = ["accel", "rlx-umap/gpu",   "rlx-runtime/gpu"]
 
-# ── Convenience bundles ──────────────────────────────────────────────────────
-gpu-apple = ["metal", "mlx"]   # all Apple GPU backends (macOS)
+# ── OS umbrellas + convenience aliases ────────────────────────────────────────
+apple     = ["metal", "mlx"]   # all Apple GPU backends (macOS)
+linux     = ["cuda", "wgpu"]
+windows   = ["cuda", "wgpu"]   # CUDA + wgpu (DX12); runtime falls back when no NVIDIA driver
+gpu-apple = ["apple"]          # back-compat alias
 gpu       = ["wgpu"]           # back-compat alias: portable wgpu GPU (NO cuda)
 
 # Local-only profiling (not for CI / release). Use with the `umap_hotpath`

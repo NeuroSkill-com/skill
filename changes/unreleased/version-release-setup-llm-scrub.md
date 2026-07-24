@@ -1,0 +1,7 @@
+- **VERSION as source of truth**: add repo-root `VERSION`; bump/tag/release/CI/packaging read it and sync package.json, tauri.conf.json, and Cargo.toml from it.
+- **Release setup composite**: optional `build-frontend` input; document rust-cache as the sole CI compile cache (no sccache dual-cache).
+- **Drop stale `llm-vulkan` / `llm-metal`**: scrub package.json Linux scripts, docs, CONTRIBUTING, skill-llm README, and i18n copy in favor of OS umbrellas (`apple` / `linux` / `windows`).
+- **CI**: add VERSION sync gate; drop Vulkan SDK from Windows PR clippy; clarify PR vs release CI in README/CONTRIBUTING; refresh skill-daemon README for OS features.
+- **Shared compile-product recipe**: `scripts/compile-product.mjs` builds daemon (OS umbrella) → tty → app (`custom-protocol`); release workflows, dry-run, prepare-daemon-sidecar, and tauri-build use it.
+- **compile-product hardening**: target-only tty gating; strict OS-feature mapping; `CARGO_TARGET_DIR`/`cargo metadata` staging; `--timings` daemon-only; fail-closed local daemon builds; ship `skill-tty` on Linux packages.
+- **Product build follow-ups**: daemon reports `VERSION`; umbrellas include `product`; Linux/Windows ship CUDA+wgpu with runtime fallback (CUDA → wgpu → CPU); macOS tty hard-fail; Linux daemon path discovery; drop Windows Vulkan SDK from release; tauri-build uses full recipe; e2e + cargo-tree feature proof.

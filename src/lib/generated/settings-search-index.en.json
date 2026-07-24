@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "GPU layers",
-    "desc": "Layers to offload to GPU (0 = CPU only, high = GPU). Requires llm-metal / llm-cuda feature."
+    "desc": "Layers to offload to GPU (0 = CPU only, high = GPU). Requires a GPU-enabled daemon build (`apple` / `linux` / `windows`)."
   },
   {
     "tab": "llm",

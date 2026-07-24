@@ -289,7 +289,8 @@ Run "npm" @("run", "build")
 
 # ── Step 0: Ensure Vulkan SDK is installed ────────────────────────────────────
 #
-# The llm-vulkan feature requires the LunarG Vulkan SDK at build time.
+# Optional: some native deps / tooling may still look for Vulkan headers.
+# LLM GPU backends live on skill-daemon (`--features windows`), not the Tauri app.
 # install-vulkan-sdk.ps1 is a no-op when the SDK is already present; when it
 # is missing it downloads and silently installs the latest version (~200 MB).
 
@@ -301,12 +302,20 @@ if ($DryRun) {
     if ($LASTEXITCODE -ne 0) { Fail "install-vulkan-sdk.ps1 failed (exit $LASTEXITCODE)" }
 }
 
-Log "Building Rust binary (target: $TAURI_TARGET, GPU: Vulkan)…"
-# llm-vulkan enables Vulkan GPU offloading for LLM inference (covers NVIDIA,
-# AMD, and Intel Arc without requiring the CUDA toolkit).  Requires the Vulkan
-# SDK (https://vulkan.lunarg.com) at build time; falls back to CPU at runtime
-# when no Vulkan-capable device is present.
-$cargoBuildArgs = @("build", "--release", "--target", $TAURI_TARGET, "--features", "llm-vulkan,custom-protocol")
+Log "Building skill-daemon (target: $TAURI_TARGET, OS umbrella: windows)…"
+$daemonBuildArgs = @("build", "-p", "skill-daemon", "--release", "--target", $TAURI_TARGET, "--features", "windows")
+if ($DryRun) {
+    Dry "cargo $($daemonBuildArgs -join ' ')"
+} else {
+    Set-Location $REPO_ROOT
+    & cargo @daemonBuildArgs
+    if ($LASTEXITCODE -ne 0) { Fail "skill-daemon cargo build failed" }
+}
+
+Log "Building Tauri skill binary (target: $TAURI_TARGET, features: custom-protocol)…"
+# LLM inference runs in skill-daemon. The Tauri app only needs custom-protocol
+# so the frontend is embedded in release builds.
+$cargoBuildArgs = @("build", "-p", "skill", "--release", "--target", $TAURI_TARGET, "--features", "custom-protocol")
 if ($DryRun) {
     Dry "cargo $($cargoBuildArgs -join ' ')"
 } else {
@@ -328,7 +337,7 @@ Ok "Build complete"
 
 Log "Bundling NSIS installer…"
 
-$bundleArgs = @("tauri", "bundle", "--target", $TAURI_TARGET, "--bundle", "nsis", "--no-sign", "--features", "llm-vulkan")
+$bundleArgs = @("tauri", "bundle", "--target", $TAURI_TARGET, "--bundle", "nsis", "--no-sign", "--features", "custom-protocol")
 if ($DryRun) {
     Dry "npx $($bundleArgs -join ' ')"
 } else {

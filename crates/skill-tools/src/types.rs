@@ -56,9 +56,11 @@ pub struct LlmToolConfig {
 
     /// When `true`, every LLM-generated bash command is presented for user
     /// review/editing before execution.  The user can modify the command or
-    /// cancel it entirely.  Requires a UI callback via [`crate::set_bash_edit_hook`].
-    /// Default: `false`.
-    #[serde(default)]
+    /// cancel it entirely.  Requires a UI callback via [`crate::set_bash_edit_hook`]
+    /// or [`crate::install_native_approval_hooks`]. Without a hook, bash-edit
+    /// requests are **denied** (fail closed).
+    /// Default: `true` (privileged by default when bash is enabled).
+    #[serde(default = "default_true")]
     pub require_bash_edit: bool,
 
     /// Allow the LLM to read file contents.
@@ -408,7 +410,7 @@ impl Default for LlmToolConfig {
             web_fetch: true,
             web_search_provider: WebSearchProvider::default(),
             bash: false,
-            require_bash_edit: false,
+            require_bash_edit: true,
             read_file: false,
             write_file: false,
             edit_file: false,
@@ -460,6 +462,11 @@ mod tests {
         assert!(!cfg.read_file);
         assert!(!cfg.write_file);
         assert!(!cfg.edit_file);
+    }
+
+    #[test]
+    fn default_config_requires_bash_edit_when_bash_enabled() {
+        assert!(LlmToolConfig::default().require_bash_edit);
     }
 
     #[test]

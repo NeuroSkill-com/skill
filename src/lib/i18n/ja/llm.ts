@@ -114,7 +114,7 @@ const llm: Record<string, string> = {
   "llm.localPath": "ローカルパス",
   "llm.inference.gpuLayers": "GPUレイヤー",
   "llm.inference.gpuLayersDesc":
-    "GPUにオフロードするレイヤー数（0 = CPUのみ、高い値 = GPU）。llm-metal / llm-cudaフィーチャーが必要です。",
+    "GPUにオフロードするレイヤー数（0 = CPUのみ、高い値 = GPU）。GPU対応daemonビルド（apple / linux / windows）が必要です。",
   "llm.inference.ctxSize": "コンテキストサイズ",
   "llm.inference.ctxSizeDesc": "KVキャッシュサイズ（トークン数）。自動はGPU/RAMに収まる最大コンテキストを選択します。",
   "llm.inference.parallel": "最大同時リクエスト",
@@ -473,7 +473,7 @@ const llm: Record<string, string> = {
   "llm.hfSearch.hideReadme": "READMEを非表示",
   "llm.noFeature": "LLMサポートがコンパイルされていません。",
   "llm.noFeatureHint":
-    "組み込みOpenAI互換推論サーバーを有効にするには、--features llm（オプションでllm-metal / llm-cuda / llm-mtmd）で再ビルドしてください。",
+    "組み込みOpenAI互換推論サーバーを有効にするには、GPU対応daemon（--features apple|linux|windows）で再ビルドしてください。",
   "llm.endpoints.title": "OpenAI互換エンドポイント",
   "llm.endpoints.hint": "すべてのエンドポイントはWebSocket / REST APIと同じポートで提供されます。",
 

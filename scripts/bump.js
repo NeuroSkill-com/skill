@@ -3,7 +3,7 @@ import { execSync, spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
-import { bumpVersion, validateVersion } from "./version-utils.mjs";
+import { bumpVersion, readVersionFile, validateVersion, writeVersionFile } from "./version-utils.mjs";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -610,7 +610,7 @@ Usage: npm run bump [version] [--rc] [--dry-run] [--clean] [--force]
 
 Arguments:
   version       Optional specific version (e.g., 1.2.3 or 1.2.3-rc.1).
-                If not provided, derives the next version from the current one.
+                If not provided, derives the next version from VERSION.
 
 Flags:
   --rc          Bump to a release candidate.
@@ -622,7 +622,10 @@ Flags:
   --clean       Clean Rust build artifacts after successful bump
   --force       Bypass version tag check (use with caution)
 
-Note: By default, bump will refuse to run if the current version is not tagged
+Note: VERSION is the source of truth. bump writes VERSION then syncs
+      package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
+      crates/skill-daemon/Cargo.toml, and crates/skill-tty/Cargo.toml.
+      By default, bump will refuse to run if the current version is not tagged
       and pushed to the remote. This prevents accidental multiple bumps. Use --force
       to override this safety check.
 `);
@@ -731,8 +734,15 @@ async function main() {
 
   // ── resolve new version ─────────────────────────────────────────────────────
 
+  // Source of truth: repo-root VERSION. Derived files (package.json,
+  // tauri.conf.json, src-tauri/Cargo.toml) are synced after the bump.
+  const currentVersion = readVersionFile();
   const pkg = JSON.parse(readText("package.json"));
-  const currentVersion = pkg.version;
+  if (pkg.version !== currentVersion) {
+    console.warn(
+      `[bump] package.json version (${pkg.version}) differs from VERSION (${currentVersion}); using VERSION`,
+    );
+  }
 
   // ── Check if current version is already tagged and pushed ─────────────────
   if (!force) {
@@ -786,21 +796,25 @@ async function main() {
   try {
     mutationStarted = true;
 
-    // ── package.json ──────────────────────────────────────────────────────────
+    // ── VERSION (source of truth) ─────────────────────────────────────────────
+    writeVersionFile(newVersion);
+    console.log(`[bump] Wrote VERSION → ${newVersion}`);
+
+    // ── package.json (derived) ────────────────────────────────────────────────
 
     // Re-read in case something changed
     const pkgFresh = JSON.parse(readText("package.json"));
     pkgFresh.version = newVersion;
     writeText("package.json", `${JSON.stringify(pkgFresh, null, 2)}\n`);
 
-    // ── src-tauri/tauri.conf.json ─────────────────────────────────────────────
+    // ── src-tauri/tauri.conf.json (derived) ───────────────────────────────────
 
     const tauriConfPath = "src-tauri/tauri.conf.json";
     const tauriConf = JSON.parse(readText(tauriConfPath));
     tauriConf.version = newVersion;
     writeText(tauriConfPath, `${JSON.stringify(tauriConf, null, 2)}\n`);
 
-    // ── src-tauri/Cargo.toml ──────────────────────────────────────────────────
+    // ── src-tauri/Cargo.toml (derived) ────────────────────────────────────────
 
     const cargoPath = "src-tauri/Cargo.toml";
     let cargo = readText(cargoPath);
@@ -811,6 +825,17 @@ async function main() {
     }
     cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
     writeText(cargoPath, cargo);
+
+    // ── skill-daemon + skill-tty crate versions (derived) ─────────────────────
+    for (const path of ["crates/skill-daemon/Cargo.toml", "crates/skill-tty/Cargo.toml"]) {
+      let toml = readText(path);
+      if (!versionLine.test(toml)) {
+        throw new Error(`Could not find package version in ${path}`);
+      }
+      toml = toml.replace(versionLine, `version = "${newVersion}"`);
+      writeText(path, toml);
+      console.log(`[bump] Synced ${path} → ${newVersion}`);
+    }
 
     // ── CHANGELOG.md — compile fragments ─────────────────────────────────────
 

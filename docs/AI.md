@@ -4,19 +4,29 @@ This document catalogues every AI / ML model used across the codebase, grouped b
 
 ---
 
-## 1. Local LLM Inference (`skill-llm`)
+## Local LLM Inference (`skill-llm`)
 
-Chat, reasoning, coding, and multimodal inference powered by **llama.cpp** (via the `llama-cpp-4` Rust bindings). Models are distributed as quantised **GGUF** files downloaded from HuggingFace Hub.
+Chat, reasoning, coding, and multimodal inference powered by the **RLX** runtime
+(`llm-rlx`), owned by **`skill-daemon`**. Catalog entries are typically
+quantised **GGUF** (and related) weights downloaded from HuggingFace Hub.
 
 The canonical model list lives in `src-tauri/llm_catalog.json`. To add or update a model, edit that file — no Rust changes needed.
 
 ### GPU acceleration
 
-| Feature flag   | Backend                        |
-|----------------|--------------------------------|
-| `llm-metal`    | Apple Metal (macOS)            |
-| `llm-cuda`     | NVIDIA CUDA                    |
-| `llm-vulkan`   | Vulkan (cross-platform)        |
+Product builds enable one daemon OS umbrella via `compile-product`
+(`apple` / `linux` / `windows`). Linux/Windows ship CUDA **and** wgpu; at
+runtime the daemon uses CUDA when a driver is present, otherwise wgpu, then
+CPU.
+
+| Feature flag     | Backend                        |
+|------------------|--------------------------------|
+| `llm-rlx-metal`  | Apple Metal (macOS)            |
+| `llm-rlx-mlx`    | Apple MLX (macOS)              |
+| `llm-rlx-cuda`   | NVIDIA CUDA                    |
+| `llm-rlx-wgpu`   | wgpu / Vulkan-capable GPUs     |
+| `llm-rlx-rocm`   | AMD ROCm                       |
+| `llm-rlx-cpu`    | CPU fallback                   |
 
 ### Model families in the catalog
 
@@ -151,7 +161,7 @@ Two TTS backends, selectable at runtime:
 | **Default voice** | `Jasper` |
 | **Speed** | 1.0× |
 
-Lightweight, CPU-friendly English TTS. Uses espeak-ng for phonemisation. Auto-downloaded from HuggingFace on first use.
+Lightweight, CPU-friendly English TTS (Metal / CUDA / wgpu when compiled in). Uses espeak-ng for phonemisation. Auto-downloaded from HuggingFace on first use. Ships on macOS, Linux, and Windows.
 
 ### NeuTTS (feature `tts-neutts`)
 

@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 target=""
 skip_build=0
-features="llm-vulkan"
+features="custom-protocol"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -66,7 +66,7 @@ if ! command -v rpmbuild >/dev/null 2>&1; then
   exit 1
 fi
 
-version="$(node -p "JSON.parse(require('fs').readFileSync('$ROOT_DIR/package.json','utf8')).version")"
+version="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 rpm_version="${version//-/\~}"
 binary_path="$ROOT_DIR/src-tauri/target/$target/release/skill"
 resources_dir="$ROOT_DIR/src-tauri/resources"
@@ -119,7 +119,9 @@ if [[ -f "$daemon_path" ]]; then
   chmod +x "$stage_root/opt/neuroskill/skill-daemon"
   echo "✓ Bundled skill-daemon sidecar"
 else
-  echo "⚠ skill-daemon not found at $daemon_path" >&2
+  echo "ERROR: skill-daemon not found at $daemon_path" >&2
+  echo "Build with: node scripts/compile-product.mjs --target $target --release" >&2
+  exit 1
 fi
 
 # ── Bundle skill-tty sidecar ─────────────────────────────────────────────────
@@ -134,7 +136,9 @@ if [[ -f "$tty_path" ]]; then
   chmod +x "$stage_root/opt/neuroskill/skill-tty"
   echo "✓ Bundled skill-tty sidecar"
 else
-  echo "⚠ skill-tty not found at $tty_path" >&2
+  echo "ERROR: skill-tty not found at $tty_path" >&2
+  echo "Build with: node scripts/compile-product.mjs --target $target --release" >&2
+  exit 1
 fi
 
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────

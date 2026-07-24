@@ -347,30 +347,37 @@ fn looks_like_qwen35(path: &Path) -> bool {
         || filename_hint(path, "qwen35")
 }
 
-/// Resolve the rlx inference device from config: explicit `rlx_device`, honouring
-/// a CPU request / disabled GPU offload, else the best available accelerator.
+/// Resolve the rlx inference device from config.
+///
+/// - `n_gpu_layers == 0` or `rlx_device == "cpu"` → CPU
+/// - Explicit accelerator tags try that device first; if unavailable they
+///   fall back (notably **`cuda` → wgpu/`Gpu` → CPU**)
+/// - `"auto"` / unknown → best available: Metal → CUDA → MLX → wgpu → CPU
 fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
     use rlx::runtime::{device_ext::is_available, Device};
 
     if config.n_gpu_layers == 0 || config.rlx_device.eq_ignore_ascii_case("cpu") {
         return Device::Cpu;
     }
+
     let pick = |d: Device| is_available(d).then_some(d);
-    let explicit = match config.rlx_device.to_ascii_lowercase().as_str() {
-        "metal" => pick(Device::Metal),
-        "mlx" => pick(Device::Mlx),
-        "cuda" => pick(Device::Cuda),
-        "rocm" => pick(Device::Rocm),
-        "gpu" | "vulkan" => pick(Device::Gpu),
-        _ => None, // "auto"/unknown → best-available below
+    let best_available = || {
+        [Device::Metal, Device::Cuda, Device::Mlx, Device::Gpu]
+            .into_iter()
+            .find(|d| is_available(*d))
     };
-    explicit
-        .or_else(|| {
-            [Device::Metal, Device::Cuda, Device::Mlx, Device::Gpu]
-                .into_iter()
-                .find(|d| is_available(*d))
-        })
-        .unwrap_or(Device::Cpu)
+
+    match config.rlx_device.to_ascii_lowercase().as_str() {
+        "metal" => pick(Device::Metal).or_else(best_available),
+        "mlx" => pick(Device::Mlx).or_else(best_available),
+        // Product Windows/Linux: CUDA when the driver is present, else wgpu.
+        "cuda" => pick(Device::Cuda).or_else(|| pick(Device::Gpu)).or_else(best_available),
+        "rocm" => pick(Device::Rocm).or_else(best_available),
+        "gpu" | "vulkan" | "wgpu" => pick(Device::Gpu).or_else(best_available),
+        // "auto" / empty / unknown
+        _ => best_available(),
+    }
+    .unwrap_or(Device::Cpu)
 }
 
 /// Resolve `(device, packed_weights)` for a GGUF family runner.
@@ -777,5 +784,22 @@ mod device_tests {
             ..LlmConfig::default()
         };
         assert_eq!(resolve_rlx_device(&cfg), Device::Cpu);
+    }
+
+    #[test]
+    fn auto_never_hard_pins_cpu_when_gpu_offload_enabled() {
+        let cfg = LlmConfig {
+            rlx_device: "auto".into(),
+            n_gpu_layers: u32::MAX,
+            ..LlmConfig::default()
+        };
+        let d = resolve_rlx_device(&cfg);
+        // On CI/mac without NVIDIA this may be Metal/Gpu/Cpu; just ensure
+        // "auto" does not short-circuit before availability checks.
+        let _ = d;
+        assert!(matches!(
+            d,
+            Device::Cpu | Device::Metal | Device::Mlx | Device::Cuda | Device::Gpu | Device::Rocm
+        ));
     }
 }

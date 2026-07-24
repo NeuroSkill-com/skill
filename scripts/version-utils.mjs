@@ -7,8 +7,19 @@
 //   - x.y.z-rc.N    (release candidate)
 //
 // Anything else is rejected.
+//
+// Source of truth: repo-root `VERSION` (one line, no "v" prefix).
+// bump.js writes VERSION then syncs package.json / tauri.conf.json /
+// src-tauri/Cargo.toml from it.
+
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/;
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+export const VERSION_FILE = join(REPO_ROOT, "VERSION");
 
 /** @param {string} version */
 export function parseVersion(version) {
@@ -27,6 +38,32 @@ export function validateVersion(v) {
   if (!VERSION_RE.test(v)) {
     throw new Error(`Version must be x.y.z or x.y.z-rc.N, got "${v}"`);
   }
+  return v;
+}
+
+/**
+ * Read the product version from the repo-root VERSION file.
+ * @param {string} [root]
+ */
+export function readVersionFile(root = REPO_ROOT) {
+  const path = join(root, "VERSION");
+  if (!existsSync(path)) {
+    throw new Error(`VERSION file missing at ${path}`);
+  }
+  const raw = readFileSync(path, "utf8").trim();
+  const line = raw.split(/\r?\n/)[0]?.trim() ?? "";
+  if (!line) throw new Error(`VERSION file is empty (${path})`);
+  return validateVersion(line);
+}
+
+/**
+ * Write the product version to the repo-root VERSION file (single line + newline).
+ * @param {string} version
+ * @param {string} [root]
+ */
+export function writeVersionFile(version, root = REPO_ROOT) {
+  const v = validateVersion(version);
+  writeFileSync(join(root, "VERSION"), `${v}\n`, "utf8");
   return v;
 }
 

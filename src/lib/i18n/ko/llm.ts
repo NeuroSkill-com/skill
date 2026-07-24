@@ -112,7 +112,7 @@ const llm: Record<string, string> = {
   "llm.localPath": "로컬 경로",
   "llm.inference.gpuLayers": "GPU 레이어",
   "llm.inference.gpuLayersDesc":
-    "GPU에 오프로드할 레이어 수 (0 = CPU 전용, 높음 = GPU). llm-metal / llm-cuda 기능이 필요합니다.",
+    "GPU에 오프로드할 레이어 수 (0 = CPU 전용, 높음 = GPU). GPU 지원 daemon 빌드(apple / linux / windows)가 필요합니다.",
   "llm.inference.ctxSize": "컨텍스트 크기",
   "llm.inference.ctxSizeDesc": "KV 캐시 크기(토큰). Auto는 GPU/RAM에 맞는 최대 컨텍스트를 선택합니다.",
   "llm.inference.parallel": "최대 동시 요청",
@@ -468,7 +468,7 @@ const llm: Record<string, string> = {
   "llm.hfSearch.hideReadme": "README 숨기기",
   "llm.noFeature": "LLM 지원이 컴파일되어 있지 않습니다.",
   "llm.noFeatureHint":
-    "--features llm (선택적으로 llm-metal / llm-cuda / llm-mtmd)으로 재빌드하여 내장 OpenAI 호환 추론 서버를 활성화하세요.",
+    "GPU 지원 daemon(--features apple|linux|windows)으로 재빌드하여 내장 OpenAI 호환 추론 서버를 활성화하세요.",
   "llm.endpoints.title": "OpenAI 호환 엔드포인트",
   "llm.endpoints.hint": "모든 엔드포인트는 WebSocket / REST API와 같은 포트에서 제공됩니다.",
 

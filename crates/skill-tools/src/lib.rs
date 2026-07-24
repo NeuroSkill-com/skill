@@ -50,7 +50,7 @@ pub use defs::{
 };
 pub use error::{ExecError, ParseError, ValidationError};
 pub use exec::execute_builtin_tool_call;
-pub use exec::{set_bash_edit_hook, BashEditHook};
+pub use exec::{install_native_approval_hooks, set_bash_edit_hook, BashEditHook};
 pub use parse::{
     build_self_healing_message, coerce_tool_call_arguments, detect_garbled_tool_call, extract_tool_calls,
     inject_tools_into_system_prompt, inject_tools_into_system_prompt_with_options, strip_tool_call_blocks,

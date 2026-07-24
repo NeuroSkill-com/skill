@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "GPUレイヤー",
-    "desc": "GPUにオフロードするレイヤー数（0 = CPUのみ、高い値 = GPU）。llm-metal / llm-cudaフィーチャーが必要です。"
+    "desc": "GPUにオフロードするレイヤー数（0 = CPUのみ、高い値 = GPU）。GPU対応daemonビルド（apple / linux / windows）が必要です。"
   },
   {
     "tab": "llm",

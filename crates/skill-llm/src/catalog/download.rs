@@ -173,13 +173,20 @@ pub fn download_file(
     if blob_path.exists() {
         let on_disk = blob_path.metadata().map(|m| m.len()).unwrap_or(0);
         if on_disk >= remote_size {
-            // Already fully downloaded — repair snapshot links if needed and return.
-            let final_path = register_snapshot(&model_dir, &refs_dir, &commit_sha, filename, &blob_path)?;
-            let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-            p.state = DownloadState::Downloaded;
-            p.status_msg = None;
-            p.progress = 1.0;
-            return Ok(final_path);
+            match sha256_file_hex(&blob_path) {
+                Ok(actual) if actual.eq_ignore_ascii_case(blob_sha.trim()) => {
+                    let final_path = register_snapshot(&model_dir, &refs_dir, &commit_sha, filename, &blob_path)?;
+                    let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    p.state = DownloadState::Downloaded;
+                    p.status_msg = None;
+                    p.progress = 1.0;
+                    return Ok(final_path);
+                }
+                Ok(_) | Err(_) => {
+                    // Stale/corrupt blob named after the expected hash — remove and re-download.
+                    let _ = std::fs::remove_file(&blob_path);
+                }
+            }
         }
     }
 
@@ -283,13 +290,25 @@ pub fn download_file(
     }
     drop(file); // explicit flush + close before rename
 
-    // ── 10. Sanity-check downloaded size ─────────────────────────────────────
+    // ── 10. Sanity-check downloaded size + content hash ──────────────────────
     let final_size = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
     if final_size < remote_size {
         anyhow::bail!(
             "Incomplete download for {filename}: \
              received {final_size} of {remote_size} bytes"
         )
+    }
+
+    let actual_sha =
+        sha256_file_hex(&incomplete_path).with_context(|| format!("hash incomplete download for {filename}"))?;
+    if !actual_sha.eq_ignore_ascii_case(blob_sha.trim()) {
+        // Corrupt / poisoned blob — delete so the next attempt starts clean.
+        let _ = std::fs::remove_file(&incomplete_path);
+        anyhow::bail!(crate::error::DownloadError::HashMismatch {
+            filename: filename.to_string(),
+            expected: blob_sha.clone(),
+            actual: actual_sha,
+        });
     }
 
     // ── 11. Atomic promotion: .incomplete → blob ──────────────────────────────
@@ -515,4 +534,42 @@ fn register_snapshot(
     std::fs::copy(blob_path, &snapshot_link).context("copy blob to snapshot")?;
 
     Ok(snapshot_link)
+}
+
+/// SHA-256 hex digest of a file (lowercase). Used to verify HF LFS blobs.
+fn sha256_file_hex(path: &Path) -> anyhow::Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path).with_context(|| format!("open {} for hashing", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 128 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+#[cfg(test)]
+mod hash_tests {
+    use super::sha256_file_hex;
+    use std::io::Write;
+
+    #[test]
+    fn sha256_matches_known_vector() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hello.bin");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"hello").unwrap();
+        drop(f);
+        // echo -n hello | shasum -a 256
+        assert_eq!(
+            sha256_file_hex(&path).unwrap(),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+    }
 }

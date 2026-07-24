@@ -108,10 +108,16 @@ sudo apt install -y \
   dbus
 ```
 
-## 6) Vulkan prerequisites (LLM GPU backend)
+## 6) GPU backends (LLM)
 
-The Linux build uses `llm-vulkan` by default via `scripts/tauri-build.js`.
-Install Vulkan prerequisites with the repo script:
+Product Linux builds compile **both** CUDA and wgpu (`--features linux`).
+No CUDA toolkit is required on the build machine (rlx-cuda / cudarc
+dynamic-loading).
+
+**At runtime:** CUDA when an NVIDIA driver is present, otherwise **wgpu**,
+otherwise CPU. That fallback is automatic — not a separate build flavor.
+
+Optional Vulkan headers/tooling (still installed in CI for system deps):
 
 ```bash
 bash scripts/install-vulkan-sdk.sh

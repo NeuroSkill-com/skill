@@ -92,39 +92,9 @@ pub fn init_tool_logger(app: &tauri::AppHandle) {
         }
     });
 
-    // Register the bash-edit hook — shows the command in a dialog and lets
-    // the user approve or cancel before execution.
-    skill_tools::set_bash_edit_hook(std::sync::Arc::new(|command: &str| {
-        // Truncate very long commands for the dialog display.
-        // Use char boundary to avoid panic on multi-byte UTF-8.
-        let display = if command.chars().count() > 2000 {
-            let truncated: String = command.chars().take(2000).collect();
-            format!(
-                "{}...\n\n({} chars total)",
-                truncated,
-                command.chars().count()
-            )
-        } else {
-            command.to_string()
-        };
-        let message = format!(
-            "The LLM wants to run this bash command:\n\n{}\n\nAllow execution?",
-            display
-        );
-        let approved = rfd::MessageDialog::new()
-            .set_level(rfd::MessageLevel::Info)
-            .set_title("NeuroSkill \u{2014} Review Bash Command")
-            .set_description(&message)
-            .set_buttons(rfd::MessageButtons::YesNo)
-            .show()
-            == rfd::MessageDialogResult::Yes;
-
-        if approved {
-            Some(command.to_string())
-        } else {
-            None
-        }
-    }));
+    // Bash-edit hook for any in-process tool execution. The daemon registers
+    // the same hooks independently — LLM tools run there, not here.
+    skill_tools::install_native_approval_hooks();
 }
 
 /// Enable or disable tool-call log output.

@@ -13,7 +13,7 @@ pub struct AsrEngineInfo {
     pub default_model: String,
     pub experimental: bool,
     pub downloadable: bool,
-    /// False when this build cannot run ASR (Windows / feature off).
+    /// False when this build cannot run ASR (feature off).
     pub available: bool,
 }
 

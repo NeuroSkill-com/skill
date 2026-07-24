@@ -11,6 +11,7 @@ import { Button } from "$lib/components/ui/button";
 import { Card, CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
+import { getDeviceStatus } from "$lib/daemon/devices";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
   lslConnect,
@@ -329,7 +330,7 @@ async function pollStatus() {
   try {
     lslRunning = await lslVirtualSourceRunning();
     if (lslRunning) {
-      const s = await daemonInvoke<{ state: string }>("get_status");
+      const s = await getDeviceStatus<{ state: string }>();
       sessionState = s.state ?? "disconnected";
     } else {
       sessionState = "disconnected";

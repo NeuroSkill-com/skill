@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "GPU 层数",
-    "desc": "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要 llm-metal / llm-cuda 功能。"
+    "desc": "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要启用 GPU 的 daemon 构建（apple / linux / windows）。"
   },
   {
     "tab": "llm",

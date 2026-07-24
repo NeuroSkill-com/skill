@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Typed client for daemon access-token management (/v1/auth/tokens).
+// ACL/expiry wire values are snake_case (see skill-daemon-state::auth).
 
 import { daemonGet, daemonPost } from "./http";
 
-export type TokenAcl = "Admin" | "ReadOnly" | "Data" | "Stream";
-export type TokenExpiry = "Week" | "Month" | "Quarter" | "Never";
+export type TokenAcl = "admin" | "read_only" | "data" | "stream";
+export type TokenExpiry = "week" | "month" | "quarter" | "never";
 
 export interface ApiToken {
   id: string;
   name: string;
   acl: string;
   preview?: string;
+  token_preview?: string;
   created_at: number;
   expires_at: number | null;
   last_used_at: number | null;

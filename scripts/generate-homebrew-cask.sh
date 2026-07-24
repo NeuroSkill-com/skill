@@ -12,7 +12,7 @@ usage() {
 Usage: bash scripts/generate-homebrew-cask.sh [options]
 
 Options:
-  --version <x.y.z>      Version to publish (default: from src-tauri/tauri.conf.json)
+  --version <x.y.z>      Version to publish (default: from VERSION)
   --sha256 <hex>         SHA-256 for DMG (default: read from GitHub release asset digest)
   --repo <owner/name>    GitHub repo (default: NeuroSkill-com/skill)
   --asset <name>         DMG asset name (default: NeuroSkill_<version>_aarch64.dmg)
@@ -56,13 +56,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(python3 - <<'PY'
-import json
-from pathlib import Path
-conf = Path('src-tauri/tauri.conf.json')
-print(json.loads(conf.read_text(encoding='utf-8'))['version'])
-PY
-)"
+  VERSION="$(tr -d '[:space:]' < VERSION)"
 fi
 
 if [[ -z "$ASSET_NAME" ]]; then

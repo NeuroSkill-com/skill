@@ -6,7 +6,7 @@
 - **Node.js** ≥ 20 with npm
 - **Tauri CLI**: installed via `npm install` (workspace devDependency)
 - **Platform SDKs**: Xcode (macOS), Visual Studio Build Tools + LLVM (Windows), build-essential (Linux)
-- **Vulkan SDK** (Linux/Windows, for `llm-vulkan` feature)
+- **Vulkan SDK** (optional Linux tooling; LLM GPU backends use OS umbrellas `apple` / `linux` / `windows`)
 
 ## Quick Start
 
@@ -41,7 +41,7 @@ for `llm-rlx` / `text-embeddings-rlx` features). Details:
 ```
 ├── crates/                  # Rust workspace crates (Tauri-independent)
 │   ├── skill-daemon/        # Standalone HTTP daemon (sidecar)
-│   ├── skill-daemon-routes/ # Daemon HTTP routes (/v1/...)
+│   ├── skill-daemon-routes/ # Extracted daemon HTTP routes (iroh first; more pending)
 │   ├── skill-daemon-state/  # Daemon shared state + DB
 │   ├── skill-daemon-common/ # Shared daemon types
 │   ├── skill-eeg/           # EEG signal processing
@@ -224,8 +224,16 @@ The **pre-push** hook runs scoped checks based on changed files:
 
 ### CI & Releases
 
-All CI logic lives in `scripts/ci.mjs` — a single Node.js file with subcommands that
-runs on macOS, Linux, and Windows. Workflows call it instead of inline bash/PowerShell.
+PR / branch CI (`ci.yml`) runs VERSION sync, clippy, frontend checks, and
+optional E2E jobs. Signed Tauri product builds run on release tags
+(`release-{mac,linux,windows}.yml`) or Preview Build — not on every PR.
+
+Shared release bootstrap lives in `.github/actions/release-setup` (Rust +
+**rust-cache only** + Node; optional frontend build). Product crates are
+compiled via `scripts/compile-product.mjs` (daemon OS umbrella → tty → app
+`custom-protocol`) so feature flags cannot drift across OS workflows.
+OS-specific signing and packaging stay in the thin release workflows.
+Helpers live in `scripts/ci.mjs` (macOS / Linux / Windows):
 
 ```bash
 # Validate ci.mjs and workflow references
@@ -242,7 +250,7 @@ npm run ci:dry-run:fast
 
 | Command | What it does |
 |---------|-------------|
-| `resolve-version` | Read version from tauri.conf.json, validate against git tag |
+| `resolve-version` | Read `VERSION`, verify derived files, validate git tag when present |
 | `verify-secrets NAME...` | Check that env vars are non-empty (no values printed) |
 | `prepare-changelog VER OUT [RANGE]` | Extract changelog + contributors to markdown |
 | `update-latest-json --platform P ...` | Merge platform entry into Tauri updater manifest |
@@ -326,8 +334,11 @@ authorization dialog each time.
 - The workspace shares a single `target/` directory (configured in `.cargo/config.toml`).
 - Frontend uses **SvelteKit** in SPA mode with **Tailwind CSS v4**.
 - EEG processing uses the device's actual sample rate — never hardcode 256 Hz.
-- GPU backends (CUDA / Vulkan / Metal / MLX / Burn) are feature-gated. The
-  `llm-vulkan` feature is the default for Linux/Windows release builds.
+- GPU backends (CUDA / Metal / MLX / wgpu / Burn) are feature-gated. Product
+  builds use `scripts/compile-product.mjs` with OS umbrellas `apple` /
+  `linux` / `windows`. Linux and Windows compile CUDA **and** wgpu so the
+  daemon can fall back at runtime (CUDA → wgpu → CPU) when no NVIDIA driver
+  is present. CUDA compiles without a local toolkit (cudarc dynamic-loading).
 - See `AGENTS.md` for comprehensive rules on encoding, accent colors, session files,
   multi-device DSP, and crate boundaries.
 
@@ -387,14 +398,14 @@ Cross-platform release builds are produced via `scripts/tauri-build.js`:
 npm run tauri:build:mac:app           # .app bundle
 npm run tauri:build:mac:dmg           # .app + .dmg
 
-# Linux (native arch)
-npm run tauri:build:linux:arm64       # aarch64 AppImage + Vulkan LLM
-npm run tauri:build:linux:x64:native  # x86_64 AppImage + Vulkan LLM
+# Linux (native arch) — daemon built with `--features linux`
+npm run tauri:build:linux:arm64       # aarch64 AppImage
+npm run tauri:build:linux:x64:native  # x86_64 AppImage
 npm run package:linux:portable        # Portable tarball
 npm run package:linux:system:arm64:native  # .deb / .rpm
 npm run package:linux:system:x64:native    # .deb / .rpm
 
-# Windows
+# Windows — daemon built with `--features windows`
 npm run tauri:build:win:nsis          # NSIS installer (.exe)
 
 # Homebrew cask (post-release)

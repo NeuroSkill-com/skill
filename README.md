@@ -105,6 +105,13 @@ Long-form documentation lives in `./docs`:
 
 ## Development (quickstart)
 
+Product version lives in the repo-root [`VERSION`](VERSION) file (`npm run bump`
+keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in
+sync). Release builds enable one daemon OS umbrella (`apple` / `linux` /
+`windows`). PR CI runs clippy/tests; signed product builds run on release tags
+or Preview Build. Details: [CONTRIBUTING.md](CONTRIBUTING.md) ·
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
 Install the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) (`curl -LsSf https://hf.co/cli/install.sh | bash` on macOS/Linux, `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"` on Windows), then:
 
 ```bash
@@ -116,7 +123,7 @@ npm run tauri dev
 Build production app:
 
 ```bash
-npm run tauri build
+npm run tauri:build
 ```
 
 ## License

@@ -114,7 +114,7 @@ const llm: Record<string, string> = {
   "llm.localPath": "Ruta local",
   "llm.inference.gpuLayers": "capas de GPU",
   "llm.inference.gpuLayersDesc":
-    "Capas para descargar a GPU (0 = solo CPU, alto = GPU). Requiere la función llm-metal/llm-cuda.",
+    "Capas para descargar a GPU (0 = solo CPU, alto = GPU). Requiere un build del daemon con GPU (apple / linux / windows).",
   "llm.inference.ctxSize": "Tamaño del contexto",
   "llm.inference.ctxSizeDesc":
     "Tamaño de caché KV en tokens. Auto elige el contexto más grande que se ajuste a su GPU/RAM.",
@@ -484,7 +484,7 @@ const llm: Record<string, string> = {
   "llm.hfSearch.hideReadme": "Ocultar README",
   "llm.noFeature": "El soporte LLM no está compilado.",
   "llm.noFeatureHint":
-    "Reconstruya con --features llm (y opcionalmente llm-metal/llm-cuda/llm-mtmd) para habilitar el servidor de inferencia integrado compatible con OpenAI.",
+    "Reconstruya con un daemon con GPU (--features apple|linux|windows) para habilitar el servidor de inferencia integrado compatible con OpenAI.",
   "llm.endpoints.title": "Puntos finales compatibles con OpenAI",
   "llm.endpoints.hint": "Todos los puntos finales se sirven en el mismo puerto que WebSocket/API REST.",
 

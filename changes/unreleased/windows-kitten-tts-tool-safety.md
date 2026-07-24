@@ -1,0 +1,2 @@
+- **Windows KittenTTS**: enable `rlx-kittentts` on Windows (cuda+gpu features) and activate `tts_kitten_active` on all desktop OSes so the default voice engine is no longer a no-op.
+- **Tool safety in daemon**: register native approval hooks in `skill-daemon`; bash-edit with no hook now **denies** instead of executing unmodified.

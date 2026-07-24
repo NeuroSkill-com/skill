@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "GPU-Ebenen",
-    "desc": "Auf die GPU auszulagernde Ebenen (0 = nur CPU). Erfordert llm-metal / llm-cuda."
+    "desc": "Auf die GPU auszulagernde Ebenen (0 = nur CPU). Erfordert einen GPU-fähigen Daemon-Build (apple / linux / windows)."
   },
   {
     "tab": "llm",

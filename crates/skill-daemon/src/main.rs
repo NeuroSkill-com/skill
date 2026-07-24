@@ -170,6 +170,10 @@ async fn daemon_main() -> anyhow::Result<()> {
     let skill_dir = skill_data_dir();
     let state = AppState::new(load_or_create_token()?, skill_dir.clone());
 
+    // Tool safety: bash-edit / dangerous-op dialogs must live in this process
+    // (tools execute here, not in the Tauri UI). Fail closed if unset.
+    skill_tools::install_native_approval_hooks();
+
     // Voice input (ASR): set the model-cache directory before any session starts.
     skill_asr::init_asr_dirs(&skill_dir);
     // Voice output (daemon-side TTS for the voice loop): point KittenTTS at the
@@ -308,7 +312,7 @@ async fn daemon_main() -> anyhow::Result<()> {
         .merge(routes::api::router())
         .merge(routes::analysis::router())
         .merge(routes::search::router())
-        .merge(routes::iroh::router())
+        .merge(skill_daemon_routes::iroh::router())
         .merge(routes::brain::router())
         .merge(routes::activity_status::router())
         .merge(routes::asr::router())
@@ -332,14 +336,15 @@ async fn daemon_main() -> anyhow::Result<()> {
             auth_middleware::auth_middleware,
         ));
 
-    // ── CORS — allow Tauri webview (and any local tool) to reach the daemon ──
+    // ── CORS — allow Tauri webview (and local tools) to reach the daemon ──
     //
     // WKWebView on macOS treats `fetch()` from the Tauri devUrl / custom
     // protocol as cross-origin when the target is `http://127.0.0.1:<port>`.
     // Without CORS headers the browser strips the `Authorization` header and
-    // the request fails the auth middleware.  A permissive CORS layer fixes
-    // this: we already authenticate every request via bearer tokens so the
-    // origin check adds no security value.
+    // the request fails the auth middleware.
+    //
+    // Origins stay permissive because auth is bearer-token based. Binding is
+    // loopback-only by default; non-loopback requires SKILL_DAEMON_ALLOW_LAN=1.
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([
@@ -409,6 +414,23 @@ async fn daemon_main() -> anyhow::Result<()> {
     }
 
     let addr = handlers::daemon_addr();
+    if !addr.ip().is_loopback() {
+        let allow_lan = std::env::var("SKILL_DAEMON_ALLOW_LAN")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !allow_lan {
+            anyhow::bail!(
+                "refusing to bind non-loopback address {addr}; \
+                 set SKILL_DAEMON_ALLOW_LAN=1 to expose the daemon on the LAN \
+                 (bearer token + CORS become network-reachable)"
+            );
+        }
+        tracing::warn!(
+            %addr,
+            "daemon bound to non-loopback address — LAN clients that learn the \
+             bearer token can call the full API; prefer 127.0.0.1 when possible"
+        );
+    }
     info!(%addr, "skill daemon listening");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

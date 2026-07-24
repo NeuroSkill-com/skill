@@ -1,0 +1,5 @@
+- **Tool safety defaults**: `require_bash_edit` defaults to `true`; expand bash denylist (`curl|bash`, interpreters); flag secret home paths (`.ssh`, `.aws`, `.env`, `auth.token`) and Windows system dirs for approval.
+- **web_fetch SSRF**: refuse loopback / private / link-local / cloud-metadata URLs.
+- **Model download integrity**: SHA-256-verify HF LFS blobs before promoting `.incomplete` → blob (and re-verify existing blobs); mismatch deletes the bad file.
+- **LAN bind**: refuse non-loopback `SKILL_DAEMON_ADDR` unless `SKILL_DAEMON_ALLOW_LAN=1`; warn on `0.0.0.0` ws host; document CORS + loopback default.
+- **CSP**: replace `csp: null` with a localhost/daemon-aware Content-Security-Policy in `tauri.conf.json`.

@@ -29,7 +29,7 @@ jobs:
         with:
           fetch-depth: 0   # full history so git tag --format can read the annotation
 
-      # ── Verify tag matches tauri.conf.json version ────────────────────────────
+      # ── Verify tag matches VERSION ────────────────────────────────────────────
       # Catches "forgot to bump the version" before wasting 20 min on a build.
       - name: Resolve version
         id: version_meta
@@ -152,18 +152,10 @@ jobs:
           set -euo pipefail
           npm run build
           npm run -s verify:tauri:frontend
-          # NOTE: `|| return $?` after each cargo invocation is required.
-          # `set -e` is inhibited inside a function called via `if ! cmd` /
-          # captured exit code, so without explicit `|| return` a failing
-          # cargo build would silently continue and run_cmd would still return 0.
-          run_cmd() {
-            cargo build -p skill-daemon --release --locked --target aarch64-apple-darwin --features apple --timings || return $?
-            cargo build -p skill-tty --release --locked --target aarch64-apple-darwin --timings || return $?
-            cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol --timings || return $?
-          }
-          if ! run_cmd; then
-            exit 1
-          fi
+          # Shared recipe: daemon (apple) → tty → app (custom-protocol).
+          node scripts/compile-product.mjs \
+            --target aarch64-apple-darwin \
+            --release --locked --timings
 
       # ── Assemble + sign .app bundle ─────────────────────────────────────
       - name: Create .app bundle

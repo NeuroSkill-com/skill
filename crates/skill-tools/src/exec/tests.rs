@@ -367,10 +367,10 @@ fn bash_edit_hook_lifecycle() {
         .build()
         .unwrap();
 
-    // 1. Without a hook set, request_bash_edit returns Some(original)
+    // 1. Without a hook set, request_bash_edit denies (fail closed)
     clear_bash_edit_hook();
     let result = rt.block_on(request_bash_edit("echo hello"));
-    assert_eq!(result, Some("echo hello".to_string()));
+    assert_eq!(result, None);
 
     // 2. Hook can modify
     set_bash_edit_hook(Arc::new(|cmd: &str| Some(format!("{} --safe", cmd))));
@@ -382,10 +382,10 @@ fn bash_edit_hook_lifecycle() {
     let result = rt.block_on(request_bash_edit("dangerous command"));
     assert_eq!(result, None);
 
-    // 4. Clearing hook restores passthrough
+    // 4. Clearing hook restores deny-by-default
     clear_bash_edit_hook();
     let result = rt.block_on(request_bash_edit("safe command"));
-    assert_eq!(result, Some("safe command".to_string()));
+    assert_eq!(result, None);
 }
 
 // ── retry_with_backoff ────────────────────────────────────────────────

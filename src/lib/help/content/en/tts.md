@@ -6,7 +6,7 @@ NeuroSkill™ speaks and listens fully on-device. **Text-to-speech (TTS)** annou
 ## Choosing engines
 Open **Settings → Voice** or the **LLM / Chat** voice sections. Engine chips come from the daemon catalog (`/v1/tts/engines`, `/v1/asr/engines`), which mirrors every backend Skill wires from rlx-models.
 
-- **TTS** — KittenTTS (default, small ONNX), NeuTTS, RLX-TTS, Qwen3-TTS, Piper, StyleTTS2, and many experimental Hub engines (Orpheus, Kyutai, MetaVoice, MiraTTS, …). Chips marked **exp** may download large checkpoints; **bundle** engines need a one-time local export (Inflect-Nano / MeloTTS). Engines unavailable in this build (for example on Windows) are greyed out.
+- **TTS** — KittenTTS (default, small RLX-native English voice), NeuTTS, RLX-TTS, Qwen3-TTS, Piper, StyleTTS2, and many experimental Hub engines (Orpheus, Kyutai, MetaVoice, MiraTTS, …). Chips marked **exp** may download large checkpoints; **bundle** engines need a one-time local export (Inflect-Nano / MeloTTS). Engines unavailable in this build are greyed out.
 - **ASR** — Whisper (default), Qwen3-ASR, Voxtral, FunASR (**SenseVoice** default; Paraformer-zh optional), Nemotron-ASR, and RLX-ASR. First use auto-downloads Hub weights; chat shows download progress while loading.
 
 ## How TTS works

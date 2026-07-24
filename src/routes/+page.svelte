@@ -40,7 +40,15 @@ import {
   MW75_COLOR,
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { getDevices, pairDevice as pairDeviceCmd } from "$lib/daemon/devices";
+import {
+  getDevices,
+  pairDevice as pairDeviceCmd,
+  forgetDevice as forgetDeviceApi,
+  setPreferredDevice,
+  retryConnect as retryConnectApi,
+  cancelRetry as cancelRetryApi,
+  getDeviceStatus,
+} from "$lib/daemon/devices";
 import { daemonGet } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { daemonStatus, setDaemonLatency } from "$lib/daemon/status.svelte";
@@ -1055,26 +1063,26 @@ const dashboardUnpaired = $derived(
 );
 
 async function retryConnect() {
-  await daemonInvoke("retry_connect");
+  await retryConnectApi();
 }
 async function cancelRetry() {
-  await daemonInvoke("cancel_retry");
+  await cancelRetryApi();
 }
 async function forgetDevice(id: string) {
-  status = await daemonInvoke<DeviceStatus>("forget_device", { id });
+  status = await forgetDeviceApi<DeviceStatus>(id);
 }
 async function setDefaultDevice(id: string) {
-  await daemonInvoke("set_preferred_device", { id });
+  await setPreferredDevice(id);
 }
 async function connectDevice(id: string) {
   // If currently connected or scanning, cancel first before switching
   if (status.state === "connected" || status.state === "scanning" || status.state === "connecting") {
-    await daemonInvoke("cancel_retry");
+    await cancelRetryApi();
     // Small delay so the backend finishes teardown before starting a new session
     await new Promise((r) => setTimeout(r, 200));
   }
-  await daemonInvoke("set_preferred_device", { id });
-  await daemonInvoke("retry_connect");
+  await setPreferredDevice(id);
+  await retryConnectApi();
 }
 
 async function pairFromDashboard(id: string) {
@@ -1145,7 +1153,7 @@ async function refreshStatus() {
     // EEG session — the daemon knows nothing about the JS-side generator.
     if (status.device_id === "virtual-eeg") return;
     const prev = status.state;
-    const ds = await daemonInvoke<Partial<DeviceStatus>>("get_status");
+    const ds = await getDeviceStatus<Partial<DeviceStatus>>();
     // Merge daemon response into existing status to preserve fields the
     // daemon doesn't track (eeg samples, filter_config, accel, gyro, etc.).
     status = { ...status, ...ds };

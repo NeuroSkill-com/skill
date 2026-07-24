@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! HTTP routes for remote-access iroh tunnel management.
 //!
-//! All routes are mounted under `/v1/iroh/` by the daemon router.
+//! Mounted under `/v1/` by the daemon (paths are relative: `/iroh/...`).
 
 use axum::{
     extract::{Path, State},
@@ -9,8 +9,7 @@ use axum::{
     Json, Router,
 };
 use serde_json::Value;
-
-use crate::state::AppState;
+use skill_daemon_state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()

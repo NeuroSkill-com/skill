@@ -41,10 +41,13 @@ hound      = { version = "3", optional = true }
 neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }
 
 # KittenTTS via rlx-kittentts (native RLX graph — no ONNX Runtime).
-# Windows skips the optional dep; `tts-kitten` stays in default for UX parity.
+# Active on macOS, Linux, and Windows (CPU / CUDA / wgpu per target features).
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 rlx-kittentts = { workspace = true, features = ["espeak", "native", "hf-download"], optional = true }
 rlx-whisper   = { workspace = true, features = ["tokenizer"], optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+rlx-kittentts = { workspace = true, features = ["espeak", "native", "hf-download", "cuda", "gpu"], optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 rlx-runtime   = { workspace = true, features = ["cpu", "cuda", "gpu"], optional = true }

@@ -1,7 +1,9 @@
 name: Release setup
 description: >-
-  Shared release-job bootstrap: Rust toolchain + rust-cache, Node 22 + npm ci,
-  and platform hooks (mac tools, Windows protoc, Linux Vulkan/apt/bootstrap).
+  Shared release-job bootstrap: Rust toolchain + Swatinem/rust-cache (sole CI
+  compile cache — do not re-add sccache here), Node 22 + npm ci, optional
+  frontend build, and platform hooks (mac tools, Windows protoc, Linux
+  Vulkan/apt/bootstrap).
 
 inputs:
   target:
@@ -39,6 +41,10 @@ inputs:
     description: cache-apt-pkgs-action version key (bump to bust apt cache).
     required: false
     default: tauri-release-linux-v7
+  build-frontend:
+    description: When "true", run npm run build + verify:tauri:frontend after npm ci.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -86,6 +92,8 @@ runs:
       with:
         targets: ${{ inputs.target }}
 
+    # Sole CI compile cache. Local builds may still use sccache via tauri-build.js;
+    # do not add Mozilla sccache-action here (dual caches thrash and hide misses).
     - name: Cache Cargo registry + build artifacts
       uses: Swatinem/rust-cache@v2.9.1
       with:
@@ -121,3 +129,11 @@ runs:
       if: inputs.windows-protoc == 'true'
       shell: bash
       run: node scripts/ci.mjs install-protoc-windows
+
+    - name: Build frontend
+      if: inputs.build-frontend == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm run build
+        npm run -s verify:tauri:frontend

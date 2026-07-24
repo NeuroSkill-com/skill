@@ -14,6 +14,7 @@ import { Button } from "$lib/components/ui/button";
 import { ChipGroup } from "$lib/components/ui/chip-group";
 import { Progress } from "$lib/components/ui/progress";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { getDeviceStatus } from "$lib/daemon/devices";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { daemonStatus } from "$lib/daemon/status.svelte";
 import { onDaemonEvent } from "$lib/daemon/ws";
@@ -173,7 +174,7 @@ async function startCalibration() {
 
   // Check daemon connectivity before starting
   try {
-    await daemonInvoke("get_status");
+    await getDeviceStatus();
   } catch (e) {
     ttsSpeak("Error: Daemon is not reachable. Please start the daemon and try again.");
     return;
@@ -288,7 +289,7 @@ onMount(async () => {
 
   // Electrode signal quality
   try {
-    const s = await daemonInvoke<DeviceStatus>("get_status");
+    const s = await getDeviceStatus<DeviceStatus>();
     elecQuality = s.channel_quality;
     museConnected = s.state === "connected";
   } catch (e) {}

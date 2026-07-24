@@ -191,7 +191,9 @@ pub struct LlmConfig {
     pub mtp_capable: bool,
 
     // ── RLX experimental runtime ─────────────────────────────────────────────
-    /// RLX device tag: `"cpu"`, `"metal"`, `"mlx"`, `"gpu"`, `"cuda"`, etc.
+    /// RLX device tag: `"auto"`, `"cpu"`, `"metal"`, `"mlx"`, `"gpu"`, `"cuda"`,
+    /// etc. On Windows/Linux, `"auto"` (the default) prefers CUDA when a
+    /// driver is present, then wgpu, then CPU.
     #[serde(default = "default_rlx_device")]
     pub rlx_device: String,
 
@@ -235,7 +237,8 @@ fn default_rlx_device() -> String {
     if cfg!(target_os = "macos") {
         "metal".into()
     } else {
-        "cpu".into()
+        // Win/Linux: pick CUDA when the driver is present, else wgpu, else CPU.
+        "auto".into()
     }
 }
 fn default_rlx_max_seq() -> usize {

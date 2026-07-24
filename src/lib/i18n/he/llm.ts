@@ -63,7 +63,7 @@ const llm: Record<string, string> = {
   "llm.hfSearch.showReadme": "הצג README",
   "llm.hfSearch.hideReadme": "הסתר README",
   "llm.noFeature": "תמיכת LLM לא קומפלה.",
-  "llm.noFeatureHint": "בנה מחדש עם --features llm כדי להפעיל את השרת המוטמע התואם OpenAI.",
+  "llm.noFeatureHint": "בנה מחדש עם daemon עם GPU (--features apple|linux|windows) כדי להפעיל את השרת המוטמע התואם OpenAI.",
   "llm.endpoints.title": "נקודות קצה תואמות OpenAI",
   "llm.endpoints.hint": "כל נקודות הקצה מוגשות באותו פורט כמו WebSocket / REST API.",
 
@@ -172,7 +172,7 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} GB",
   "llm.localPath": "נתיב מקומי",
   "llm.inference.gpuLayers": "שכבות GPU",
-  "llm.inference.gpuLayersDesc": "שכבות לפריקה ל-GPU (0 = CPU בלבד). דורש llm-metal / llm-cuda.",
+  "llm.inference.gpuLayersDesc": "שכבות לפריקה ל-GPU (0 = CPU בלבד). דורש בניית daemon עם GPU (apple / linux / windows).",
   "llm.inference.ctxSize": "גודל הקשר",
   "llm.inference.ctxSizeDesc": "גודל KV-cache בטוקנים (ריק = ברירת מחדל של המודל).",
   "llm.inference.parallel": "מקסימום בקשות במקביל",

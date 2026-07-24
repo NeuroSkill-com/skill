@@ -24,6 +24,7 @@ import {
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import { daemonGet, daemonPost } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { renameChatSession } from "$lib/daemon/chat";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import {
   dateToCompactKey,
@@ -650,7 +651,7 @@ function saveSummaryToChat(summary: string) {
       const sid = res?.id ?? 0;
       if (sid > 0) {
         ixLlmSessionId = sid;
-        await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` }).catch(() => {});
+        await renameChatSession(sid, `Search: ${ixQuery}`).catch(() => {});
         await daemonInvoke("save_chat_message", {
           sessionId: sid,
           role: "user",
@@ -3736,7 +3737,7 @@ Reference specific metrics and timestamps.`;
                               sid = res?.id ?? 0;
                               if (sid > 0) {
                                 ixLlmSessionId = sid;
-                                await daemonInvoke("rename_chat_session", { id: sid, title: `Search: ${ixQuery}` });
+                                await renameChatSession(sid, `Search: ${ixQuery}`);
                                 await daemonInvoke("save_chat_message", { sessionId: sid, role: "user", content: ixLlmPrompt, thinking: null });
                                 const ssMarkdown = buildScreenshotMarkdown();
                                 const visionSection = ixLlmVisionSummary ? `\n\n---\n\n**Screenshot Analysis**\n\n${ixLlmVisionSummary}` : "";

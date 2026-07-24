@@ -22,7 +22,11 @@ header() { printf "\n${YEL}━━━ %s ━━━${RST}\n" "$1"; }
 TEST_PORT=19444
 TEST_ADDR="127.0.0.1:${TEST_PORT}"
 PROJ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DAEMON_BIN="${PROJ_ROOT}/src-tauri/target/debug/skill-daemon"
+HOST_TRIPLE="$(rustc -vV 2>/dev/null | awk -F': ' '/^host:/{print $2}')"
+DAEMON_BIN="${PROJ_ROOT}/src-tauri/target/${HOST_TRIPLE}/debug/skill-daemon"
+if [[ ! -x "${DAEMON_BIN}" ]]; then
+  DAEMON_BIN="${PROJ_ROOT}/src-tauri/target/debug/skill-daemon"
+fi
 PLIST_PATH="$HOME/Library/LaunchAgents/com.skill.daemon.plist"
 LOG_DIR="$HOME/Library/Logs/NeuroSkill"
 TOKEN_PATH="$HOME/Library/Application Support/skill/daemon/auth.token"
@@ -101,10 +105,16 @@ trap cleanup EXIT
 
 # ── Build if needed ──────────────────────────────────────────────────────────
 if [[ ! -x "${DAEMON_BIN}" ]]; then
-  echo "Building skill-daemon in debug mode..."
-  (cd "${PROJ_ROOT}" && cargo build -p skill-daemon) || {
+  echo "Building skill-daemon (OS umbrella via compile-product)…"
+  (cd "${PROJ_ROOT}" && node scripts/compile-product.mjs --debug --skip-app --no-verify-features) || {
     echo "Build failed"; exit 1
   }
+  # Refresh path after compile-product (always uses --target <host>).
+  HOST_TRIPLE="$(rustc -vV 2>/dev/null | awk -F': ' '/^host:/{print $2}')"
+  DAEMON_BIN="${PROJ_ROOT}/src-tauri/target/${HOST_TRIPLE}/debug/skill-daemon"
+  if [[ ! -x "${DAEMON_BIN}" ]]; then
+    DAEMON_BIN="${PROJ_ROOT}/src-tauri/target/debug/skill-daemon"
+  fi
 fi
 
 echo "Daemon binary: ${DAEMON_BIN}"

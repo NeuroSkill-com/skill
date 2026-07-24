@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "GPU шари",
-    "desc": "Шари для офлоаду на GPU (0 = лише CPU). Потрібно llm-metal / llm-cuda."
+    "desc": "Шари для офлоаду на GPU (0 = лише CPU). Потрібен GPU-збірник демона (apple / linux / windows)."
   },
   {
     "tab": "llm",

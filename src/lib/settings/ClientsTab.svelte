@@ -9,6 +9,7 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { SettingsCard } from "$lib/components/ui/settings-card";
 import { getApiToken, getWsPort } from "$lib/daemon/client";
 import { daemonGet, daemonPost } from "$lib/daemon/http";
+import { createAuthToken, type TokenAcl } from "$lib/daemon/tokens";
 import { t } from "$lib/i18n/index.svelte";
 
 type Totp = { id: string; name: string; created_at: number; revoked_at?: number | null; last_used_at?: number | null };
@@ -184,13 +185,13 @@ async function createInvite() {
 
     // Create a scoped API token for the paired device so it can
     // authenticate directly with the daemon HTTP/WS endpoints.
-    const { daemonInvoke } = await import("$lib/daemon/invoke-proxy");
-    const acl = inviteScope === "full" ? "admin" : inviteScope === "read" ? "read_only" : "data";
-    const deviceToken = await daemonInvoke<{ token: string }>("create_auth_token", {
-      name: `Phone (${new Date().toLocaleDateString()})`,
+    const acl: TokenAcl =
+      inviteScope === "full" ? "admin" : inviteScope === "read" ? "read_only" : "data";
+    const deviceToken = await createAuthToken(
+      `Phone (${new Date().toLocaleDateString()})`,
       acl,
-      expiry: "quarter",
-    });
+      "quarter",
+    );
 
     const r = await api<PhoneInviteResponse>("/v1/iroh/phone-invite", "POST", {
       name: "Invite",

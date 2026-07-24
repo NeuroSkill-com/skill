@@ -32,7 +32,10 @@ use crate::types::LlmToolConfig;
 
 // Re-export public API items that were previously accessible from `exec`.
 pub use helpers::{enforce_path_integrity, resolve_tool_path, retry_with_backoff};
-pub use safety::{check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook};
+pub use safety::{
+    check_bash_safety, check_path_safety, install_native_approval_hooks, request_tool_approval, set_bash_edit_hook,
+    BashEditHook,
+};
 pub use truncate::truncate_text;
 
 // ── Public execution entry point ──────────────────────────────────────────────

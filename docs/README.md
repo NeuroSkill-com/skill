@@ -15,7 +15,7 @@ This directory contains long-form project documentation.
 
 ## Developer setup
 
-- [DEVELOPMENT.md](./DEVELOPMENT.md) — setup/build/release quick guide
+- [DEVELOPMENT.md](./DEVELOPMENT.md) — setup/build/release (`VERSION` is the product version source of truth)
 - [LINUX.md](./LINUX.md) — Linux prerequisites and packaging
 - [WINDOWS.md](./WINDOWS.md) — Windows prerequisites and build notes
 - [API.md](./API.md) — WebSocket + HTTP API overview

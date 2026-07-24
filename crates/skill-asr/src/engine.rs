@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //! Real ASR+VAD engine — only compiled when `cfg(asr_active)` (feature `asr` on a
-//! non-Windows target). Microphone capture via `cpal`, streaming voice-activity
+//! desktop OS). Microphone capture via `cpal`, streaming voice-activity
 //! detection via `rlx-vad` (Silero), transcription via `rlx-whisper`.
 //!
 //! Lifecycle: [`spawn`] starts a dedicated OS thread that owns the (non-`Send`)
@@ -406,23 +406,36 @@ fn push_transcript(runner: &mut WhisperRunner, pcm: &[f32], out: &mut Vec<String
     }
 }
 
-/// Whisper inference device. Prefers Metal when the backend is compiled in and
-/// available (Apple Silicon) — rlx-whisper runs the mel encoder on the GPU and
-/// keeps the decoder on CPU. Falls back to CPU otherwise. `SKILL_ASR_DEVICE=cpu`
-/// forces CPU. Safe regardless of features: `is_available` returns false when
-/// the Metal backend isn't linked.
+/// ASR inference device. Honour `SKILL_ASR_DEVICE` (`cpu` / `metal` / `mlx` /
+/// `cuda` / `rocm` / `gpu` / `auto`); otherwise pick the first compiled-in
+/// accelerator that reports available (Metal → CUDA → MLX → wgpu → CPU).
 fn asr_device() -> Device {
-    if std::env::var("SKILL_ASR_DEVICE")
-        .map(|v| v.eq_ignore_ascii_case("cpu"))
-        .unwrap_or(false)
-    {
-        return Device::Cpu;
+    use rlx_runtime::device_ext::is_available;
+
+    if let Ok(v) = std::env::var("SKILL_ASR_DEVICE") {
+        let v = v.trim().to_ascii_lowercase();
+        if !v.is_empty() && v != "auto" {
+            if v == "cpu" {
+                return Device::Cpu;
+            }
+            let explicit = match v.as_str() {
+                "metal" => Device::Metal,
+                "mlx" => Device::Mlx,
+                "cuda" => Device::Cuda,
+                "rocm" => Device::Rocm,
+                "gpu" | "vulkan" | "wgpu" => Device::Gpu,
+                _ => Device::Cpu,
+            };
+            if explicit == Device::Cpu || is_available(explicit) {
+                return explicit;
+            }
+        }
     }
-    if rlx_runtime::device_ext::is_available(Device::Metal) {
-        Device::Metal
-    } else {
-        Device::Cpu
-    }
+
+    [Device::Metal, Device::Cuda, Device::Mlx, Device::Gpu]
+        .into_iter()
+        .find(|&d| is_available(d))
+        .unwrap_or(Device::Cpu)
 }
 
 fn build_input_stream(

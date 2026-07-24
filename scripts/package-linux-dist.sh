@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 target=""
 skip_build=0
-features="llm-vulkan"
+features="custom-protocol"
 output_root=""
 
 while [[ $# -gt 0 ]]; do
@@ -50,7 +50,7 @@ if [[ -z "$output_root" ]]; then
   output_root="$ROOT_DIR/dist/linux/$target"
 fi
 
-version="$(node -p "JSON.parse(require('fs').readFileSync('$ROOT_DIR/package.json','utf8')).version")"
+version="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 binary_path="$ROOT_DIR/src-tauri/target/$target/release/skill"
 resources_dir="$ROOT_DIR/src-tauri/resources"
 
@@ -106,8 +106,8 @@ bundle_sidecar() {
   return 1
 }
 
-bundle_sidecar skill-daemon || true
-bundle_sidecar skill-tty || true
+bundle_sidecar skill-daemon
+bundle_sidecar skill-tty
 
 # ── Bundle ONNX Runtime shared library ───────────────────────────────────────
 # ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.

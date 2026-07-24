@@ -20,7 +20,7 @@
 
 import { execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { baseVersion, bumpVersion } from "./version-utils.mjs";
+import { baseVersion, bumpVersion, readVersionFile } from "./version-utils.mjs";
 
 // GitHub caps PR/issue bodies at 65_536 chars. Leave headroom for the
 // surrounding template; truncate the embedded notes if they exceed this.
@@ -93,8 +93,13 @@ function gitTagExistsOnAnyRemote(tag) {
   return false;
 }
 
-function gitHeadPackageVersion() {
-  // Read package.json at HEAD to confirm the current commit is the bump for `currentVersion`.
+function gitHeadVersion() {
+  // Prefer VERSION at HEAD (source of truth); fall back to package.json for older commits.
+  const versionOut = sh("git", ["show", "HEAD:VERSION"], { capture: true });
+  if (versionOut.status === 0) {
+    const line = versionOut.stdout.trim().split(/\r?\n/)[0]?.trim() ?? "";
+    if (line) return line;
+  }
   const out = sh("git", ["show", "HEAD:package.json"], { capture: true });
   if (out.status !== 0) return null;
   try {
@@ -118,12 +123,12 @@ function ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranc
 
   if (haveLocal && haveRemote) return; // Nothing to recover.
 
-  // Sanity: HEAD's package.json must match `currentVersion`. If it doesn't,
+  // Sanity: HEAD's VERSION must match `currentVersion`. If it doesn't,
   // we're not on the bump commit and tagging here would produce a wrong tag.
-  const headVersion = gitHeadPackageVersion();
+  const headVersion = gitHeadVersion();
   if (headVersion !== currentVersion) {
     fail(
-      `Cannot self-heal: HEAD's package.json version (${headVersion ?? "unknown"}) doesn't match the ` +
+      `Cannot self-heal: HEAD VERSION (${headVersion ?? "unknown"}) doesn't match the ` +
         `current version (${currentVersion}). Resolve manually: tag the right commit, push, then re-run.`,
     );
   }
@@ -236,8 +241,7 @@ async function main() {
     fail("Working tree is dirty. Commit or stash changes before running release.");
   }
 
-  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-  const currentVersion = pkg.version;
+  const currentVersion = readVersionFile();
   const newVersion = bumpVersion(currentVersion, { rc });
   const base = baseVersion(newVersion);
   const branchName = `release/${base}`;

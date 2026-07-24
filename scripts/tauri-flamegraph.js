@@ -186,12 +186,12 @@ if (isLinux) {
 }
 
 // ── Determine features ──────────────────────────────────────────────────────
+// LLM GPU backends live on skill-daemon (OS umbrellas apple/linux/windows),
+// not the Tauri `skill` binary. Leave empty unless the caller passed --features.
 
 let features = "";
 if (!extraCargoArgs.includes("--features") && !extraCargoArgs.includes("--no-default-features")) {
-  if (isLinux || isWin) {
-    features = "llm-vulkan";
-  }
+  // no default GPU feature injection
 }
 
 // ── Enable debug symbols ─────────────────────────────────────────────────────

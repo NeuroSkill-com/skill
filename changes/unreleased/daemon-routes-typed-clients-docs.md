@@ -1,0 +1,4 @@
+- **Daemon routes extraction**: move iroh HTTP routes into `skill-daemon-routes` (first non-stub module); document remaining extraction blockers in the crate and `docs/architecture.md`.
+- **Typed daemon clients**: migrate tokens, chat rename/cancel-tool, device prefer/forget/retry/status call sites off `daemonInvoke`; fix `tokens.ts` ACL wire types to snake_case; add `npm run check:typed-daemon-clients`.
+- **Docs**: rewrite `docs/LLM.md` and `docs/HOOKS.md` for RLX-in-daemon ownership; correct `docs/AI.md` llama.cpp claim; align Node prerequisite to ≥20 (`docs/DEVELOPMENT.md`, `package.json` engines).
+- **Workspace hygiene**: remove duplicate `Cargo.toml` workspace members (`skill-daemon`, `skill-daemon-common`).

@@ -8,6 +8,35 @@ use super::truncate::truncate_text;
 use crate::search;
 use crate::types::LlmToolConfig;
 
+/// Block obvious SSRF targets (loopback / link-local / RFC1918 / metadata).
+fn blocked_fetch_url(url: &str) -> Option<String> {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return Some("invalid url".into());
+    };
+    let host = parsed.host_str()?.to_lowercase();
+    if matches!(
+        host.as_str(),
+        "localhost" | "127.0.0.1" | "::1" | "0.0.0.0" | "metadata.google.internal"
+    ) {
+        return Some(format!("refusing to fetch local/metadata host `{host}`"));
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
+            return Some(format!("refusing to fetch non-public address `{ip}`"));
+        }
+        if let std::net::IpAddr::V4(v4) = ip {
+            if v4.is_private() || v4.is_link_local() {
+                return Some(format!("refusing to fetch private address `{ip}`"));
+            }
+            // AWS/GCP/Azure link-local metadata
+            if v4.octets() == [169, 254, 169, 254] {
+                return Some("refusing to fetch cloud metadata address".into());
+            }
+        }
+    }
+    None
+}
+
 // ── web_search ────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
@@ -258,6 +287,9 @@ pub(crate) async fn exec_web_fetch(args: &Value, allowed_tools: &LlmToolConfig) 
         .to_string();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return json!({ "ok": false, "tool": "web_fetch", "error": "url must start with http:// or https://" });
+    }
+    if let Some(reason) = blocked_fetch_url(&url) {
+        return json!({ "ok": false, "tool": "web_fetch", "error": reason });
     }
 
     let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);

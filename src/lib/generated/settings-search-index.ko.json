@@ -280,7 +280,7 @@
     "tab": "llm",
     "key": "llm.inference.gpuLayers",
     "label": "GPU 레이어",
-    "desc": "GPU에 오프로드할 레이어 수 (0 = CPU 전용, 높음 = GPU). llm-metal / llm-cuda 기능이 필요합니다."
+    "desc": "GPU에 오프로드할 레이어 수 (0 = CPU 전용, 높음 = GPU). GPU 지원 daemon 빌드(apple / linux / windows)가 필요합니다."
   },
   {
     "tab": "llm",

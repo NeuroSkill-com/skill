@@ -1,8 +1,21 @@
 # skill-daemon
 
-Local backend daemon for Skill.
+Local backend daemon for Skill. The Tauri app is a thin UI client; persistent
+work (devices, LLM, ASR, embeddings, HTTP API) runs here.
 
 ## Run
+
+Product / release builds must enable **exactly one** OS umbrella. Linux/Windows
+ship CUDA + wgpu so runtime can fall back when CUDA is unavailable:
+
+```bash
+cargo run -p skill-daemon --features apple          # macOS (Metal + MLX)
+cargo run -p skill-daemon --features linux          # Linux CUDA + wgpu
+cargo run -p skill-daemon --features windows        # Windows CUDA + wgpu
+# Or: node scripts/compile-product.mjs --skip-app
+```
+
+Dev defaults omit GPU umbrellas (CPU / leaf features as needed):
 
 ```bash
 cargo run -p skill-daemon
@@ -11,7 +24,7 @@ cargo run -p skill-daemon
 Optional custom bind address:
 
 ```bash
-SKILL_DAEMON_ADDR=127.0.0.1:18444 cargo run -p skill-daemon
+SKILL_DAEMON_ADDR=127.0.0.1:18444 cargo run -p skill-daemon --features apple
 ```
 
 ## Endpoints

@@ -1,7 +1,8 @@
 # install-vulkan-sdk.ps1
 #
-# Ensures the LunarG Vulkan SDK is present on Windows before a build that
-# uses the `llm-vulkan` feature flag.
+# Ensures the LunarG Vulkan SDK is present on Windows.
+# Optional for most Skill builds — LLM GPU backends are selected via the
+# skill-daemon OS umbrella (`--features windows`), not a Tauri `llm-vulkan` flag.
 #
 # Detection order (first hit wins -- the script exits immediately if found):
 #   1. VULKAN_SDK environment variable points to a directory that contains

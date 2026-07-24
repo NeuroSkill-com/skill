@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Rust stable (>= 1.95 — run `rustup update stable` if clippy fails)
-- Node.js 18+
+- Node.js ≥ 20 (CI uses 22; match CONTRIBUTING.md)
 - Tauri CLI v2
 - Python 3 (optional — only for `huggingface_hub` model downloads)
 - Platform-specific build tools:
@@ -113,6 +113,11 @@ You do **not** need a local RLX checkout for a normal build. Cargo resolves `rlx
 
 CI does not clone RLX separately. Jobs use the committed `Cargo.lock` git pins; Cargo fetches `https://github.com/MIT-RLX/rlx.git` and `rlx-models.git` as needed.
 
+`ci.yml` gates PRs/branches on VERSION sync + clippy/frontend tests. Full signed
+product builds (daemon OS umbrella via `compile-product`: `apple` /
+`linux` / `windows`) run on release tags via
+`.github/actions/release-setup` + the per-OS release workflows, or via Preview Build.
+
 ## Data health check
 
 ```bash
@@ -208,7 +213,8 @@ Version strings follow SemVer with an optional `-rc.N` pre-release suffix:
 | `x.y.z`          | stable  | `0.5.1`          |
 | `x.y.z-rc.N`     | rc      | `0.5.1-rc.3`     |
 
-`bump` is the low-level primitive that mutates version files (`package.json`,
+`bump` is the low-level primitive that writes the repo-root `VERSION` file
+(source of truth) and syncs derived version fields (`package.json`,
 `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`), runs preflight (clippy +
 tests), compiles `changes/unreleased/*.md` into a versioned release file, and
 creates a single commit whose message is the version string itself (this is
@@ -226,8 +232,8 @@ npm run bump 1.2.0-rc.1       # explicit version
 catches the "I bumped but forgot to tag" case. Use `--force` to bypass during
 recovery.
 
-`tag` creates `v${pkg.version}` and pushes it to every git remote — works
-unchanged for both stable and RC versions.
+`tag` creates `v${VERSION}` (from the repo-root `VERSION` file) and pushes it
+to every git remote — works unchanged for both stable and RC versions.
 
 ```bash
 npm run tag
@@ -367,11 +373,14 @@ exact source state.
 
 | File / workflow                               | Role                                                       |
 |-----------------------------------------------|------------------------------------------------------------|
+| `VERSION`                                     | Product version source of truth                            |
 | `scripts/release.js`                          | Orchestrator: branch + bump + push + tag + PR              |
-| `scripts/bump.js`                             | Mutates version files, preflight, version-string commit    |
-| `scripts/tag.js`                              | `git tag v${pkg.version}` + push                           |
-| `scripts/ci.mjs cmdResolveVersion`            | Emits `channel`/`prerelease` outputs for downstream steps  |
-| `scripts/ci.mjs cmdUpdateLatestJson`          | Merges `latest.json` per platform; mirrors to `rc-latest`  |
+| `scripts/bump.js`                             | Writes VERSION + derived files, preflight, version commit  |
+| `scripts/tag.js`                              | `git tag v${VERSION}` + push                               |
+| `scripts/ci.mjs resolve-version`              | Validates VERSION (+ derived); emits channel/prerelease    |
+| `scripts/ci.mjs update-latest-json`           | Merges `latest.json` per platform; mirrors to `rc-latest`  |
+| `.github/actions/release-setup`               | Shared Rust + rust-cache + Node (+ optional frontend)      |
+| `scripts/compile-product.mjs`                 | Shared daemon (OS umbrella) → tty → app (`custom-protocol`) |
 | `.github/workflows/release-{mac,linux,win}.yml` | Build + sign + notarize + publish; tag pattern allows `-rc.N` |
 | `.github/workflows/promote.yml`               | Push-to-main → flip prerelease flag on matching tag        |
 | `.github/workflows/pr-checks.yml`             | Soft reminder on `release`-labeled PRs to use rebase/squash|

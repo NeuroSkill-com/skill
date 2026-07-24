@@ -19,7 +19,7 @@
 //!   transcript). Routing is interpreted by the daemon; the engine itself only
 //!   produces transcripts.
 //!
-//! When built without the `asr` feature (or on Windows) the public API is a set
+//! When built without the `asr` feature the public API is a set
 //! of no-ops that report "unavailable" so callers compile unchanged.
 
 use std::path::{Path, PathBuf};
@@ -198,7 +198,7 @@ fn default_skill_dir_fallback() -> PathBuf {
     }
 }
 
-/// Whether this build ships the real engine (feature `asr`, non-Windows).
+/// Whether this build ships the real engine (feature `asr` on a desktop OS).
 pub const fn is_available() -> bool {
     cfg!(asr_active)
 }

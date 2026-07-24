@@ -6,7 +6,6 @@ pub mod asr;
 pub mod brain;
 pub mod core;
 pub mod history;
-pub(crate) mod iroh;
 pub mod labels;
 pub mod models_validate;
 pub mod search;

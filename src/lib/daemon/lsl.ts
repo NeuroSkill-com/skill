@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 import { daemonInvoke } from "./invoke-proxy";
+import { getDeviceStatus } from "./devices";
 
 export interface LslPairStreamRequest {
   sourceId: string;
@@ -151,7 +152,7 @@ export async function lslGetIdleTimeout(): Promise<number | null> {
 }
 
 export function getStatus<T>(): Promise<T> {
-  return daemonInvoke<T>("get_status");
+  return getDeviceStatus<T>();
 }
 
 export async function listSecondarySessions<T>(): Promise<T[]> {
