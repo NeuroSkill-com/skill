@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 import { execSync, spawn } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
 import { bumpVersion, validateVersion } from "./version-utils.mjs";
 
@@ -13,6 +21,76 @@ function readText(path) {
 
 function writeText(path, content) {
   writeFileSync(path, content, "utf8");
+}
+
+// Sibling rlx overlay written by scripts/ensure-rlx.sh (outside the repo).
+// Must match MARK in that script.
+const RLX_OVERLAY_MARK = "# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)";
+
+function rlxOverlayPath() {
+  return join(dirname(process.cwd()), ".cargo", "config.toml");
+}
+
+function isManagedRlxOverlay(path) {
+  return existsSync(path) && readText(path).includes(RLX_OVERLAY_MARK);
+}
+
+/**
+ * Sync Cargo.lock to the bumped crate versions against GitHub git pins.
+ *
+ * Local `scripts/rlx local` marks Cargo.lock skip-worktree and path-patches
+ * rlx* onto sibling checkouts. That made the old `cargo generate-lockfile`
+ * refresh invisible to `git add`, so RC tags shipped a stale lock (skill
+ * version still at the previous RC) and CI `--locked` builds failed.
+ *
+ * Here we: stash the managed overlay → clear skip-worktree → `cargo metadata`
+ * (keeps existing git revs; only syncs package versions / unused patches) →
+ * restore the overlay. Caller must `git add` while skip-worktree is still off.
+ */
+function refreshCargoLockForRelease() {
+  const overlay = rlxOverlayPath();
+  const stash = `${overlay}.bump-stash`;
+  let stashed = false;
+
+  // Recover a stash left by a crashed prior bump before we do anything else.
+  if (existsSync(stash) && !existsSync(overlay)) {
+    renameSync(stash, overlay);
+    console.log("[bump] Restored rlx overlay left from a previous interrupted bump");
+  }
+
+  if (isManagedRlxOverlay(overlay)) {
+    renameSync(overlay, stash);
+    stashed = true;
+    console.log("[bump] Stashed local rlx overlay for GitHub-pinned Cargo.lock refresh");
+  }
+
+  try {
+    try {
+      execSync("git update-index --no-skip-worktree Cargo.lock", { stdio: "ignore" });
+    } catch {
+      // Index flag may already be clear, or Cargo.lock absent in odd checkouts.
+    }
+
+    // Prefer metadata over `generate-lockfile`: the latter re-resolves every
+    // unpinned git dep to tip-of-default-branch and would float rlx on every RC.
+    console.log("[bump] Refreshing Cargo.lock (cargo metadata, GitHub git pins)…");
+    execSync("cargo metadata --format-version=1", { stdio: "inherit" });
+  } finally {
+    if (stashed && existsSync(stash)) {
+      renameSync(stash, overlay);
+      console.log("[bump] Restored local rlx overlay");
+    }
+  }
+}
+
+function protectCargoLockIfOverlayActive() {
+  if (!isManagedRlxOverlay(rlxOverlayPath())) return;
+  try {
+    execSync("git update-index --skip-worktree Cargo.lock", { stdio: "ignore" });
+    console.log("[bump] Re-marked Cargo.lock skip-worktree (local rlx overlay active)");
+  } catch {
+    // ignore
+  }
 }
 
 // Version helpers live in scripts/version-utils.mjs so bump.js, release.js,
@@ -763,7 +841,10 @@ async function main() {
     for (const [category, count] of Object.entries(result.categoryCounts)) {
       console.log(`[bump]   - ${category}: ${count}`);
     }
-    execSync("cargo generate-lockfile", { stdio: "inherit" });
+
+    // Keep Cargo.lock in sync with the bumped skill version so CI `--locked`
+    // builds (npm run release → tag → Release workflows) don't fail.
+    refreshCargoLockForRelease();
 
     // ── optionally clean Rust build artifacts to free disk space ──────────────
 
@@ -776,9 +857,13 @@ async function main() {
     execSync("npm run build:settings-index", { stdio: "inherit" });
 
     // ── create bump commit ────────────────────────────────────────────────────
+    // Cargo.lock must be addable here: refreshCargoLockForRelease cleared
+    // skip-worktree. Re-protect after commit if the local rlx overlay is back.
 
     execSync("git add -A", { stdio: "inherit" });
+    execSync("git add Cargo.lock", { stdio: "inherit" });
     execSync(`git commit -m "${newVersion}"`, { stdio: "inherit" });
+    protectCargoLockIfOverlayActive();
 
     console.log(`\n\x1b[1;32m[bump] ✓ ${newVersion} committed successfully\x1b[0m`);
   } catch (err) {
@@ -790,6 +875,7 @@ async function main() {
         execSync(`git checkout -- .`, { stdio: "inherit" });
         // Remove any untracked files created during bump (e.g. release archive)
         execSync(`git clean -fd changes/releases`, { stdio: "ignore" });
+        protectCargoLockIfOverlayActive();
       } catch (revertErr) {
         console.error(`\x1b[31m[bump] Revert failed: ${revertErr.message}. Manual cleanup may be needed.\x1b[0m`);
         console.error(`[bump] To restore manually: git reset --hard ${headBefore}`);
