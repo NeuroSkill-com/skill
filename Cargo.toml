@@ -103,6 +103,9 @@ rlx-nemo         = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git" }
 rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git" }
+# Transitive crates.io pins (e.g. tribev2 → rlx-models-core 0.2.1) must not
+# mix with git-patched rlx (LayerKvCache API). Force the git package.
+rlx-models-core  = { git = "https://github.com/MIT-RLX/rlx-models.git" }
 
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #
