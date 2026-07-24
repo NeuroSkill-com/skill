@@ -17,9 +17,9 @@
 //!       Qwen3.6-27B-Q4_K_M-mtp.gguf
 //!
 //! Run with:
-//!   cargo test -p skill-llm --features llm --test llm_mtp_e2e -- --nocapture
+//!   cargo test -p skill-llm --features llm-rlx-metal --test llm_mtp_e2e -- --nocapture
 
-#![cfg(feature = "llm")]
+#![cfg(feature = "llm-rlx")]
 
 use std::sync::{atomic::Ordering, Arc};
 use std::time::{Duration, Instant};
