@@ -171,7 +171,7 @@ version = "2"
 version = "1"
 
 [dependencies.rlx]
-version = "0.2.5"
+version = "0.2.14"
 optional = true
 default-features = false
 
