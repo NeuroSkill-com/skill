@@ -171,6 +171,23 @@ const onboarding: Record<string, string> = {
   "onboarding.screenRecDesc":
     "Requise sur macOS pour capturer les fenêtres d'autres applications pour le système de captures d'écran. Sans cette autorisation, les captures peuvent être vides.",
   "onboarding.screenRecOpen": "Ouvrir les réglages",
+
+  "onboarding.doneOptionalTitle": "Configurer plus tard ?",
+  "onboarding.doneOptionalBody": "La calibration, les modèles d’IA locaux, les permissions et les extensions sont facultatifs — configurez-les quand vous voulez dans Réglages ou ci-dessous.",
+  "onboarding.doneOptionalCta": "Configuration facultative",
+  "onboarding.modelsSkipPrimary": "Passer pour l’instant",
+  "onboarding.modelsDownloadLater": "Vous pourrez télécharger des modèles plus tard dans Réglages → LLM et Voix.",
+  "onboarding.disclaimerAck": "Je comprends que {app} est réservé à la recherche et n’est pas un dispositif médical.",
+  "onboarding.openLive": "Ouvrir le tableau de bord Direct",
+
+  // ── Auto-synced from en/ (2026-07-25) ──
+  // TODO: translate the following 6 key(s) into fr
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
 };
 
 export default onboarding;

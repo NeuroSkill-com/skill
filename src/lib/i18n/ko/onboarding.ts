@@ -158,6 +158,23 @@ const onboarding: Record<string, string> = {
   "onboarding.next": "다음",
   "onboarding.getStarted": "시작하기",
   "onboarding.finish": "완료",
+
+  "onboarding.doneOptionalTitle": "나중에 더 설정할까요?",
+  "onboarding.doneOptionalBody": "보정, 로컬 AI 모델, 권한, 확장 기능은 선택 사항입니다. 설정 또는 아래에서 언제든 구성할 수 있습니다.",
+  "onboarding.doneOptionalCta": "선택 설정",
+  "onboarding.modelsSkipPrimary": "지금은 건너뛰기",
+  "onboarding.modelsDownloadLater": "모델은 나중에 설정 → LLM 및 음성에서 다운로드할 수 있습니다.",
+  "onboarding.disclaimerAck": "{app}은(는) 연구용이며 의료기기가 아님을 이해합니다.",
+  "onboarding.openLive": "라이브 대시보드 열기",
+
+  // ── Auto-synced from en/ (2026-07-25) ──
+  // TODO: translate the following 6 key(s) into ko
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
 };
 
 export default onboarding;

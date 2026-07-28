@@ -209,7 +209,7 @@ const search: Record<string, string> = {
   "search.umapShow": "3D 地图",
   "search.openSession": "打开会话",
 
-  "labels.title": "所有标签",
+  "labels.title": "浏览标签",
   "labels.totalLabels": "{n} 个标签",
   "labels.page": "第 {page} 页，共 {total} 页",
   "labels.noLabels": "暂无标签",
@@ -225,7 +225,7 @@ const search: Record<string, string> = {
   "labels.date": "日期",
   "labels.duration": "时长",
   "labels.updated": "已更新",
-  "labels.openLabels": "所有标签",
+  "labels.openLabels": "浏览标签",
   "labels.search.exact": "精确",
   "labels.search.exactTitle": "即时子串筛选——在您输入时匹配文本",
   "labels.search.semantic": "语义",
@@ -317,6 +317,13 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "匹配附近的截图",
 
   "search.maxTokens": "令牌",
+
+  "search.exampleFocusedCoding": "专注编程",
+  "search.exampleDrowsyAfternoon": "昏沉的下午",
+  "search.exampleMeetingStress": "会议压力",
+  "search.examplesLabel": "试用示例",
+  "search.advancedToggle": "高级",
+  "search.sourceLabel": "来源",
 };
 
 export default search;

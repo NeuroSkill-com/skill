@@ -4,6 +4,8 @@
 // Pure helper functions for the LLM settings tab.
 // Extracted so they can be unit-tested without mounting the Svelte component.
 
+import hfDownloadsCacheJson from "$lib/generated/hf-downloads-cache.json";
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
@@ -43,11 +45,22 @@ export interface ModelFamily {
   desc: string;
   tags: string[];
   vendors: string[];
+  /** Max HuggingFace Hub downloads across this family's repos (from cache). */
+  downloads: number;
   entries: LlmModelEntry[];
   mmproj: LlmModelEntry[];
   recommended: LlmModelEntry | undefined;
   downloaded: LlmModelEntry[];
 }
+
+/** Shape of `hf-downloads-cache.json` (src-tauri + src/lib/generated). */
+export interface HfDownloadsCache {
+  updated_at?: string;
+  repos?: Record<string, { downloads?: number; likes?: number; author?: string }>;
+  mlx_community_top?: Array<{ repo: string; downloads?: number; likes?: number }>;
+}
+
+export const HF_DOWNLOADS_CACHE: HfDownloadsCache = hfDownloadsCacheJson as HfDownloadsCache;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,8 +70,50 @@ export function vendorLabel(repo: string): string {
     bartowski: "Bartowski",
     unsloth: "Unsloth",
     HauhauCS: "HauhauCS",
+    "mlx-community": "MLX",
   };
   return labels[owner] ?? owner;
+}
+
+/** Hub download count for a repo from the committed cache (0 if unknown). */
+export function repoDownloads(repo: string, cache: HfDownloadsCache = HF_DOWNLOADS_CACHE): number {
+  return Number(cache.repos?.[repo]?.downloads) || 0;
+}
+
+/** Best Hub download count among a family's text-model repos (ignores mmproj). */
+export function familyDownloads(
+  family: Pick<ModelFamily, "entries">,
+  cache: HfDownloadsCache = HF_DOWNLOADS_CACHE,
+): number {
+  let best = 0;
+  for (const e of family.entries) best = Math.max(best, repoDownloads(e.repo, cache));
+  return best;
+}
+
+// ── Discovered (external-app) models ─────────────────────────────────────────
+
+/** Whether an entry was discovered from another app's cache (LM Studio, …). */
+export function isDiscovered(entry: LlmModelEntry): boolean {
+  return entry.tags.includes("discovered");
+}
+
+/** The source token of a discovered entry (the tag other than "discovered"). */
+export function discoveredSource(entry: LlmModelEntry): string {
+  return entry.tags.find((tag) => tag !== "discovered") ?? "local";
+}
+
+/** Human-facing label for a discovery source token (`lmstudio` → `LM Studio`). */
+export function sourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+    lemonade: "Lemonade",
+    hf: "HuggingFace",
+    mlx: "MLX",
+    vllm: "vLLM",
+    rlx: "RLX",
+  };
+  return labels[source] ?? "Local";
 }
 
 export function familySizeRank(tags: string[]): number {
@@ -199,9 +254,9 @@ export function tagColor(tag: string): string {
 /**
  * Build `ModelFamily[]` from a flat catalog entry list.
  * Filters out families that have no non-mmproj entries.
- * Sorted by name → primary size → size-rank tag → id.
+ * Sorted by HuggingFace Hub downloads (desc), then name → size → id.
  */
-export function buildFamilies(entries: LlmModelEntry[]): ModelFamily[] {
+export function buildFamilies(entries: LlmModelEntry[], cache: HfDownloadsCache = HF_DOWNLOADS_CACHE): ModelFamily[] {
   const map = new Map<string, ModelFamily>();
   for (const e of entries) {
     if (!map.has(e.family_id)) {
@@ -211,6 +266,7 @@ export function buildFamilies(entries: LlmModelEntry[]): ModelFamily[] {
         desc: e.family_desc || "",
         tags: [],
         vendors: [],
+        downloads: 0,
         entries: [],
         mmproj: [],
         recommended: undefined,
@@ -232,9 +288,13 @@ export function buildFamilies(entries: LlmModelEntry[]): ModelFamily[] {
       if (e.state === "downloaded") f.downloaded.push(e);
     }
   }
+  for (const f of map.values()) {
+    f.downloads = familyDownloads(f, cache);
+  }
   return Array.from(map.values())
     .filter((f) => f.entries.length > 0)
     .sort((a, b) => {
+      if (a.downloads !== b.downloads) return b.downloads - a.downloads;
       const byName = a.name.localeCompare(b.name);
       if (byName !== 0) return byName;
       const aSize = familyPrimarySize(a.entries);
@@ -285,7 +345,15 @@ export function familyOptionLabel(f: ModelFamily, activeModel: string): string {
   else if (loading) prefix = "⬇ ";
   let suffix = "";
   if (dlCount > 0 && !active) suffix = ` (${dlCount} downloaded)`;
-  return `${prefix}${f.name}${suffix}`;
+  const hub = f.downloads > 0 ? ` · ↓ ${formatHubDownloads(f.downloads)}` : "";
+  return `${prefix}${f.name}${hub}${suffix}`;
+}
+
+/** Compact Hub download count for UI (`1.2M`, `48K`, …). */
+export function formatHubDownloads(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
 }
 
 /**

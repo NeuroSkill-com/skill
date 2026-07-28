@@ -121,6 +121,41 @@ function synonymQueries(q: string): string[] {
 
 function commands(): Command[] {
   return [
+    // ── Primary shell ──────────────────────────────────────────────────
+    {
+      id: "open-live",
+      icon: "◎",
+      section: t("cmdK.sectionPrimary"),
+      label: t("cmdK.openLive"),
+      keywords: t("cmdK.kw.live"),
+      action: nav.openLive,
+    },
+    {
+      id: "open-search",
+      icon: "⌕",
+      section: t("cmdK.sectionPrimary"),
+      label: t("cmdK.openSearch"),
+      shortcut: `${mod}⇧S`,
+      keywords: t("cmdK.kw.search"),
+      action: nav.openSearch,
+    },
+    {
+      id: "open-chat",
+      icon: "✦",
+      section: t("cmdK.sectionPrimary"),
+      label: t("cmdK.openChat"),
+      keywords: t("cmdK.kw.chat"),
+      action: () => nav.openChat(),
+    },
+    {
+      id: "open-history",
+      icon: "◷",
+      section: t("cmdK.sectionPrimary"),
+      label: t("cmdK.openHistory"),
+      keywords: t("cmdK.kw.history"),
+      action: nav.openHistory,
+    },
+
     // ── Navigation ─────────────────────────────────────────────────────
     {
       id: "open-settings",
@@ -140,29 +175,12 @@ function commands(): Command[] {
       action: nav.openHelp,
     },
     {
-      id: "open-history",
-      icon: "🕐",
-      section: t("cmdK.sectionNavigation"),
-      label: t("cmdK.openHistory"),
-      keywords: t("cmdK.kw.history"),
-      action: nav.openHistory,
-    },
-    {
       id: "open-compare",
       icon: "⚖",
       section: t("cmdK.sectionNavigation"),
       label: t("cmdK.openCompare"),
       keywords: t("cmdK.kw.compare"),
       action: nav.openCompare,
-    },
-    {
-      id: "open-search",
-      icon: "🔍",
-      section: t("cmdK.sectionNavigation"),
-      label: t("cmdK.openSearch"),
-      shortcut: `${mod}⇧S`,
-      keywords: t("cmdK.kw.search"),
-      action: nav.openSearch,
     },
     {
       id: "open-label",
@@ -310,10 +328,10 @@ function commands(): Command[] {
     },
     {
       id: "open-labels",
-      icon: "🏷",
+      icon: "☰",
       section: t("cmdK.sectionNavigation"),
-      label: t("labels.openLabels"),
-      keywords: "labels annotations notes tags all browse edit delete manage",
+      label: t("cmdK.openLabels"),
+      keywords: t("cmdK.kw.labels"),
       action: nav.openLabels,
     },
     {

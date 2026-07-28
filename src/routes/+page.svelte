@@ -64,7 +64,7 @@ import {
   PpgMetrics,
 } from "$lib/dashboard";
 import { t } from "$lib/i18n/index.svelte";
-import { openBtSettings, openHistory, openLabel, openSettings, openUpdates } from "$lib/navigation";
+import { openBtSettings, openCalibration, openDownloads, openLabel, openSearch, openSettingsTab, openUpdates, openApi } from "$lib/navigation";
 import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
 import { setBtOff } from "$lib/stores/bt-status.svelte";
 import { addToast } from "$lib/stores/toast.svelte";
@@ -948,10 +948,51 @@ let recentLabel = $state<string | null>(null);
 let recentLabelAt = $state(0); // unix seconds
 
 // ── Card collapse state ────────────────────────────────────────────────────
-let ppgOpticalExpanded = $state(true);
-let imuExpanded = $state(true);
+let ppgOpticalExpanded = $state(false);
+let imuExpanded = $state(false);
 let eegChExpanded = $state(false);
 let signalExpanded = $state(false);
+
+/** Connected dashboard view — progressive disclosure of modalities. */
+type LiveView = "waveform" | "physiology" | "state";
+const LIVE_VIEW_KEY = "dashboard.liveView";
+let liveView = $state<LiveView>("waveform");
+try {
+  const stored = localStorage.getItem(LIVE_VIEW_KEY);
+  if (stored === "waveform" || stored === "physiology" || stored === "state") liveView = stored;
+} catch {
+  /* ignore */
+}
+function setLiveView(v: LiveView) {
+  liveView = v;
+  if (v === "physiology") {
+    ppgOpticalExpanded = true;
+    imuExpanded = true;
+  }
+  try {
+    localStorage.setItem(LIVE_VIEW_KEY, v);
+  } catch {
+    /* ignore */
+  }
+}
+
+const availableLiveViews = $derived.by((): LiveView[] => {
+  const views: LiveView[] = [];
+  if (hasEeg) views.push("waveform");
+  if (hasPpg || hasImuCap || hasFnirs) views.push("physiology");
+  if (hasEeg) views.push("state");
+  if (views.length === 0) views.push("waveform");
+  return views;
+});
+
+$effect(() => {
+  const avail = availableLiveViews;
+  if (!avail.includes(liveView)) {
+    setLiveView(avail[0]);
+  }
+});
+
+let streamedToastShown = $state(false);
 
 // ── Onboarding checklist ───────────────────────────────────────────────────
 // Persisted in localStorage so it survives reloads.
@@ -1052,6 +1093,46 @@ let onboardSteps = $derived([
   { key: "dndConfigured", label: t("dashboard.setupDnd"), done: onboardDone.dndConfigured },
   { key: "apiVisited", label: t("dashboard.setupApi"), done: onboardDone.apiVisited },
 ]);
+
+async function onChecklistStep(key: string) {
+  switch (key) {
+    case "devicePaired":
+      await openSettingsTab("devices");
+      break;
+    case "calibrated":
+      await openCalibration();
+      break;
+    case "firstSession":
+      // Stay on Live — recording happens here once connected
+      addToast("info", t("dashboard.gettingStarted"), t("dashboard.setupSession"), 4000);
+      break;
+    case "goalSet":
+      await openSettingsTab("goals");
+      break;
+    case "llmDownloaded":
+      await openDownloads();
+      break;
+    case "searchRun":
+      await openSearch();
+      break;
+    case "dndConfigured":
+      await openSettingsTab("goals");
+      break;
+    case "apiVisited":
+      await openApi();
+      break;
+  }
+}
+
+$effect(() => {
+  if (status.state === "connected" && hasEeg && !streamedToastShown) {
+    streamedToastShown = true;
+    addToast("success", t("shell.live"), t("dashboard.streamingToast"), 5000);
+  }
+  if (status.state !== "connected") {
+    streamedToastShown = false;
+  }
+});
 
 // Track unpaired device IDs we've already toasted about so we don't spam.
 const knownUnpairedIds = new Set<string>();
@@ -2279,14 +2360,42 @@ useWindowTitle("window.title.main");
               <div class="text-ui-sm text-muted-foreground">IMU: {imuLabels.join(" · ")}</div>
             {/if}
           </div>
-          {#if hasFnirs}
+          {#if hasFnirs && liveView === "physiology"}
             <div class="xl:col-span-2">
               <FnirsChart bind:this={fnirsChartEl} />
             </div>
           {/if}
         {/if}
 
-        {#if hasEeg}
+        <!-- Live view switcher (all connected devices) -->
+        {#if availableLiveViews.length > 1}
+          <div class="xl:col-span-2 flex items-center justify-center gap-0.5 p-0.5 rounded-lg
+                      bg-muted/80 dark:bg-white/[0.04] border border-border dark:border-white/[0.06]"
+               role="tablist" aria-label={t("dashboard.viewLabel")}>
+            {#each availableLiveViews as id (id)}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={liveView === id}
+                onclick={() => setLiveView(id)}
+                class="flex-1 px-2.5 py-1.5 rounded-md text-ui-sm font-semibold transition-colors
+                       {liveView === id
+                         ? 'bg-background dark:bg-surface-1 text-foreground shadow-sm'
+                         : 'text-muted-foreground hover:text-foreground'}"
+              >
+                {id === "waveform" ? t("dashboard.viewWaveform")
+                  : id === "physiology" ? t("dashboard.viewPhysiology")
+                  : t("dashboard.viewState")}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if hasEeg && liveView === "waveform"}
+          <div class="xl:col-span-2">
+            <BrainStateScores relaxation={relaxScore} engagement={engagementScore} />
+          </div>
+        {:else if hasEeg && liveView === "state"}
           <!-- Brain activity state (flow, fatigue, streak) -->
           <BrainCard />
 
@@ -2320,6 +2429,7 @@ useWindowTitle("window.title.main");
           <ArtifactEvents {blinkCount} {blinkRate} />
         {/if}
 
+        {#if liveView === "physiology"}
         <!-- Head Pose (IMU-equipped devices only) -->
         {#if hasImuCap}
         <HeadPoseCard pitch={headPitch} roll={headRoll} stillness={stillnessScore} {nodCount} {shakeCount} />
@@ -2391,8 +2501,9 @@ useWindowTitle("window.title.main");
           {/if}
         </div>
         {/if}
+        {/if}
 
-        {#if hasEeg}
+        {#if hasEeg && liveView === "waveform"}
           <!-- EEG channel grid -->
           <div class="rounded-xl border border-border dark:border-white/[0.04]
                       bg-muted dark:bg-surface-2 px-3 py-2 flex flex-col gap-1.5">
@@ -2520,6 +2631,7 @@ useWindowTitle("window.title.main");
           <div class="xl:col-span-2">
             <OnboardingChecklist
               steps={onboardSteps}
+              onStepClick={onChecklistStep}
               onDismiss={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true, llmDownloaded: true, searchRun: true, dndConfigured: true, apiVisited: true }; saveOnboarding(); }}
             />
           </div>
@@ -2617,8 +2729,8 @@ useWindowTitle("window.title.main");
         {/if}
       {/if}
 
-      <!-- ════ Band Powers & EEG Waveforms — only during active EEG session ════ -->
-      {#if status.state === "connected" && hasEeg}
+      <!-- ════ Band Powers & EEG Waveforms — Waveform view primary surface ════ -->
+      {#if status.state === "connected" && hasEeg && liveView === "waveform"}
       <Separator class="bg-border dark:bg-white/[0.06]" />
 
       <div class="flex flex-col gap-2">

@@ -161,6 +161,23 @@ const onboarding: Record<string, string> = {
   "onboarding.next": "次へ",
   "onboarding.getStarted": "始める",
   "onboarding.finish": "完了",
+
+  "onboarding.doneOptionalTitle": "あとで追加設定しますか？",
+  "onboarding.doneOptionalBody": "キャリブレーション、ローカルAIモデル、権限、拡張機能は任意です。設定または下からいつでも構成できます。",
+  "onboarding.doneOptionalCta": "任意の設定",
+  "onboarding.modelsSkipPrimary": "今はスキップ",
+  "onboarding.modelsDownloadLater": "モデルは後で 設定 → LLM と音声 からダウンロードできます。",
+  "onboarding.disclaimerAck": "{app} は研究用途のみで、医療機器ではないことを理解しました。",
+  "onboarding.openLive": "ライブダッシュボードを開く",
+
+  // ── Auto-synced from en/ (2026-07-25) ──
+  // TODO: translate the following 6 key(s) into ja
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
 };
 
 export default onboarding;

@@ -468,12 +468,18 @@ const llm: Record<string, string> = {
   "chat.prompts.cat.analysis": "Análisis",
 
   "llm.hfSearch.title": "Buscar modelos en HuggingFace",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "Buscar modelos GGUF en HuggingFace…",
+  "llm.hfSearch.placeholderMlx": "Buscar modelos de mlx-community…",
   "llm.hfSearch.searchBtn": "Buscar",
   "llm.hfSearch.searching": "Buscando…",
   "llm.hfSearch.noResults": "No se encontraron modelos GGUF. Pruebe con otra consulta.",
+  "llm.hfSearch.noResultsMlx": "No se encontraron modelos de mlx-community. Pruebe con otra consulta.",
   "llm.hfSearch.loadingFiles": "Cargando archivos…",
   "llm.hfSearch.noFiles": "No se encontraron archivos GGUF en este repositorio.",
+  "llm.hfSearch.noFilesMlx": "No se encontraron archivos de snapshot MLX en este repositorio.",
+  "llm.hfSearch.mlxPackHint": "Añadir el paquete MLX completo",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "Tamaño",
   "llm.hfSearch.colFile": "Archivo",
@@ -585,6 +591,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "No disponible en esta compilación (plataforma o flag de función).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into es
+  "llm.discovered.title": "Encontrados en este equipo",
+  "llm.discovered.rescan": "Volver a analizar",
+  "llm.discovered.scanning": "Analizando…",
+  "llm.discovered.empty": "No se encontraron modelos locales de LM Studio, Ollama, Lemonade ni la caché de HuggingFace / MLX.",
+  "llm.discovered.useBtn": "Usar",
+  "llm.discovered.active": "Activo",
+  "llm.discovered.scanFailed": "Error al analizar",
+  "llm.discovered.selectFailed": "No se pudo seleccionar el modelo",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into es
+  "llm.discovered.localOnly": "Solo local",
+  "llm.discovered.egress": "El análisis y la ejecución de estos modelos ocurren íntegramente en este dispositivo: no se envía nada por la red. Descargar un modelo de HuggingFace es la única acción aquí que accede a internet.",
+  "llm.discovered.enable": "Detectar modelos locales",
+  "llm.discovered.enableDesc": "Mostrar modelos GGUF y MLX de LM Studio, Ollama, Lemonade y la caché de HuggingFace / MLX",
+  "llm.discovered.off": "La detección de modelos locales está desactivada.",
+  "llm.discovered.advanced": "Ajustes de análisis",
+  "llm.discovered.sourcesLabel": "Fuentes",
+  "llm.discovered.sourcesFiltered": "Solo se analizan las fuentes resaltadas.",
+  "llm.discovered.extraDirsLabel": "Carpetas adicionales",
+  "llm.discovered.addDir": "Añadir",
+  "llm.discovered.addDirPlaceholder": "/ruta/a/modelos",
+  "llm.discovered.removeDir": "Quitar",
 };
 
 export default llm;

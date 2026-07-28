@@ -1627,6 +1627,47 @@ useWindowTitle("window.title.search");
             </textarea>
           </div>
 
+          <!-- Search button row — primary action before advanced knobs -->
+          <div class="flex items-center gap-2 px-3 py-2
+                      border-t border-border dark:border-white/[0.06]">
+            {#if error}
+              <span class="text-ui-sm text-destructive flex-1 truncate" title={error}>{error}</span>
+            {:else}
+              <span class="flex-1 text-ui-2xs text-muted-foreground/25 select-none">
+                {t("search.interactiveCmdEnter")}
+              </span>
+            {/if}
+            <Button onclick={searchInteractive} disabled={ixSearching || !ixQuery.trim()} size="sm"
+                    class="gap-1.5 h-7 px-4 text-ui-md bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
+              {#if ixSearching}
+                <Spinner size="w-3 h-3" />
+                {ixStatus || t("search.interactiveSearching")}
+              {:else}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
+                  <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+                  <line x1="12" y1="7" x2="5"  y2="17"/>
+                  <line x1="12" y1="7" x2="19" y2="17"/>
+                  <line x1="5"  y1="19" x2="19" y2="19"/>
+                </svg>
+                {t("search.modeInteractive")}
+              {/if}
+            </Button>
+          </div>
+
+          <!-- Advanced: pipeline depth + filters -->
+          <button onclick={() => ixShowAdvanced = !ixShowAdvanced}
+                  class="flex items-center gap-1.5 w-full px-3 py-1.5
+                         border-t border-border dark:border-white/[0.06]
+                         text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground/70
+                         transition-colors select-none">
+            <span>{ixShowAdvanced ? "▾" : "▸"}</span>
+            <span class="uppercase tracking-widest font-semibold">{t("search.advancedToggle")}</span>
+            {#if ixSnrPositiveOnly || deviceFilter !== "all" || ixFilterStartUtc || ixEegRankBy !== "timestamp"}
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Filters active"></span>
+            {/if}
+          </button>
+
+          {#if ixShowAdvanced}
           <!-- Pipeline step rows -->
           {#each [
             { n: 2, color: "#3b82f6", title: "Text similarity",
@@ -1671,20 +1712,12 @@ useWindowTitle("window.title.search");
             </div>
           {/each}
 
-          <!-- Advanced filters toggle -->
-          <button onclick={() => ixShowAdvanced = !ixShowAdvanced}
-                  class="flex items-center gap-1.5 w-full px-3 py-1
-                         border-t border-border dark:border-white/[0.06]
-                         text-ui-2xs text-muted-foreground/40 hover:text-muted-foreground/70
-                         transition-colors select-none">
-            <span>{ixShowAdvanced ? "▾" : "▸"}</span>
-            <span class="uppercase tracking-widest font-semibold">{t("search.advancedFilters")}</span>
-            {#if ixSnrPositiveOnly || deviceFilter !== "all" || ixFilterStartUtc || ixEegRankBy !== "timestamp"}
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Filters active"></span>
-            {/if}
-          </button>
+          <div class="flex items-center gap-1.5 px-3 py-1
+                      border-t border-border dark:border-white/[0.06]
+                      text-ui-2xs text-muted-foreground/40 uppercase tracking-widest font-semibold select-none">
+            {t("search.advancedFilters")}
+          </div>
 
-          {#if ixShowAdvanced}
           <!-- SNR filter toggle -->
           <div class="flex items-center gap-2 px-3 py-1.5
                       border-t border-border dark:border-white/[0.06]
@@ -1859,32 +1892,6 @@ useWindowTitle("window.title.search");
             </div>
           {/if}
 
-          <!-- Search button row -->
-          <div class="flex items-center gap-2 px-3 py-2
-                      border-t border-border dark:border-white/[0.06]">
-            {#if error}
-              <span class="text-ui-sm text-destructive flex-1 truncate" title={error}>{error}</span>
-            {:else}
-              <span class="flex-1 text-ui-2xs text-muted-foreground/25 select-none">
-                {t("search.interactiveCmdEnter")}
-              </span>
-            {/if}
-            <Button onclick={searchInteractive} disabled={ixSearching || !ixQuery.trim()} size="sm"
-                    class="gap-1.5 h-7 px-4 text-ui-md bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
-              {#if ixSearching}
-                <Spinner size="w-3 h-3" />
-                {ixStatus || t("search.interactiveSearching")}
-              {:else}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
-                  <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
-                  <line x1="12" y1="7" x2="5"  y2="17"/>
-                  <line x1="12" y1="7" x2="19" y2="17"/>
-                  <line x1="5"  y1="19" x2="19" y2="19"/>
-                </svg>
-                {t("search.modeInteractive")}
-              {/if}
-            </Button>
-          </div>
         {/if}
       </div>
 
@@ -2503,6 +2510,29 @@ useWindowTitle("window.title.search");
             <p class="text-ui-md text-muted-foreground/50 max-w-[320px] leading-relaxed">
               {t("search.interactiveEmptyState")}
             </p>
+          </div>
+          <div class="flex flex-col gap-1.5 items-center mt-1">
+            <span class="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground/50">
+              {t("search.examplesLabel")}
+            </span>
+            <div class="flex flex-wrap justify-center gap-1.5 max-w-[360px]">
+              {#each [
+                t("search.exampleFocusedCoding"),
+                t("search.exampleDrowsyAfternoon"),
+                t("search.exampleMeetingStress"),
+              ] as example}
+                <button
+                  type="button"
+                  onclick={() => { ixQuery = example; showIxCard = true; searchInteractive(); }}
+                  class="px-2.5 py-1 rounded-full text-ui-sm font-medium
+                         border border-border dark:border-white/[0.08]
+                         text-muted-foreground hover:text-foreground
+                         hover:bg-muted/60 dark:hover:bg-white/[0.04] transition-colors"
+                >
+                  {example}
+                </button>
+              {/each}
+            </div>
           </div>
           <!-- Pipeline steps hint -->
           <div class="flex flex-col gap-1.5 text-left max-w-[280px] mt-1">

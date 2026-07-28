@@ -218,7 +218,7 @@ const search: Record<string, string> = {
   "search.umapShow": "3Dマップ",
   "search.openSession": "セッションを開く",
 
-  "labels.title": "すべてのラベル",
+  "labels.title": "ラベルを閲覧",
   "labels.totalLabels": "{n}件のラベル",
   "labels.page": "{total}ページ中{page}ページ",
   "labels.noLabels": "ラベルはまだありません",
@@ -234,7 +234,7 @@ const search: Record<string, string> = {
   "labels.date": "日付",
   "labels.duration": "期間",
   "labels.updated": "更新済み",
-  "labels.openLabels": "すべてのラベル",
+  "labels.openLabels": "ラベルを閲覧",
   "labels.search.exact": "完全一致",
   "labels.search.exactTitle": "即時部分文字列フィルター — 入力に合わせてテキストをマッチ",
   "labels.search.semantic": "セマンティック",
@@ -331,6 +331,13 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "一致付近のスクリーンショット",
 
   "search.maxTokens": "トークン",
+
+  "search.exampleFocusedCoding": "集中してコーディング",
+  "search.exampleDrowsyAfternoon": "眠い午後",
+  "search.exampleMeetingStress": "会議のストレス",
+  "search.examplesLabel": "例を試す",
+  "search.advancedToggle": "詳細",
+  "search.sourceLabel": "ソース",
 };
 
 export default search;

@@ -441,12 +441,18 @@ const llm: Record<string, string> = {
   "chat.prompts.cat.analysis": "分析",
 
   "llm.hfSearch.title": "搜索 HuggingFace 模型",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "在 HuggingFace 上搜索 GGUF 模型…",
+  "llm.hfSearch.placeholderMlx": "搜索 mlx-community 模型…",
   "llm.hfSearch.searchBtn": "搜索",
   "llm.hfSearch.searching": "搜索中…",
   "llm.hfSearch.noResults": "未找到 GGUF 模型。请尝试其他查询。",
+  "llm.hfSearch.noResultsMlx": "未找到 mlx-community 模型。请尝试其他查询。",
   "llm.hfSearch.loadingFiles": "正在加载文件…",
   "llm.hfSearch.noFiles": "此仓库中未找到 GGUF 文件。",
+  "llm.hfSearch.noFilesMlx": "此仓库中未找到 MLX 快照文件。",
+  "llm.hfSearch.mlxPackHint": "添加整个 MLX 包",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "大小",
   "llm.hfSearch.colFile": "文件",
@@ -554,6 +560,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "当前构建不可用（平台或功能开关）。",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into zh
+  "llm.discovered.title": "本机上找到的模型",
+  "llm.discovered.rescan": "重新扫描",
+  "llm.discovered.scanning": "扫描中…",
+  "llm.discovered.empty": "未在 LM Studio、Ollama、Lemonade 或 HuggingFace / MLX 缓存中找到本地模型。",
+  "llm.discovered.useBtn": "使用",
+  "llm.discovered.active": "使用中",
+  "llm.discovered.scanFailed": "扫描失败",
+  "llm.discovered.selectFailed": "无法选择模型",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into zh
+  "llm.discovered.localOnly": "仅本地",
+  "llm.discovered.egress": "这些模型的扫描和运行完全在本设备上进行，不会通过网络发送任何内容。只有从 HuggingFace 下载模型才会连接互联网。",
+  "llm.discovered.enable": "发现本地模型",
+  "llm.discovered.enableDesc": "显示来自 LM Studio、Ollama、Lemonade 和 HuggingFace / MLX 缓存的 GGUF 与 MLX 模型",
+  "llm.discovered.off": "本地模型发现已关闭。",
+  "llm.discovered.advanced": "扫描设置",
+  "llm.discovered.sourcesLabel": "来源",
+  "llm.discovered.sourcesFiltered": "仅扫描高亮显示的来源。",
+  "llm.discovered.extraDirsLabel": "额外文件夹",
+  "llm.discovered.addDir": "添加",
+  "llm.discovered.addDirPlaceholder": "/模型/路径",
+  "llm.discovered.removeDir": "移除",
 };
 
 export default llm;

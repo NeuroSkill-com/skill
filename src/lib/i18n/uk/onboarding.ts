@@ -163,6 +163,23 @@ const onboarding: Record<string, string> = {
   "onboarding.screenRecDesc":
     "Потрібен на macOS для захоплення вікон інших програм для системи знімків екрана. Без нього знімки можуть бути порожніми.",
   "onboarding.screenRecOpen": "Відкрити налаштування",
+
+  "onboarding.doneOptionalTitle": "Налаштувати більше пізніше?",
+  "onboarding.doneOptionalBody": "Калібрування, локальні моделі ШІ, дозволи та розширення необов’язкові — налаштуйте будь-коли в Параметрах або нижче.",
+  "onboarding.doneOptionalCta": "Додаткове налаштування",
+  "onboarding.modelsSkipPrimary": "Пропустити поки що",
+  "onboarding.modelsDownloadLater": "Моделі можна завантажити пізніше в Параметри → LLM і Голос.",
+  "onboarding.disclaimerAck": "Я розумію, що {app} призначено лише для досліджень і не є медичним виробом.",
+  "onboarding.openLive": "Відкрити живу панель",
+
+  // ── Auto-synced from en/ (2026-07-25) ──
+  // TODO: translate the following 6 key(s) into uk
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
 };
 
 export default onboarding;

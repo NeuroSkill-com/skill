@@ -161,8 +161,8 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "实用工具",
   "cmdK.openSettings": "打开设置",
   "cmdK.openHelp": "打开帮助",
-  "cmdK.openHistory": "打开历史",
-  "cmdK.openSearch": "搜索",
+  "cmdK.openHistory": "历史",
+  "cmdK.openSearch": "查找",
   "cmdK.openLabel": "添加标签",
   "cmdK.retryConnect": "重试连接",
   "cmdK.openBtSettings": "打开蓝牙设置",
@@ -255,7 +255,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} – EEG 搜索",
   "window.title.calibration": "{app} – 校准",
   "window.title.focusTimer": "专注计时器",
-  "window.title.labels": "所有标签",
+  "window.title.labels": "浏览标签",
   "window.title.label": "添加标签",
   "window.title.onboarding": "{app} – 欢迎",
   "window.title.api": "{app} – API 状态",
@@ -330,6 +330,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleases": "接收预发布版本",
   "updates.receivePrereleasesDesc": "在稳定版本之前接收候选版本。手动和后台更新检查都会立即遵循此设置。",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "主要",
+  "cmdK.openLive": "实时",
+  "cmdK.openChat": "提问",
+  "cmdK.openLabels": "浏览标签",
+  "cmdK.kw.live": "仪表盘 实时 波形 信号 流式 主页",
+  "cmdK.kw.chat": "提问 llm 聊天 助手 模型 对话 语音",
+  "cmdK.kw.labels": "浏览 全部标签 注释 笔记 标签 编辑 删除 管理",
 };
 
 export default ui;

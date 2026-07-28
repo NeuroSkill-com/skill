@@ -101,7 +101,7 @@ const history: Record<string, string> = {
     "Grabación larga dividida en {n} archivos por seguridad ante fallos; duración {duration}",
   "history.snr": "Calidad de la señal",
   "history.label": "etiqueta",
-  "history.labels": "etiquetas",
+  "history.labels": "Mostrar etiquetas",
   "history.activityLoading": "Cargando actividad de archivos...",
   "history.activityTitle": "Actividad de archivos",
   "history.activityFile": "archivo",
@@ -266,7 +266,7 @@ const history: Record<string, string> = {
   "history.streakGreatStart": "¡Gran comienzo!",
 
   // ── Auto-synced from en/ (2026-03-28) ──
-  "history.addLabel": "Add Label",
+  "history.addLabel": "Añadir etiqueta",
 };
 
 export default history;

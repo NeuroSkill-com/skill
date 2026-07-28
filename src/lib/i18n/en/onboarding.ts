@@ -86,6 +86,13 @@ const onboarding: Record<string, string> = {
   "onboarding.models.download": "Download",
   "onboarding.models.downloading": "Downloading…",
   "onboarding.models.downloaded": "Downloaded",
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint":
+    "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
   "onboarding.models.qwenTitle": "Qwen3.5 4B (Q4_K_M)",
   "onboarding.models.qwenDesc":
     "Recommended chat model. Uses Q4_K_M for the best quality/speed balance on most laptops.",
@@ -161,10 +168,19 @@ const onboarding: Record<string, string> = {
   "onboarding.doneTip.tray": "{app} lives in your menu bar tray. Click the icon to show/hide the dashboard.",
   "onboarding.doneTip.shortcuts": "Use ⌘K to open the command palette, or ? to see all keyboard shortcuts.",
   "onboarding.doneTip.help": "Open Help from the tray menu for a full reference of every feature.",
+  "onboarding.doneOptionalTitle": "Want more later?",
+  "onboarding.doneOptionalBody":
+    "Calibration, local AI models, permissions, and extensions are optional — set them up anytime from Settings or below.",
+  "onboarding.doneOptionalCta": "Optional setup",
+  "onboarding.modelsSkipPrimary": "Skip for now",
+  "onboarding.modelsDownloadLater": "You can download models later from Settings → LLM and Voice.",
+  "onboarding.disclaimerAck":
+    "I understand {app} is for research use only and is not a medical device.",
   "onboarding.back": "Back",
   "onboarding.next": "Next",
   "onboarding.getStarted": "Get Started",
   "onboarding.finish": "Finish",
+  "onboarding.openLive": "Open Live dashboard",
 };
 
 export default onboarding;

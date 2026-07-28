@@ -202,7 +202,7 @@ const history: Record<string, string> = {
   "history.chunkCountTooltip": "Довгий запис розділено на {n} файлів для безпеки; тривалість {duration}",
   "history.snr": "Якість сигналу",
   "history.label": "мітка",
-  "history.labels": "мітки",
+  "history.labels": "Показати мітки",
   "history.activityLoading": "Завантаження активності файлів...",
   "history.activityTitle": "Активність файлів",
   "history.activityFile": "файл",
@@ -268,7 +268,7 @@ const history: Record<string, string> = {
     "Запишіть принаймні одну EEG-сесію, потім поверніться сюди для порівняння діапазонів часу.",
 
   // ── Auto-synced from en/ (2026-03-28) ──
-  "history.addLabel": "Add Label",
+  "history.addLabel": "Додати мітку",
 };
 
 export default history;

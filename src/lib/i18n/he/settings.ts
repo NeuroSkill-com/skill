@@ -808,6 +808,18 @@ const settings: Record<string, string> = {
   "daemonActivity.lastRanHoursAgo": "לפני {n} שע׳",
   "daemonActivity.tickDuration": "משך: {n} ms",
   "daemonActivity.tickCount": "הפעלות: {n}",
+
+  "settingsTabs.clients": "לקוחות",
+  "settingsTabs.terminal": "מסוף",
+  "settingsTabs.validation": "אימות",
+  "settings.group.signal": "אות",
+  "settings.group.intelligence": "בינה",
+  "settings.group.capture": "לכידה ופרטיות",
+  "settings.group.automation": "אוטומציה",
+  "settings.group.app": "אפליקציה",
+  "settings.group.advanced": "מתקדם",
+  "settings.group.showAdvanced": "הצג מתקדם",
+  "settings.group.hideAdvanced": "הסתר מתקדם",
 };
 
 export default settings;

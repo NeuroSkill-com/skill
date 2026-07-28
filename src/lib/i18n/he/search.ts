@@ -179,7 +179,7 @@ const search: Record<string, string> = {
   "search.openSession": "פתח סשן",
   "search.resultSummary": "{queries} שאילתות · {k} שכנים · {days} ימים",
 
-  "labels.title": "כל התוויות",
+  "labels.title": "עיון בתוויות",
   "labels.totalLabels": "{n} תוויות",
   "labels.page": "עמוד {page} מתוך {total}",
   "labels.noLabels": "עדיין אין תוויות",
@@ -195,7 +195,7 @@ const search: Record<string, string> = {
   "labels.date": "תאריך",
   "labels.duration": "משך",
   "labels.updated": "עודכן",
-  "labels.openLabels": "כל התוויות",
+  "labels.openLabels": "עיון בתוויות",
   "labels.search.exact": "מדויק",
   "labels.search.exactTitle": "סינון מיידי לפי מחרוזת משנה — מוצא התאמות תוך כדי הקלדה",
   "labels.search.semantic": "סמנטי",
@@ -326,6 +326,13 @@ const search: Record<string, string> = {
   "embeddings.indexMemory": "נפח אחסון בדיסק",
   "embeddings.indexMemoryRow": "{backend}: {total} ({text} טקסט · {context} הקשר · {eeg} EEG)",
   "embeddings.indexMemoryTotal": "סך הכול: {total}",
+
+  "search.exampleFocusedCoding": "תכנות ממוקד",
+  "search.exampleDrowsyAfternoon": "אחר צהריים ישנוני",
+  "search.exampleMeetingStress": "לחץ בפגישה",
+  "search.examplesLabel": "נסה דוגמה",
+  "search.advancedToggle": "מתקדם",
+  "search.sourceLabel": "מקור",
 };
 
 export default search;

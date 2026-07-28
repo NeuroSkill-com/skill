@@ -90,8 +90,8 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "Утиліти",
   "cmdK.openSettings": "Відкрити налаштування",
   "cmdK.openHelp": "Відкрити довідку",
-  "cmdK.openHistory": "Відкрити історію",
-  "cmdK.openSearch": "Пошук embeddings",
+  "cmdK.openHistory": "Історія",
+  "cmdK.openSearch": "Пошук",
   "cmdK.openLabel": "Додати мітку",
   "cmdK.retryConnect": "Повторити з'єднання",
   "cmdK.openBtSettings": "Відкрити налаштування Bluetooth",
@@ -246,7 +246,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} – Пошук ЕЕГ",
   "window.title.calibration": "{app} – Калібрування",
   "window.title.focusTimer": "Таймер фокусу",
-  "window.title.labels": "Усі мітки",
+  "window.title.labels": "Переглянути мітки",
   "window.title.label": "Додати мітку",
   "window.title.onboarding": "{app} – Ласкаво просимо",
   "window.title.api": "{app} – Статус API",
@@ -342,6 +342,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "Отримуйте реліз-кандидати раніше за стабільні версії. Ручні та фонові перевірки оновлень ураховують цей параметр одразу.",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "Основне",
+  "cmdK.openLive": "Наживо",
+  "cmdK.openChat": "Запитати",
+  "cmdK.openLabels": "Переглянути мітки",
+  "cmdK.kw.live": "панель наживо хвиля сигнал стрімінг головна",
+  "cmdK.kw.chat": "запитати llm чат асистент модель розмова голос",
+  "cmdK.kw.labels": "переглянути всі мітки анотації нотатки теги редагувати видалити керувати",
 };
 
 export default ui;

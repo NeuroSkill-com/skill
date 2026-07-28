@@ -55,6 +55,13 @@ const common: Record<string, string> = {
   "error.description": "发生了意外错误。您可以尝试重新加载页面或返回仪表盘。",
   "error.goHome": "前往仪表盘",
   "error.reload": "重新加载页面",
+
+  "shell.live": "实时",
+  "shell.find": "查找",
+  "shell.ask": "提问",
+  "shell.history": "历史",
+  "shell.navLabel": "主要界面",
+  "common.reload": "重新加载",
 };
 
 export default common;

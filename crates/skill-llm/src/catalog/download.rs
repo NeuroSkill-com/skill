@@ -338,8 +338,17 @@ pub fn download_file(
 /// [`download_file`].  For split models it downloads each shard sequentially,
 /// mapping overall progress across the entire set.
 ///
-/// Returns the path to the **first shard** — the one llama.cpp needs.
+/// For mlx-community snapshot models ([`LlmModelEntry::is_mlx`]) it downloads
+/// every listed file (or the full HF sibling list when `shard_files` is empty)
+/// and returns the **snapshot directory**.
+///
+/// Returns the path to the **first shard** — the one llama.cpp needs — or the
+/// MLX snapshot directory for mlx entries.
 pub fn download_model(entry: &LlmModelEntry, progress: &Arc<Mutex<DownloadProgress>>) -> anyhow::Result<PathBuf> {
+    if entry.is_mlx() {
+        return download_mlx_snapshot(entry, progress);
+    }
+
     let filenames: Vec<&str> = entry.all_filenames().collect();
     let total_shards = filenames.len();
 
@@ -474,6 +483,118 @@ pub fn download_model(entry: &LlmModelEntry, progress: &Arc<Mutex<DownloadProgre
     }
 
     first_path.ok_or_else(|| anyhow::anyhow!("no shard files to download"))
+}
+
+/// Download an mlx-community HF snapshot (config + tokenizer + safetensors).
+///
+/// Returns the snapshot directory so [`crate::engine::rlx_backend`] can open it
+/// with `Qwen3Runner::from_mlx_packed` / `MlxLoader`.
+fn download_mlx_snapshot(entry: &LlmModelEntry, progress: &Arc<Mutex<DownloadProgress>>) -> anyhow::Result<PathBuf> {
+    use hf_hub::api::sync::ApiBuilder;
+
+    {
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if p.cancelled {
+            if p.pause_requested {
+                p.state = DownloadState::Paused;
+                p.status_msg = Some("Paused.".into());
+                anyhow::bail!("paused")
+            }
+            p.state = DownloadState::Cancelled;
+            p.status_msg = Some("Cancelled.".into());
+            anyhow::bail!("cancelled")
+        }
+        p.state = DownloadState::Downloading;
+        p.status_msg = Some(format!("Listing mlx-community files ({})…", entry.repo));
+        p.progress = 0.0;
+    }
+
+    let endpoint = std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://huggingface.co".into());
+    let mut builder = ApiBuilder::new().with_endpoint(endpoint);
+    if let Ok(token) = std::env::var("HF_TOKEN").or_else(|_| std::env::var("HUGGING_FACE_HUB_TOKEN")) {
+        builder = builder.with_token(Some(token));
+    }
+    let api = builder.build().context("init hf-hub api for mlx snapshot")?;
+    let repo = api.model(entry.repo.clone());
+    let info = repo.info().with_context(|| format!("hf info for {}", entry.repo))?;
+
+    // Prefer an explicit shard list from the catalog; otherwise take every
+    // sibling except README / git metadata.
+    let skip = |name: &str| {
+        let lower = name.to_ascii_lowercase();
+        lower == "readme.md" || lower == ".gitattributes" || lower.ends_with(".md") && !lower.contains("config")
+    };
+    let files: Vec<String> = if !entry.shard_files.is_empty() {
+        entry.shard_files.clone()
+    } else {
+        info.siblings
+            .iter()
+            .map(|s| s.rfilename.clone())
+            .filter(|n| !skip(n))
+            .collect()
+    };
+    if files.is_empty() {
+        anyhow::bail!("no files to download from {}", entry.repo);
+    }
+
+    let total = files.len();
+    {
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        p.total_shards = total as u16;
+        p.current_shard = 1;
+    }
+
+    let mut snap_dir: Option<PathBuf> = None;
+    for (i, name) in files.iter().enumerate() {
+        {
+            let p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if p.cancelled {
+                if p.pause_requested {
+                    anyhow::bail!("paused")
+                }
+                anyhow::bail!("cancelled")
+            }
+        }
+        {
+            let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            p.current_shard = (i + 1) as u16;
+            p.status_msg = Some(format!("Downloading {} ({}/{})…", name, i + 1, total));
+            p.progress = i as f32 / total as f32;
+        }
+
+        let path = repo
+            .get(name)
+            .with_context(|| format!("download {}/{}", entry.repo, name))?;
+        if snap_dir.is_none() {
+            // `get` returns …/snapshots/{sha}/{rfilename}; walk up one level per
+            // path component so nested files still yield the snapshot root.
+            let mut root = path.clone();
+            for _ in Path::new(name).components() {
+                root = match root.parent() {
+                    Some(p) => p.to_path_buf(),
+                    None => break,
+                };
+            }
+            snap_dir = Some(root);
+        }
+    }
+
+    let dir = snap_dir.ok_or_else(|| anyhow::anyhow!("mlx snapshot empty for {}", entry.repo))?;
+    if !dir.join("config.json").is_file() {
+        anyhow::bail!(
+            "mlx snapshot for {} is missing config.json (got {})",
+            entry.repo,
+            dir.display()
+        );
+    }
+
+    {
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        p.state = DownloadState::Downloaded;
+        p.status_msg = None;
+        p.progress = 1.0;
+    }
+    Ok(dir)
 }
 
 /// Register a completed blob in the HF Hub snapshot directory structure so that

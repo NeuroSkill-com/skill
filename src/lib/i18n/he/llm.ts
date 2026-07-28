@@ -48,12 +48,18 @@ const llm: Record<string, string> = {
     "מספר האסימונים שנוצרים בצורה ספקולטיבית בכל שלב פענוח. ערכים גבוהים יותר מגבירים את התפוקה אך דורשים יותר זיכרון. מחייב מודל עם תמיכה ב-MTP.",
 
   "llm.hfSearch.title": "חיפוש מודלים ב-HuggingFace",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "חיפוש מודלי GGUF ב-HuggingFace…",
+  "llm.hfSearch.placeholderMlx": "חיפוש מודלים של mlx-community…",
   "llm.hfSearch.searchBtn": "חיפוש",
   "llm.hfSearch.searching": "מחפש…",
   "llm.hfSearch.noResults": "לא נמצאו מודלי GGUF. נסו שאילתה אחרת.",
+  "llm.hfSearch.noResultsMlx": "לא נמצאו מודלי mlx-community. נסו שאילתה אחרת.",
   "llm.hfSearch.loadingFiles": "טוען קבצים…",
   "llm.hfSearch.noFiles": "לא נמצאו קבצי GGUF במאגר זה.",
+  "llm.hfSearch.noFilesMlx": "לא נמצאו קבצי snapshot של MLX במאגר זה.",
+  "llm.hfSearch.mlxPackHint": "הוספת חבילת MLX שלמה",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "גודל",
   "llm.hfSearch.colFile": "קובץ",
@@ -553,6 +559,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "לא זמין בבילד זה (פלטפורמה או דגל תכונה).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into he
+  "llm.discovered.title": "נמצאו במחשב זה",
+  "llm.discovered.rescan": "סרוק מחדש",
+  "llm.discovered.scanning": "סורק…",
+  "llm.discovered.empty": "לא נמצאו מודלים מקומיים מ-LM Studio, Ollama, Lemonade או ממטמון HuggingFace / MLX.",
+  "llm.discovered.useBtn": "השתמש",
+  "llm.discovered.active": "פעיל",
+  "llm.discovered.scanFailed": "הסריקה נכשלה",
+  "llm.discovered.selectFailed": "לא ניתן לבחור מודל",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into he
+  "llm.discovered.localOnly": "מקומי בלבד",
+  "llm.discovered.egress": "הסריקה וההרצה של מודלים אלה מתבצעות כולן במכשיר זה — דבר אינו נשלח דרך הרשת. הורדת מודל מ-HuggingFace היא הפעולה היחידה כאן שמתחברת לאינטרנט.",
+  "llm.discovered.enable": "גילוי מודלים מקומיים",
+  "llm.discovered.enableDesc": "הצגת מודלי GGUF ו-MLX מ-LM Studio, Ollama, Lemonade וממטמון HuggingFace / MLX",
+  "llm.discovered.off": "גילוי מודלים מקומיים כבוי.",
+  "llm.discovered.advanced": "הגדרות סריקה",
+  "llm.discovered.sourcesLabel": "מקורות",
+  "llm.discovered.sourcesFiltered": "רק המקורות המודגשים נסרקים.",
+  "llm.discovered.extraDirsLabel": "תיקיות נוספות",
+  "llm.discovered.addDir": "הוסף",
+  "llm.discovered.addDirPlaceholder": "/נתיב/למודלים",
+  "llm.discovered.removeDir": "הסר",
 };
 
 export default llm;

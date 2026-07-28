@@ -216,7 +216,7 @@ const search: Record<string, string> = {
   "search.umapShow": "mapa 3D",
   "search.openSession": "Sesión abierta",
 
-  "labels.title": "Todas las etiquetas",
+  "labels.title": "Explorar etiquetas",
   "labels.totalLabels": "{n} etiquetas",
   "labels.page": "página {page} de {total}",
   "labels.noLabels": "Aún no hay etiquetas",
@@ -233,7 +233,7 @@ const search: Record<string, string> = {
   "labels.date": "Fecha",
   "labels.duration": "Duración",
   "labels.updated": "Actualizado",
-  "labels.openLabels": "Todas las etiquetas",
+  "labels.openLabels": "Explorar etiquetas",
   "labels.search.exact": "Exacto",
   "labels.search.exactTitle": "Filtro de subcadena instantáneo: coincide con el texto a medida que escribe",
   "labels.search.semantic": "Semántico",
@@ -339,6 +339,13 @@ const search: Record<string, string> = {
   "embeddings.indexMemory": "Espacio en disco",
   "embeddings.indexMemoryRow": "{backend}: {total} ({text} texto · {context} contexto · {eeg} EEG)",
   "embeddings.indexMemoryTotal": "En total: {total}",
+
+  "search.exampleFocusedCoding": "programación concentrada",
+  "search.exampleDrowsyAfternoon": "tarde somnolienta",
+  "search.exampleMeetingStress": "estrés en reunión",
+  "search.examplesLabel": "Probar un ejemplo",
+  "search.advancedToggle": "Avanzado",
+  "search.sourceLabel": "Fuente",
 };
 
 export default search;

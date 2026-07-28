@@ -15,6 +15,7 @@ import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import LlmAsrSection from "$lib/llm/LlmAsrSection.svelte";
+import LlmDiscoveredSection from "$lib/llm/LlmDiscoveredSection.svelte";
 import LlmHfSearchSection from "$lib/llm/LlmHfSearchSection.svelte";
 import LlmInferenceSection from "$lib/llm/LlmInferenceSection.svelte";
 import LlmModelPickerSection from "$lib/llm/LlmModelPickerSection.svelte";
@@ -81,6 +82,13 @@ interface LlmConfig {
   cache_type_v: string;
   attn_rot_disabled: boolean;
   mtp_draft_count: number;
+  discovery: DiscoveryConfig;
+}
+
+interface DiscoveryConfig {
+  enabled: boolean;
+  sources: string[];
+  extra_dirs: string[];
 }
 
 interface ModelHardwareFit {
@@ -139,6 +147,7 @@ let config = $state<LlmConfig>({
   cache_type_v: "f16",
   attn_rot_disabled: false,
   mtp_draft_count: 0,
+  discovery: { enabled: true, sources: [], extra_dirs: [] },
 });
 
 let configSaving = $state(false);
@@ -423,6 +432,17 @@ onDestroy(() => {
   onSetMtpDraftCount={async (val) => { config = { ...config, mtp_draft_count: val }; await saveConfig(); }}
 />
 {/if}
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Models discovered from other local apps (LM Studio, Ollama, Lemonade, …)    -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<LlmDiscoveredSection
+  activeModel={catalog?.active_model ?? ""}
+  discovery={config.discovery ?? { enabled: true, sources: [], extra_dirs: [] }}
+  {configSaving}
+  onSetDiscovery={async (d) => { config = { ...config, discovery: d }; await saveConfig(); }}
+  onModelSelected={async () => { await loadCatalog(); await loadHardwareFit(); }}
+/>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- HuggingFace model search                                                   -->

@@ -20,6 +20,47 @@ pub enum LlmInferenceRuntime {
     Rlx,
 }
 
+/// Configuration for **local model discovery** — surfacing GGUFs that other
+/// apps (LM Studio, Ollama, Lemonade, the HuggingFace cache, …) already
+/// downloaded so neuroskill can run them in place.
+///
+/// ## Data & network egress
+///
+/// Discovery is a **fully local, offline** operation. It only reads directory
+/// listings and GGUF file headers on this machine — it makes **no network
+/// requests**, sends **nothing** off-device, and never triggers a download.
+/// Running a discovered model is also 100% on-device (the embedded engine
+/// loads the GGUF by path). Contrast with HuggingFace search/download, which
+/// does contact `huggingface.co`. See `docs/LLM.md` → "Data & Network Egress".
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ModelDiscoveryConfig {
+    /// Master switch. When `true` (the default) the catalog is augmented with a
+    /// live overlay of locally-discovered GGUFs. Turning it off removes the
+    /// overlay on the next refresh; it never affects downloaded catalog models.
+    pub enabled: bool,
+
+    /// Restrict discovery to these source tokens: `"lmstudio"`, `"ollama"`,
+    /// `"lemonade"`, `"hf"`, `"mlx"`, `"vllm"`, `"rlx"`. Empty = all sources.
+    /// Unknown tokens are ignored.
+    pub sources: Vec<String>,
+
+    /// Additional absolute directories to scan for GGUF files, on top of the
+    /// well-known app caches (tagged as the `extra` source).
+    pub extra_dirs: Vec<std::path::PathBuf>,
+}
+
+impl Default for ModelDiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            // Local-only and private, so on by default for the best UX.
+            enabled: true,
+            sources: Vec::new(),
+            extra_dirs: Vec::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LlmConfig {
@@ -204,6 +245,12 @@ pub struct LlmConfig {
     /// Optional RLX soft cap for F32 dequantized weight memory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rlx_max_memory_gb: Option<f32>,
+
+    // ── Local model discovery ────────────────────────────────────────────────
+    /// Surface GGUFs downloaded by other local apps (LM Studio, Ollama, …).
+    /// Local/offline only — see [`ModelDiscoveryConfig`].
+    #[serde(default)]
+    pub discovery: ModelDiscoveryConfig,
 }
 
 fn default_llm_parallel() -> usize {
@@ -280,6 +327,7 @@ impl Default for LlmConfig {
             rlx_device: default_rlx_device(),
             rlx_max_seq: default_rlx_max_seq(),
             rlx_max_memory_gb: None,
+            discovery: ModelDiscoveryConfig::default(),
         }
     }
 }

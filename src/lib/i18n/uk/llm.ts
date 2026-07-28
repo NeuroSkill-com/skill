@@ -279,12 +279,18 @@ const llm: Record<string, string> = {
     "Кількість токенів, що генеруються спекулятивно на кожному кроці декодування. Більші значення підвищують пропускну здатність, але потребують більше пам'яті. Потребує MTP-сумісну модель.",
 
   "llm.hfSearch.title": "Пошук моделей на HuggingFace",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "Шукати GGUF-моделі на HuggingFace…",
+  "llm.hfSearch.placeholderMlx": "Шукати моделі mlx-community…",
   "llm.hfSearch.searchBtn": "Шукати",
   "llm.hfSearch.searching": "Пошук…",
   "llm.hfSearch.noResults": "GGUF-моделі не знайдено. Спробуйте інший запит.",
+  "llm.hfSearch.noResultsMlx": "Моделі mlx-community не знайдено. Спробуйте інший запит.",
   "llm.hfSearch.loadingFiles": "Завантаження файлів…",
   "llm.hfSearch.noFiles": "У цьому репозиторії не знайдено файлів GGUF.",
+  "llm.hfSearch.noFilesMlx": "У цьому репозиторії не знайдено файлів MLX-знімка.",
+  "llm.hfSearch.mlxPackHint": "Додати весь MLX-пакет",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "Розмір",
   "llm.hfSearch.colFile": "Файл",
@@ -566,6 +572,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "Недоступно в цій збірці (платформа або feature flag).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into uk
+  "llm.discovered.title": "Знайдено на цьому комп'ютері",
+  "llm.discovered.rescan": "Сканувати знову",
+  "llm.discovered.scanning": "Сканування…",
+  "llm.discovered.empty": "Локальних моделей із LM Studio, Ollama, Lemonade чи кешу HuggingFace / MLX не знайдено.",
+  "llm.discovered.useBtn": "Використати",
+  "llm.discovered.active": "Активна",
+  "llm.discovered.scanFailed": "Помилка сканування",
+  "llm.discovered.selectFailed": "Не вдалося вибрати модель",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into uk
+  "llm.discovered.localOnly": "Лише локально",
+  "llm.discovered.egress": "Сканування та запуск цих моделей відбуваються повністю на цьому пристрої — нічого не надсилається через мережу. Лише завантаження моделі з HuggingFace звертається до Інтернету.",
+  "llm.discovered.enable": "Виявляти локальні моделі",
+  "llm.discovered.enableDesc": "Показувати GGUF і MLX з LM Studio, Ollama, Lemonade та кешу HuggingFace / MLX",
+  "llm.discovered.off": "Виявлення локальних моделей вимкнено.",
+  "llm.discovered.advanced": "Налаштування сканування",
+  "llm.discovered.sourcesLabel": "Джерела",
+  "llm.discovered.sourcesFiltered": "Скануються лише виділені джерела.",
+  "llm.discovered.extraDirsLabel": "Додаткові теки",
+  "llm.discovered.addDir": "Додати",
+  "llm.discovered.addDirPlaceholder": "/шлях/до/моделей",
+  "llm.discovered.removeDir": "Вилучити",
 };
 
 export default llm;

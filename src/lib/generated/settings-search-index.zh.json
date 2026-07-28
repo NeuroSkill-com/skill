@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "发现本地模型",
+    "desc": "显示来自 LM Studio、Ollama、Lemonade 和 HuggingFace / MLX 缓存的 GGUF 与 MLX 模型"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "启用 LLM 服务器",
     "desc": "在与 WebSocket API 相同的端口上运行 OpenAI 兼容的推理服务器。需要 llm Cargo 功能和已下载的模型。"

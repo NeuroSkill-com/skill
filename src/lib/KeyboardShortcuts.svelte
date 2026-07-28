@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
 import { t } from "$lib/i18n/index.svelte";
+import { prettyAccelerator } from "$lib/utils/accelerator";
 
 let open = $state(false);
 
@@ -31,26 +32,7 @@ let historyShortcut = $state("");
 let apiShortcut = $state("");
 let themeShortcut = $state("");
 
-/** Pretty-print a Tauri accelerator string for display.
- *  "CmdOrCtrl+Shift+L" → "⌘⇧L" on Mac, "Ctrl+Shift+L" elsewhere. */
-function pretty(accel: string): string {
-  if (!accel) return "—";
-  const isMac = navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac");
-  let s = accel;
-  if (isMac) {
-    s = s
-      .replace(/CmdOrCtrl/gi, "⌘")
-      .replace(/CommandOrControl/gi, "⌘")
-      .replace(/Ctrl/gi, "⌃")
-      .replace(/Cmd/gi, "⌘")
-      .replace(/Alt/gi, "⌥")
-      .replace(/Shift/gi, "⇧")
-      .replace(/\+/g, "");
-  } else {
-    s = s.replace(/CmdOrCtrl/gi, "Ctrl").replace(/CommandOrControl/gi, "Ctrl");
-  }
-  return s;
-}
+const pretty = prettyAccelerator;
 
 interface ShortcutEntry {
   keys: string;

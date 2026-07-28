@@ -55,6 +55,13 @@ const common: Record<string, string> = {
   "error.description": "Ocurrió un error inesperado. Puedes intentar recargar la página o volver al panel.",
   "error.goHome": "Ir al panel",
   "error.reload": "Recargar página",
+
+  "shell.live": "En vivo",
+  "shell.find": "Buscar",
+  "shell.ask": "Preguntar",
+  "shell.history": "Historial",
+  "shell.navLabel": "Destinos principales",
+  "common.reload": "Recargar",
 };
 
 export default common;

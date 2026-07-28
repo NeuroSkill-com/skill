@@ -151,6 +151,23 @@ const onboarding: Record<string, string> = {
   "onboarding.next": "下一步",
   "onboarding.getStarted": "开始使用",
   "onboarding.finish": "完成",
+
+  "onboarding.doneOptionalTitle": "稍后再设置更多？",
+  "onboarding.doneOptionalBody": "校准、本地 AI 模型、权限和扩展均为可选 — 可随时在设置或下方完成。",
+  "onboarding.doneOptionalCta": "可选设置",
+  "onboarding.modelsSkipPrimary": "暂时跳过",
+  "onboarding.modelsDownloadLater": "之后可在 设置 → LLM 与语音 中下载模型。",
+  "onboarding.disclaimerAck": "我理解 {app} 仅供研究使用，并非医疗器械。",
+  "onboarding.openLive": "打开实时仪表盘",
+
+  // ── Auto-synced from en/ (2026-07-25) ──
+  // TODO: translate the following 6 key(s) into zh
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
 };
 
 export default onboarding;

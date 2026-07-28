@@ -231,7 +231,7 @@ const history: Record<string, string> = {
   "history.chunkCountTooltip": "הקלטה ארוכה פוצלה ל-{n} קבצים להגנה מקריסה; משך {duration}",
   "history.snr": "איכות אות",
   "history.label": "תווית",
-  "history.labels": "תוויות",
+  "history.labels": "הצג תוויות",
   "history.activityLoading": "טוען פעילות קבצים...",
   "history.activityTitle": "פעילות קבצים",
   "history.activityFile": "קובץ",
@@ -264,7 +264,7 @@ const history: Record<string, string> = {
   "history.daysAgo": "לפני {n} ימים",
 
   // ── Auto-synced from en/ (2026-03-28) ──
-  "history.addLabel": "Add Label",
+  "history.addLabel": "הוסף תווית",
 };
 
 export default history;

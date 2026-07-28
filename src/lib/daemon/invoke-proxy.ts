@@ -53,6 +53,7 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   // LLM catalog
   get_llm_catalog: [G, "/v1/llm/catalog"],
   refresh_llm_catalog: [P, "/v1/llm/catalog/refresh"],
+  discover_local_models: [G, "/v1/llm/catalog/discovered"],
 
   // LLM downloads
   get_llm_downloads: [G, "/v1/llm/downloads"],

@@ -187,7 +187,7 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "Utilidades",
   "cmdK.openSettings": "Abrir configuración",
   "cmdK.openHelp": "Abrir ayuda",
-  "cmdK.openHistory": "Abrir historial",
+  "cmdK.openHistory": "Historial",
   "cmdK.openSearch": "Buscar",
   "cmdK.openLabel": "Agregar etiqueta",
   "cmdK.retryConnect": "Reintentar conexión",
@@ -279,7 +279,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} – Búsqueda de EEG",
   "window.title.calibration": "{app} – Calibración",
   "window.title.focusTimer": "Temporizador de enfoque",
-  "window.title.labels": "Todas las etiquetas",
+  "window.title.labels": "Explorar etiquetas",
   "window.title.label": "Agregar etiqueta",
   "window.title.onboarding": "{app} – Bienvenido",
   "window.title.api": "{app} – Estado de la API",
@@ -365,6 +365,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "Recibe candidatos a versión antes de las versiones estables. Las comprobaciones manuales y automáticas respetan esta opción al instante.",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "Principal",
+  "cmdK.openLive": "En vivo",
+  "cmdK.openChat": "Preguntar",
+  "cmdK.openLabels": "Explorar etiquetas",
+  "cmdK.kw.live": "panel en vivo forma de onda señal streaming inicio",
+  "cmdK.kw.chat": "preguntar llm chat asistente modelo conversación voz",
+  "cmdK.kw.labels": "explorar todas etiquetas anotaciones notas tags editar borrar gestionar",
 };
 
 export default ui;

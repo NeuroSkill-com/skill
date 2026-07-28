@@ -51,10 +51,18 @@ const common: Record<string, string> = {
   "common.resetZoom": "Double-click chart or click to reset zoom",
   "common.openComparison": "Open comparison",
   "common.dismiss": "Dismiss",
+  "common.reload": "Reload",
   "common.error": "Something went wrong",
   "error.description": "An unexpected error occurred. You can try reloading the page or going back to the dashboard.",
   "error.goHome": "Go to Dashboard",
   "error.reload": "Reload Page",
+
+  // ── Primary shell destinations ───────────────────────────────────────────
+  "shell.live": "Live",
+  "shell.find": "Find",
+  "shell.ask": "Ask",
+  "shell.history": "History",
+  "shell.navLabel": "Primary destinations",
 };
 
 export default common;

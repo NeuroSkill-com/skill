@@ -1,0 +1,92 @@
+name: HF downloads cache
+
+# Refreshes src-tauri/hf_downloads_cache.json by crawling HuggingFace Hub
+# (catalog repos + top mlx-community models by downloads), then opens a PR
+# when the cache drifted. Keeps offline catalog sorting current without
+# requiring network at app runtime.
+#
+# Local:  npm run sync:hf:downloads
+# Check:  npm run sync:hf:downloads:check
+
+on:
+  schedule:
+    - cron: "23 7 * * 1" # Mondays 07:23 UTC
+  workflow_dispatch:
+    inputs:
+      mlx_top:
+        description: "How many mlx-community models to crawl (default 100)"
+        required: false
+        default: "100"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: hf-downloads-cache
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh HF downloads cache
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Crawl HuggingFace + write cache
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_DOWNLOADS_MLX_TOP: ${{ github.event.inputs.mlx_top || '100' }}
+        run: node scripts/update-hf-downloads-cache.mjs --write --verbose
+
+      - name: Open PR if the cache drifted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src-tauri/hf_downloads_cache.json src/lib/generated/hf-downloads-cache.json; then
+            echo "Cache already current — nothing to do."
+            exit 0
+          fi
+
+          UPDATED="$(python3 -c 'import json; print(json.load(open("src-tauri/hf_downloads_cache.json")).get("updated_at","unknown"))')"
+          BRANCH="automated/hf-downloads-cache"
+          TITLE="chore(llm): refresh HuggingFace downloads cache"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add src-tauri/hf_downloads_cache.json src/lib/generated/hf-downloads-cache.json
+          git commit -m "$(cat <<EOF
+          ${TITLE}
+
+          Regenerated from Hub downloads (catalog repos + mlx-community top).
+          updated_at=${UPDATED}
+          EOF
+          )"
+          git push --force origin "$BRANCH"
+
+          BODY="$(cat <<EOF
+## Summary
+- Refresh \`src-tauri/hf_downloads_cache.json\` from HuggingFace Hub
+- Catalog repos + top mlx-community models sorted by downloads
+- Used by the LLM picker to sort families by popularity (desc)
+
+## Test plan
+- [ ] \`npm run sync:hf:downloads:check\`
+- [ ] Settings → LLM family dropdown shows popular models first
+EOF
+)"
+
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            echo "PR already open for $BRANCH — branch updated in place."
+            gh pr edit "$BRANCH" --title "$TITLE" --body "$BODY" || true
+          else
+            gh pr create --title "$TITLE" --body "$BODY"
+          fi

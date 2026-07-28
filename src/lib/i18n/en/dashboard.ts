@@ -170,6 +170,11 @@ const dashboard: Record<string, string> = {
   "dashboard.setupSearch": "Run a similarity search",
   "dashboard.setupDnd": "Set a DND focus threshold",
   "dashboard.setupApi": "Try the API",
+  "dashboard.viewWaveform": "Waveform",
+  "dashboard.viewPhysiology": "Physiology",
+  "dashboard.viewState": "State",
+  "dashboard.viewLabel": "Live view",
+  "dashboard.streamingToast": "You're streaming. Label moments from the title bar when something interesting happens.",
   "dashboard.recordingActive": "Recording in Progress",
   "dashboard.recordingActiveBody":
     "You are currently recording EEG data. Quitting now will end the session and close the CSV file cleanly.",

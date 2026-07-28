@@ -28,7 +28,7 @@ pub use skill_tts::config::default_neutts_backbone_repo;
 pub use skill_tts::NeuttsConfig;
 
 // Re-export LLM config types from skill-llm.
-pub use skill_llm::config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ToolExecutionMode};
+pub use skill_llm::config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ModelDiscoveryConfig, ToolExecutionMode};
 
 // Screenshot configuration — defined locally to avoid pulling in the heavy
 // skill-screenshots crate (xcap → pipewire on Linux) for settings I/O.

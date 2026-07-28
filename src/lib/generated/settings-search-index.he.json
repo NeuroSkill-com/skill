@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "גילוי מודלים מקומיים",
+    "desc": "הצגת מודלי GGUF ו-MLX מ-LM Studio, Ollama, Lemonade וממטמון HuggingFace / MLX"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "הפעל שרת LLM",
     "desc": "הפעל שרת אינפרנס תואם OpenAI על אותו פורט של WebSocket API. דורש את פיצ׳ר llm ב-Cargo ומודל שהורד."

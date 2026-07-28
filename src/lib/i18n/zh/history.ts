@@ -100,7 +100,7 @@ const history: Record<string, string> = {
   "history.chunkCountTooltip": "为防止崩溃，长录制被分为 {n} 个文件；时长 {duration}",
   "history.snr": "信号质量",
   "history.label": "标签",
-  "history.labels": "标签",
+  "history.labels": "显示标签",
   "history.activityLoading": "正在加载文件活动...",
   "history.activityTitle": "文件活动",
   "history.activityFile": "个文件",

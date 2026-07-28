@@ -187,7 +187,7 @@ const search: Record<string, string> = {
   "search.openSession": "Ouvrir la session",
   "search.resultSummary": "{queries} requêtes · {k} voisins · {days} jour(s)",
 
-  "labels.title": "Toutes les étiquettes",
+  "labels.title": "Parcourir les étiquettes",
   "labels.totalLabels": "{n} étiquettes",
   "labels.page": "page {page} sur {total}",
   "labels.noLabels": "Pas encore d'étiquettes",
@@ -204,7 +204,7 @@ const search: Record<string, string> = {
   "labels.date": "Date",
   "labels.duration": "Durée",
   "labels.updated": "Mis à jour",
-  "labels.openLabels": "Toutes les étiquettes",
+  "labels.openLabels": "Parcourir les étiquettes",
   "labels.search.exact": "Exact",
   "labels.search.exactTitle":
     "Filtre instantané par sous-chaîne - trouve les correspondances au fur et à mesure de la saisie",
@@ -339,6 +339,13 @@ const search: Record<string, string> = {
   "embeddings.indexMemory": "Empreinte sur disque",
   "embeddings.indexMemoryRow": "{backend} : {total} ({text} texte · {context} contexte · {eeg} EEG)",
   "embeddings.indexMemoryTotal": "Total : {total}",
+
+  "search.exampleFocusedCoding": "codage concentré",
+  "search.exampleDrowsyAfternoon": "après-midi somnolent",
+  "search.exampleMeetingStress": "stress en réunion",
+  "search.examplesLabel": "Essayer un exemple",
+  "search.advancedToggle": "Avancé",
+  "search.sourceLabel": "Source",
 };
 
 export default search;

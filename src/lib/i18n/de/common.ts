@@ -56,6 +56,13 @@ const common: Record<string, string> = {
     "Ein unerwarteter Fehler ist aufgetreten. Versuchen Sie, die Seite neu zu laden oder zum Dashboard zurückzukehren.",
   "error.goHome": "Zum Dashboard",
   "error.reload": "Seite neu laden",
+
+  "shell.live": "Live",
+  "shell.find": "Finden",
+  "shell.ask": "Fragen",
+  "shell.history": "Verlauf",
+  "shell.navLabel": "Hauptbereiche",
+  "common.reload": "Neu laden",
 };
 
 export default common;

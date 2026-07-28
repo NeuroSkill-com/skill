@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "로컬 모델 검색",
+    "desc": "LM Studio, Ollama, Lemonade 및 HuggingFace / MLX 캐시의 GGUF·MLX 모델 표시"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "LLM 서버 활성화",
     "desc": "WebSocket API와 같은 포트에서 OpenAI 호환 추론 서버를 실행합니다. llm Cargo 기능과 다운로드된 모델이 필요합니다."

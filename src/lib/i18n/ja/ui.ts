@@ -165,7 +165,7 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "ユーティリティ",
   "cmdK.openSettings": "設定を開く",
   "cmdK.openHelp": "ヘルプを開く",
-  "cmdK.openHistory": "履歴を開く",
+  "cmdK.openHistory": "履歴",
   "cmdK.openSearch": "検索",
   "cmdK.openLabel": "ラベルを追加",
   "cmdK.retryConnect": "接続を再試行",
@@ -260,7 +260,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} – EEG検索",
   "window.title.calibration": "{app} – キャリブレーション",
   "window.title.focusTimer": "集中タイマー",
-  "window.title.labels": "すべてのラベル",
+  "window.title.labels": "ラベルを閲覧",
   "window.title.label": "ラベルを追加",
   "window.title.onboarding": "{app} – ようこそ",
   "window.title.api": "{app} – APIステータス",
@@ -338,6 +338,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "安定版リリースより前にリリース候補を受け取ります。手動とバックグラウンドのどちらの更新チェックもこの設定を即座に反映します。",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "メイン",
+  "cmdK.openLive": "ライブ",
+  "cmdK.openChat": "質問",
+  "cmdK.openLabels": "ラベルを閲覧",
+  "cmdK.kw.live": "ダッシュボード ライブ 波形 信号 ストリーミング ホーム",
+  "cmdK.kw.chat": "質問 llm チャット アシスタント モデル 会話 音声",
+  "cmdK.kw.labels": "閲覧 すべてのラベル 注釈 メモ タグ 編集 削除 管理",
 };
 
 export default ui;

@@ -28,13 +28,16 @@
 //! - **persistence** — load / save / merge / cache refresh / active-model queries
 //! - **memory** — `estimate_memory_gb`, `recommend_ctx_size`
 //! - **download** — resumable HuggingFace downloader with multi-shard support
+//! - **discover** — surface GGUFs downloaded by other apps (LM Studio, Ollama, …)
 
+pub mod discover;
 pub mod download;
 pub mod memory;
 pub mod persistence;
 pub mod types;
 
 // Re-export the public API so existing `catalog::*` imports keep working.
+pub use discover::{discover_local_models, source_label, DISCOVERED_TAG};
 pub use download::{download_file, download_model};
 pub use memory::{estimate_memory_gb, recommend_ctx_size};
 pub use types::{

@@ -68,6 +68,8 @@ interface LlmModelEntry {
   recommended: boolean;
   state: DownloadState;
   progress: number;
+  tags?: string[];
+  local_path?: string | null;
 }
 interface LlmCatalogLite {
   entries: LlmModelEntry[];
@@ -151,9 +153,17 @@ const STEP_META: StepMeta[] = [
   { id: "extensions", addedIn: 2 },
   { id: "done", addedIn: 1 },
 ];
+/** First-run path: connect → fit → tray tip → done. Optional steps are reachable from Done. */
+const CORE_STEPS: Step[] = ["welcome", "enable_bluetooth", "bluetooth", "fit", "tray", "done"];
 const STEPS: Step[] = STEP_META.map((s) => s.id);
 
 let step = $state<Step>("welcome");
+/** When false, next/prev follow CORE_STEPS only (skip optional until user opts in). */
+let optionalMode = $state(false);
+let disclaimerAck = $state(false);
+
+const navSteps = $derived(optionalMode ? STEPS : CORE_STEPS);
+let stepIdx = $derived(Math.max(0, navSteps.indexOf(step)));
 
 // ── Onboarding version status (drives "what's new" banner + NEW badges) ────
 interface OnboardingStatus {
@@ -176,7 +186,6 @@ function isNewStep(id: Step): boolean {
 
 // ── Bluetooth adapter check (OS-level)
 let btEnabled = $state<boolean | null>(null);
-let stepIdx = $derived(STEPS.indexOf(step));
 
 // ── Font-size A−/A+ control (in top bar) ──────────────────────────────────
 //
@@ -243,6 +252,13 @@ let modelsTimer: ReturnType<typeof setInterval> | null = null;
 
 // ── Model download step state ─────────────────────────────────────────────
 let llmTarget = $state<LlmModelEntry | null>(null);
+// Models already downloaded elsewhere on this machine (LM Studio, Ollama, HF
+// cache, …), surfaced so the user can reuse one instead of re-downloading.
+let discoveredModels = $state<LlmModelEntry[]>([]);
+// Currently-active model filename from the catalog (tracks reuse adoption).
+let activeLlmModel = $state("");
+// True while adopting a discovered model (disables reuse buttons).
+let llmActionBusy = $state(false);
 let zunaStatus = $state<EegModelStatusLite | null>(null);
 let modelLoadError = $state("");
 let ttsActionBusy = $state(false);
@@ -464,11 +480,18 @@ let autoModelsStarted = $state(false);
 const llmIsDownloading = $derived(llmTarget?.state === "downloading");
 const llmIsDownloaded = $derived(llmTarget?.state === "downloaded");
 const llmProgressPct = $derived((llmTarget?.progress ?? 0) * 100);
+// The adopted (active) discovered model, if reuse satisfied the LLM step.
+const reusedModel = $derived(
+  discoveredModels.find((e) => e.filename === activeLlmModel && e.state === "downloaded") ?? null,
+);
+// The LLM requirement is satisfied by either downloading the default model or
+// reusing one already present elsewhere on the machine.
+const llmReady = $derived(llmIsDownloaded || reusedModel !== null);
 const zunaIsDownloading = $derived(zunaStatus?.downloading_weights ?? false);
 const zunaIsDownloaded = $derived(zunaStatus?.weights_found ?? false);
 const zunaProgressPct = $derived((zunaStatus?.download_progress ?? 0) * 100);
 const allRecommendedReady = $derived(
-  llmIsDownloaded &&
+  llmReady &&
     zunaIsDownloaded &&
     neuttsDlState === "ready" &&
     kittenDlState === "ready" &&
@@ -491,7 +514,7 @@ const footerModelStatus = $derived.by(() => {
       return fmt("NeuTTS", neuttsDlState === "ready", neuttsDlState === "downloading", 0, neuttsDlState === "error");
     if (stage === "ocr")
       return fmt("OCR", ocrDlState === "ready", ocrDlState === "downloading", 0, ocrDlState === "error");
-    return fmt("LLM", llmIsDownloaded, llmIsDownloading, llmProgressPct, false);
+    return fmt("LLM", llmReady, llmIsDownloading, llmProgressPct, false);
   };
   const parts = onboardingDownloadOrder.map(stagePart);
 
@@ -569,8 +592,10 @@ function pickFamilyTarget(entries: LlmModelEntry[], familyId: string, familyRe: 
  *  3. Any recommended model, smallest first.
  */
 function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
-  // If any model is already downloaded, prefer it (skip download).
-  const downloaded = entries.find((e) => !e.is_mmproj && e.state === "downloaded");
+  // If a catalog model was already downloaded through the app, prefer it (skip
+  // download). Discovered (external-app) models are handled separately as an
+  // explicit reuse choice, so they don't silently satisfy the default card.
+  const downloaded = entries.find((e) => !e.is_mmproj && !isDiscoveredEntry(e) && e.state === "downloaded");
   if (downloaded) return downloaded;
 
   return (
@@ -578,6 +603,30 @@ function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
     entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
     null
   );
+}
+
+/** Whether an entry was discovered from another app's cache (tagged "discovered"). */
+function isDiscoveredEntry(e: LlmModelEntry): boolean {
+  return (e.tags ?? []).includes("discovered");
+}
+
+/** Source token of a discovered entry (the tag other than "discovered"). */
+function discoveredSourceToken(e: LlmModelEntry): string {
+  return (e.tags ?? []).find((tag) => tag !== "discovered") ?? "local";
+}
+
+/** Human label for a discovery source token (`lmstudio` → `LM Studio`). */
+function discoverySourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    lmstudio: "LM Studio",
+    ollama: "Ollama",
+    lemonade: "Lemonade",
+    hf: "HuggingFace",
+    mlx: "MLX",
+    vllm: "vLLM",
+    rlx: "RLX",
+  };
+  return labels[source] ?? "Local";
 }
 
 async function refreshModelDownloads() {
@@ -588,11 +637,45 @@ async function refreshModelDownloads() {
       daemonInvoke<boolean>("check_ocr_models_ready"),
     ]);
     llmTarget = pickLlmTarget(catalog.entries);
+    activeLlmModel = catalog.active_model ?? "";
     zunaStatus = eeg;
     if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
     modelLoadError = "";
   } catch (e) {
     modelLoadError = String(e);
+  }
+  // Scan for models already on this machine (best-effort — the endpoint returns
+  // an empty list when discovery is disabled or unsupported by the daemon).
+  await refreshDiscoveredModels();
+}
+
+async function refreshDiscoveredModels() {
+  try {
+    const res = await daemonInvoke<{ enabled?: boolean; models?: LlmModelEntry[] }>("discover_local_models");
+    const models = res?.models ?? [];
+    discoveredModels = models
+      .filter((e) => !e.is_mmproj && e.state === "downloaded")
+      .sort((a, b) => a.size_gb - b.size_gb);
+  } catch {
+    discoveredModels = [];
+  }
+}
+
+/** Reuse an already-downloaded model found elsewhere on the machine. */
+async function adoptDiscoveredModel(entry: LlmModelEntry) {
+  if (llmActionBusy) return;
+  llmActionBusy = true;
+  modelLoadError = "";
+  try {
+    // Same path Settings → LLM uses to adopt a discovered model: sets it active
+    // in the catalog and (re)loads the server with it.
+    await daemonInvoke("switch_llm_model", { filename: entry.filename });
+    activeLlmModel = entry.filename;
+    await refreshModelDownloads();
+  } catch (e) {
+    modelLoadError = String(e);
+  } finally {
+    llmActionBusy = false;
   }
 }
 
@@ -683,7 +766,7 @@ async function downloadRecommendedBundle() {
         if (neuttsDlState !== "ready") await downloadTtsBackend("neutts");
       } else if (stage === "ocr") {
         if (ocrDlState !== "ready") await downloadOcrModels();
-      } else if (!llmIsDownloaded && !llmIsDownloading) {
+      } else if (!llmReady && !llmIsDownloading) {
         await downloadLlm();
       }
     }
@@ -787,6 +870,19 @@ onMount(async () => {
   // Best-effort: if the call fails the wizard still works, just without badges.
   try {
     onboardingStatus = await invoke<OnboardingStatus>("get_onboarding_status");
+    // Returning users with newly added steps should see the full wizard (NEW badges).
+    if (
+      onboardingStatus.isReturning &&
+      STEP_META.some(
+        (m) =>
+          m.addedIn > onboardingStatus.completedVersion &&
+          m.id !== "done" &&
+          m.id !== "welcome" &&
+          !CORE_STEPS.includes(m.id),
+      )
+    ) {
+      optionalMode = true;
+    }
   } catch {}
 
   status = await getDeviceStatus<DeviceStatus>();
@@ -973,11 +1069,15 @@ $effect(() => {
 // ── Navigation ─────────────────────────────────────────────────────────────
 function next() {
   const i = stepIdx;
-  if (i < STEPS.length - 1) step = STEPS[i + 1];
+  if (i < navSteps.length - 1) step = navSteps[i + 1];
 }
 function prev() {
   const i = stepIdx;
-  if (i > 0) step = STEPS[i - 1];
+  if (i > 0) step = navSteps[i - 1];
+}
+function enterOptionalSetup() {
+  optionalMode = true;
+  step = "calibration";
 }
 
 function onArrowKey(e: KeyboardEvent) {
@@ -1059,12 +1159,12 @@ useWindowTitle("window.title.onboarding");
 
   <!-- ── Progress ──────────────────────────────────────────────────────────── -->
   <div class="px-4 pb-2 shrink-0">
-    <Progress value={((stepIdx) / (STEPS.length - 1)) * 100} class="h-1"
+    <Progress value={navSteps.length > 1 ? (stepIdx / (navSteps.length - 1)) * 100 : 0} class="h-1"
               aria-label="Setup progress" />
     <!-- On narrow viewports the step labels don't fit; show numbers
          only and surface the active step's label below. -->
     <div class="flex justify-between mt-1">
-      {#each STEPS as s, i}
+      {#each navSteps as s, i}
         <button
           onclick={() => { if (i <= stepIdx && !calRunning) step = s; }}
           aria-label={t(`onboarding.step.${s}`)}
@@ -1097,7 +1197,6 @@ useWindowTitle("window.title.onboarding");
     <!-- ════ WELCOME ══════════════════════════════════════════════════════════ -->
     {#if step === "welcome"}
       <div class="flex flex-col items-center gap-3 pt-4 text-center" in:fly={{ x: 30, duration: 200 }}>
-        <span class="text-4xl">🧠</span>
         <h2 class="text-[1.05rem] font-bold">
           {onboardingStatus.isReturning ? t("onboarding.welcomeBackTitle") : t("onboarding.welcomeTitle")}
         </h2>
@@ -1130,11 +1229,7 @@ useWindowTitle("window.title.onboarding");
           {#each [
             { id: "bluetooth",   icon: "📡" },
             { id: "fit",         icon: "🎧" },
-            { id: "calibration", icon: "🎯" },
-            { id: "models",      icon: "⬇️" },
             { id: "tray",        icon: "🖥" },
-            { id: "permissions", icon: "🔒" },
-            { id: "extensions",  icon: "🧩" },
           ] as s}
             <div class="relative flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
                         bg-muted dark:bg-surface-2 px-3 py-2">
@@ -1143,15 +1238,21 @@ useWindowTitle("window.title.onboarding");
                 <span class="text-ui-base font-semibold">{t(`onboarding.step.${s.id}`)}</span>
                 <span class="text-ui-xs text-muted-foreground">{t(`onboarding.${s.id}Hint`)}</span>
               </div>
-              {#if isNewStep(s.id as Step)}
-                <span class="text-ui-2xs font-bold tracking-widest px-1 py-px rounded-sm
-                             bg-violet-500 text-white shadow-sm uppercase leading-none shrink-0">
-                  {t("onboarding.newBadge")}
-                </span>
-              {/if}
             </div>
           {/each}
+          <p class="text-ui-xs text-muted-foreground/70 text-left leading-relaxed px-1">
+            {t("onboarding.doneOptionalBody")}
+          </p>
         </div>
+
+        <label class="flex items-start gap-2.5 w-full max-w-[340px] text-left mt-1 cursor-pointer
+                      rounded-lg border border-amber-400/30 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2.5">
+          <input type="checkbox" bind:checked={disclaimerAck}
+                 class="mt-0.5 rounded border-border" />
+          <span class="text-ui-sm text-foreground/80 leading-relaxed">
+            {t("onboarding.disclaimerAck")}
+          </span>
+        </label>
       </div>
 
     <!-- ════ ENABLE BLUETOOTH (OS) ═════════════════════════════════════════════════ -->
@@ -1413,6 +1514,38 @@ useWindowTitle("window.title.onboarding");
         <p class="text-ui-base text-muted-foreground leading-relaxed max-w-[340px]">
           {t("onboarding.modelsBody")}
         </p>
+        <p class="text-ui-sm text-muted-foreground/70 leading-relaxed max-w-[340px]">
+          {t("onboarding.modelsDownloadLater")}
+        </p>
+
+        {#if discoveredModels.length > 0}
+          <Card class="w-full max-w-[360px] border-emerald-500/30 dark:border-emerald-400/20 bg-emerald-500/[0.04] dark:bg-emerald-400/[0.04] gap-0 py-0 overflow-hidden">
+            <CardContent class="px-3 py-3 flex flex-col gap-2 text-left">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">♻️</span>
+                <span class="text-ui-base font-semibold">{t("onboarding.models.reuseTitle")}</span>
+              </div>
+              <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.reuseHint")}</p>
+              {#each discoveredModels as model (model.filename)}
+                {@const isActive = model.filename === activeLlmModel}
+                <div class="flex items-center gap-2 rounded-lg border border-border/70 dark:border-white/[0.08] bg-surface-1 px-2.5 py-2">
+                  <div class="flex flex-col min-w-0 flex-1">
+                    <span class="text-ui-sm font-medium truncate">{model.family_name || model.filename}</span>
+                    <span class="text-ui-2xs text-muted-foreground/70">
+                      {t("onboarding.models.reuseFrom", { source: discoverySourceLabel(discoveredSourceToken(model)) })}
+                      {#if model.quant}· {model.quant}{/if}
+                      {#if model.size_gb > 0}· {model.size_gb.toFixed(1)} GB{/if}
+                    </span>
+                  </div>
+                  <Button size="sm" class="h-7 text-ui-sm px-3 shrink-0" onclick={() => adoptDiscoveredModel(model)}
+                          disabled={isActive || llmActionBusy}>
+                    {isActive ? t("onboarding.models.reuseActive") : t("onboarding.models.reuseUse")}
+                  </Button>
+                </div>
+              {/each}
+            </CardContent>
+          </Card>
+        {/if}
 
         <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-surface-1 gap-0 py-0 overflow-hidden">
           <CardContent class="px-3 py-3 flex flex-col gap-3">
@@ -1437,7 +1570,11 @@ useWindowTitle("window.title.onboarding");
                 </span>
               </div>
               <p class="text-ui-sm text-muted-foreground/80 leading-relaxed">{t("onboarding.models.qwenDesc")}</p>
-              {#if llmTarget?.repo}
+              {#if reusedModel && !llmIsDownloaded}
+                <p class="text-ui-xs text-emerald-600 dark:text-emerald-400 leading-relaxed">
+                  ♻️ {t("onboarding.models.reuseSatisfied", { model: reusedModel.family_name || reusedModel.filename })}
+                </p>
+              {:else if llmTarget?.repo}
                 <p class="text-ui-2xs text-muted-foreground/70 font-mono">🤗 hf download {llmTarget.repo} {llmTarget.filename}</p>
               {/if}
               {#if llmIsDownloading}
@@ -1889,7 +2026,6 @@ useWindowTitle("window.title.onboarding");
           </p>
         {:else}
           <!-- Default Done View -->
-          <span class="text-4xl">🎉</span>
           <h2 class="text-[1.05rem] font-bold">{t("onboarding.doneTitle")}</h2>
           <p class="text-ui-md text-muted-foreground leading-relaxed max-w-[320px]">
             {t("onboarding.doneBody")}
@@ -1900,11 +2036,21 @@ useWindowTitle("window.title.onboarding");
           {#each ["tray", "shortcuts", "help"] as tip}
             <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
                         bg-muted dark:bg-surface-2 px-3 py-2 text-left">
-              <span class="text-base shrink-0">{tip === "tray" ? "🖥" : tip === "shortcuts" ? "⌨" : "❓"}</span>
               <p class="text-ui-sm text-muted-foreground leading-relaxed">{t(`onboarding.doneTip.${tip}`)}</p>
             </div>
           {/each}
         </div>
+
+        {#if !optionalMode}
+          <div class="w-full max-w-[300px] mt-2 rounded-lg border border-border dark:border-white/[0.06]
+                      bg-muted/50 dark:bg-surface-2 px-3 py-2.5 flex flex-col gap-2 text-left">
+            <p class="text-ui-base font-semibold">{t("onboarding.doneOptionalTitle")}</p>
+            <p class="text-ui-sm text-muted-foreground leading-relaxed">{t("onboarding.doneOptionalBody")}</p>
+            <Button size="sm" variant="outline" class="self-start h-7 text-ui-sm" onclick={enterOptionalSetup}>
+              {t("onboarding.doneOptionalCta")}
+            </Button>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -1921,7 +2067,7 @@ useWindowTitle("window.title.onboarding");
     {/if}
 
     <div class="flex gap-1.5">
-      {#each STEPS as _, i}
+      {#each navSteps as _, i}
         <div class="w-1.5 h-1.5 rounded-full transition-colors
                     {i === stepIdx ? 'bg-foreground' : i < stepIdx ? 'bg-foreground/30' : 'bg-muted-foreground/20'}"></div>
       {/each}
@@ -1937,9 +2083,17 @@ useWindowTitle("window.title.onboarding");
     {:else if step === "calibration" && calPhase.kind === "done"}
       <!-- "Next" shown inline in the done screen — hide duplicate here -->
       <span></span>
+    {:else if step === "welcome"}
+      <Button size="sm" class="text-ui-base h-7 px-3" onclick={next} disabled={!disclaimerAck}>
+        {t("onboarding.getStarted")} →
+      </Button>
+    {:else if step === "models"}
+      <Button size="sm" variant="outline" class="text-ui-base h-7 px-3" onclick={next}>
+        {t("onboarding.modelsSkipPrimary")} →
+      </Button>
     {:else}
       <Button size="sm" class="text-ui-base h-7 px-3" onclick={next}>
-        {step === "welcome" ? t("onboarding.getStarted") : t("onboarding.next")} →
+        {t("onboarding.next")} →
       </Button>
     {/if}
   </div>

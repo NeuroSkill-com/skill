@@ -851,6 +851,18 @@ const settings: Record<string, string> = {
   "daemonActivity.lastRanHoursAgo": "vor {n} h",
   "daemonActivity.tickDuration": "Dauer: {n} ms",
   "daemonActivity.tickCount": "{n}× ausgeführt",
+
+  "settingsTabs.clients": "Clients",
+  "settingsTabs.terminal": "Terminal",
+  "settingsTabs.validation": "Validierung",
+  "settings.group.signal": "Signal",
+  "settings.group.intelligence": "Intelligenz",
+  "settings.group.capture": "Erfassung & Datenschutz",
+  "settings.group.automation": "Automatisierung",
+  "settings.group.app": "App",
+  "settings.group.advanced": "Erweitert",
+  "settings.group.showAdvanced": "Erweitert anzeigen",
+  "settings.group.hideAdvanced": "Erweitert ausblenden",
 };
 
 export default settings;

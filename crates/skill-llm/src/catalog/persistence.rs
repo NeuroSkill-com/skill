@@ -14,6 +14,7 @@
 //! the next save.
 
 use super::types::*;
+use crate::config::ModelDiscoveryConfig;
 use std::path::{Path, PathBuf};
 
 /// The bundled default catalog, embedded at compile time.
@@ -44,6 +45,28 @@ trait Pipe: Sized {
     }
 }
 impl<T> Pipe for T {}
+
+/// Canonicalize a path for de-dup comparison, falling back to the path as-is
+/// when it cannot be resolved (e.g. a symlink target that no longer exists).
+fn canonical(p: &Path) -> PathBuf {
+    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Short deterministic hash of an absolute path (first 8 hex of SHA-256).
+fn short_path_hash(p: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(p.to_string_lossy().as_bytes());
+    hex::encode(h.finalize())[..8].to_string()
+}
+
+/// Split `"name.gguf"` into `("name", ".gguf")`; no extension → `(name, "")`.
+fn split_ext(filename: &str) -> (&str, &str) {
+    match filename.rfind('.') {
+        Some(i) => (&filename[..i], &filename[i..]),
+        None => (filename, ""),
+    }
+}
 
 impl LlmCatalog {
     /// Load the catalog for `skill_dir`.
@@ -100,6 +123,9 @@ impl LlmCatalog {
         };
 
         cat.refresh_cache();
+        // Discovery is config-driven and orchestrated by the daemon (which owns
+        // settings) via `apply_discovery` right after load — see
+        // `skill-daemon-state`. `load()` itself stays offline/config-free.
         cat
     }
 
@@ -107,9 +133,19 @@ impl LlmCatalog {
     ///
     /// Always writes the **normalized** format.  Any legacy flat file is
     /// replaced, completing the migration.
+    ///
+    /// Discovered-model entries (the live LM Studio / Ollama / … overlay) are
+    /// **excluded** — they are recomputed from disk on every load via
+    /// [`apply_discovery`](LlmCatalog::apply_discovery), so persisting them
+    /// would only risk stale entries.
     pub fn save(&self, skill_dir: &Path) {
         let path = skill_dir.join(CATALOG_FILE);
-        let norm = self.deflate();
+        let persistable = LlmCatalog {
+            entries: self.entries.iter().filter(|e| !e.is_discovered()).cloned().collect(),
+            active_model: self.active_model.clone(),
+            active_mmproj: self.active_mmproj.clone(),
+        };
+        let norm = persistable.deflate();
         if let Ok(json) = serde_json::to_string_pretty(&norm) {
             let _ = std::fs::write(path, json);
         }
@@ -117,9 +153,15 @@ impl LlmCatalog {
 
     /// Probe the HF Hub disk cache and update `local_path` / `state` for
     /// every entry that is not currently downloading.  Zero network I/O.
+    ///
+    /// Discovered entries (from LM Studio / Ollama / … — see [`apply_discovery`])
+    /// are skipped: their `local_path` lives **outside** the HF Hub cache, so
+    /// resolving them here would wipe the path and mark them `NotDownloaded`.
+    ///
+    /// [`apply_discovery`]: LlmCatalog::apply_discovery
     pub fn refresh_cache(&mut self) {
         for entry in &mut self.entries {
-            if entry.state == DownloadState::Downloading {
+            if entry.state == DownloadState::Downloading || entry.is_discovered() {
                 continue;
             }
             entry.local_path = entry.resolve_cached();
@@ -128,6 +170,54 @@ impl LlmCatalog {
             } else {
                 DownloadState::NotDownloaded
             };
+        }
+    }
+
+    /// Rebuild the **discovered-model overlay**: GGUFs that other local apps
+    /// (LM Studio, Ollama, Lemonade, HF cache, …) already downloaded, surfaced
+    /// as `Downloaded` catalog entries the engine can load by path.
+    ///
+    /// Idempotent and cheap to re-run — call it after load and on every catalog
+    /// refresh. It drops the previous overlay, then appends a fresh scan
+    /// (honoring `cfg`: enable flag, source allowlist, extra dirs),
+    /// de-duplicating by canonical path (a model already in the catalog via the
+    /// HF cache is not shown twice) and by `filename` key (collisions across
+    /// sources get a short path-hash suffix so selection stays unambiguous).
+    ///
+    /// When `cfg.enabled == false` the scan yields nothing, so this simply
+    /// clears any existing overlay.
+    pub fn apply_discovery(&mut self, cfg: &ModelDiscoveryConfig) {
+        use std::collections::HashSet;
+
+        // 1. Drop any prior overlay (discovered entries are never persisted, but
+        //    an older on-disk catalog may still carry some — strip those too).
+        self.entries.retain(|e| !e.is_discovered());
+
+        // 2. Paths & keys already represented by the rest of the catalog.
+        let mut taken_paths: HashSet<PathBuf> = self
+            .entries
+            .iter()
+            .filter_map(|e| e.local_path.as_ref().map(|p| canonical(p)))
+            .collect();
+        let mut taken_names: HashSet<String> = self.entries.iter().map(|e| e.filename.clone()).collect();
+
+        // 3. Append fresh scan results, de-duplicated.
+        for mut entry in super::discover::discover_local_models(cfg) {
+            let Some(path) = entry.local_path.clone() else {
+                continue;
+            };
+            let canon = canonical(&path);
+            if !taken_paths.insert(canon) {
+                continue; // same file already known (e.g. HF-cache dup)
+            }
+            if !taken_names.insert(entry.filename.clone()) {
+                // Disambiguate a colliding key with a short, deterministic hash.
+                let suffix = short_path_hash(&path);
+                let (stem, ext) = split_ext(&entry.filename);
+                entry.filename = format!("{stem}.{suffix}{ext}");
+                taken_names.insert(entry.filename.clone());
+            }
+            self.entries.push(entry);
         }
     }
 

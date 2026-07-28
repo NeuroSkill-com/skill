@@ -183,6 +183,12 @@ const dashboard: Record<string, string> = {
   "dashboard.primary": "主设备",
   "dashboard.backgroundRecordings": "后台录制",
   "dashboard.stopSecondary": "停止录制",
+
+  "dashboard.viewWaveform": "波形",
+  "dashboard.viewPhysiology": "生理",
+  "dashboard.viewState": "状态",
+  "dashboard.viewLabel": "实时视图",
+  "dashboard.streamingToast": "正在流式传输。有趣的瞬间可从标题栏添加标签。",
 };
 
 export default dashboard;

@@ -324,13 +324,39 @@ pub(super) async fn cmd_llm_downloads(state: &AppState) -> Result<Value, String>
     Ok(json!({ "downloads": items }))
 }
 
+/// Current local-model-discovery settings (defaults when the LLM feature is off).
+#[cfg(feature = "llm")]
+fn discovery_cfg(state: &AppState) -> skill_llm::config::ModelDiscoveryConfig {
+    state.llm_config.lock().map(|c| c.discovery.clone()).unwrap_or_default()
+}
+#[cfg(not(feature = "llm"))]
+fn discovery_cfg(_state: &AppState) -> skill_llm::config::ModelDiscoveryConfig {
+    skill_llm::config::ModelDiscoveryConfig::default()
+}
+
 pub(super) async fn cmd_llm_refresh(state: &AppState) -> Result<Value, String> {
+    let cfg = discovery_cfg(state);
     if let Ok(mut cat) = state.llm_catalog.lock() {
         cat.refresh_cache();
+        cat.apply_discovery(&cfg);
         cat.auto_select();
     }
     persist_llm_catalog(state);
     Ok(json!({}))
+}
+
+/// Re-scan local app caches (LM Studio, Ollama, Lemonade, HF, …) for GGUF
+/// models and return the discovered overlay. Mirrors `llm_discover_local_impl`.
+pub(super) async fn cmd_llm_discover(state: &AppState) -> Result<Value, String> {
+    let cfg = discovery_cfg(state);
+    let models: Vec<skill_llm::catalog::LlmModelEntry> = if let Ok(mut cat) = state.llm_catalog.lock() {
+        cat.apply_discovery(&cfg);
+        cat.entries.iter().filter(|e| e.is_discovered()).cloned().collect()
+    } else {
+        Vec::new()
+    };
+    persist_llm_catalog(state);
+    Ok(json!({ "ok": true, "enabled": cfg.enabled, "models": models }))
 }
 
 pub(super) async fn cmd_llm_hardware_fit(state: &AppState) -> Result<Value, String> {

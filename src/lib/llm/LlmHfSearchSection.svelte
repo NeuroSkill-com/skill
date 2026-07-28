@@ -35,6 +35,7 @@ let { onModelAdded }: Props = $props();
 // ── State ──────────────────────────────────────────────────────────────────
 
 let query = $state("");
+let searchFormat = $state<"gguf" | "mlx">("gguf");
 let searching = $state(false);
 let searchError = $state("");
 let results = $state<HfSearchResult[]>([]);
@@ -85,7 +86,7 @@ async function doSearch() {
   searchError = "";
   try {
     const resp = await daemonGet<{ ok: boolean; results?: HfSearchResult[]; error?: string }>(
-      `/v1/llm/catalog/search?q=${encodeURIComponent(q)}&limit=12`,
+      `/v1/llm/catalog/search?q=${encodeURIComponent(q)}&limit=12&format=${searchFormat}`,
     );
     if (resp.ok && resp.results) {
       results = resp.results;
@@ -98,6 +99,17 @@ async function doSearch() {
     results = [];
   } finally {
     searching = false;
+  }
+}
+
+function setFormat(next: "gguf" | "mlx") {
+  if (searchFormat === next) return;
+  searchFormat = next;
+  expandedRepo = null;
+  repoFiles = [];
+  if (query.trim().length >= 2) {
+    clearTimeout(debounceTimer);
+    void doSearch();
   }
 }
 
@@ -117,7 +129,7 @@ async function toggleRepo(repo: string) {
   readmeExpanded = false;
   try {
     const resp = await daemonGet<{ ok: boolean; files?: HfFile[]; readme?: string | null; error?: string }>(
-      `/v1/llm/catalog/search/files?repo=${encodeURIComponent(repo)}`,
+      `/v1/llm/catalog/search/files?repo=${encodeURIComponent(repo)}&format=${searchFormat}`,
     );
     if (resp.ok && resp.files) {
       repoFiles = resp.files;
@@ -140,6 +152,30 @@ async function addModel(repo: string, file: HfFile, download: boolean) {
       filename: file.filename,
       size_gb: file.size_gb,
       download,
+      format: searchFormat,
+    });
+    await onModelAdded();
+  } catch (e: unknown) {
+    // silently handled — catalog refresh will show the entry
+  } finally {
+    addingFile = null;
+  }
+}
+
+/** Add an mlx-community snapshot as one catalog entry (config.json + shard_files). */
+async function addMlxPack(repo: string, files: HfFile[], download: boolean) {
+  if (files.length === 0) return;
+  addingFile = "__mlx_pack__";
+  const size_gb = files.reduce((sum, f) => sum + (f.size_gb || 0), 0);
+  const shard_files = files.map((f) => f.filename);
+  try {
+    await daemonPost("/v1/llm/catalog/add-model", {
+      repo,
+      filename: "config.json",
+      size_gb: Math.round(size_gb * 100) / 100,
+      download,
+      format: "mlx",
+      shardFiles: shard_files,
     });
     await onModelAdded();
   } catch (e: unknown) {
@@ -175,16 +211,36 @@ const NOTABLE_TAGS = new Set([
 </script>
 
 <section class="flex flex-col gap-2">
-  <div class="flex items-center gap-2 px-0.5">
+  <div class="flex items-center justify-between gap-2 px-0.5">
     <SectionHeader>{t("llm.hfSearch.title")}</SectionHeader>
+    <div class="flex items-center gap-1 rounded-lg border border-border/60 dark:border-white/[0.06] p-0.5 bg-surface-2">
+      <button
+        type="button"
+        class="text-ui-xs px-2 py-1 rounded-md cursor-pointer transition-colors {searchFormat === 'gguf'
+          ? 'bg-surface-1 text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => setFormat("gguf")}
+      >
+        {t("llm.hfSearch.formatGguf")}
+      </button>
+      <button
+        type="button"
+        class="text-ui-xs px-2 py-1 rounded-md cursor-pointer transition-colors {searchFormat === 'mlx'
+          ? 'bg-surface-1 text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => setFormat("mlx")}
+      >
+        {t("llm.hfSearch.formatMlx")}
+      </button>
+    </div>
   </div>
 
   <!-- Search input -->
   <div class="relative">
     <input
       type="text"
-      aria-label={t("llm.hfSearch.placeholder")}
-      placeholder={t("llm.hfSearch.placeholder")}
+      aria-label={searchFormat === "mlx" ? t("llm.hfSearch.placeholderMlx") : t("llm.hfSearch.placeholder")}
+      placeholder={searchFormat === "mlx" ? t("llm.hfSearch.placeholderMlx") : t("llm.hfSearch.placeholder")}
       bind:value={query}
       oninput={onInput}
       onkeydown={(e) => { if (e.key === "Enter") { clearTimeout(debounceTimer); doSearch(); } }}
@@ -276,8 +332,29 @@ const NOTABLE_TAGS = new Set([
                 {:else if filesError}
                   <div class="px-4 py-3 text-ui-sm text-destructive">{filesError}</div>
                 {:else if repoFiles.length === 0}
-                  <div class="px-4 py-3 text-ui-sm text-muted-foreground">{t("llm.hfSearch.noFiles")}</div>
+                  <div class="px-4 py-3 text-ui-sm text-muted-foreground">{searchFormat === "mlx" ? t("llm.hfSearch.noFilesMlx") : t("llm.hfSearch.noFiles")}</div>
                 {:else}
+                  {#if searchFormat === "mlx"}
+                    {@const isAddingPack = addingFile === "__mlx_pack__"}
+                    {@const packGb = repoFiles.reduce((sum, f) => sum + (f.size_gb || 0), 0)}
+                    <div class="flex items-center gap-2 px-4 py-2.5 bg-surface-3/80 border-b border-border/40 dark:border-white/[0.04]">
+                      <span class="text-ui-sm text-muted-foreground truncate">
+                        {t("llm.hfSearch.mlxPackHint")} · {fmtGB(packGb)} · {repoFiles.length} files
+                      </span>
+                      <div class="ml-auto flex items-center gap-1 shrink-0">
+                        <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2"
+                          disabled={isAddingPack}
+                          onclick={() => addMlxPack(r.repo, repoFiles, false)}>
+                          {isAddingPack ? "…" : t("llm.hfSearch.addBtn")}
+                        </Button>
+                        <Button size="sm" class="h-6 text-ui-sm px-2 bg-violet-600 hover:bg-violet-700 text-white"
+                          disabled={isAddingPack}
+                          onclick={() => addMlxPack(r.repo, repoFiles, true)}>
+                          {isAddingPack ? "…" : t("llm.hfSearch.addDownloadBtn")}
+                        </Button>
+                      </div>
+                    </div>
+                  {/if}
                   <!-- Column headers -->
                   <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center px-4 py-1.5 bg-surface-3">
                     <span class="text-ui-xs font-semibold uppercase tracking-widest text-muted-foreground/60">{t("llm.hfSearch.colQuant")}</span>
@@ -299,16 +376,18 @@ const NOTABLE_TAGS = new Set([
                           {/if}
                         </div>
                         <div class="flex items-center gap-1 shrink-0">
-                          <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2"
-                            disabled={isAdding}
-                            onclick={() => addModel(r.repo, file, false)}>
-                            {isAdding ? "…" : t("llm.hfSearch.addBtn")}
-                          </Button>
-                          <Button size="sm" class="h-6 text-ui-sm px-2 bg-violet-600 hover:bg-violet-700 text-white"
-                            disabled={isAdding}
-                            onclick={() => addModel(r.repo, file, true)}>
-                            {isAdding ? "…" : t("llm.hfSearch.addDownloadBtn")}
-                          </Button>
+                          {#if searchFormat !== "mlx"}
+                            <Button size="sm" variant="outline" class="h-6 text-ui-sm px-2"
+                              disabled={isAdding}
+                              onclick={() => addModel(r.repo, file, false)}>
+                              {isAdding ? "…" : t("llm.hfSearch.addBtn")}
+                            </Button>
+                            <Button size="sm" class="h-6 text-ui-sm px-2 bg-violet-600 hover:bg-violet-700 text-white"
+                              disabled={isAdding}
+                              onclick={() => addModel(r.repo, file, true)}>
+                              {isAdding ? "…" : t("llm.hfSearch.addDownloadBtn")}
+                            </Button>
+                          {/if}
                         </div>
                       </div>
                     {/each}
@@ -321,7 +400,7 @@ const NOTABLE_TAGS = new Set([
       {/each}
     </div>
   {:else if !searching && query.trim().length >= 2 && !searchError}
-    <p class="text-ui-sm text-muted-foreground px-1">{t("llm.hfSearch.noResults")}</p>
+    <p class="text-ui-sm text-muted-foreground px-1">{searchFormat === "mlx" ? t("llm.hfSearch.noResultsMlx") : t("llm.hfSearch.noResults")}</p>
   {/if}
 </section>
 

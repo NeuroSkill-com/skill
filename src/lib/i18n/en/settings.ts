@@ -741,6 +741,19 @@ const settings: Record<string, string> = {
   "settings.storageFormatParquetDesc": "Columnar, compressed",
   "settings.storageFormatBothDesc": "CSV + Parquet simultaneously",
 
+  // ── Settings IA groups ──────────────────────────────────────────────────
+  "settingsTabs.clients": "Clients",
+  "settingsTabs.terminal": "Terminal",
+  "settingsTabs.validation": "Validation",
+  "settings.group.signal": "Signal",
+  "settings.group.intelligence": "Intelligence",
+  "settings.group.capture": "Capture & Privacy",
+  "settings.group.automation": "Automation",
+  "settings.group.app": "App",
+  "settings.group.advanced": "Advanced",
+  "settings.group.showAdvanced": "Show advanced",
+  "settings.group.hideAdvanced": "Hide advanced",
+
   // ── Extensions tab ──────────────────────────────────────────────────────
   "settingsTabs.extensions": "Extensions",
   "extensions.ideTitle": "IDE Extensions",

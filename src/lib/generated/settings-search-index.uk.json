@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "Виявляти локальні моделі",
+    "desc": "Показувати GGUF і MLX з LM Studio, Ollama, Lemonade та кешу HuggingFace / MLX"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "Увімкнути LLM сервер",
     "desc": "Запустити OpenAI-сумісний сервер інференсу на тому ж порту, що й WebSocket API. Потрібен Cargo feature llm і завантажена модель."

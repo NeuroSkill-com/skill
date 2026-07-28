@@ -215,7 +215,7 @@ const search: Record<string, string> = {
   "search.umapShow": "3D 맵",
   "search.openSession": "세션 열기",
 
-  "labels.title": "모든 라벨",
+  "labels.title": "라벨 찾아보기",
   "labels.totalLabels": "{n}개 라벨",
   "labels.page": "{total} 중 {page} 페이지",
   "labels.noLabels": "아직 라벨이 없습니다",
@@ -231,7 +231,7 @@ const search: Record<string, string> = {
   "labels.date": "날짜",
   "labels.duration": "시간",
   "labels.updated": "수정됨",
-  "labels.openLabels": "모든 라벨",
+  "labels.openLabels": "라벨 찾아보기",
   "labels.search.exact": "정확",
   "labels.search.exactTitle": "입력하는 대로 매칭되는 즉시 부분 문자열 필터",
   "labels.search.semantic": "시맨틱",
@@ -326,6 +326,13 @@ const search: Record<string, string> = {
   "search.nodeScreenshotsTip": "일치 항목 근처 스크린샷",
 
   "search.maxTokens": "토큰",
+
+  "search.exampleFocusedCoding": "집중 코딩",
+  "search.exampleDrowsyAfternoon": "졸린 오후",
+  "search.exampleMeetingStress": "회의 스트레스",
+  "search.examplesLabel": "예시 시도",
+  "search.advancedToggle": "고급",
+  "search.sourceLabel": "소스",
 };
 
 export default search;

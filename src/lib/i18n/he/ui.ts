@@ -103,8 +103,8 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "כלים",
   "cmdK.openSettings": "פתח הגדרות",
   "cmdK.openHelp": "פתח עזרה",
-  "cmdK.openHistory": "פתח היסטוריה",
-  "cmdK.openSearch": "חפש embeddings",
+  "cmdK.openHistory": "היסטוריה",
+  "cmdK.openSearch": "חיפוש",
   "cmdK.openLabel": "הוסף תווית",
   "cmdK.retryConnect": "נסה חיבור מחדש",
   "cmdK.openBtSettings": "פתח הגדרות Bluetooth",
@@ -255,7 +255,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} – חיפוש EEG",
   "window.title.calibration": "{app} – כיול",
   "window.title.focusTimer": "טיימר מיקוד",
-  "window.title.labels": "כל התוויות",
+  "window.title.labels": "עיון בתוויות",
   "window.title.label": "הוסף תווית",
   "window.title.onboarding": "{app} – ברוכים הבאים",
   "window.title.api": "{app} – סטטוס API",
@@ -331,6 +331,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "קבל מועמדי גרסה לפני הגרסאות היציבות. בדיקות ידניות ואוטומטיות מתחשבות בהגדרה זו באופן מיידי.",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "ראשי",
+  "cmdK.openLive": "חי",
+  "cmdK.openChat": "שאלה",
+  "cmdK.openLabels": "עיון בתוויות",
+  "cmdK.kw.live": "לוח חי צורת גל אות סטרימינג ראשי בית",
+  "cmdK.kw.chat": "שאלה llm צ׳אט עוזר מודל שיחה קול",
+  "cmdK.kw.labels": "עיון כל התוויות הערות תגיות עריכה מחיקה ניהול",
 };
 
 export default ui;

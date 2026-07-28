@@ -55,6 +55,13 @@ const common: Record<string, string> = {
   "error.description": "예상치 못한 오류가 발생했습니다. 페이지를 새로고침하거나 대시보드로 돌아가 보세요.",
   "error.goHome": "대시보드로 이동",
   "error.reload": "페이지 새로고침",
+
+  "shell.live": "라이브",
+  "shell.find": "찾기",
+  "shell.ask": "질문",
+  "shell.history": "기록",
+  "shell.navLabel": "주요 화면",
+  "common.reload": "다시 로드",
 };
 
 export default common;

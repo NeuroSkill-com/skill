@@ -23,6 +23,7 @@ import "$lib/stores/font-size.svelte";
 import "$lib/stores/chart-colors.svelte";
 // Side-effect: fetches canonical app name from Rust backend
 import "$lib/stores/app-name.svelte";
+import AppShellNav from "$lib/AppShellNav.svelte";
 import CommandPalette from "$lib/CommandPalette.svelte";
 import CustomTitleBar from "$lib/CustomTitleBar.svelte";
 import { ToastContainer } from "$lib/components/ui/toast";
@@ -95,7 +96,10 @@ onDestroy(() => unlisteners.forEach((u) => u()));
 <CommandPalette />
 <WhatsNew />
 <PairBrowserModal />
+<!-- Shell sits inside #main-content so it clears the fixed titlebar (30px pad)
+     and stays clickable — outside it was painted under the drag region. -->
 <div id="main-content" class="flex flex-col flex-1 min-h-0">
+  <AppShellNav />
   <div class="flex-1 min-h-0 overflow-auto">
     {@render children()}
   </div>

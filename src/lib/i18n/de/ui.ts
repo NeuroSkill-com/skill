@@ -94,8 +94,8 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "Dienstprogramme",
   "cmdK.openSettings": "Einstellungen öffnen",
   "cmdK.openHelp": "Hilfe öffnen",
-  "cmdK.openHistory": "Verlauf öffnen",
-  "cmdK.openSearch": "Embeddings durchsuchen",
+  "cmdK.openHistory": "Verlauf",
+  "cmdK.openSearch": "Finden",
   "cmdK.openLabel": "Label hinzufügen",
   "cmdK.retryConnect": "Verbindung wiederholen",
   "cmdK.openBtSettings": "Bluetooth-Einstellungen öffnen",
@@ -262,7 +262,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} - EEG-Suche",
   "window.title.calibration": "{app} - Kalibrierung",
   "window.title.focusTimer": "Fokus-Timer",
-  "window.title.labels": "Alle Beschriftungen",
+  "window.title.labels": "Labels durchsuchen",
   "window.title.label": "Beschriftung hinzufügen",
   "window.title.onboarding": "{app} - Willkommen",
   "window.title.api": "{app} - API-Status",
@@ -348,6 +348,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "Erhalte Release-Kandidaten vor den stabilen Versionen. Manuelle und automatische Prüfungen berücksichtigen diese Einstellung sofort.",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "Primär",
+  "cmdK.openLive": "Live",
+  "cmdK.openChat": "Fragen",
+  "cmdK.openLabels": "Labels durchsuchen",
+  "cmdK.kw.live": "dashboard live wellenform signal streaming haupt startseite",
+  "cmdK.kw.chat": "fragen llm chat assistent modell gespräch stimme",
+  "cmdK.kw.labels": "alle labels annotationen notizen tags bearbeiten löschen verwalten",
 };
 
 export default ui;

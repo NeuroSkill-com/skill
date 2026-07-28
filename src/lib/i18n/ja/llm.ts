@@ -457,12 +457,18 @@ const llm: Record<string, string> = {
   "chat.prompts.cat.analysis": "分析",
 
   "llm.hfSearch.title": "HuggingFaceモデルを検索",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "HuggingFaceでGGUFモデルを検索…",
+  "llm.hfSearch.placeholderMlx": "mlx-communityモデルを検索…",
   "llm.hfSearch.searchBtn": "検索",
   "llm.hfSearch.searching": "検索中…",
   "llm.hfSearch.noResults": "GGUFモデルが見つかりません。別のクエリをお試しください。",
+  "llm.hfSearch.noResultsMlx": "mlx-communityモデルが見つかりません。別のクエリをお試しください。",
   "llm.hfSearch.loadingFiles": "ファイルを読み込み中…",
   "llm.hfSearch.noFiles": "このリポジトリにGGUFファイルが見つかりません。",
+  "llm.hfSearch.noFilesMlx": "このリポジトリにMLXスナップショットファイルが見つかりません。",
+  "llm.hfSearch.mlxPackHint": "MLXパック全体を追加",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "サイズ",
   "llm.hfSearch.colFile": "ファイル",
@@ -573,6 +579,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "このビルドでは利用できません（プラットフォームまたは機能フラグ）。",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into ja
+  "llm.discovered.title": "このマシンで見つかったモデル",
+  "llm.discovered.rescan": "再スキャン",
+  "llm.discovered.scanning": "スキャン中…",
+  "llm.discovered.empty": "LM Studio、Ollama、Lemonade、HuggingFace / MLX キャッシュにローカルモデルが見つかりませんでした。",
+  "llm.discovered.useBtn": "使用",
+  "llm.discovered.active": "使用中",
+  "llm.discovered.scanFailed": "スキャンに失敗しました",
+  "llm.discovered.selectFailed": "モデルを選択できませんでした",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into ja
+  "llm.discovered.localOnly": "ローカルのみ",
+  "llm.discovered.egress": "これらのモデルのスキャンと実行はすべてこのデバイス上で行われ、ネットワークには何も送信されません。HuggingFace からモデルをダウンロードする場合のみインターネットに接続します。",
+  "llm.discovered.enable": "ローカルモデルを検出",
+  "llm.discovered.enableDesc": "LM Studio、Ollama、Lemonade、HuggingFace / MLX キャッシュの GGUF と MLX モデルを表示",
+  "llm.discovered.off": "ローカルモデルの検出は無効になっています。",
+  "llm.discovered.advanced": "スキャン設定",
+  "llm.discovered.sourcesLabel": "ソース",
+  "llm.discovered.sourcesFiltered": "強調表示されたソースのみをスキャンします。",
+  "llm.discovered.extraDirsLabel": "追加フォルダ",
+  "llm.discovered.addDir": "追加",
+  "llm.discovered.addDirPlaceholder": "/モデルへのパス",
+  "llm.discovered.removeDir": "削除",
 };
 
 export default llm;

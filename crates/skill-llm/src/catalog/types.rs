@@ -352,6 +352,24 @@ impl LlmModelEntry {
         self.is_mmproj || self.filename.to_ascii_lowercase().contains("mmproj")
     }
 
+    /// Whether this entry was discovered from another app's cache (LM Studio,
+    /// Ollama, Lemonade, …) rather than the bundled/HF catalog.
+    ///
+    /// Discovered entries are a live overlay: their `local_path` points outside
+    /// the HF Hub cache, they are recomputed on every load/refresh, and they are
+    /// never persisted. `refresh_cache()` skips them so it does not clobber
+    /// their `local_path`. Keyed on the `"discovered"` tag applied by
+    /// [`crate::catalog::discover`].
+    pub fn is_discovered(&self) -> bool {
+        self.tags.iter().any(|t| t == "discovered")
+    }
+
+    /// True for mlx-community (or tagged) snapshot models — weights live as a
+    /// directory (`config.json` + packed/safetensors), not a single GGUF.
+    pub fn is_mlx(&self) -> bool {
+        self.tags.iter().any(|t| t.eq_ignore_ascii_case("mlx")) || self.repo.starts_with("mlx-community/")
+    }
+
     /// Whether this entry represents a split (sharded) GGUF model.
     pub fn is_split(&self) -> bool {
         self.shard_files.len() > 1
@@ -388,6 +406,10 @@ impl LlmModelEntry {
     /// filesystem only, no network.
     ///
     /// For split models, returns `Some` only when **all** shards are present.
+    ///
+    /// For [`Self::is_mlx`] entries the primary filename is typically
+    /// `config.json`; this returns the **snapshot directory** (parent of that
+    /// file) so the MLX loader can open the packed safetensors pack.
     pub fn resolve_cached(&self) -> Option<PathBuf> {
         use hf_hub::{Cache, Repo};
         let cache = Cache::from_env();
@@ -400,6 +422,14 @@ impl LlmModelEntry {
             for name in self.shard_files.iter().skip(1) {
                 repo.get(name)?;
             }
+        }
+
+        if self.is_mlx() {
+            // Prefer an on-disk snapshot dir that already has config.json.
+            if first.is_dir() {
+                return Some(first);
+            }
+            return first.parent().map(|p| p.to_path_buf());
         }
 
         Some(first)

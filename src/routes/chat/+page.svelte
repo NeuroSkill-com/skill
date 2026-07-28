@@ -64,7 +64,7 @@ import {
 } from "$lib/chat/chat-types";
 import { parseAssistantOutput } from "$lib/chat/chat-utils";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { cancelToolCall, renameChatSession } from "$lib/daemon/chat";
+import { cancelToolCall as cancelToolCallApi, renameChatSession } from "$lib/daemon/chat";
 import { type DaemonEvent, onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
@@ -477,7 +477,7 @@ $effect(() => {
 async function cancelToolCall(msgId: number, tuIdx: number, toolCallId: string | undefined) {
   if (!toolCallId) return;
   try {
-    await cancelToolCall(toolCallId);
+    await cancelToolCallApi(toolCallId);
   } catch (e) {}
   messages = messages.map((m) => {
     if (m.id !== msgId) return m;

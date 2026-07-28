@@ -1,0 +1,14 @@
+- **UX shell**: add Live / Find / Ask / History primary destinations bar across main feature windows; keep Label in the main titlebar.
+- **Settings IA**: group tabs (Signal, Intelligence, Capture & Privacy, Automation, App) with a collapsible Advanced section; default to Devices.
+- **Live dashboard**: Waveform / Physiology / State view switcher with progressive disclosure when connected; views adapt to device modalities.
+- **Onboarding**: slim core path (connect → fit → tray → done); research-use acknowledgement; optional calibration/models/permissions from Done.
+- **Getting Started**: checklist steps deep-link to Devices, Calibration, Goals, Downloads, Search, and API.
+- **Find**: example query chips; Interactive query + Search first; pipeline knobs and filters under Advanced; titlebar mode control labeled Source.
+- **Command palette**: Primary section for Live / Find / Ask / History; distinguish Add Label vs Browse Labels.
+- **i18n**: translate new shell / settings groups / Live views / onboarding / Find / ⌘K strings across de, es, fr, he, ja, ko, uk, zh (replace English auto-sync fallbacks).
+- **Label IA**: align Browse Labels window title + `labels.openLabels`; History toggle is “Show labels”; titlebar Help/Reload localized.
+- **Bugfix**: chat tool-cancel no longer recursively shadows the daemon client; Tokens tab Copy uses typed token + `common.copy`.
+- **Shell discoverability**: Find / Ask / History show accelerator hints; tooltips include shortcuts.
+- **Shell click fix**: primary nav lives inside `#main-content` so it clears the fixed titlebar drag region.
+- **Chart a11y**: band-power tiles use hatch patterns + active chart-scheme colors (not color alone).
+- **Window titles**: Rust labels window opens as “Browse Labels”; `labels.title` aligned.

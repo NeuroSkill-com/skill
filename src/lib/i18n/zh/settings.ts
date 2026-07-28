@@ -795,6 +795,18 @@ const settings: Record<string, string> = {
   "daemonActivity.lastRanHoursAgo": "{n} 小时前",
   "daemonActivity.tickDuration": "耗时 {n} ms",
   "daemonActivity.tickCount": "已执行 {n} 次",
+
+  "settingsTabs.clients": "客户端",
+  "settingsTabs.terminal": "终端",
+  "settingsTabs.validation": "验证",
+  "settings.group.signal": "信号",
+  "settings.group.intelligence": "智能",
+  "settings.group.capture": "采集与隐私",
+  "settings.group.automation": "自动化",
+  "settings.group.app": "应用",
+  "settings.group.advanced": "高级",
+  "settings.group.showAdvanced": "显示高级",
+  "settings.group.hideAdvanced": "隐藏高级",
 };
 
 export default settings;

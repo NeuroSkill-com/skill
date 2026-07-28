@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "Discover local models",
+    "desc": "Surface GGUF and MLX models from LM Studio, Ollama, Lemonade, and the HuggingFace / MLX cache"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "Enable LLM server",
     "desc": "Run an OpenAI-compatible inference server on the same port as the WebSocket API. Requires the llm Cargo feature and a downloaded model."

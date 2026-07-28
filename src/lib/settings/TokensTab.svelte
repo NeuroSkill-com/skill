@@ -233,8 +233,8 @@ onMount(refresh);
             {justCreated.token}
           </code>
           <Button variant="outline" size="sm" class="h-7 text-ui-xs shrink-0"
-            onclick={() => copyToken(justCreated!.token)}>
-            {copied ? t("tokens.copied") : "Copy"}
+            onclick={() => { const tok = justCreated?.token; if (tok) void copyToken(tok); }}>
+            {copied ? t("tokens.copied") : t("common.copy")}
           </Button>
         </div>
       </CardContent>

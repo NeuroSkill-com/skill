@@ -452,12 +452,18 @@ const llm: Record<string, string> = {
   "chat.prompts.cat.analysis": "분석",
 
   "llm.hfSearch.title": "HuggingFace 모델 검색",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "HuggingFace에서 GGUF 모델 검색…",
+  "llm.hfSearch.placeholderMlx": "mlx-community 모델 검색…",
   "llm.hfSearch.searchBtn": "검색",
   "llm.hfSearch.searching": "검색 중…",
   "llm.hfSearch.noResults": "GGUF 모델을 찾을 수 없습니다. 다른 검색어를 시도해 보세요.",
+  "llm.hfSearch.noResultsMlx": "mlx-community 모델을 찾을 수 없습니다. 다른 검색어를 시도해 보세요.",
   "llm.hfSearch.loadingFiles": "파일 불러오는 중…",
   "llm.hfSearch.noFiles": "이 저장소에서 GGUF 파일을 찾을 수 없습니다.",
+  "llm.hfSearch.noFilesMlx": "이 저장소에서 MLX 스냅샷 파일을 찾을 수 없습니다.",
+  "llm.hfSearch.mlxPackHint": "전체 MLX 팩 추가",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "크기",
   "llm.hfSearch.colFile": "파일",
@@ -567,6 +573,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "이 빌드에서는 사용할 수 없습니다(플랫폼 또는 기능 플래그).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into ko
+  "llm.discovered.title": "이 기기에서 찾은 모델",
+  "llm.discovered.rescan": "다시 검색",
+  "llm.discovered.scanning": "검색 중…",
+  "llm.discovered.empty": "LM Studio, Ollama, Lemonade 또는 HuggingFace / MLX 캐시에서 로컬 모델을 찾을 수 없습니다.",
+  "llm.discovered.useBtn": "사용",
+  "llm.discovered.active": "활성",
+  "llm.discovered.scanFailed": "검색 실패",
+  "llm.discovered.selectFailed": "모델을 선택할 수 없습니다",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into ko
+  "llm.discovered.localOnly": "로컬 전용",
+  "llm.discovered.egress": "이러한 모델의 검색과 실행은 모두 이 기기에서 이루어지며 네트워크로 전송되는 것은 없습니다. HuggingFace에서 모델을 다운로드하는 경우에만 인터넷에 연결됩니다.",
+  "llm.discovered.enable": "로컬 모델 검색",
+  "llm.discovered.enableDesc": "LM Studio, Ollama, Lemonade 및 HuggingFace / MLX 캐시의 GGUF·MLX 모델 표시",
+  "llm.discovered.off": "로컬 모델 검색이 꺼져 있습니다.",
+  "llm.discovered.advanced": "검색 설정",
+  "llm.discovered.sourcesLabel": "소스",
+  "llm.discovered.sourcesFiltered": "강조 표시된 소스만 검색합니다.",
+  "llm.discovered.extraDirsLabel": "추가 폴더",
+  "llm.discovered.addDir": "추가",
+  "llm.discovered.addDirPlaceholder": "/모델/경로",
+  "llm.discovered.removeDir": "제거",
 };
 
 export default llm;

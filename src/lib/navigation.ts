@@ -6,12 +6,22 @@
 // Centralises the repeated `async function openX() { await invoke("open_x_window"); }` pattern.
 
 import { invoke } from "@tauri-apps/api/core";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 export async function openSettings(): Promise<void> {
   await invoke("open_settings_window");
 }
 export async function openHelp(): Promise<void> {
   await invoke("open_help_window");
+}
+/** Focus the main Live dashboard window. */
+export async function openLive(): Promise<void> {
+  const main = await WebviewWindow.getByLabel("main");
+  if (main) {
+    await main.unminimize();
+    await main.show();
+    await main.setFocus();
+  }
 }
 export async function openHistory(): Promise<void> {
   await invoke("open_history_window");
@@ -24,6 +34,9 @@ export async function openLabels(): Promise<void> {
 }
 export async function openSearch(): Promise<void> {
   await invoke("open_search_window");
+}
+export async function openChat(sessionId?: number): Promise<void> {
+  await invoke("open_chat_window", { sessionId: sessionId ?? null });
 }
 export async function openCompare(): Promise<void> {
   await invoke("open_compare_window");

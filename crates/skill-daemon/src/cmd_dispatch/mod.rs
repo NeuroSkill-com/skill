@@ -212,6 +212,7 @@ async fn dispatch_family_commands(state: &AppState, msg: &Value, cmd: &str) -> O
         "llm_delete" => Some(llm_cmds::cmd_llm_delete(state, msg).await),
         "llm_downloads" => Some(llm_cmds::cmd_llm_downloads(state).await),
         "llm_refresh_catalog" => Some(llm_cmds::cmd_llm_refresh(state).await),
+        "llm_discover_local" => Some(llm_cmds::cmd_llm_discover(state).await),
         "llm_hardware_fit" => Some(llm_cmds::cmd_llm_hardware_fit(state).await),
         "llm_logs" => Some(llm_cmds::cmd_llm_logs(state).await),
         "llm_chat" => Some(llm_cmds::cmd_llm_chat(state, msg).await),

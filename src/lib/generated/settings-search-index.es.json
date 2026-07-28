@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "Detectar modelos locales",
+    "desc": "Mostrar modelos GGUF y MLX de LM Studio, Ollama, Lemonade y la caché de HuggingFace / MLX"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "Habilitar servidor LLM",
     "desc": "Ejecute un servidor de inferencia compatible con OpenAI en el mismo puerto que la API WebSocket. Requiere la función llm Cargo y un modelo descargado."

@@ -81,6 +81,24 @@ jobs:
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
+  hf-downloads-cache-gate:
+    name: HF downloads cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      # Offline integrity check only (no Hub crawl on every PR). The weekly
+      # hf-downloads-cache workflow refreshes counts and opens a PR.
+      - name: Verify committed downloads cache covers the catalog
+        run: npm run sync:hf:downloads:check
+
   # ── Rust backend ─────────────────────────────────────────────────────────────
   #
   # clippy is a strict superset of `cargo check` — it performs the same

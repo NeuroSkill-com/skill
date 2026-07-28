@@ -56,6 +56,13 @@ const common: Record<string, string> = {
   "error.reload": "Перезавантажити сторінку",
   "common.connect": "Підключити",
   "common.disconnect": "Відключити",
+
+  "shell.live": "Наживо",
+  "shell.find": "Пошук",
+  "shell.ask": "Запитати",
+  "shell.history": "Історія",
+  "shell.navLabel": "Основні розділи",
+  "common.reload": "Перезавантажити",
 };
 
 export default common;

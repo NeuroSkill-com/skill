@@ -154,6 +154,23 @@ const onboarding: Record<string, string> = {
   "onboarding.screenRecDesc":
     "נדרשת ב-macOS ללכידת חלונות יישומים אחרים עבור מערכת צילומי המסך. ללא הרשאה זו, צילומי המסך עלולים להיות ריקים.",
   "onboarding.screenRecOpen": "פתח הגדרות",
+
+  "onboarding.doneOptionalTitle": "רוצה עוד אחר כך?",
+  "onboarding.doneOptionalBody": "כיול, מודלי AI מקומיים, הרשאות והרחבות הם אופציונליים — הגדר בכל עת בהגדרות או למטה.",
+  "onboarding.doneOptionalCta": "הגדרה אופציונלית",
+  "onboarding.modelsSkipPrimary": "דלג לעת עתה",
+  "onboarding.modelsDownloadLater": "אפשר להוריד מודלים אחר כך בהגדרות → LLM וקול.",
+  "onboarding.disclaimerAck": "אני מבין/ה ש־{app} מיועד למחקר בלבד ואינו מכשיר רפואי.",
+  "onboarding.openLive": "פתח לוח חי",
+
+  // ── Auto-synced from en/ (2026-07-25) ──
+  // TODO: translate the following 6 key(s) into he
+  "onboarding.models.reuseTitle": "Reuse a model you already have",
+  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
+  "onboarding.models.reuseFrom": "from {source}",
+  "onboarding.models.reuseUse": "Use this",
+  "onboarding.models.reuseActive": "In use",
+  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
 };
 
 export default onboarding;

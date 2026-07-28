@@ -184,7 +184,7 @@ const search: Record<string, string> = {
   "search.openSession": "Відкрити сесію",
   "search.resultSummary": "{queries} запитів · {k} сусідів · {days} днів",
 
-  "labels.title": "Всі мітки",
+  "labels.title": "Переглянути мітки",
   "labels.totalLabels": "{n} міток",
   "labels.page": "сторінка {page} з {total}",
   "labels.noLabels": "Ще немає міток",
@@ -200,7 +200,7 @@ const search: Record<string, string> = {
   "labels.date": "Дата",
   "labels.duration": "Тривалість",
   "labels.updated": "Оновлено",
-  "labels.openLabels": "Всі мітки",
+  "labels.openLabels": "Переглянути мітки",
   "labels.search.exact": "Точний",
   "labels.search.exactTitle": "Миттєвий фільтр за підрядком — знаходить збіги під час введення",
   "labels.search.semantic": "Семантичний",
@@ -334,6 +334,13 @@ const search: Record<string, string> = {
   "embeddings.indexMemory": "Розмір на диску",
   "embeddings.indexMemoryRow": "{backend}: {total} ({text} текст · {context} контекст · {eeg} ЕЕГ)",
   "embeddings.indexMemoryTotal": "Усього: {total}",
+
+  "search.exampleFocusedCoding": "зосереджене кодування",
+  "search.exampleDrowsyAfternoon": "сонливий день",
+  "search.exampleMeetingStress": "стрес на зустрічі",
+  "search.examplesLabel": "Спробувати приклад",
+  "search.advancedToggle": "Розширені",
+  "search.sourceLabel": "Джерело",
 };
 
 export default search;

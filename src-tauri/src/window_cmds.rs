@@ -791,7 +791,7 @@ pub async fn open_focus_timer_window(app: AppHandle) -> Result<(), String> {
 }
 
 window_cmd!(open_labels_window, "labels", "labels",
-    "All Labels",
+    "Browse Labels",
     size: (680.0, 600.0), min: (480.0, 400.0));
 
 window_cmd!(open_label_window, "label", "label",

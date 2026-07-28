@@ -100,7 +100,7 @@ const history: Record<string, string> = {
   "history.chunkCountTooltip": "クラッシュ対策のため{n}ファイルに分割された長時間録音; 期間 {duration}",
   "history.snr": "信号品質",
   "history.label": "ラベル",
-  "history.labels": "ラベル",
+  "history.labels": "ラベルを表示",
   "history.activityLoading": "ファイルアクティビティを読み込み中...",
   "history.activityTitle": "ファイルアクティビティ",
   "history.activityFile": "ファイル",

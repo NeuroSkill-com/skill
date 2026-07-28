@@ -523,6 +523,51 @@
       "mtp": true,
       "params_b": 27,
       "max_context_length": 262144
+    },
+    "mlx-qwen3-0.6b": {
+      "name": "Qwen3 0.6B (MLX)",
+      "description": "Tiny Qwen3 instruct model as an mlx-community 4-bit pack. Runs on Apple Silicon via RLX MLX (packed DequantMatMul).",
+      "repo": "mlx-community/Qwen3-0.6B-4bit",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small",
+        "mlx"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 0.6,
+      "max_context_length": 32768
+    },
+    "mlx-qwen3-1.7b": {
+      "name": "Qwen3 1.7B (MLX)",
+      "description": "Compact Qwen3 instruct model — mlx-community 4-bit. Good laptop default on Apple Silicon.",
+      "repo": "mlx-community/Qwen3-1.7B-4bit",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small",
+        "mlx"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 1.7,
+      "max_context_length": 32768
+    },
+    "mlx-qwen3-4b": {
+      "name": "Qwen3 4B (MLX)",
+      "description": "Qwen3 4B instruct as mlx-community 4-bit. Stronger quality than 1.7B; still fits in ~3 GB.",
+      "repo": "mlx-community/Qwen3-4B-4bit",
+      "tags": [
+        "chat",
+        "reasoning",
+        "small",
+        "mlx"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 4.0,
+      "max_context_length": 32768
     }
   },
   "models": [
@@ -5350,6 +5395,61 @@
       "description": "Qwen3.6-27B MTP vision projector -- FP32",
       "remote_filename": "mmproj-F32.gguf",
       "advanced": true
+    },
+    {
+      "family": "mlx-qwen3-0.6b",
+      "filename": "config.json",
+      "quant": "4bit",
+      "size_gb": 0.35,
+      "description": "mlx-community 4-bit pack (config + safetensors + tokenizer)",
+      "recommended": true,
+      "shard_files": [
+        "config.json",
+        "model.safetensors",
+        "model.safetensors.index.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "added_tokens.json",
+        "merges.txt",
+        "vocab.json"
+      ]
+    },
+    {
+      "family": "mlx-qwen3-1.7b",
+      "filename": "config.json",
+      "quant": "4bit",
+      "size_gb": 0.95,
+      "description": "mlx-community 4-bit pack (config + safetensors + tokenizer)",
+      "recommended": true,
+      "shard_files": [
+        "config.json",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "added_tokens.json",
+        "merges.txt",
+        "vocab.json"
+      ]
+    },
+    {
+      "family": "mlx-qwen3-4b",
+      "filename": "config.json",
+      "quant": "4bit",
+      "size_gb": 2.2,
+      "description": "mlx-community 4-bit pack (config + safetensors + tokenizer)",
+      "recommended": true,
+      "shard_files": [
+        "config.json",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "added_tokens.json",
+        "merges.txt",
+        "vocab.json"
+      ]
     }
   ]
 }

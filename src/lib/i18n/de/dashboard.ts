@@ -187,6 +187,12 @@ const dashboard: Record<string, string> = {
   "dashboard.primary": "PRIMARY",
   "dashboard.backgroundRecordings": "Background Recordings",
   "dashboard.stopSecondary": "Stop recording",
+
+  "dashboard.viewWaveform": "Wellenform",
+  "dashboard.viewPhysiology": "Physiologie",
+  "dashboard.viewState": "Zustand",
+  "dashboard.viewLabel": "Live-Ansicht",
+  "dashboard.streamingToast": "Du streamst. Markiere Momente über die Titelleiste, wenn etwas Interessantes passiert.",
 };
 
 export default dashboard;

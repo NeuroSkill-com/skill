@@ -243,6 +243,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.discovered.enable",
+    "label": "ローカルモデルを検出",
+    "desc": "LM Studio、Ollama、Lemonade、HuggingFace / MLX キャッシュの GGUF と MLX モデルを表示"
+  },
+  {
+    "tab": "llm",
     "key": "llm.enabled",
     "label": "LLMサーバーを有効化",
     "desc": "WebSocket APIと同じポートでOpenAI互換推論サーバーを実行します。llm Cargoフィーチャーとダウンロード済みモデルが必要です。"

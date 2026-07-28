@@ -823,6 +823,18 @@ const settings: Record<string, string> = {
   "daemonActivity.lastRanHoursAgo": "{n} 時間前",
   "daemonActivity.tickDuration": "実行時間: {n} ms",
   "daemonActivity.tickCount": "実行回数: {n}",
+
+  "settingsTabs.clients": "クライアント",
+  "settingsTabs.terminal": "ターミナル",
+  "settingsTabs.validation": "検証",
+  "settings.group.signal": "信号",
+  "settings.group.intelligence": "知能",
+  "settings.group.capture": "取得とプライバシー",
+  "settings.group.automation": "自動化",
+  "settings.group.app": "アプリ",
+  "settings.group.advanced": "詳細",
+  "settings.group.showAdvanced": "詳細を表示",
+  "settings.group.hideAdvanced": "詳細を隠す",
 };
 
 export default settings;

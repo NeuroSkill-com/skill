@@ -48,7 +48,7 @@ pub mod engine;
 pub mod handlers;
 
 // Re-export the most-used types at crate root for convenience.
-pub use config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ToolExecutionMode};
+pub use config::{LlmConfig, LlmInferenceRuntime, LlmToolConfig, ModelDiscoveryConfig, ToolExecutionMode};
 pub use event::{LlmEventEmitter, NoopEmitter};
 
 #[cfg(feature = "llm")]

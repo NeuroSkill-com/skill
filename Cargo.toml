@@ -92,6 +92,7 @@ rlx-pkg          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main"
 rlx-text         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-metal        = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-mlx          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-mlx-io       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-cuda         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-wgpu         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-rocm         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }

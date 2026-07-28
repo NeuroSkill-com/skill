@@ -60,34 +60,102 @@ type Tab =
   | "extensions"
   | "tokens"
   | "validation";
-let tab = $state<Tab>("activity");
+let tab = $state<Tab>("devices");
 
+/** Flat list used for keyboard shortcuts + switch-tab validation. */
 const TAB_IDS: Tab[] = [
-  "activity",
-  "goals",
   "devices",
   "exg",
-  "embeddings",
-  "lsl",
-  "sleep",
   "calibration",
-  "tts",
+  "sleep",
+  "embeddings",
   "llm",
-  "tools",
-  "clients",
+  "tts",
+  "activity",
   "screenshots",
-  "hooks",
-  "appearance",
-  "settings",
-  "shortcuts",
-  "umap",
-  "updates",
   "permissions",
-  "tokens",
-  "terminal",
   "extensions",
+  "goals",
+  "tools",
+  "appearance",
+  "shortcuts",
+  "updates",
+  "tokens",
+  "settings",
+  // Advanced
+  "lsl",
+  "umap",
+  "hooks",
+  "terminal",
+  "clients",
   "validation",
 ];
+
+type TabGroupId = "signal" | "intelligence" | "capture" | "automation" | "app" | "advanced";
+
+interface TabGroup {
+  id: TabGroupId;
+  label: () => string;
+  tabs: Tab[];
+  advanced?: boolean;
+}
+
+const TAB_GROUPS: TabGroup[] = [
+  {
+    id: "signal",
+    label: () => t("settings.group.signal"),
+    tabs: ["devices", "exg", "calibration", "sleep"],
+  },
+  {
+    id: "intelligence",
+    label: () => t("settings.group.intelligence"),
+    tabs: ["embeddings", "llm", "tts"],
+  },
+  {
+    id: "capture",
+    label: () => t("settings.group.capture"),
+    tabs: ["activity", "screenshots", "permissions", "extensions"],
+  },
+  {
+    id: "automation",
+    label: () => t("settings.group.automation"),
+    tabs: ["goals", "tools"],
+  },
+  {
+    id: "app",
+    label: () => t("settings.group.app"),
+    tabs: ["appearance", "shortcuts", "updates", "tokens", "settings"],
+  },
+  {
+    id: "advanced",
+    label: () => t("settings.group.advanced"),
+    tabs: ["lsl", "umap", "hooks", "terminal", "clients", "validation"],
+    advanced: true,
+  },
+];
+
+const ADVANCED_TABS = new Set<Tab>(TAB_GROUPS.find((g) => g.advanced)?.tabs ?? []);
+const ADVANCED_KEY = "settings.showAdvanced";
+let showAdvanced = $state(false);
+
+try {
+  showAdvanced = localStorage.getItem(ADVANCED_KEY) === "1";
+} catch {
+  /* ignore */
+}
+
+function toggleAdvanced() {
+  showAdvanced = !showAdvanced;
+  try {
+    localStorage.setItem(ADVANCED_KEY, showAdvanced ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+  if (!showAdvanced && ADVANCED_TABS.has(tab)) {
+    tab = "devices";
+  }
+}
+
 const TAB_LABELS: Record<Tab, () => string> = {
   goals: () => t("settingsTabs.goals"),
   devices: () => t("settingsTabs.devices"),
@@ -98,16 +166,15 @@ const TAB_LABELS: Record<Tab, () => string> = {
   tts: () => t("settingsTabs.tts"),
   llm: () => t("settingsTabs.llm"),
   tools: () => t("settingsTabs.tools"),
-  clients: () => "Clients",
+  clients: () => t("settingsTabs.clients"),
   embeddings: () => t("settingsTabs.embeddings"),
   hooks: () => t("settingsTabs.hooks"),
   activity: () => t("settingsTabs.activity"),
-  terminal: () => "Terminal",
+  terminal: () => t("settingsTabs.terminal"),
   extensions: () => t("settingsTabs.extensions"),
   appearance: () => t("settingsTabs.appearance"),
   settings: () => t("settingsTabs.settings"),
   shortcuts: () => t("settingsTabs.shortcuts"),
-
   umap: () => t("settingsTabs.umap"),
   updates: () => t("settingsTabs.updates"),
   permissions: () => t("settingsTabs.permissions"),
@@ -344,7 +411,16 @@ onMount(async () => {
     const payload = typeof ev.payload === "string" ? { tab: ev.payload, settingKey: null } : ev.payload;
 
     if (TAB_IDS.includes(payload.tab as Tab)) {
-      tab = payload.tab as Tab;
+      const next = payload.tab as Tab;
+      if (ADVANCED_TABS.has(next) && !showAdvanced) {
+        showAdvanced = true;
+        try {
+          localStorage.setItem(ADVANCED_KEY, "1");
+        } catch {
+          /* ignore */
+        }
+      }
+      tab = next;
       if (payload.settingKey) {
         scrollToSetting(payload.settingKey);
       }
@@ -379,50 +455,101 @@ $effect(() => {
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]"
          aria-label={t("settingsTabs.settings")}>
-      {#each TAB_IDS as id, i (id)}
-        {@const active = tab === id}
-        <button
-          onclick={() => tab = id}
-          role="tab"
-          aria-selected={active}
-          aria-controls="tab-panel-{id}"
-          title="{tabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
-          class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
-                 rounded-lg text-left transition-colors text-ui-md font-medium
-                 {active
-                   ? 'bg-foreground/[0.08] dark:bg-white/[0.08] text-foreground'
-                   : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'}">
-
-          <!-- Active indicator bar -->
-          {#if active}
-            <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5
-                         rounded-full bg-foreground/60 dark:bg-white/60"></span>
+      {#each TAB_GROUPS as group (group.id)}
+        {#if group.advanced}
+          <button
+            type="button"
+            onclick={toggleAdvanced}
+            class="mx-2 mt-2 mb-0.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left
+                   text-ui-xs font-semibold uppercase tracking-wider text-muted-foreground/70
+                   hover:text-foreground hover:bg-foreground/[0.04] transition-colors"
+            aria-expanded={showAdvanced}
+          >
+            <span class="flex-1">{showAdvanced ? t("settings.group.hideAdvanced") : t("settings.group.showAdvanced")}</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 class="w-2.5 h-2.5 transition-transform {showAdvanced ? 'rotate-90' : ''}">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+          {#if showAdvanced}
+            <div class="mx-2 mb-1 px-2.5 text-ui-2xs font-semibold uppercase tracking-wider
+                        text-muted-foreground/40">{group.label()}</div>
+            {#each group.tabs as id (id)}
+              {@const i = TAB_IDS.indexOf(id)}
+              {@const active = tab === id}
+              <button
+                onclick={() => tab = id}
+                role="tab"
+                aria-selected={active}
+                aria-controls="tab-panel-{id}"
+                title="{tabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
+                class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
+                       rounded-lg text-left transition-colors text-ui-md font-medium
+                       {active
+                         ? 'bg-foreground/[0.08] dark:bg-white/[0.08] text-foreground'
+                         : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'}">
+                {#if active}
+                  <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5
+                               rounded-full bg-foreground/60 dark:bg-white/60"></span>
+                {/if}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+                     class="w-3.5 h-3.5 shrink-0 {active ? 'opacity-80' : 'opacity-40 group-hover:opacity-60'}">
+                  {@html TAB_ICONS[id]}
+                </svg>
+                <span class="flex-1 leading-none whitespace-nowrap">{tabLabel(id)}</span>
+                {#if digitForTab(i)}
+                  <kbd class="text-ui-2xs font-mono tabular-nums shrink-0
+                              {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
+                    {modifierForTab(i)}{digitForTab(i)}
+                  </kbd>
+                {/if}
+              </button>
+            {/each}
           {/if}
-
-          <!-- Icon -->
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
-               class="w-3.5 h-3.5 shrink-0 {active ? 'opacity-80' : 'opacity-40 group-hover:opacity-60'}">
-            {@html TAB_ICONS[id]}
-          </svg>
-
-          <!-- Label -->
-          <span class="flex-1 leading-none whitespace-nowrap">{tabLabel(id)}</span>
-
-          <!-- Kbd hint -->
-          {#if digitForTab(i)}
-            <kbd class="text-ui-2xs font-mono tabular-nums shrink-0
-                        {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
-              {modifierForTab(i)}{digitForTab(i)}
-            </kbd>
-          {/if}
-        </button>
+        {:else}
+          <div class="mx-2 mt-2 mb-0.5 px-2.5 text-ui-2xs font-semibold uppercase tracking-wider
+                      text-muted-foreground/40 first:mt-0">{group.label()}</div>
+          {#each group.tabs as id (id)}
+            {@const i = TAB_IDS.indexOf(id)}
+            {@const active = tab === id}
+            <button
+              onclick={() => tab = id}
+              role="tab"
+              aria-selected={active}
+              aria-controls="tab-panel-{id}"
+              title="{tabLabel(id)}{digitForTab(i) ? ` (${modifierForTab(i)}${digitForTab(i)})` : ''}"
+              class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
+                     rounded-lg text-left transition-colors text-ui-md font-medium
+                     {active
+                       ? 'bg-foreground/[0.08] dark:bg-white/[0.08] text-foreground'
+                       : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'}">
+              {#if active}
+                <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5
+                             rounded-full bg-foreground/60 dark:bg-white/60"></span>
+              {/if}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+                   class="w-3.5 h-3.5 shrink-0 {active ? 'opacity-80' : 'opacity-40 group-hover:opacity-60'}">
+                {@html TAB_ICONS[id]}
+              </svg>
+              <span class="flex-1 leading-none whitespace-nowrap">{tabLabel(id)}</span>
+              {#if digitForTab(i)}
+                <kbd class="text-ui-2xs font-mono tabular-nums shrink-0
+                            {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
+                  {modifierForTab(i)}{digitForTab(i)}
+                </kbd>
+              {/if}
+            </button>
+          {/each}
+        {/if}
       {/each}
     </nav>
 
     <button
       type="button"
-      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-violet-500/40 transition-colors"
+      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-foreground/20 transition-colors"
       aria-label={t("settingsTabs.settings")}
       onmousedown={startResize}
     ></button>

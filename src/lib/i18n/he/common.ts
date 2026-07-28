@@ -55,6 +55,13 @@ const common: Record<string, string> = {
   "error.reload": "טען מחדש",
   "common.connect": "התחבר",
   "common.disconnect": "התנתק",
+
+  "shell.live": "חי",
+  "shell.find": "חיפוש",
+  "shell.ask": "שאלה",
+  "shell.history": "היסטוריה",
+  "shell.navLabel": "יעדים ראשיים",
+  "common.reload": "טען מחדש",
 };
 
 export default common;

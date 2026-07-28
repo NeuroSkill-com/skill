@@ -161,6 +161,12 @@ const search: Record<string, string> = {
   "search.interactiveCmdEnter": "⌘↵ to search",
   "search.interactiveEmptyState":
     "Type a concept and watch the brain map unfold — cross-modal search bridges your labels, EEG patterns, and temporal context into one interactive 3D graph.",
+  "search.exampleFocusedCoding": "focused coding",
+  "search.exampleDrowsyAfternoon": "drowsy afternoon",
+  "search.exampleMeetingStress": "meeting stress",
+  "search.examplesLabel": "Try an example",
+  "search.advancedToggle": "Advanced",
+  "search.sourceLabel": "Source",
   "search.interactiveSearching": "Building cross-modal graph…",
   "search.interactiveNoResults":
     "No graph nodes found. Try a broader query or ensure your labels and EEG data are embedded.",
@@ -228,7 +234,7 @@ const search: Record<string, string> = {
   "search.umapShow": "3D map",
   "search.openSession": "Open session",
 
-  "labels.title": "All Labels",
+  "labels.title": "Browse Labels",
   "labels.totalLabels": "{n} labels",
   "labels.page": "page {page} of {total}",
   "labels.noLabels": "No labels yet",
@@ -244,7 +250,7 @@ const search: Record<string, string> = {
   "labels.date": "Date",
   "labels.duration": "Duration",
   "labels.updated": "Updated",
-  "labels.openLabels": "All Labels",
+  "labels.openLabels": "Browse Labels",
   "labels.search.exact": "Exact",
   "labels.search.exactTitle": "Instant substring filter — matches text as you type",
   "labels.search.semantic": "Semantic",

@@ -133,6 +133,20 @@ npm run sync:readme:supported
 npm run sync:readme:supported:check
 ```
 
+## LLM catalog / Hub downloads cache
+
+```bash
+npm run sync:llm:catalog          # refresh GGUF file lists from Hub
+npm run sync:llm:catalog:check
+npm run sync:hf:downloads         # crawl Hub download counts → cache JSON
+npm run sync:hf:downloads:check   # verify cache covers catalog repos
+```
+
+`sync:hf:downloads` writes both `src-tauri/hf_downloads_cache.json` and
+`src/lib/generated/hf-downloads-cache.json`. The Settings → LLM family picker
+sorts by those counts (descending). A weekly GitHub Action refreshes the cache
+and opens a PR (`.github/workflows/hf-downloads-cache.yml`).
+
 ## Testing
 
 ### Quick commands

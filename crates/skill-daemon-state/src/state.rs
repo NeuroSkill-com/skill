@@ -244,7 +244,10 @@ impl AppState {
         let settings = skill_settings::load_settings(&skill_dir);
         let token_store = crate::auth::TokenStore::load(&skill_dir);
         let hooks = settings.hooks.clone();
-        let llm_catalog = skill_llm::catalog::LlmCatalog::load(&skill_dir);
+        let mut llm_catalog = skill_llm::catalog::LlmCatalog::load(&skill_dir);
+        // Augment with locally-discovered models (LM Studio / Ollama / … GGUFs)
+        // per the user's discovery settings. Local/offline scan — no egress.
+        llm_catalog.apply_discovery(&settings.llm.discovery);
         #[cfg(feature = "llm")]
         let llm_config = settings.llm.clone();
         Self {

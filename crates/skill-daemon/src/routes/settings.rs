@@ -190,17 +190,25 @@ pub(crate) struct LlmAddModelRequest {
     pub(crate) size_gb: Option<f32>,
     pub(crate) mmproj: Option<String>,
     pub(crate) download: Option<bool>,
+    /// `gguf` (default) or `mlx` — mlx entries get `tags: ["mlx"]` + shard_files.
+    pub(crate) format: Option<String>,
+    /// Snapshot members for mlx-community packs (config + safetensors + tokenizer).
+    pub(crate) shard_files: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct HfSearchParams {
     pub(crate) q: String,
     pub(crate) limit: Option<usize>,
+    /// `gguf` (default) or `mlx` — mlx searches `author=mlx-community`.
+    pub(crate) format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct HfFilesParams {
     pub(crate) repo: String,
+    /// When `mlx`, list snapshot files (config/safetensors/tokenizer) instead of GGUF.
+    pub(crate) format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -542,6 +550,7 @@ fn llm_routes() -> Router<AppState> {
         .route("/llm/server/switch-mmproj", post(llm_server_switch_mmproj))
         .route("/llm/catalog", get(llm_get_catalog))
         .route("/llm/catalog/refresh", post(llm_refresh_catalog))
+        .route("/llm/catalog/discovered", get(llm_discover_local))
         .route("/llm/catalog/add-model", post(llm_add_model))
         .route("/llm/catalog/search", get(llm_search_hf))
         .route("/llm/catalog/search/files", get(llm_search_hf_files))
@@ -1739,6 +1748,10 @@ async fn llm_get_catalog(state: State<AppState>) -> Json<serde_json::Value> {
 
 async fn llm_refresh_catalog(state: State<AppState>) -> Json<serde_json::Value> {
     settings_llm_runtime::llm_refresh_catalog_impl(state).await
+}
+
+async fn llm_discover_local(state: State<AppState>) -> Json<serde_json::Value> {
+    settings_llm_runtime::llm_discover_local_impl(state).await
 }
 
 async fn llm_add_model(state: State<AppState>, req: Json<LlmAddModelRequest>) -> Json<serde_json::Value> {

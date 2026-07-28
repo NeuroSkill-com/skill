@@ -807,6 +807,18 @@ const settings: Record<string, string> = {
   "daemonActivity.lastRanHoursAgo": "{n}시간 전",
   "daemonActivity.tickDuration": "소요 시간: {n} ms",
   "daemonActivity.tickCount": "실행 횟수: {n}",
+
+  "settingsTabs.clients": "클라이언트",
+  "settingsTabs.terminal": "터미널",
+  "settingsTabs.validation": "검증",
+  "settings.group.signal": "신호",
+  "settings.group.intelligence": "지능",
+  "settings.group.capture": "캡처 및 개인정보",
+  "settings.group.automation": "자동화",
+  "settings.group.app": "앱",
+  "settings.group.advanced": "고급",
+  "settings.group.showAdvanced": "고급 표시",
+  "settings.group.hideAdvanced": "고급 숨기기",
 };
 
 export default settings;

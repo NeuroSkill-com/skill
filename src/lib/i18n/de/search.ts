@@ -187,7 +187,7 @@ const search: Record<string, string> = {
   "search.openSession": "Sitzung öffnen",
   "search.resultSummary": "{queries} Abfragen · {k} Nachbarn · {days} Tag(e)",
 
-  "labels.title": "Alle Labels",
+  "labels.title": "Labels durchsuchen",
   "labels.totalLabels": "{n} Labels",
   "labels.page": "Seite {page} von {total}",
   "labels.noLabels": "Noch keine Labels",
@@ -204,7 +204,7 @@ const search: Record<string, string> = {
   "labels.date": "Datum",
   "labels.duration": "Dauer",
   "labels.updated": "Aktualisiert",
-  "labels.openLabels": "Alle Labels",
+  "labels.openLabels": "Labels durchsuchen",
   "labels.search.exact": "Exakt",
   "labels.search.exactTitle": "Sofortige Teilstring-Suche — findet Übereinstimmungen während der Eingabe",
   "labels.search.semantic": "Semantisch",
@@ -339,6 +339,13 @@ const search: Record<string, string> = {
   "embeddings.indexMemory": "Speicherverbrauch auf der Festplatte",
   "embeddings.indexMemoryRow": "{backend}: {total} ({text} Text · {context} Kontext · {eeg} EEG)",
   "embeddings.indexMemoryTotal": "Gesamt: {total}",
+
+  "search.exampleFocusedCoding": "fokussiertes Programmieren",
+  "search.exampleDrowsyAfternoon": "schläfriger Nachmittag",
+  "search.exampleMeetingStress": "Meeting-Stress",
+  "search.examplesLabel": "Beispiel ausprobieren",
+  "search.advancedToggle": "Erweitert",
+  "search.sourceLabel": "Quelle",
 };
 
 export default search;

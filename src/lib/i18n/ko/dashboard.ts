@@ -185,6 +185,12 @@ const dashboard: Record<string, string> = {
   "dashboard.primary": "기본",
   "dashboard.backgroundRecordings": "백그라운드 녹화",
   "dashboard.stopSecondary": "녹화 중지",
+
+  "dashboard.viewWaveform": "파형",
+  "dashboard.viewPhysiology": "생리",
+  "dashboard.viewState": "상태",
+  "dashboard.viewLabel": "라이브 보기",
+  "dashboard.streamingToast": "스트리밍 중입니다. 흥미로운 순간은 제목 표시줄에서 라벨을 달아 보세요.",
 };
 
 export default dashboard;

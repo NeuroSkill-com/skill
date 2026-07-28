@@ -100,6 +100,7 @@ export interface BandSnapshot {
     BAND_TAU_MS   as TAU_MS,
   } from "$lib/constants";
   import { animatedCanvas } from "$lib/charts/use-canvas";
+  import { getActiveScheme } from "$lib/stores/chart-colors.svelte";
 
   let { chNames = EEG_CH as readonly string[], chColors = EEG_COLOR as readonly string[] }: {
     chNames?: readonly string[];
@@ -114,6 +115,17 @@ export interface BandSnapshot {
   // ── Band metadata + canvas layout ─────────────────────────────────────────
   // Each channel gets one "tile" — a full-width rectangle whose background is
   // the stacked band-power proportions rendered as solid coloured segments.
+  // Hatch overlays encode band identity without relying on color alone.
+
+  /** Distinct hatch styles per band (angle deg, gap px, line width). */
+  const HATCH: readonly { angle: number; gap: number; lw: number }[] = [
+    { angle: 0, gap: 5, lw: 1.2 },       // δ horizontal
+    { angle: 45, gap: 5, lw: 1.2 },      // θ diagonal /
+    { angle: 90, gap: 5, lw: 1.2 },      // α vertical
+    { angle: -45, gap: 5, lw: 1.2 },     // β diagonal \
+    { angle: 30, gap: 4, lw: 1.4 },      // γ denser /
+    { angle: -30, gap: 3.5, lw: 1.5 },   // γ+ denser \
+  ];
 
   // ── Public API ─────────────────────────────────────────────────────────────
   let target = $state<BandSnapshot | null>(null);
@@ -148,6 +160,55 @@ export interface BandSnapshot {
   $effect(() => { ensureBuffers(chNames.length || 4); });
 
   let lastNow = -1;
+  let hatchCacheKey = "";
+  let hatchPatterns: (CanvasPattern | null)[] = [];
+
+  function bandColors(): string[] {
+    const s = getActiveScheme();
+    // Scheme exposes 5 clinical bands; high-γ reuses γ with a darker hatch.
+    return [s.delta, s.theta, s.alpha, s.beta, s.gamma, s.gamma];
+  }
+
+  function ensureHatches(ctx: CanvasRenderingContext2D) {
+    const colors = bandColors();
+    const key = `${getActiveScheme().id}:${colors.join(",")}`;
+    if (key === hatchCacheKey && hatchPatterns.length === NBAND) return;
+    hatchCacheKey = key;
+    hatchPatterns = colors.map((color, b) => makeHatchPattern(ctx, color, HATCH[b]!));
+  }
+
+  function makeHatchPattern(
+    ctx: CanvasRenderingContext2D,
+    color: string,
+    style: { angle: number; gap: number; lw: number },
+  ): CanvasPattern | null {
+    const size = Math.max(8, Math.ceil(style.gap * 2));
+    const off = document.createElement("canvas");
+    off.width = size;
+    off.height = size;
+    const octx = off.getContext("2d");
+    if (!octx) return null;
+    octx.fillStyle = color;
+    octx.globalAlpha = 0.78;
+    octx.fillRect(0, 0, size, size);
+    octx.strokeStyle = "rgba(255,255,255,0.45)";
+    octx.lineWidth = style.lw;
+    octx.globalAlpha = 1;
+    const rad = (style.angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    // Parallel lines across a padded tile so tiling stays seamless.
+    octx.beginPath();
+    for (let i = -2; i <= size / style.gap + 2; i++) {
+      const d = i * style.gap;
+      const ox = size / 2 - sin * d;
+      const oy = size / 2 + cos * d;
+      octx.moveTo(ox - cos * size, oy - sin * size);
+      octx.lineTo(ox + cos * size, oy + sin * size);
+    }
+    octx.stroke();
+    return ctx.createPattern(off, "repeat");
+  }
 
   // ── Draw — called every frame by the animatedCanvas action ─────────────────
   function draw(ctx: CanvasRenderingContext2D, W: number, _H: number) {
@@ -157,6 +218,9 @@ export interface BandSnapshot {
     const dt    = lastNow < 0 ? 0 : now - lastNow;
     lastNow     = now;
     const alpha = dt > 0 ? 1 - Math.exp(-dt / TAU_MS) : 0;
+
+    ensureHatches(ctx);
+    const colors = bandColors();
 
     // ── Interpolate toward target ─────────────────────────────────────────
     if (target) {
@@ -197,7 +261,8 @@ export interface BandSnapshot {
       let xc = 0;
       for (let b = 0; b < NBAND; b++) {
         const segW = (displayed[ci][b] / sum) * W;
-        ctx.fillStyle   = BANDS[b].color;
+        const pat = hatchPatterns[b];
+        ctx.fillStyle = pat ?? colors[b] ?? BANDS[b].color;
         ctx.globalAlpha = 0.78;
         // +0.5 px overlap prevents hairline gaps between segments.
         ctx.fillRect(xc, ty, segW + 0.5, TILE_H);
@@ -261,7 +326,7 @@ export interface BandSnapshot {
       for (let b = 0; b < NBAND; b++) {
         const bPct = Math.round((displayed[ci][b] / sum) * 100);
         const bx   = stripL + b * colW + colW / 2;
-        ctx.fillStyle   = BANDS[b].color;
+        ctx.fillStyle   = colors[b] ?? BANDS[b].color;
         ctx.globalAlpha = b === dom ? 1 : 0.72;
         ctx.fillText(`${BANDS[b].sym} ${bPct}`, bx, stripY);
       }

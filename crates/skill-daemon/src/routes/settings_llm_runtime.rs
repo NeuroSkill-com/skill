@@ -451,19 +451,52 @@ pub(crate) async fn llm_get_catalog_impl(State(state): State<AppState>) -> Json<
     Json(serde_json::to_value(cat).unwrap_or_default())
 }
 
+/// Current local-model-discovery settings (defaults when the LLM feature is
+/// compiled out, where `state.llm_config` does not exist).
+#[cfg(feature = "llm")]
+fn discovery_cfg(state: &AppState) -> skill_llm::config::ModelDiscoveryConfig {
+    state.llm_config.lock().map(|c| c.discovery.clone()).unwrap_or_default()
+}
+#[cfg(not(feature = "llm"))]
+fn discovery_cfg(_state: &AppState) -> skill_llm::config::ModelDiscoveryConfig {
+    skill_llm::config::ModelDiscoveryConfig::default()
+}
+
 pub(crate) async fn llm_refresh_catalog_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let cfg = discovery_cfg(&state);
     if let Ok(mut cat) = state.llm_catalog.lock() {
         cat.refresh_cache();
+        cat.apply_discovery(&cfg);
         cat.auto_select();
     }
     persist_llm_catalog(&state);
     Json(serde_json::json!({"ok": true}))
 }
 
-// ── HuggingFace GGUF search ──────────────────────────────────────────────
+/// Re-scan local app caches (LM Studio, Ollama, Lemonade, HF, …) for GGUF
+/// models and return the discovered overlay.
+///
+/// `GET /llm/catalog/discovered`. Mutates the shared catalog so the discovered
+/// entries are immediately selectable via the normal `switch-model` flow;
+/// returns just the discovered subset for a dedicated UI section.
+pub(crate) async fn llm_discover_local_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let cfg = discovery_cfg(&state);
+    let models: Vec<skill_llm::catalog::LlmModelEntry> = if let Ok(mut cat) = state.llm_catalog.lock() {
+        cat.apply_discovery(&cfg);
+        cat.entries.iter().filter(|e| e.is_discovered()).cloned().collect()
+    } else {
+        Vec::new()
+    };
+    persist_llm_catalog(&state);
+    Json(serde_json::json!({"ok": true, "enabled": cfg.enabled, "models": models}))
+}
 
-/// Search HuggingFace Hub for GGUF model repos.
-/// Query: `GET /llm/catalog/search?q=<query>&limit=<n>`
+// ── HuggingFace model search (GGUF + mlx-community) ─────────────────────
+
+/// Search HuggingFace Hub for model repos.
+/// Query: `GET /llm/catalog/search?q=<query>&limit=<n>&format=gguf|mlx`
+///
+/// Results are always sorted by Hub downloads descending.
 pub(crate) async fn llm_search_hf_impl(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HfSearchParams>,
@@ -473,6 +506,8 @@ pub(crate) async fn llm_search_hf_impl(
         return Json(serde_json::json!({"ok": false, "error": "empty query"}));
     }
     let limit = params.limit.unwrap_or(12).min(50);
+    let format = params.format.as_deref().unwrap_or("gguf").trim().to_ascii_lowercase();
+    let mlx = format == "mlx" || format == "mlx-community";
 
     // Resolve HF endpoint from settings or env.
     let hf_endpoint = {
@@ -489,13 +524,23 @@ pub(crate) async fn llm_search_hf_impl(
         .ok()
         .or_else(|| std::env::var("HUGGING_FACE_HUB_TOKEN").ok());
 
-    // Search HF API for GGUF models.
-    let search_url = format!(
-        "{}/api/models?search={}&filter=gguf&sort=downloads&direction=-1&limit={}",
-        hf_endpoint,
-        urlencoding::encode(&query),
-        limit
-    );
+    // Search HF API — always sort by downloads desc. mlx mode scopes to
+    // the mlx-community org; GGUF keeps the legacy `filter=gguf` tag.
+    let search_url = if mlx {
+        format!(
+            "{}/api/models?author=mlx-community&search={}&sort=downloads&direction=-1&limit={}",
+            hf_endpoint,
+            urlencoding::encode(&query),
+            limit
+        )
+    } else {
+        format!(
+            "{}/api/models?search={}&filter=gguf&sort=downloads&direction=-1&limit={}",
+            hf_endpoint,
+            urlencoding::encode(&query),
+            limit
+        )
+    };
 
     let result = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
         let agent = ureq::Agent::new_with_config(
@@ -510,8 +555,9 @@ pub(crate) async fn llm_search_hf_impl(
         let resp = req.call().map_err(|e| e.to_string())?;
         let models: Vec<serde_json::Value> = resp.into_body().read_json().map_err(|e| e.to_string())?;
 
-        // For each repo, extract key metadata.
-        let results: Vec<serde_json::Value> = models
+        // For each repo, extract key metadata. Hub already sorted by downloads;
+        // re-sort locally so a mixed response stays descending.
+        let mut results: Vec<serde_json::Value> = models
             .into_iter()
             .filter_map(|m| {
                 let id = m.get("id")?.as_str()?.to_string();
@@ -534,11 +580,17 @@ pub(crate) async fn llm_search_hf_impl(
                     "tags": tags,
                     "pipeline_tag": pipeline_tag,
                     "last_modified": last_modified,
+                    "format": if mlx { "mlx" } else { "gguf" },
                 }))
             })
             .collect();
+        results.sort_by(|a, b| {
+            let da = a.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0);
+            let db = b.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0);
+            db.cmp(&da)
+        });
 
-        Ok(serde_json::json!({ "ok": true, "results": results }))
+        Ok(serde_json::json!({ "ok": true, "results": results, "format": if mlx { "mlx" } else { "gguf" } }))
     })
     .await;
 
@@ -549,8 +601,8 @@ pub(crate) async fn llm_search_hf_impl(
     }
 }
 
-/// Fetch GGUF files from a specific HF repo.
-/// Query: `GET /llm/catalog/search/files?repo=<repo>`
+/// Fetch files from a specific HF repo.
+/// Query: `GET /llm/catalog/search/files?repo=<repo>&format=gguf|mlx`
 pub(crate) async fn llm_search_hf_files_impl(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HfFilesParams>,
@@ -559,6 +611,8 @@ pub(crate) async fn llm_search_hf_files_impl(
     if repo.is_empty() {
         return Json(serde_json::json!({"ok": false, "error": "empty repo"}));
     }
+    let format = params.format.as_deref().unwrap_or("gguf").trim().to_ascii_lowercase();
+    let mlx = format == "mlx" || format == "mlx-community" || repo.starts_with("mlx-community/");
 
     let hf_endpoint = {
         let settings = crate::routes::settings_io::load_user_settings(&state);
@@ -597,15 +651,21 @@ pub(crate) async fn llm_search_hf_files_impl(
                     return None;
                 }
                 let path = s.get("path")?.as_str()?;
-                if !path.to_lowercase().ends_with(".gguf") {
-                    return None;
-                }
-                // Skip files in subdirectories and imatrix files.
-                if path.contains('/') {
-                    return None;
-                }
-                if path.to_lowercase().contains("imatrix") {
-                    return None;
+                if mlx {
+                    if !is_mlx_snapshot_file(path) {
+                        return None;
+                    }
+                } else {
+                    if !path.to_lowercase().ends_with(".gguf") {
+                        return None;
+                    }
+                    // Skip files in subdirectories and imatrix files.
+                    if path.contains('/') {
+                        return None;
+                    }
+                    if path.to_lowercase().contains("imatrix") {
+                        return None;
+                    }
                 }
                 // Prefer LFS size, fall back to regular size.
                 let size = s
@@ -614,7 +674,11 @@ pub(crate) async fn llm_search_hf_files_impl(
                     .or_else(|| s.get("size").and_then(|v| v.as_u64()))
                     .unwrap_or(0);
                 let size_gb = size as f64 / 1_073_741_824.0;
-                let quant = infer_quant(path);
+                let quant = if mlx {
+                    infer_mlx_quant_hint(path)
+                } else {
+                    infer_quant(path)
+                };
                 let is_mmproj = path.to_ascii_lowercase().contains("mmproj");
                 Some(serde_json::json!({
                     "filename": path,
@@ -645,7 +709,13 @@ pub(crate) async fn llm_search_hf_files_impl(
             }
         };
 
-        Ok(serde_json::json!({ "ok": true, "repo": repo, "files": files, "readme": readme }))
+        Ok(serde_json::json!({
+            "ok": true,
+            "repo": repo,
+            "files": files,
+            "readme": readme,
+            "format": if mlx { "mlx" } else { "gguf" },
+        }))
     })
     .await;
 
@@ -656,20 +726,82 @@ pub(crate) async fn llm_search_hf_files_impl(
     }
 }
 
+fn is_mlx_snapshot_file(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains('/') {
+        return false;
+    }
+    matches!(
+        lower.as_str(),
+        "config.json"
+            | "tokenizer.json"
+            | "tokenizer_config.json"
+            | "special_tokens_map.json"
+            | "generation_config.json"
+            | "model.safetensors.index.json"
+            | "chat_template.jinja"
+    ) || lower.ends_with(".safetensors")
+        || lower.ends_with(".model")
+        || lower.starts_with("tokenizer")
+}
+
+fn infer_mlx_quant_hint(path: &str) -> String {
+    let lower = path.to_ascii_lowercase();
+    if lower == "config.json" {
+        "config".into()
+    } else if lower.ends_with(".safetensors") {
+        "safetensors".into()
+    } else if lower.contains("tokenizer") {
+        "tokenizer".into()
+    } else {
+        "file".into()
+    }
+}
+
 pub(crate) async fn llm_add_model_impl(
     State(state): State<AppState>,
     Json(req): Json<LlmAddModelRequest>,
 ) -> Json<serde_json::Value> {
     let should_download = req.download.unwrap_or(false);
+    let format = req.format.as_deref().unwrap_or("").trim().to_ascii_lowercase();
+    let is_mlx = format == "mlx"
+        || format == "mlx-community"
+        || req.repo.starts_with("mlx-community/")
+        || req
+            .shard_files
+            .as_ref()
+            .is_some_and(|s| s.iter().any(|f| f.eq_ignore_ascii_case("config.json")));
+    let filename = if is_mlx && !req.filename.eq_ignore_ascii_case("config.json") {
+        // Snapshot packs always key off config.json so resolve_cached /
+        // download_mlx_snapshot treat them as directory models.
+        "config.json".to_string()
+    } else {
+        req.filename.clone()
+    };
+    let shard_files = req.shard_files.clone().unwrap_or_default();
+    let quant = if is_mlx {
+        infer_mlx_pack_quant(&req.repo, &shard_files)
+    } else {
+        infer_quant(&filename)
+    };
+    let mut tags = vec!["external".to_string()];
+    if is_mlx {
+        tags.push("mlx".to_string());
+    }
+
     if let Ok(mut cat) = state.llm_catalog.lock() {
-        if !cat.entries.iter().any(|e| e.filename == req.filename) {
+        if !cat.entries.iter().any(|e| e.filename == filename && e.repo == req.repo) {
             let entry = skill_llm::catalog::LlmModelEntry {
                 repo: req.repo.clone(),
-                filename: req.filename.clone(),
+                filename: filename.clone(),
                 remote_filename: None,
-                quant: infer_quant(&req.filename),
+                quant,
                 size_gb: req.size_gb.unwrap_or(0.0),
-                description: "External model".to_string(),
+                description: if is_mlx {
+                    "mlx-community pack (config + safetensors)".to_string()
+                } else {
+                    "External model".to_string()
+                },
                 family_id: req
                     .repo
                     .split('/')
@@ -684,15 +816,15 @@ pub(crate) async fn llm_add_model_impl(
                     .unwrap_or("External")
                     .replace(['_', '-'], " "),
                 family_desc: String::new(),
-                tags: vec!["external".to_string()],
-                is_mmproj: req.mmproj.as_ref().map(|m| m == &req.filename).unwrap_or(false)
-                    || req.filename.to_ascii_lowercase().contains("mmproj"),
+                tags,
+                is_mmproj: req.mmproj.as_ref().map(|m| m == &filename).unwrap_or(false)
+                    || filename.to_ascii_lowercase().contains("mmproj"),
                 mtp: false,
                 recommended: false,
                 advanced: false,
                 params_b: 0.0,
                 max_context_length: 0,
-                shard_files: Vec::new(),
+                shard_files,
                 local_path: None,
                 state: if should_download {
                     skill_llm::catalog::DownloadState::Downloading
@@ -714,10 +846,21 @@ pub(crate) async fn llm_add_model_impl(
     persist_llm_catalog(&state);
 
     if should_download {
-        spawn_model_download(state, req.filename.clone());
+        spawn_model_download(state, filename.clone());
     }
 
-    Json(serde_json::json!({"ok": true, "filename": req.filename}))
+    Json(serde_json::json!({"ok": true, "filename": filename}))
+}
+
+fn infer_mlx_pack_quant(repo: &str, shard_files: &[String]) -> String {
+    let lower_repo = repo.to_ascii_lowercase();
+    for bits in ["8bit", "6bit", "5bit", "4bit", "3bit", "2bit"] {
+        if lower_repo.contains(bits) {
+            return bits.to_string();
+        }
+    }
+    let _ = shard_files;
+    "mlx".into()
 }
 
 pub(crate) async fn llm_get_downloads_impl(State(state): State<AppState>) -> Json<Vec<serde_json::Value>> {
@@ -971,6 +1114,8 @@ mod tests {
                 size_gb: Some(1.2),
                 mmproj: None,
                 download: Some(false),
+                format: None,
+                shard_files: None,
             }),
         )
         .await;
@@ -982,6 +1127,8 @@ mod tests {
                 size_gb: Some(1.2),
                 mmproj: None,
                 download: Some(false),
+                format: None,
+                shard_files: None,
             }),
         )
         .await;

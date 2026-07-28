@@ -247,6 +247,93 @@ fn looks_like_gemma(path: &Path) -> bool {
     )
 }
 
+/// True when `path` is an mlx-community (or mlx-lm) quantized snapshot directory.
+fn looks_like_mlx_dir(path: &Path) -> bool {
+    if !path.is_dir() || !path.join("config.json").is_file() {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(path.join("config.json")) else {
+        return false;
+    };
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    // mlx-lm packs use `quantization: { bits, group_size }`; GPTQ/AWQ use
+    // `quantization_config` and stay on the safetensors path.
+    v.get("quantization")
+        .and_then(|q| q.as_object())
+        .is_some_and(|q| q.contains_key("bits") || q.contains_key("group_size"))
+}
+
+#[cfg(feature = "llm-model-discovery")]
+fn mlx_model_type(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path.join("config.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("model_type").and_then(|t| t.as_str()).map(str::to_string)
+}
+
+/// Prefer MLX for mlx-community packs when available; otherwise honour
+/// `config.rlx_device` / auto ranking.
+#[cfg(feature = "llm-model-discovery")]
+fn resolve_mlx_device(config: &LlmConfig) -> rlx::runtime::Device {
+    use rlx::runtime::{device_ext::is_available, Device};
+    if config.n_gpu_layers == 0 || config.rlx_device.eq_ignore_ascii_case("cpu") {
+        return Device::Cpu;
+    }
+    if is_available(Device::Mlx) {
+        // Explicit non-mlx accelerator still wins when the user asked for it.
+        match config.rlx_device.to_ascii_lowercase().as_str() {
+            "metal" if is_available(Device::Metal) => return Device::Metal,
+            "cuda" if is_available(Device::Cuda) => return Device::Cuda,
+            "gpu" | "wgpu" | "vulkan" if is_available(Device::Gpu) => return Device::Gpu,
+            _ => return Device::Mlx,
+        }
+    }
+    resolve_rlx_device(config)
+}
+
+/// Load an mlx-community snapshot via `Qwen3Runner::from_mlx_packed` when the
+/// config is a Qwen2/Qwen3 dense decoder. Other model_types fall through.
+///
+/// Gated on `llm-model-discovery` until the locked rlx-models pin exports
+/// `from_mlx_packed` (local sibling / post-0.2.13). Without the feature, mlx
+/// dirs fall through so CI can still build against the current git pin.
+#[cfg(feature = "llm-model-discovery")]
+fn try_mlx_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_mlx_dir(path) {
+        return None;
+    }
+    let model_type = mlx_model_type(path).unwrap_or_default();
+    // Qwen2 / Qwen3 share the packed Qwen3 runner (attention_bias / qk_norm
+    // come from config.json). MoE / Qwen3.5 DeltaNet are out of scope.
+    if !matches!(model_type.as_str(), "qwen3" | "qwen2" | "qwen2_5" | "qwen2.5") {
+        log::info!(
+            "mlx dir {:?}: model_type={model_type:?} — no from_mlx_packed path yet; falling through",
+            path
+        );
+        return None;
+    }
+    let device = resolve_mlx_device(config);
+    let max_seq = config.rlx_max_seq.max(128);
+    let cfg_path = path.join("config.json");
+    Some(
+        rlx_models::Qwen3Config::from_file(&cfg_path)
+            .and_then(|cfg| rlx_models::run::Qwen3Runner::from_mlx_packed(cfg, path, max_seq, device))
+            .map(|runner| Box::new(runner) as Box<dyn LmRunner>),
+    )
+}
+
+#[cfg(not(feature = "llm-model-discovery"))]
+fn try_mlx_runner(path: &Path, _config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    if looks_like_mlx_dir(path) {
+        log::warn!(
+            "mlx pack at {:?} needs --features llm-model-discovery (and a post-0.2.13 rlx-models)",
+            path
+        );
+    }
+    None
+}
+
 fn try_minicpm5_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
     if !looks_like_minicpm5(path) {
         return None;
@@ -310,28 +397,104 @@ fn try_nemotron_runner(path: &Path) -> Option<Result<Box<dyn LmRunner>>> {
     )
 }
 
-fn try_gemma_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+fn try_gemma_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
     if !looks_like_gemma(path) {
         return None;
     }
     let (device, packed) = gpu_plan(path, config);
-    Some(
-        rlx_gemma::GemmaRunner::builder()
-            .weights(path)
-            .device(device)
-            .packed_weights(packed)
-            .build()
-            .map(|runner| Box::new(runner) as Box<dyn LmRunner>),
-    )
+    // Multimodal needs the F32 embed path — packed is forced off when mmproj set.
+    let packed = if mmproj.is_some() { false } else { packed };
+    let mut b = rlx_gemma::GemmaRunner::builder()
+        .weights(path)
+        .device(device)
+        .packed_weights(packed);
+    if let Some(mp) = mmproj {
+        b = b.mmproj(mp);
+    }
+    Some(b.build().map(|runner| Box::new(runner) as Box<dyn LmRunner>))
 }
 
-fn try_catalog_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+fn try_catalog_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
     // gemma + minicpm5 expose `.device()` + `.packed_weights()` → packed GPU path.
     // minimax + nemotron have no packed/device toggle → device-less CPU default.
-    try_gemma_runner(path, config)
+    try_gemma_runner(path, mmproj, config)
         .or_else(|| try_minicpm5_runner(path, config))
         .or_else(|| try_minimax_runner(path))
         .or_else(|| try_nemotron_runner(path))
+}
+
+fn looks_like_qwen3_vl(path: &Path) -> bool {
+    matches!(
+        peek_gguf_arch(path).as_deref(),
+        Some("qwen3vl" | "qwen3vlmoe" | "qwen3_vl" | "qwen3-vl")
+    ) || filename_hint(path, "qwen3-vl")
+        || filename_hint(path, "qwen3vl")
+}
+
+fn looks_like_lfm(path: &Path) -> bool {
+    matches!(
+        peek_gguf_arch(path).as_deref(),
+        Some("lfm2" | "lfm" | "lfm25" | "lfm2_5" | "lfm2-vl" | "lfm25-vl" | "lfm2_5_vl")
+    ) || filename_hint(path, "lfm2")
+        || filename_hint(path, "lfm25")
+}
+
+fn try_qwen3_vl_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    if !looks_like_qwen3_vl(path) {
+        return None;
+    }
+    let device = resolve_rlx_device(config);
+    let max_seq = config.rlx_max_seq.clamp(32, 4096);
+    let mut b = rlx_models::qwen3_vl::Qwen3VlRunner::builder()
+        .weights(path)
+        .device(device)
+        .max_seq(max_seq);
+    if let Some(mp) = mmproj {
+        b = b.mmproj(mp);
+    }
+    Some(b.build().map(|r| Box::new(r) as Box<dyn LmRunner>))
+}
+
+fn try_lfm_vl_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    // Only take the VL path when mmproj is present; plain LFM stays on auto_runner.
+    let mm = mmproj?;
+    if !looks_like_lfm(path) {
+        return None;
+    }
+    let device = resolve_rlx_device(config);
+    Some(
+        rlx_models::lfm_vl::LfmVlRunner::builder()
+            .weights(path)
+            .mmproj(mm)
+            .device(device)
+            .build()
+            .map(|r| Box::new(r) as Box<dyn LmRunner>),
+    )
+}
+
+fn looks_like_mistral(path: &Path) -> bool {
+    matches!(peek_gguf_arch(path).as_deref(), Some("mistral3" | "mistral4"))
+        || filename_hint(path, "ministral")
+        || filename_hint(path, "mistral-medium")
+        || filename_hint(path, "mistral_medium")
+}
+
+fn try_mistral_vl_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+    let mm = mmproj?;
+    if !looks_like_mistral(path) {
+        return None;
+    }
+    let device = resolve_rlx_device(config);
+    let max_seq = config.rlx_max_seq.clamp(32, 8192);
+    Some(
+        rlx_models::mistral_vl::MistralVlRunner::builder()
+            .weights(path)
+            .mmproj(mm)
+            .device(device)
+            .max_seq(max_seq)
+            .build()
+            .map(|r| Box::new(r) as Box<dyn LmRunner>),
+    )
 }
 
 fn looks_like_qwen3(path: &Path) -> bool {
@@ -512,7 +675,31 @@ impl RlxTextRunner {
     /// Attach an optional mmproj vision encoder (e.g. for Qwen3.5-VL).
     /// When `mmproj` is `None` the runner is text-only.
     pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
-        if let Some(result) = try_catalog_runner(model_path, config) {
+        // mlx-community packed safetensors dirs — before GGUF-oriented paths.
+        if let Some(result) = try_mlx_runner(model_path, config) {
+            let runner = result?;
+            return finish_load(model_path, runner, mmproj, None);
+        }
+
+        // Qwen3-VL before plain Qwen3 (same GGUF family otherwise strips mmproj).
+        if let Some(result) = try_qwen3_vl_runner(model_path, mmproj, config) {
+            let runner = result?;
+            return finish_load(model_path, runner, mmproj, None);
+        }
+
+        // LFM + mmproj → LfmVlRunner (text-only LFM falls through).
+        if let Some(result) = try_lfm_vl_runner(model_path, mmproj, config) {
+            let runner = result?;
+            return finish_load(model_path, runner, mmproj, None);
+        }
+
+        // Ministral / Mistral Medium + mmproj → MistralVlRunner.
+        if let Some(result) = try_mistral_vl_runner(model_path, mmproj, config) {
+            let runner = result?;
+            return finish_load(model_path, runner, mmproj, None);
+        }
+
+        if let Some(result) = try_catalog_runner(model_path, mmproj, config) {
             let runner = result?;
             let family = runner.family();
             let explicit_tokenizer = match family {
@@ -520,50 +707,55 @@ impl RlxTextRunner {
                 "minicpm5" => resolve_minicpm5_tokenizer(model_path),
                 _ => None,
             };
-            return Ok(Self {
-                runner,
-                family,
-                weights_path: model_path.to_path_buf(),
-                explicit_tokenizer,
-            });
+            return finish_load(model_path, runner, mmproj, explicit_tokenizer);
         }
 
-        // Qwen3 GGUF: build with an explicit GPU device. rlx-models'
-        // `auto_runner` builds every family device-less (→ `Device::Cpu`), so the
-        // packed-K-quant `Op::DequantMatMul` runs single-threaded on CPU even with
-        // `--features llm-rlx-metal`. Honour `config.rlx_device` here. Falls back
-        // to the CPU `auto_runner` path if the GPU build fails.
-        if let Some(runner) = try_qwen3_runner_with_device(model_path, config) {
-            return Ok(Self {
-                family: runner.family(),
-                runner,
-                weights_path: model_path.to_path_buf(),
-                explicit_tokenizer: None,
-            });
+        // Plain Qwen3 (not VL): never attach mmproj here.
+        if mmproj.is_none() {
+            if let Some(runner) = try_qwen3_runner_with_device(model_path, config) {
+                return finish_load(model_path, runner, None, None);
+            }
+        } else if looks_like_qwen3(model_path) && !looks_like_qwen3_vl(model_path) {
+            return Err(anyhow!(
+                "mmproj is set but this GGUF is plain Qwen3 (not qwen3vl*) — \
+                 omit mmproj for text-only, or use a Qwen3-VL / Qwen3.5 checkpoint"
+            ));
         }
 
         // Qwen3.5 / 3.6: must not fall through to auto_runner's SpecRunner
         // (MTP GGUFs OOM on unified-memory Macs during graph warm).
         if let Some(result) = try_qwen35_runner(model_path, mmproj, config) {
             let runner = result?;
-            return Ok(Self {
-                family: runner.family(),
-                runner,
-                weights_path: model_path.to_path_buf(),
-                explicit_tokenizer: None,
-            });
+            return finish_load(model_path, runner, mmproj, None);
         }
 
         let runner = auto_runner_with_mmproj(model_path, mmproj).map_err(|e| anyhow!("RLX auto_runner: {e}"))?;
-        let family = runner.family();
-        Ok(Self {
-            runner,
-            family,
-            weights_path: model_path.to_path_buf(),
-            explicit_tokenizer: None,
-        })
+        finish_load(model_path, runner, mmproj, None)
     }
+}
 
+fn finish_load(
+    model_path: &Path,
+    runner: Box<dyn LmRunner>,
+    mmproj: Option<&Path>,
+    explicit_tokenizer: Option<PathBuf>,
+) -> Result<RlxTextRunner> {
+    if mmproj.is_some() && !runner.supports_multimodal() {
+        return Err(anyhow!(
+            "mmproj was requested but runner `{}` does not support multimodal — \
+             omit mmproj or use a VL-capable family (qwen35, gemma+mmproj, qwen3-vl, lfm-vl, mistral-vl)",
+            runner.family()
+        ));
+    }
+    Ok(RlxTextRunner {
+        family: runner.family(),
+        runner,
+        weights_path: model_path.to_path_buf(),
+        explicit_tokenizer,
+    })
+}
+
+impl RlxTextRunner {
     pub(super) fn family(&self) -> &'static str {
         self.family
     }

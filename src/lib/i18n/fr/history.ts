@@ -202,7 +202,7 @@ const history: Record<string, string> = {
   "history.chunkCountTooltip": "Enregistrement long divisé en {n} fichiers par sécurité ; durée {duration}",
   "history.snr": "Qualité du signal",
   "history.label": "étiquette",
-  "history.labels": "étiquettes",
+  "history.labels": "Afficher les labels",
   "history.activityLoading": "Chargement de l'activité fichiers...",
   "history.activityTitle": "Activité fichiers",
   "history.activityFile": "fichier",
@@ -268,7 +268,7 @@ const history: Record<string, string> = {
     "Enregistrez au moins une session EEG, puis revenez ici pour comparer les plages horaires.",
 
   // ── Auto-synced from en/ (2026-03-28) ──
-  "history.addLabel": "Add Label",
+  "history.addLabel": "Ajouter une étiquette",
 };
 
 export default history;

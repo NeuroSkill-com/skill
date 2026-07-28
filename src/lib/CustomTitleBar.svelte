@@ -11,7 +11,7 @@ import { onDestroy, onMount } from "svelte";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { t } from "$lib/i18n/index.svelte";
 import type { LlmCatalog, LlmModelEntry } from "$lib/llm/llm-helpers";
-import { openHelp, openHistory, openLabel } from "$lib/navigation";
+import { openHelp, openLabel } from "$lib/navigation";
 import { isBtOff } from "$lib/stores/bt-status.svelte";
 import { chatTitlebarState, hBar, hCbs, helpTitlebarState, labelTitlebarState } from "$lib/stores/titlebar.svelte";
 import LanguagePicker from "./LanguagePicker.svelte";
@@ -272,8 +272,9 @@ onDestroy(() => {
 {#snippet centerContent()}
   {#if isSearchWindow}
     <div class="search-window-head">
+      <span class="search-source-label">{t("search.sourceLabel")}</span>
       <select class="search-mode-select" value={searchMode}
-              aria-label={t("search.title")}
+              aria-label={t("search.sourceLabel")}
               onchange={(e) => emitSearchModeSwitch((e.currentTarget as HTMLSelectElement).value)}>
         {#each (["interactive","eeg","text","images","code","meetings","brain"] as const) as m}
           <option value={m}>{t(`search.mode${m[0].toUpperCase()}${m.slice(1)}`)}</option>
@@ -356,10 +357,8 @@ onDestroy(() => {
 {#snippet actionButtons()}
   <div class="titlebar-actions">
     {#if isMainWindow}
-      {@render tbBtn("Add Label", "Add Label", openLabel,
+      {@render tbBtn(t("cmdK.openLabel"), t("cmdK.openLabel"), openLabel,
         '<path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>')}
-      {@render tbBtn("History", "History", openHistory,
-        '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')}
     {:else if isHistoryWindow}
       {@render tbBtn(
         hBar.compareMode ? t("history.exitCompare") : t("history.compare"),
@@ -373,20 +372,20 @@ onDestroy(() => {
           {hBar.compareCount}/2
         </button>
       {/if}
-      {@render tbBtn(t("history.labels"), "Labels", hCbs.toggleLabels,
+      {@render tbBtn(t("history.labels"), t("history.labels"), hCbs.toggleLabels,
         '<path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
         hBar.showLabels ? 'text-amber-500 bg-amber-500/10' : undefined
       )}
-      {@render tbBtn("Reload", "Reload", hCbs.reload,
+      {@render tbBtn(t("common.reload"), t("common.reload"), hCbs.reload,
         '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>')}
     {:else if isSettingsWindow}
-      {@render tbBtn("Help", "Help", openHelp,
+      {@render tbBtn(t("settingsTabs.help"), t("settingsTabs.help"), openHelp,
         '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>')}
     {:else if isApiWindow}
       {@render tbBtn(t("apiStatus.refresh"), t("apiStatus.refresh"), emitApiRefresh,
         '<path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>')}
     {/if}
-    <button type="button" title={"Command Palette (" + (isMac ? "⌘" : "Ctrl+") + "K)"} aria-label="Command Palette"
+    <button type="button" title={t("cmdK.title") + " (" + (isMac ? "⌘" : "Ctrl+") + "K)"} aria-label={t("cmdK.title")}
       onclick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: isMac, ctrlKey: !isMac, bubbles: true }))}
       class="flex items-center justify-center w-6 h-6 rounded-md transition-colors
              text-muted-foreground hover:text-foreground hover:bg-accent">
@@ -681,10 +680,16 @@ onDestroy(() => {
   .search-window-head {
     position: absolute;
     left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; justify-content: center;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
     width: min(920px, calc(100vw - 200px));
     min-width: 0; padding: 0 10px; height: 100%;
     overflow: hidden; pointer-events: auto; z-index: 1;
+  }
+  .search-source-label {
+    font-size: 0.62rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-text) 45%, transparent);
+    white-space: nowrap; user-select: none;
   }
   .search-mode-switch {
     display: inline-flex; align-items: center;

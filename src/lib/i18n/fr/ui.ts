@@ -94,8 +94,8 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "Utilitaires",
   "cmdK.openSettings": "Ouvrir les paramètres",
   "cmdK.openHelp": "Ouvrir l'aide",
-  "cmdK.openHistory": "Ouvrir l'historique",
-  "cmdK.openSearch": "Rechercher des embeddings",
+  "cmdK.openHistory": "Historique",
+  "cmdK.openSearch": "Rechercher",
   "cmdK.openLabel": "Ajouter un label",
   "cmdK.retryConnect": "Réessayer la connexion",
   "cmdK.openBtSettings": "Ouvrir les paramètres Bluetooth",
@@ -263,7 +263,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} - Recherche EEG",
   "window.title.calibration": "{app} - Calibration",
   "window.title.focusTimer": "Minuteur de concentration",
-  "window.title.labels": "Toutes les étiquettes",
+  "window.title.labels": "Parcourir les étiquettes",
   "window.title.label": "Ajouter une étiquette",
   "window.title.onboarding": "{app} - Bienvenue",
   "window.title.api": "{app} - Statut API",
@@ -349,6 +349,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "Recevez les versions candidates avant les versions stables. Les vérifications manuelles et automatiques prennent en compte ce réglage immédiatement.",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "Principal",
+  "cmdK.openLive": "Direct",
+  "cmdK.openChat": "Demander",
+  "cmdK.openLabels": "Parcourir les étiquettes",
+  "cmdK.kw.live": "tableau de bord direct forme d’onde signal streaming accueil",
+  "cmdK.kw.chat": "demander llm chat assistant modèle conversation voix",
+  "cmdK.kw.labels": "parcourir toutes étiquettes annotations notes tags modifier supprimer gérer",
 };
 
 export default ui;

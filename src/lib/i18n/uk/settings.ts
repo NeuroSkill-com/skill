@@ -842,6 +842,18 @@ const settings: Record<string, string> = {
   "daemonActivity.lastRanHoursAgo": "{n} год тому",
   "daemonActivity.tickDuration": "тривалість: {n} мс",
   "daemonActivity.tickCount": "цикли: {n}",
+
+  "settingsTabs.clients": "Клієнти",
+  "settingsTabs.terminal": "Термінал",
+  "settingsTabs.validation": "Перевірка",
+  "settings.group.signal": "Сигнал",
+  "settings.group.intelligence": "Інтелект",
+  "settings.group.capture": "Захоплення та приватність",
+  "settings.group.automation": "Автоматизація",
+  "settings.group.app": "Додаток",
+  "settings.group.advanced": "Розширені",
+  "settings.group.showAdvanced": "Показати розширені",
+  "settings.group.hideAdvanced": "Сховати розширені",
 };
 
 export default settings;

@@ -16,6 +16,7 @@ import {
   familyOptionLabel,
   familyPrimarySize,
   familySizeRank,
+  formatHubDownloads,
   hasActiveDownloads,
   type LlmCatalog,
   type LlmModelEntry,
@@ -305,8 +306,21 @@ describe("buildFamilies", () => {
     expect(phi.vendors).toContain("Bartowski");
   });
 
-  it("sorts families alphabetically by name", () => {
-    const families = buildFamilies(multiCatalog().entries);
+  it("sorts families by Hub downloads descending, then name", () => {
+    const cache = {
+      repos: {
+        "bartowski/Qwen3-1.7B-GGUF": { downloads: 50_000 },
+        "bartowski/Phi-4-GGUF": { downloads: 10_000 },
+      },
+    };
+    const families = buildFamilies(multiCatalog().entries, cache);
+    expect(families.map((f) => f.id)).toEqual(["qwen3-1.7b", "phi-4"]);
+    expect(families[0].downloads).toBe(50_000);
+    expect(families[1].downloads).toBe(10_000);
+  });
+
+  it("falls back to name when download counts tie", () => {
+    const families = buildFamilies(multiCatalog().entries, { repos: {} });
     expect(families[0].name).toBe("Phi-4");
     expect(families[1].name).toBe("Qwen3 1.7B");
   });
@@ -367,6 +381,7 @@ describe("familyOptionLabel", () => {
       desc: "",
       tags: [],
       vendors: [],
+      downloads: 0,
       entries: [entry({ filename: "active.gguf", state: "downloaded" })],
       mmproj: [],
       recommended: undefined,
@@ -384,6 +399,7 @@ describe("familyOptionLabel", () => {
       desc: "",
       tags: [],
       vendors: [],
+      downloads: 0,
       entries: [entry({ filename: "dl.gguf", state: "downloading" })],
       mmproj: [],
       recommended: undefined,
@@ -400,6 +416,7 @@ describe("familyOptionLabel", () => {
       desc: "",
       tags: [],
       vendors: [],
+      downloads: 0,
       entries: [entry({ filename: "a.gguf", state: "downloaded" })],
       mmproj: [],
       recommended: undefined,
@@ -409,13 +426,30 @@ describe("familyOptionLabel", () => {
     expect(label).toContain("(2 downloaded)");
   });
 
-  it("omits download count for active families", () => {
+  it("includes Hub download count when known", () => {
     const f: ModelFamily = {
       id: "test",
       name: "TestModel",
       desc: "",
       tags: [],
       vendors: [],
+      downloads: 48_000,
+      entries: [entry({ filename: "a.gguf" })],
+      mmproj: [],
+      recommended: undefined,
+      downloaded: [],
+    };
+    expect(familyOptionLabel(f, "")).toContain("↓ 48.0K");
+  });
+
+  it("omits local download count for active families", () => {
+    const f: ModelFamily = {
+      id: "test",
+      name: "TestModel",
+      desc: "",
+      tags: [],
+      vendors: [],
+      downloads: 0,
       entries: [entry({ filename: "active.gguf" })],
       mmproj: [],
       recommended: undefined,
@@ -423,6 +457,16 @@ describe("familyOptionLabel", () => {
     };
     const label = familyOptionLabel(f, "active.gguf");
     expect(label).not.toContain("downloaded");
+  });
+});
+
+// ── formatHubDownloads ───────────────────────────────────────────────────────
+
+describe("formatHubDownloads", () => {
+  it("formats millions and thousands", () => {
+    expect(formatHubDownloads(1_250_000)).toBe("1.3M");
+    expect(formatHubDownloads(4800)).toBe("4.8K");
+    expect(formatHubDownloads(42)).toBe("42");
   });
 });
 

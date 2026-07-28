@@ -288,12 +288,18 @@ const llm: Record<string, string> = {
     "Nombre de tokens générés spéculativement par étape de décodage. Des valeurs plus élevées augmentent le débit mais nécessitent plus de mémoire. Nécessite un modèle compatible MTP.",
 
   "llm.hfSearch.title": "Rechercher des modèles HuggingFace",
+  "llm.hfSearch.formatGguf": "GGUF",
+  "llm.hfSearch.formatMlx": "MLX",
   "llm.hfSearch.placeholder": "Rechercher des modèles GGUF sur HuggingFace…",
+  "llm.hfSearch.placeholderMlx": "Rechercher des modèles mlx-community…",
   "llm.hfSearch.searchBtn": "Rechercher",
   "llm.hfSearch.searching": "Recherche en cours…",
   "llm.hfSearch.noResults": "Aucun modèle GGUF trouvé. Essayez une autre requête.",
+  "llm.hfSearch.noResultsMlx": "Aucun modèle mlx-community trouvé. Essayez une autre requête.",
   "llm.hfSearch.loadingFiles": "Chargement des fichiers…",
   "llm.hfSearch.noFiles": "Aucun fichier GGUF trouvé dans ce dépôt.",
+  "llm.hfSearch.noFilesMlx": "Aucun fichier de snapshot MLX trouvé dans ce dépôt.",
+  "llm.hfSearch.mlxPackHint": "Ajouter le pack MLX complet",
   "llm.hfSearch.colQuant": "Quant",
   "llm.hfSearch.colSize": "Taille",
   "llm.hfSearch.colFile": "Fichier",
@@ -576,6 +582,32 @@ const llm: Record<string, string> = {
 
   "chat.voice.engineUnavailable": "Non disponible dans cette version (plateforme ou option de compilation).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 9 key(s) into fr
+  "llm.discovered.title": "Trouvés sur cette machine",
+  "llm.discovered.rescan": "Analyser à nouveau",
+  "llm.discovered.scanning": "Analyse…",
+  "llm.discovered.empty": "Aucun modèle local trouvé depuis LM Studio, Ollama, Lemonade ou le cache HuggingFace / MLX.",
+  "llm.discovered.useBtn": "Utiliser",
+  "llm.discovered.active": "Actif",
+  "llm.discovered.scanFailed": "Échec de l'analyse",
+  "llm.discovered.selectFailed": "Impossible de sélectionner le modèle",
+
+  // ── Auto-synced from en/ (2026-07-24) ──
+  // TODO: translate the following 12 key(s) into fr
+  "llm.discovered.localOnly": "Local uniquement",
+  "llm.discovered.egress": "L'analyse et l'exécution de ces modèles se font entièrement sur cet appareil : rien n'est envoyé sur le réseau. Le téléchargement d'un modèle depuis HuggingFace est la seule action ici qui accède à Internet.",
+  "llm.discovered.enable": "Détecter les modèles locaux",
+  "llm.discovered.enableDesc": "Afficher les modèles GGUF et MLX de LM Studio, Ollama, Lemonade et du cache HuggingFace / MLX",
+  "llm.discovered.off": "La détection des modèles locaux est désactivée.",
+  "llm.discovered.advanced": "Paramètres d'analyse",
+  "llm.discovered.sourcesLabel": "Sources",
+  "llm.discovered.sourcesFiltered": "Seules les sources en surbrillance sont analysées.",
+  "llm.discovered.extraDirsLabel": "Dossiers supplémentaires",
+  "llm.discovered.addDir": "Ajouter",
+  "llm.discovered.addDirPlaceholder": "/chemin/vers/modèles",
+  "llm.discovered.removeDir": "Retirer",
 };
 
 export default llm;

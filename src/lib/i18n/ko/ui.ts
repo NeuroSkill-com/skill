@@ -161,8 +161,8 @@ const ui: Record<string, string> = {
   "cmdK.sectionUtilities": "유틸리티",
   "cmdK.openSettings": "설정 열기",
   "cmdK.openHelp": "도움말 열기",
-  "cmdK.openHistory": "기록 열기",
-  "cmdK.openSearch": "검색",
+  "cmdK.openHistory": "기록",
+  "cmdK.openSearch": "찾기",
   "cmdK.openLabel": "라벨 추가",
   "cmdK.retryConnect": "연결 재시도",
   "cmdK.openBtSettings": "Bluetooth 설정 열기",
@@ -257,7 +257,7 @@ const ui: Record<string, string> = {
   "window.title.search": "{app} – EEG 검색",
   "window.title.calibration": "{app} – 캘리브레이션",
   "window.title.focusTimer": "집중 타이머",
-  "window.title.labels": "모든 라벨",
+  "window.title.labels": "라벨 찾아보기",
   "window.title.label": "라벨 추가",
   "window.title.onboarding": "{app} – 환영",
   "window.title.api": "{app} – API 상태",
@@ -335,6 +335,14 @@ const ui: Record<string, string> = {
   "updates.receivePrereleasesDesc":
     "안정 릴리스 전에 릴리스 후보를 받습니다. 수동 및 백그라운드 업데이트 확인 모두 이 설정을 즉시 반영합니다.",
   "about.rcMarker": "(RC · {commit})",
+
+  "cmdK.sectionPrimary": "주요",
+  "cmdK.openLive": "라이브",
+  "cmdK.openChat": "질문",
+  "cmdK.openLabels": "라벨 찾아보기",
+  "cmdK.kw.live": "대시보드 라이브 파형 신호 스트리밍 홈",
+  "cmdK.kw.chat": "질문 llm 채팅 어시스턴트 모델 대화 음성",
+  "cmdK.kw.labels": "찾아보기 모든 라벨 주석 메모 태그 편집 삭제 관리",
 };
 
 export default ui;

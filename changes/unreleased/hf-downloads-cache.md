@@ -1,0 +1,4 @@
+- **HF downloads cache**: `scripts/update-hf-downloads-cache.mjs` crawls Hub download counts for every catalog repo plus top mlx-community models; writes `src-tauri/hf_downloads_cache.json` and `src/lib/generated/hf-downloads-cache.json`.
+- Weekly GitHub Action refreshes the cache and opens a PR; CI checks the committed cache covers the catalog.
+- LLM family picker sorts by Hub downloads descending by default and shows `↓ N` in the dropdown.
+- HF search adds an MLX tab (also sorted by downloads); “Add pack” imports the whole mlx-community snapshot.

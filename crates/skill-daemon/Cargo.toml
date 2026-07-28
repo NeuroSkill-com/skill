@@ -19,6 +19,7 @@ default = ["product"]
 apple = [
     "product",
     "skill-llm/apple",
+    "llm-model-discovery",
     "embed-exg-metal", "embed-exg-mlx",
     "skill-daemon-state/apple",
     "skill-screenshots/apple",
@@ -27,6 +28,7 @@ apple = [
 linux = [
     "product",
     "skill-llm/linux",
+    "llm-model-discovery",
     "embed-exg-gpu", "embed-exg-cuda",
     "skill-daemon-state/linux",
     "skill-screenshots/linux",
@@ -35,6 +37,7 @@ linux = [
 windows = [
     "product",
     "skill-llm/windows",
+    "llm-model-discovery",
     "embed-exg-gpu", "embed-exg-cuda",
     "skill-daemon-state/windows",
     "skill-screenshots/windows",
@@ -63,6 +66,12 @@ llm-rlx-mlx   = ["llm", "skill-llm/llm-rlx-mlx"]
 llm-rlx-cuda  = ["llm", "skill-llm/llm-rlx-cuda"]
 llm-rlx-rocm  = ["llm", "skill-llm/llm-rlx-rocm"]
 llm-rlx-wgpu  = ["llm", "skill-llm/llm-rlx-wgpu"]
+# Discover GGUFs / mlx packs already downloaded by other local apps (LM Studio,
+# Ollama, Lemonade, HF / MLX cache) via rlx-models' `weights_discover` scanner,
+# so onboarding + Settings can reuse them instead of re-downloading. Enabled by
+# every OS umbrella above (rlx-models now resolves to 0.2.14 via git `main`,
+# which ships `weights_discover`). Standalone use: `--features apple,llm-model-discovery`.
+llm-model-discovery = ["llm-rlx", "skill-llm/llm-model-discovery"]
 text-embeddings-rlx = ["skill-daemon-state/text-embeddings-rlx", "skill-screenshots/text-embeddings-rlx"]
 # Each tier picks the GPU backend for the whole screenshots pipeline — both the
 # vision embedder AND OCR (rlx-ocr now runs on every backend at parity, with

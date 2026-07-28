@@ -56,6 +56,13 @@ const common: Record<string, string> = {
   "error.reload": "Recharger la page",
   "common.connect": "Connecter",
   "common.disconnect": "Déconnecter",
+
+  "shell.live": "Direct",
+  "shell.find": "Rechercher",
+  "shell.ask": "Demander",
+  "shell.history": "Historique",
+  "shell.navLabel": "Destinations principales",
+  "common.reload": "Recharger",
 };
 
 export default common;

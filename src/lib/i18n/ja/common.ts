@@ -56,6 +56,13 @@ const common: Record<string, string> = {
     "予期しないエラーが発生しました。ページの再読み込みまたはダッシュボードに戻ることをお試しください。",
   "error.goHome": "ダッシュボードへ",
   "error.reload": "ページを再読み込み",
+
+  "shell.live": "ライブ",
+  "shell.find": "検索",
+  "shell.ask": "質問",
+  "shell.history": "履歴",
+  "shell.navLabel": "主な画面",
+  "common.reload": "再読み込み",
 };
 
 export default common;

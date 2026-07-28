@@ -185,6 +185,12 @@ const dashboard: Record<string, string> = {
   "dashboard.primary": "プライマリ",
   "dashboard.backgroundRecordings": "バックグラウンド記録",
   "dashboard.stopSecondary": "記録を停止",
+
+  "dashboard.viewWaveform": "波形",
+  "dashboard.viewPhysiology": "生理",
+  "dashboard.viewState": "状態",
+  "dashboard.viewLabel": "ライブ表示",
+  "dashboard.streamingToast": "ストリーミング中です。気になる瞬間はタイトルバーからラベルを付けられます。",
 };
 
 export default dashboard;
