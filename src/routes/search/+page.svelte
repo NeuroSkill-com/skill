@@ -22,9 +22,9 @@ import {
   UMAP_POLL_INTERVAL_MS,
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { renameChatSession } from "$lib/daemon/chat";
 import { daemonGet, daemonPost } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { renameChatSession } from "$lib/daemon/chat";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import {
   dateToCompactKey,

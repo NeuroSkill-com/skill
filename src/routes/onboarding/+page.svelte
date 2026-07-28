@@ -18,8 +18,8 @@ import { Card, CardContent } from "$lib/components/ui/card";
 import { Progress } from "$lib/components/ui/progress";
 import { ToggleRow } from "$lib/components/ui/toggle-row";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { daemonPost } from "$lib/daemon/http";
 import { getDeviceStatus, retryConnect } from "$lib/daemon/devices";
+import { daemonPost } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import {
   getActiveWindowTracking,
@@ -491,11 +491,7 @@ const zunaIsDownloading = $derived(zunaStatus?.downloading_weights ?? false);
 const zunaIsDownloaded = $derived(zunaStatus?.weights_found ?? false);
 const zunaProgressPct = $derived((zunaStatus?.download_progress ?? 0) * 100);
 const allRecommendedReady = $derived(
-  llmReady &&
-    zunaIsDownloaded &&
-    neuttsDlState === "ready" &&
-    kittenDlState === "ready" &&
-    ocrDlState === "ready",
+  llmReady && zunaIsDownloaded && neuttsDlState === "ready" && kittenDlState === "ready" && ocrDlState === "ready",
 );
 
 const footerModelStatus = $derived.by(() => {

@@ -168,15 +168,18 @@ const onboarding: Record<string, string> = {
   "onboarding.finish": "Fertig",
 
   "onboarding.doneOptionalTitle": "Später mehr einrichten?",
-  "onboarding.doneOptionalBody": "Kalibrierung, lokale KI-Modelle, Berechtigungen und Erweiterungen sind optional — jederzeit unter Einstellungen oder unten.",
+  "onboarding.doneOptionalBody":
+    "Kalibrierung, lokale KI-Modelle, Berechtigungen und Erweiterungen sind optional — jederzeit unter Einstellungen oder unten.",
   "onboarding.doneOptionalCta": "Optionale Einrichtung",
   "onboarding.modelsSkipPrimary": "Vorerst überspringen",
   "onboarding.modelsDownloadLater": "Modelle kannst du später unter Einstellungen → LLM und Stimme herunterladen.",
-  "onboarding.disclaimerAck": "Ich verstehe, dass {app} nur für Forschungszwecke gedacht ist und kein Medizinprodukt ist.",
+  "onboarding.disclaimerAck":
+    "Ich verstehe, dass {app} nur für Forschungszwecke gedacht ist und kein Medizinprodukt ist.",
   "onboarding.openLive": "Live-Dashboard öffnen",
 
   "onboarding.models.reuseTitle": "Ein vorhandenes Modell wiederverwenden",
-  "onboarding.models.reuseHint": "Diese Modelle wurden auf diesem Gerät gefunden (aus LM Studio, Ollama oder dem Hugging-Face-Cache). Verwende eines davon statt erneut herunterzuladen.",
+  "onboarding.models.reuseHint":
+    "Diese Modelle wurden auf diesem Gerät gefunden (aus LM Studio, Ollama oder dem Hugging-Face-Cache). Verwende eines davon statt erneut herunterzuladen.",
   "onboarding.models.reuseFrom": "aus {source}",
   "onboarding.models.reuseUse": "Dieses verwenden",
   "onboarding.models.reuseActive": "Wird verwendet",

@@ -595,16 +595,19 @@ const llm: Record<string, string> = {
   "llm.discovered.title": "Encontrados en este equipo",
   "llm.discovered.rescan": "Volver a analizar",
   "llm.discovered.scanning": "Analizando…",
-  "llm.discovered.empty": "No se encontraron modelos locales de LM Studio, Ollama, Lemonade ni la caché de HuggingFace / MLX.",
+  "llm.discovered.empty":
+    "No se encontraron modelos locales de LM Studio, Ollama, Lemonade ni la caché de HuggingFace / MLX.",
   "llm.discovered.useBtn": "Usar",
   "llm.discovered.active": "Activo",
   "llm.discovered.scanFailed": "Error al analizar",
   "llm.discovered.selectFailed": "No se pudo seleccionar el modelo",
 
   "llm.discovered.localOnly": "Solo local",
-  "llm.discovered.egress": "El análisis y la ejecución de estos modelos ocurren íntegramente en este dispositivo: no se envía nada por la red. Descargar un modelo de HuggingFace es la única acción aquí que accede a internet.",
+  "llm.discovered.egress":
+    "El análisis y la ejecución de estos modelos ocurren íntegramente en este dispositivo: no se envía nada por la red. Descargar un modelo de HuggingFace es la única acción aquí que accede a internet.",
   "llm.discovered.enable": "Detectar modelos locales",
-  "llm.discovered.enableDesc": "Mostrar modelos GGUF y MLX de LM Studio, Ollama, Lemonade y la caché de HuggingFace / MLX",
+  "llm.discovered.enableDesc":
+    "Mostrar modelos GGUF y MLX de LM Studio, Ollama, Lemonade y la caché de HuggingFace / MLX",
   "llm.discovered.off": "La detección de modelos locales está desactivada.",
   "llm.discovered.advanced": "Ajustes de análisis",
   "llm.discovered.sourcesLabel": "Fuentes",

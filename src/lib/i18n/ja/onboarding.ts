@@ -163,7 +163,8 @@ const onboarding: Record<string, string> = {
   "onboarding.finish": "完了",
 
   "onboarding.doneOptionalTitle": "あとで追加設定しますか？",
-  "onboarding.doneOptionalBody": "キャリブレーション、ローカルAIモデル、権限、拡張機能は任意です。設定または下からいつでも構成できます。",
+  "onboarding.doneOptionalBody":
+    "キャリブレーション、ローカルAIモデル、権限、拡張機能は任意です。設定または下からいつでも構成できます。",
   "onboarding.doneOptionalCta": "任意の設定",
   "onboarding.modelsSkipPrimary": "今はスキップ",
   "onboarding.modelsDownloadLater": "モデルは後で 設定 → LLM と音声 からダウンロードできます。",
@@ -171,7 +172,8 @@ const onboarding: Record<string, string> = {
   "onboarding.openLive": "ライブダッシュボードを開く",
 
   "onboarding.models.reuseTitle": "既にあるモデルを再利用",
-  "onboarding.models.reuseHint": "これらのモデルはこのマシン上で見つかりました（LM Studio、Ollama、または Hugging Face キャッシュ）。再ダウンロードする代わりに再利用できます。",
+  "onboarding.models.reuseHint":
+    "これらのモデルはこのマシン上で見つかりました（LM Studio、Ollama、または Hugging Face キャッシュ）。再ダウンロードする代わりに再利用できます。",
   "onboarding.models.reuseFrom": "{source} から",
   "onboarding.models.reuseUse": "これを使う",
   "onboarding.models.reuseActive": "使用中",

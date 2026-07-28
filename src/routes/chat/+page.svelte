@@ -63,8 +63,8 @@ import {
   type UsageInfo,
 } from "$lib/chat/chat-types";
 import { parseAssistantOutput } from "$lib/chat/chat-utils";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { cancelToolCall as cancelToolCallApi, renameChatSession } from "$lib/daemon/chat";
+import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { type DaemonEvent, onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
 import { chatTitlebarState } from "$lib/stores/titlebar.svelte";

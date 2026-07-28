@@ -185,13 +185,8 @@ async function createInvite() {
 
     // Create a scoped API token for the paired device so it can
     // authenticate directly with the daemon HTTP/WS endpoints.
-    const acl: TokenAcl =
-      inviteScope === "full" ? "admin" : inviteScope === "read" ? "read_only" : "data";
-    const deviceToken = await createAuthToken(
-      `Phone (${new Date().toLocaleDateString()})`,
-      acl,
-      "quarter",
-    );
+    const acl: TokenAcl = inviteScope === "full" ? "admin" : inviteScope === "read" ? "read_only" : "data";
+    const deviceToken = await createAuthToken(`Phone (${new Date().toLocaleDateString()})`, acl, "quarter");
 
     const r = await api<PhoneInviteResponse>("/v1/iroh/phone-invite", "POST", {
       name: "Invite",

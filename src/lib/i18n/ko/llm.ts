@@ -584,7 +584,8 @@ const llm: Record<string, string> = {
   "llm.discovered.selectFailed": "모델을 선택할 수 없습니다",
 
   "llm.discovered.localOnly": "로컬 전용",
-  "llm.discovered.egress": "이러한 모델의 검색과 실행은 모두 이 기기에서 이루어지며 네트워크로 전송되는 것은 없습니다. HuggingFace에서 모델을 다운로드하는 경우에만 인터넷에 연결됩니다.",
+  "llm.discovered.egress":
+    "이러한 모델의 검색과 실행은 모두 이 기기에서 이루어지며 네트워크로 전송되는 것은 없습니다. HuggingFace에서 모델을 다운로드하는 경우에만 인터넷에 연결됩니다.",
   "llm.discovered.enable": "로컬 모델 검색",
   "llm.discovered.enableDesc": "LM Studio, Ollama, Lemonade 및 HuggingFace / MLX 캐시의 GGUF·MLX 모델 표시",
   "llm.discovered.off": "로컬 모델 검색이 꺼져 있습니다.",

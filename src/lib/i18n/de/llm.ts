@@ -111,7 +111,8 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} GB",
   "llm.localPath": "Lokaler Pfad",
   "llm.inference.gpuLayers": "GPU-Ebenen",
-  "llm.inference.gpuLayersDesc": "Auf die GPU auszulagernde Ebenen (0 = nur CPU). Erfordert einen GPU-fähigen Daemon-Build (apple / linux / windows).",
+  "llm.inference.gpuLayersDesc":
+    "Auf die GPU auszulagernde Ebenen (0 = nur CPU). Erfordert einen GPU-fähigen Daemon-Build (apple / linux / windows).",
   "llm.inference.ctxSize": "Kontextgröße",
   "llm.inference.ctxSizeDesc": "KV-Cache-Größe in Token (leer = Modellstandard).",
   "llm.inference.parallel": "Maximale Anzahl gleichzeitiger Anfragen",
@@ -582,16 +583,19 @@ const llm: Record<string, string> = {
   "llm.discovered.title": "Auf diesem Gerät gefunden",
   "llm.discovered.rescan": "Neu scannen",
   "llm.discovered.scanning": "Wird gescannt…",
-  "llm.discovered.empty": "Keine lokalen Modelle aus LM Studio, Ollama, Lemonade oder dem HuggingFace-/MLX-Cache gefunden.",
+  "llm.discovered.empty":
+    "Keine lokalen Modelle aus LM Studio, Ollama, Lemonade oder dem HuggingFace-/MLX-Cache gefunden.",
   "llm.discovered.useBtn": "Verwenden",
   "llm.discovered.active": "Aktiv",
   "llm.discovered.scanFailed": "Scan fehlgeschlagen",
   "llm.discovered.selectFailed": "Modell konnte nicht ausgewählt werden",
 
   "llm.discovered.localOnly": "Nur lokal",
-  "llm.discovered.egress": "Das Suchen und Ausführen dieser Modelle geschieht vollständig auf diesem Gerät – es werden keine Daten über das Netzwerk gesendet. Nur das Herunterladen eines Modells von HuggingFace stellt eine Internetverbindung her.",
+  "llm.discovered.egress":
+    "Das Suchen und Ausführen dieser Modelle geschieht vollständig auf diesem Gerät – es werden keine Daten über das Netzwerk gesendet. Nur das Herunterladen eines Modells von HuggingFace stellt eine Internetverbindung her.",
   "llm.discovered.enable": "Lokale Modelle erkennen",
-  "llm.discovered.enableDesc": "GGUF- und MLX-Modelle aus LM Studio, Ollama, Lemonade und dem HuggingFace-/MLX-Cache anzeigen",
+  "llm.discovered.enableDesc":
+    "GGUF- und MLX-Modelle aus LM Studio, Ollama, Lemonade und dem HuggingFace-/MLX-Cache anzeigen",
   "llm.discovered.off": "Die Erkennung lokaler Modelle ist deaktiviert.",
   "llm.discovered.advanced": "Scan-Einstellungen",
   "llm.discovered.sourcesLabel": "Quellen",

@@ -26,13 +26,7 @@ let chatShortcut = $state("");
 let historyShortcut = $state("");
 
 const active = $derived<Dest>(
-  windowLabel === "search"
-    ? "find"
-    : windowLabel === "chat"
-      ? "ask"
-      : windowLabel === "history"
-        ? "history"
-        : "live",
+  windowLabel === "search" ? "find" : windowLabel === "chat" ? "ask" : windowLabel === "history" ? "history" : "live",
 );
 
 const ITEMS: { id: Dest; label: () => string; shortcut: () => string }[] = [

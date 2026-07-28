@@ -19,6 +19,7 @@ import { createConnection } from "node:net";
 import { arch, cpus, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compileProduct } from "./lib/compile-product.mjs";
 import {
   applyMacProfileEnv,
   defaultMacBuildTarget,
@@ -26,7 +27,6 @@ import {
   resolveTargetTriple,
   rewriteTargetArgs,
 } from "./lib/target-triples.mjs";
-import { compileProduct } from "./lib/compile-product.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -877,8 +877,7 @@ function assembleMacOsApp() {
 if (subcommand === "build") {
   console.log("\n🔧 Compiling product (daemon + tty + app)…");
   const allowMissingDaemon =
-    process.env.SKILL_ALLOW_MISSING_DAEMON === "1" ||
-    rawSubArgs.includes("--allow-missing-daemon");
+    process.env.SKILL_ALLOW_MISSING_DAEMON === "1" || rawSubArgs.includes("--allow-missing-daemon");
   const isDebug = rawSubArgs.includes("--debug");
   try {
     compileProduct({
@@ -896,9 +895,7 @@ if (subcommand === "build") {
       console.warn(`⚠ Product compile failed (continuing): ${msg}`);
     } else {
       console.error(`✗ Product compile failed: ${msg}`);
-      console.error(
-        "  Pass --allow-missing-daemon or set SKILL_ALLOW_MISSING_DAEMON=1 to override.",
-      );
+      console.error("  Pass --allow-missing-daemon or set SKILL_ALLOW_MISSING_DAEMON=1 to override.");
       process.exit(typeof e?.status === "number" ? e.status : 1);
     }
   }

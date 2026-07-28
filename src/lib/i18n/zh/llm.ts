@@ -110,7 +110,8 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} GB",
   "llm.localPath": "本地路径",
   "llm.inference.gpuLayers": "GPU 层数",
-  "llm.inference.gpuLayersDesc": "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要启用 GPU 的 daemon 构建（apple / linux / windows）。",
+  "llm.inference.gpuLayersDesc":
+    "卸载到 GPU 的层数（0 = 仅 CPU，高值 = GPU）。需要启用 GPU 的 daemon 构建（apple / linux / windows）。",
   "llm.inference.ctxSize": "上下文大小",
   "llm.inference.ctxSizeDesc": "KV-cache 大小（以 token 为单位）。自动选择适合您 GPU/RAM 的最大上下文。",
   "llm.inference.parallel": "最大并发请求数",
@@ -571,7 +572,8 @@ const llm: Record<string, string> = {
   "llm.discovered.selectFailed": "无法选择模型",
 
   "llm.discovered.localOnly": "仅本地",
-  "llm.discovered.egress": "这些模型的扫描和运行完全在本设备上进行，不会通过网络发送任何内容。只有从 HuggingFace 下载模型才会连接互联网。",
+  "llm.discovered.egress":
+    "这些模型的扫描和运行完全在本设备上进行，不会通过网络发送任何内容。只有从 HuggingFace 下载模型才会连接互联网。",
   "llm.discovered.enable": "发现本地模型",
   "llm.discovered.enableDesc": "显示来自 LM Studio、Ollama、Lemonade 和 HuggingFace / MLX 缓存的 GGUF 与 MLX 模型",
   "llm.discovered.off": "本地模型发现已关闭。",

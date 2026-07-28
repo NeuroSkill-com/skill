@@ -173,7 +173,8 @@ const onboarding: Record<string, string> = {
   "onboarding.screenRecOpen": "Ouvrir les réglages",
 
   "onboarding.doneOptionalTitle": "Configurer plus tard ?",
-  "onboarding.doneOptionalBody": "La calibration, les modèles d’IA locaux, les permissions et les extensions sont facultatifs — configurez-les quand vous voulez dans Réglages ou ci-dessous.",
+  "onboarding.doneOptionalBody":
+    "La calibration, les modèles d’IA locaux, les permissions et les extensions sont facultatifs — configurez-les quand vous voulez dans Réglages ou ci-dessous.",
   "onboarding.doneOptionalCta": "Configuration facultative",
   "onboarding.modelsSkipPrimary": "Passer pour l’instant",
   "onboarding.modelsDownloadLater": "Vous pourrez télécharger des modèles plus tard dans Réglages → LLM et Voix.",
@@ -181,7 +182,8 @@ const onboarding: Record<string, string> = {
   "onboarding.openLive": "Ouvrir le tableau de bord Direct",
 
   "onboarding.models.reuseTitle": "Réutilisez un modèle déjà présent",
-  "onboarding.models.reuseHint": "Ces modèles ont été trouvés sur cette machine (depuis LM Studio, Ollama ou le cache Hugging Face). Réutilisez-en un au lieu de le retélécharger.",
+  "onboarding.models.reuseHint":
+    "Ces modèles ont été trouvés sur cette machine (depuis LM Studio, Ollama ou le cache Hugging Face). Réutilisez-en un au lieu de le retélécharger.",
   "onboarding.models.reuseFrom": "depuis {source}",
   "onboarding.models.reuseUse": "Utiliser celui-ci",
   "onboarding.models.reuseActive": "En cours d'utilisation",

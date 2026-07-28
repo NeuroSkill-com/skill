@@ -41,13 +41,13 @@ import {
 } from "$lib/constants";
 import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 import {
+  cancelRetry as cancelRetryApi,
+  forgetDevice as forgetDeviceApi,
+  getDeviceStatus,
   getDevices,
   pairDevice as pairDeviceCmd,
-  forgetDevice as forgetDeviceApi,
-  setPreferredDevice,
   retryConnect as retryConnectApi,
-  cancelRetry as cancelRetryApi,
-  getDeviceStatus,
+  setPreferredDevice,
 } from "$lib/daemon/devices";
 import { daemonGet } from "$lib/daemon/http";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
@@ -64,7 +64,16 @@ import {
   PpgMetrics,
 } from "$lib/dashboard";
 import { t } from "$lib/i18n/index.svelte";
-import { openBtSettings, openCalibration, openDownloads, openLabel, openSearch, openSettingsTab, openUpdates, openApi } from "$lib/navigation";
+import {
+  openApi,
+  openBtSettings,
+  openCalibration,
+  openDownloads,
+  openLabel,
+  openSearch,
+  openSettingsTab,
+  openUpdates,
+} from "$lib/navigation";
 import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
 import { setBtOff } from "$lib/stores/bt-status.svelte";
 import { addToast } from "$lib/stores/toast.svelte";

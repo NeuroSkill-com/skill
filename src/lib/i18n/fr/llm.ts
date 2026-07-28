@@ -113,7 +113,8 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} Go",
   "llm.localPath": "Chemin local",
   "llm.inference.gpuLayers": "Couches GPU",
-  "llm.inference.gpuLayersDesc": "Couches à décharger sur le GPU (0 = CPU uniquement). Nécessite un build daemon GPU (apple / linux / windows).",
+  "llm.inference.gpuLayersDesc":
+    "Couches à décharger sur le GPU (0 = CPU uniquement). Nécessite un build daemon GPU (apple / linux / windows).",
   "llm.inference.ctxSize": "Taille du contexte",
   "llm.inference.ctxSizeDesc":
     "Taille du cache KV en jetons. Auto choisit le plus grand contexte qui tient dans votre GPU/RAM.",
@@ -309,7 +310,8 @@ const llm: Record<string, string> = {
   "llm.hfSearch.showReadme": "Afficher le README",
   "llm.hfSearch.hideReadme": "Masquer le README",
   "llm.noFeature": "Le support LLM n'est pas compilé.",
-  "llm.noFeatureHint": "Reconstruisez avec un daemon GPU (--features apple|linux|windows) pour activer le serveur intégré compatible OpenAI.",
+  "llm.noFeatureHint":
+    "Reconstruisez avec un daemon GPU (--features apple|linux|windows) pour activer le serveur intégré compatible OpenAI.",
   "llm.endpoints.title": "Points de terminaison compatibles OpenAI",
   "llm.endpoints.hint": "Tous les points de terminaison sont servis sur le même port que l'API WebSocket/REST.",
   "llm.mmproj.autoload": "Charger automatiquement l'encodeur de vision",
@@ -593,9 +595,11 @@ const llm: Record<string, string> = {
   "llm.discovered.selectFailed": "Impossible de sélectionner le modèle",
 
   "llm.discovered.localOnly": "Local uniquement",
-  "llm.discovered.egress": "L'analyse et l'exécution de ces modèles se font entièrement sur cet appareil : rien n'est envoyé sur le réseau. Le téléchargement d'un modèle depuis HuggingFace est la seule action ici qui accède à Internet.",
+  "llm.discovered.egress":
+    "L'analyse et l'exécution de ces modèles se font entièrement sur cet appareil : rien n'est envoyé sur le réseau. Le téléchargement d'un modèle depuis HuggingFace est la seule action ici qui accède à Internet.",
   "llm.discovered.enable": "Détecter les modèles locaux",
-  "llm.discovered.enableDesc": "Afficher les modèles GGUF et MLX de LM Studio, Ollama, Lemonade et du cache HuggingFace / MLX",
+  "llm.discovered.enableDesc":
+    "Afficher les modèles GGUF et MLX de LM Studio, Ollama, Lemonade et du cache HuggingFace / MLX",
   "llm.discovered.off": "La détection des modèles locaux est désactivée.",
   "llm.discovered.advanced": "Paramètres d'analyse",
   "llm.discovered.sourcesLabel": "Origines",

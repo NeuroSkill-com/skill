@@ -571,7 +571,8 @@ const llm: Record<string, string> = {
   "llm.discovered.egress":
     "Scanning and running these models happens entirely on this device — nothing is sent over the network. Downloading a model from HuggingFace is the only action here that reaches the internet.",
   "llm.discovered.enable": "Discover local models",
-  "llm.discovered.enableDesc": "Surface GGUF and MLX models from LM Studio, Ollama, Lemonade, and the HuggingFace / MLX cache",
+  "llm.discovered.enableDesc":
+    "Surface GGUF and MLX models from LM Studio, Ollama, Lemonade, and the HuggingFace / MLX cache",
   "llm.discovered.off": "Local model discovery is turned off.",
   "llm.discovered.advanced": "Scan settings",
   "llm.discovered.sourcesLabel": "Sources",

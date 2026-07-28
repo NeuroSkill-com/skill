@@ -161,7 +161,8 @@ const onboarding: Record<string, string> = {
   "onboarding.openLive": "打开实时仪表盘",
 
   "onboarding.models.reuseTitle": "复用你已拥有的模型",
-  "onboarding.models.reuseHint": "这些模型已在此设备上找到（来自 LM Studio、Ollama 或 Hugging Face 缓存）。可直接复用，无需重新下载。",
+  "onboarding.models.reuseHint":
+    "这些模型已在此设备上找到（来自 LM Studio、Ollama 或 Hugging Face 缓存）。可直接复用，无需重新下载。",
   "onboarding.models.reuseFrom": "来自 {source}",
   "onboarding.models.reuseUse": "使用此模型",
   "onboarding.models.reuseActive": "使用中",

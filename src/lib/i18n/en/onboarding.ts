@@ -174,8 +174,7 @@ const onboarding: Record<string, string> = {
   "onboarding.doneOptionalCta": "Optional setup",
   "onboarding.modelsSkipPrimary": "Skip for now",
   "onboarding.modelsDownloadLater": "You can download models later from Settings → LLM and Voice.",
-  "onboarding.disclaimerAck":
-    "I understand {app} is for research use only and is not a medical device.",
+  "onboarding.disclaimerAck": "I understand {app} is for research use only and is not a medical device.",
   "onboarding.back": "Back",
   "onboarding.next": "Next",
   "onboarding.getStarted": "Get Started",

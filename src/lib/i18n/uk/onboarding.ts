@@ -165,7 +165,8 @@ const onboarding: Record<string, string> = {
   "onboarding.screenRecOpen": "Відкрити налаштування",
 
   "onboarding.doneOptionalTitle": "Налаштувати більше пізніше?",
-  "onboarding.doneOptionalBody": "Калібрування, локальні моделі ШІ, дозволи та розширення необов’язкові — налаштуйте будь-коли в Параметрах або нижче.",
+  "onboarding.doneOptionalBody":
+    "Калібрування, локальні моделі ШІ, дозволи та розширення необов’язкові — налаштуйте будь-коли в Параметрах або нижче.",
   "onboarding.doneOptionalCta": "Додаткове налаштування",
   "onboarding.modelsSkipPrimary": "Пропустити поки що",
   "onboarding.modelsDownloadLater": "Моделі можна завантажити пізніше в Параметри → LLM і Голос.",
@@ -173,7 +174,8 @@ const onboarding: Record<string, string> = {
   "onboarding.openLive": "Відкрити живу панель",
 
   "onboarding.models.reuseTitle": "Використайте модель, яка вже є",
-  "onboarding.models.reuseHint": "Ці моделі знайдено на цьому комп’ютері (з LM Studio, Ollama або кешу Hugging Face). Використайте одну з них замість повторного завантаження.",
+  "onboarding.models.reuseHint":
+    "Ці моделі знайдено на цьому комп’ютері (з LM Studio, Ollama або кешу Hugging Face). Використайте одну з них замість повторного завантаження.",
   "onboarding.models.reuseFrom": "з {source}",
   "onboarding.models.reuseUse": "Використати",
   "onboarding.models.reuseActive": "Використовується",

@@ -160,7 +160,8 @@ const onboarding: Record<string, string> = {
   "onboarding.finish": "완료",
 
   "onboarding.doneOptionalTitle": "나중에 더 설정할까요?",
-  "onboarding.doneOptionalBody": "보정, 로컬 AI 모델, 권한, 확장 기능은 선택 사항입니다. 설정 또는 아래에서 언제든 구성할 수 있습니다.",
+  "onboarding.doneOptionalBody":
+    "보정, 로컬 AI 모델, 권한, 확장 기능은 선택 사항입니다. 설정 또는 아래에서 언제든 구성할 수 있습니다.",
   "onboarding.doneOptionalCta": "선택 설정",
   "onboarding.modelsSkipPrimary": "지금은 건너뛰기",
   "onboarding.modelsDownloadLater": "모델은 나중에 설정 → LLM 및 음성에서 다운로드할 수 있습니다.",
@@ -168,7 +169,8 @@ const onboarding: Record<string, string> = {
   "onboarding.openLive": "라이브 대시보드 열기",
 
   "onboarding.models.reuseTitle": "이미 있는 모델 재사용",
-  "onboarding.models.reuseHint": "이 모델들은 이 기기에서 발견되었습니다(LM Studio, Ollama 또는 Hugging Face 캐시). 다시 다운로드하지 말고 재사용하세요.",
+  "onboarding.models.reuseHint":
+    "이 모델들은 이 기기에서 발견되었습니다(LM Studio, Ollama 또는 Hugging Face 캐시). 다시 다운로드하지 말고 재사용하세요.",
   "onboarding.models.reuseFrom": "{source}에서",
   "onboarding.models.reuseUse": "이 모델 사용",
   "onboarding.models.reuseActive": "사용 중",

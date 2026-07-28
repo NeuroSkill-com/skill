@@ -12,8 +12,7 @@
 export function prettyAccelerator(accel: string): string {
   if (!accel) return "—";
   const isMac =
-    typeof navigator !== "undefined" &&
-    (navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac"));
+    typeof navigator !== "undefined" && (navigator.platform?.startsWith("Mac") || navigator.userAgent.includes("Mac"));
   let s = accel;
   if (isMac) {
     s = s

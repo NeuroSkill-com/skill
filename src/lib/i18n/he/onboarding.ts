@@ -164,7 +164,8 @@ const onboarding: Record<string, string> = {
   "onboarding.openLive": "פתח לוח חי",
 
   "onboarding.models.reuseTitle": "השתמש מחדש במודל שכבר קיים אצלך",
-  "onboarding.models.reuseHint": "המודלים האלה נמצאו במחשב הזה (מ-LM Studio, Ollama או מטמון Hugging Face). אפשר להשתמש באחד מהם במקום להוריד שוב.",
+  "onboarding.models.reuseHint":
+    "המודלים האלה נמצאו במחשב הזה (מ-LM Studio, Ollama או מטמון Hugging Face). אפשר להשתמש באחד מהם במקום להוריד שוב.",
   "onboarding.models.reuseFrom": "מ-{source}",
   "onboarding.models.reuseUse": "השתמש בזה",
   "onboarding.models.reuseActive": "בשימוש",

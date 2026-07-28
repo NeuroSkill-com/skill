@@ -194,7 +194,8 @@ const dashboard: Record<string, string> = {
   "dashboard.viewPhysiology": "Physiologie",
   "dashboard.viewState": "État",
   "dashboard.viewLabel": "Vue en direct",
-  "dashboard.streamingToast": "Vous diffusez. Étiquetez les moments depuis la barre de titre quand quelque chose d’intéressant se produit.",
+  "dashboard.streamingToast":
+    "Vous diffusez. Étiquetez les moments depuis la barre de titre quand quelque chose d’intéressant se produit.",
 };
 
 export default dashboard;

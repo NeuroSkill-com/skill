@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-import { daemonInvoke } from "./invoke-proxy";
 import { getDeviceStatus } from "./devices";
+import { daemonInvoke } from "./invoke-proxy";
 
 export interface LslPairStreamRequest {
   sourceId: string;

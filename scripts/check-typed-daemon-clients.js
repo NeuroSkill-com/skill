@@ -28,10 +28,7 @@ const TYPED = {
 };
 
 const ROOTS = ["src/lib", "src/routes"];
-const SKIP = new Set([
-  path.resolve("src/lib/daemon/invoke-proxy.ts"),
-  path.resolve("src/tests"),
-]);
+const SKIP = new Set([path.resolve("src/lib/daemon/invoke-proxy.ts"), path.resolve("src/tests")]);
 
 async function* walk(dir) {
   for (const ent of await readdir(dir, { withFileTypes: true })) {

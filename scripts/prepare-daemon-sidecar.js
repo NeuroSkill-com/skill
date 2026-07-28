@@ -4,22 +4,14 @@
  * Thin wrapper around the shared compile-product recipe (--skip-app --stage-sidecar).
  */
 
-import {
-  compileProduct,
-  parseCompileProductArgs,
-} from "./lib/compile-product.mjs";
+import { compileProduct, parseCompileProductArgs } from "./lib/compile-product.mjs";
 
 const extra = process.argv.slice(2);
 if (process.env.SKILL_DAEMON_TARGET && !extra.includes("--target")) {
   extra.unshift("--target", process.env.SKILL_DAEMON_TARGET);
 }
 
-const opts = parseCompileProductArgs([
-  "--release",
-  "--skip-app",
-  "--stage-sidecar",
-  ...extra,
-]);
+const opts = parseCompileProductArgs(["--release", "--skip-app", "--stage-sidecar", ...extra]);
 
 try {
   compileProduct(opts);

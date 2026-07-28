@@ -8,11 +8,11 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { Separator } from "$lib/components/ui/separator";
 import { SettingsCard } from "$lib/components/ui/settings-card";
 import {
-  type ApiToken,
   type TokenAcl as Acl,
-  type TokenExpiry as Expiry,
+  type ApiToken,
   createAuthToken,
   deleteAuthToken,
+  type TokenExpiry as Expiry,
   listAuthTokens,
   refreshDefaultToken as refreshDefaultTokenApi,
   revokeAuthToken,

@@ -111,7 +111,8 @@ const llm: Record<string, string> = {
   "llm.size": "{gb} GB",
   "llm.localPath": "Локальний шлях",
   "llm.inference.gpuLayers": "GPU шари",
-  "llm.inference.gpuLayersDesc": "Шари для офлоаду на GPU (0 = лише CPU). Потрібен GPU-збірник демона (apple / linux / windows).",
+  "llm.inference.gpuLayersDesc":
+    "Шари для офлоаду на GPU (0 = лише CPU). Потрібен GPU-збірник демона (apple / linux / windows).",
   "llm.inference.ctxSize": "Розмір контексту",
   "llm.inference.ctxSizeDesc": "Розмір KV-cache у токенах (порожньо = за замовчуванням моделі).",
   "llm.inference.parallel": "Макс. одночасних запитів",
@@ -300,7 +301,8 @@ const llm: Record<string, string> = {
   "llm.hfSearch.showReadme": "Показати README",
   "llm.hfSearch.hideReadme": "Сховати README",
   "llm.noFeature": "Підтримка LLM не скомпільована.",
-  "llm.noFeatureHint": "Перезберіть з GPU-демоном (--features apple|linux|windows), щоб увімкнути вбудований OpenAI-сумісний сервер.",
+  "llm.noFeatureHint":
+    "Перезберіть з GPU-демоном (--features apple|linux|windows), щоб увімкнути вбудований OpenAI-сумісний сервер.",
   "llm.endpoints.title": "OpenAI-сумісні ендпоїнти",
   "llm.endpoints.hint": "Усі ендпоїнти працюють на тому ж порту, що WebSocket / REST API.",
   "llm.mmproj.autoload": "Автозавантаження візуального кодера",
@@ -583,7 +585,8 @@ const llm: Record<string, string> = {
   "llm.discovered.selectFailed": "Не вдалося вибрати модель",
 
   "llm.discovered.localOnly": "Лише локально",
-  "llm.discovered.egress": "Сканування та запуск цих моделей відбуваються повністю на цьому пристрої — нічого не надсилається через мережу. Лише завантаження моделі з HuggingFace звертається до Інтернету.",
+  "llm.discovered.egress":
+    "Сканування та запуск цих моделей відбуваються повністю на цьому пристрої — нічого не надсилається через мережу. Лише завантаження моделі з HuggingFace звертається до Інтернету.",
   "llm.discovered.enable": "Виявляти локальні моделі",
   "llm.discovered.enableDesc": "Показувати GGUF і MLX з LM Studio, Ollama, Lemonade та кешу HuggingFace / MLX",
   "llm.discovered.off": "Виявлення локальних моделей вимкнено.",

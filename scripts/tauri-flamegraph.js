@@ -189,7 +189,7 @@ if (isLinux) {
 // LLM GPU backends live on skill-daemon (OS umbrellas apple/linux/windows),
 // not the Tauri `skill` binary. Leave empty unless the caller passed --features.
 
-let features = "";
+const features = "";
 if (!extraCargoArgs.includes("--features") && !extraCargoArgs.includes("--no-default-features")) {
   // no default GPU feature injection
 }
