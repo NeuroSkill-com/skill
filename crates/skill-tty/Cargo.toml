@@ -1,6 +1,6 @@
 [package]
 name = "skill-tty"
-version = "0.0.131-rc.18"
+version = "0.0.131-rc.19"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "PTY proxy for transparent terminal session recording. Split out of skill-daemon so process-name kills (Tauri sidecar reload, kill-old-daemon-on-upgrade) do not sweep up active terminal sessions."

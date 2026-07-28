@@ -5803,6 +5803,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - **Windows Vulkan SDK removal**: Drop Vulkan SDK requirements from Windows PR clippy/release paths where no longer needed.
 
+## [0.0.131-rc.19] — 2026-07-28
+
+### Features
+
+- Minor updates and improvements
+
 ## [0.0.131-rc.2] — 2026-05-31
 
 ### Features
