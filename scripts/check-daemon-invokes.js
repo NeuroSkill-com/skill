@@ -244,6 +244,7 @@ const DAEMON_OWNED_COMMANDS = new Set([
   "get_label_embedding_status",
   "get_label_index_stats",
   "get_llm_catalog",
+  "discover_local_models",
   "get_llm_downloads",
   "get_llm_logs",
   "get_llm_server_status",
