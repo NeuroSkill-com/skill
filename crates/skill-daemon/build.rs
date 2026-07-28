@@ -31,6 +31,12 @@ fn main() {
     }
     println!("cargo:rustc-env=SKILL_PRODUCT_VERSION={product_version}");
 
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        // skill-daemon can exceed ld64 compact unwind table limits in debug
+        // builds; force DWARF unwind info to avoid noisy linker warnings.
+        println!("cargo:rustc-link-arg-bins=-Wl,-no_compact_unwind");
+    }
+
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
         println!("cargo:rustc-link-lib=vulkan");
         linux_openblas::link_system_openblas(true);
