@@ -583,8 +583,6 @@ const llm: Record<string, string> = {
   "chat.voice.engineUnavailable": "Non disponible dans cette version (plateforme ou option de compilation).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 9 key(s) into fr
   "llm.discovered.title": "Trouvés sur cette machine",
   "llm.discovered.rescan": "Analyser à nouveau",
   "llm.discovered.scanning": "Analyse…",
@@ -594,15 +592,13 @@ const llm: Record<string, string> = {
   "llm.discovered.scanFailed": "Échec de l'analyse",
   "llm.discovered.selectFailed": "Impossible de sélectionner le modèle",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 12 key(s) into fr
   "llm.discovered.localOnly": "Local uniquement",
   "llm.discovered.egress": "L'analyse et l'exécution de ces modèles se font entièrement sur cet appareil : rien n'est envoyé sur le réseau. Le téléchargement d'un modèle depuis HuggingFace est la seule action ici qui accède à Internet.",
   "llm.discovered.enable": "Détecter les modèles locaux",
   "llm.discovered.enableDesc": "Afficher les modèles GGUF et MLX de LM Studio, Ollama, Lemonade et du cache HuggingFace / MLX",
   "llm.discovered.off": "La détection des modèles locaux est désactivée.",
   "llm.discovered.advanced": "Paramètres d'analyse",
-  "llm.discovered.sourcesLabel": "Sources",
+  "llm.discovered.sourcesLabel": "Origines",
   "llm.discovered.sourcesFiltered": "Seules les sources en surbrillance sont analysées.",
   "llm.discovered.extraDirsLabel": "Dossiers supplémentaires",
   "llm.discovered.addDir": "Ajouter",

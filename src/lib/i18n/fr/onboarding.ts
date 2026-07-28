@@ -180,14 +180,12 @@ const onboarding: Record<string, string> = {
   "onboarding.disclaimerAck": "Je comprends que {app} est réservé à la recherche et n’est pas un dispositif médical.",
   "onboarding.openLive": "Ouvrir le tableau de bord Direct",
 
-  // ── Auto-synced from en/ (2026-07-25) ──
-  // TODO: translate the following 6 key(s) into fr
-  "onboarding.models.reuseTitle": "Reuse a model you already have",
-  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
-  "onboarding.models.reuseFrom": "from {source}",
-  "onboarding.models.reuseUse": "Use this",
-  "onboarding.models.reuseActive": "In use",
-  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
+  "onboarding.models.reuseTitle": "Réutilisez un modèle déjà présent",
+  "onboarding.models.reuseHint": "Ces modèles ont été trouvés sur cette machine (depuis LM Studio, Ollama ou le cache Hugging Face). Réutilisez-en un au lieu de le retélécharger.",
+  "onboarding.models.reuseFrom": "depuis {source}",
+  "onboarding.models.reuseUse": "Utiliser celui-ci",
+  "onboarding.models.reuseActive": "En cours d'utilisation",
+  "onboarding.models.reuseSatisfied": "Réutilisation de {model} — aucun téléchargement nécessaire.",
 };
 
 export default onboarding;

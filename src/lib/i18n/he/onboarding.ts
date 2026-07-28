@@ -163,14 +163,12 @@ const onboarding: Record<string, string> = {
   "onboarding.disclaimerAck": "אני מבין/ה ש־{app} מיועד למחקר בלבד ואינו מכשיר רפואי.",
   "onboarding.openLive": "פתח לוח חי",
 
-  // ── Auto-synced from en/ (2026-07-25) ──
-  // TODO: translate the following 6 key(s) into he
-  "onboarding.models.reuseTitle": "Reuse a model you already have",
-  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
-  "onboarding.models.reuseFrom": "from {source}",
-  "onboarding.models.reuseUse": "Use this",
-  "onboarding.models.reuseActive": "In use",
-  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
+  "onboarding.models.reuseTitle": "השתמש מחדש במודל שכבר קיים אצלך",
+  "onboarding.models.reuseHint": "המודלים האלה נמצאו במחשב הזה (מ-LM Studio, Ollama או מטמון Hugging Face). אפשר להשתמש באחד מהם במקום להוריד שוב.",
+  "onboarding.models.reuseFrom": "מ-{source}",
+  "onboarding.models.reuseUse": "השתמש בזה",
+  "onboarding.models.reuseActive": "בשימוש",
+  "onboarding.models.reuseSatisfied": "נעשה שימוש מחדש ב-{model} — אין צורך בהורדה.",
 };
 
 export default onboarding;

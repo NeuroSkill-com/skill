@@ -580,8 +580,6 @@ const llm: Record<string, string> = {
   "chat.voice.engineUnavailable": "このビルドでは利用できません（プラットフォームまたは機能フラグ）。",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 9 key(s) into ja
   "llm.discovered.title": "このマシンで見つかったモデル",
   "llm.discovered.rescan": "再スキャン",
   "llm.discovered.scanning": "スキャン中…",
@@ -591,8 +589,6 @@ const llm: Record<string, string> = {
   "llm.discovered.scanFailed": "スキャンに失敗しました",
   "llm.discovered.selectFailed": "モデルを選択できませんでした",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 12 key(s) into ja
   "llm.discovered.localOnly": "ローカルのみ",
   "llm.discovered.egress": "これらのモデルのスキャンと実行はすべてこのデバイス上で行われ、ネットワークには何も送信されません。HuggingFace からモデルをダウンロードする場合のみインターネットに接続します。",
   "llm.discovered.enable": "ローカルモデルを検出",

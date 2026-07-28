@@ -167,14 +167,12 @@ const onboarding: Record<string, string> = {
   "onboarding.disclaimerAck": "{app}은(는) 연구용이며 의료기기가 아님을 이해합니다.",
   "onboarding.openLive": "라이브 대시보드 열기",
 
-  // ── Auto-synced from en/ (2026-07-25) ──
-  // TODO: translate the following 6 key(s) into ko
-  "onboarding.models.reuseTitle": "Reuse a model you already have",
-  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
-  "onboarding.models.reuseFrom": "from {source}",
-  "onboarding.models.reuseUse": "Use this",
-  "onboarding.models.reuseActive": "In use",
-  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
+  "onboarding.models.reuseTitle": "이미 있는 모델 재사용",
+  "onboarding.models.reuseHint": "이 모델들은 이 기기에서 발견되었습니다(LM Studio, Ollama 또는 Hugging Face 캐시). 다시 다운로드하지 말고 재사용하세요.",
+  "onboarding.models.reuseFrom": "{source}에서",
+  "onboarding.models.reuseUse": "이 모델 사용",
+  "onboarding.models.reuseActive": "사용 중",
+  "onboarding.models.reuseSatisfied": "{model} 재사용 중 — 다운로드가 필요 없습니다.",
 };
 
 export default onboarding;

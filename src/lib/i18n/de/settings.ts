@@ -852,10 +852,10 @@ const settings: Record<string, string> = {
   "daemonActivity.tickDuration": "Dauer: {n} ms",
   "daemonActivity.tickCount": "{n}× ausgeführt",
 
-  "settingsTabs.clients": "Clients",
-  "settingsTabs.terminal": "Terminal",
+  "settingsTabs.clients": "Client-Apps",
+  "settingsTabs.terminal": "Konsole",
   "settingsTabs.validation": "Validierung",
-  "settings.group.signal": "Signal",
+  "settings.group.signal": "Signale",
   "settings.group.intelligence": "Intelligenz",
   "settings.group.capture": "Erfassung & Datenschutz",
   "settings.group.automation": "Automatisierung",

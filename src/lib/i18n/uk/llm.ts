@@ -573,8 +573,6 @@ const llm: Record<string, string> = {
   "chat.voice.engineUnavailable": "Недоступно в цій збірці (платформа або feature flag).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 9 key(s) into uk
   "llm.discovered.title": "Знайдено на цьому комп'ютері",
   "llm.discovered.rescan": "Сканувати знову",
   "llm.discovered.scanning": "Сканування…",
@@ -584,8 +582,6 @@ const llm: Record<string, string> = {
   "llm.discovered.scanFailed": "Помилка сканування",
   "llm.discovered.selectFailed": "Не вдалося вибрати модель",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 12 key(s) into uk
   "llm.discovered.localOnly": "Лише локально",
   "llm.discovered.egress": "Сканування та запуск цих моделей відбуваються повністю на цьому пристрої — нічого не надсилається через мережу. Лише завантаження моделі з HuggingFace звертається до Інтернету.",
   "llm.discovered.enable": "Виявляти локальні моделі",

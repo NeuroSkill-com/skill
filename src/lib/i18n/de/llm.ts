@@ -579,8 +579,6 @@ const llm: Record<string, string> = {
   "chat.voice.engineUnavailable": "In diesem Build nicht verfügbar (Plattform oder Feature-Flag).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 9 key(s) into de
   "llm.discovered.title": "Auf diesem Gerät gefunden",
   "llm.discovered.rescan": "Neu scannen",
   "llm.discovered.scanning": "Wird gescannt…",
@@ -590,8 +588,6 @@ const llm: Record<string, string> = {
   "llm.discovered.scanFailed": "Scan fehlgeschlagen",
   "llm.discovered.selectFailed": "Modell konnte nicht ausgewählt werden",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 12 key(s) into de
   "llm.discovered.localOnly": "Nur lokal",
   "llm.discovered.egress": "Das Suchen und Ausführen dieser Modelle geschieht vollständig auf diesem Gerät – es werden keine Daten über das Netzwerk gesendet. Nur das Herunterladen eines Modells von HuggingFace stellt eine Internetverbindung her.",
   "llm.discovered.enable": "Lokale Modelle erkennen",

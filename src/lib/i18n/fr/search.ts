@@ -345,7 +345,7 @@ const search: Record<string, string> = {
   "search.exampleMeetingStress": "stress en réunion",
   "search.examplesLabel": "Essayer un exemple",
   "search.advancedToggle": "Avancé",
-  "search.sourceLabel": "Source",
+  "search.sourceLabel": "Origine",
 };
 
 export default search;

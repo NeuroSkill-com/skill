@@ -560,8 +560,6 @@ const llm: Record<string, string> = {
   "chat.voice.engineUnavailable": "לא זמין בבילד זה (פלטפורמה או דגל תכונה).",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 9 key(s) into he
   "llm.discovered.title": "נמצאו במחשב זה",
   "llm.discovered.rescan": "סרוק מחדש",
   "llm.discovered.scanning": "סורק…",
@@ -571,8 +569,6 @@ const llm: Record<string, string> = {
   "llm.discovered.scanFailed": "הסריקה נכשלה",
   "llm.discovered.selectFailed": "לא ניתן לבחור מודל",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 12 key(s) into he
   "llm.discovered.localOnly": "מקומי בלבד",
   "llm.discovered.egress": "הסריקה וההרצה של מודלים אלה מתבצעות כולן במכשיר זה — דבר אינו נשלח דרך הרשת. הורדת מודל מ-HuggingFace היא הפעולה היחידה כאן שמתחברת לאינטרנט.",
   "llm.discovered.enable": "גילוי מודלים מקומיים",

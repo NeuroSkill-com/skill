@@ -859,7 +859,7 @@ const settings: Record<string, string> = {
   "daemonActivity.tickCount": "ciclos: {n}",
 
   "settingsTabs.clients": "Clientes",
-  "settingsTabs.terminal": "Terminal",
+  "settingsTabs.terminal": "Consola",
   "settingsTabs.validation": "Validación",
   "settings.group.signal": "Señal",
   "settings.group.intelligence": "Inteligencia",

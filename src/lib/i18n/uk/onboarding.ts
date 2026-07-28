@@ -172,14 +172,12 @@ const onboarding: Record<string, string> = {
   "onboarding.disclaimerAck": "Я розумію, що {app} призначено лише для досліджень і не є медичним виробом.",
   "onboarding.openLive": "Відкрити живу панель",
 
-  // ── Auto-synced from en/ (2026-07-25) ──
-  // TODO: translate the following 6 key(s) into uk
-  "onboarding.models.reuseTitle": "Reuse a model you already have",
-  "onboarding.models.reuseHint": "These models were found on this machine (from LM Studio, Ollama, or the Hugging Face cache). Reuse one instead of downloading again.",
-  "onboarding.models.reuseFrom": "from {source}",
-  "onboarding.models.reuseUse": "Use this",
-  "onboarding.models.reuseActive": "In use",
-  "onboarding.models.reuseSatisfied": "Reusing {model} — no download needed.",
+  "onboarding.models.reuseTitle": "Використайте модель, яка вже є",
+  "onboarding.models.reuseHint": "Ці моделі знайдено на цьому комп’ютері (з LM Studio, Ollama або кешу Hugging Face). Використайте одну з них замість повторного завантаження.",
+  "onboarding.models.reuseFrom": "з {source}",
+  "onboarding.models.reuseUse": "Використати",
+  "onboarding.models.reuseActive": "Використовується",
+  "onboarding.models.reuseSatisfied": "Повторно використовується {model} — завантаження не потрібне.",
 };
 
 export default onboarding;

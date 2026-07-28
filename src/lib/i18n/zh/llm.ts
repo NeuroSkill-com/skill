@@ -561,8 +561,6 @@ const llm: Record<string, string> = {
   "chat.voice.engineUnavailable": "当前构建不可用（平台或功能开关）。",
   "chat.voice.engine.rlx-asr": "RLX-ASR",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 9 key(s) into zh
   "llm.discovered.title": "本机上找到的模型",
   "llm.discovered.rescan": "重新扫描",
   "llm.discovered.scanning": "扫描中…",
@@ -572,8 +570,6 @@ const llm: Record<string, string> = {
   "llm.discovered.scanFailed": "扫描失败",
   "llm.discovered.selectFailed": "无法选择模型",
 
-  // ── Auto-synced from en/ (2026-07-24) ──
-  // TODO: translate the following 12 key(s) into zh
   "llm.discovered.localOnly": "仅本地",
   "llm.discovered.egress": "这些模型的扫描和运行完全在本设备上进行，不会通过网络发送任何内容。只有从 HuggingFace 下载模型才会连接互联网。",
   "llm.discovered.enable": "发现本地模型",
