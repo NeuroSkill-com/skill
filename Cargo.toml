@@ -144,7 +144,7 @@ zip = { version = "7", features = ["deflate"] }
 # Local sibling checkouts: `bash scripts/ensure-rlx.sh` / `scripts/rlx local`
 # (writes `[patch."<git-url>"]` outside the repo; never commit `../` paths).
 # CI fetches these git URLs from main (commit pinned in Cargo.lock) — no sibling clone.
-rlx          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
+rlx          = { git = "https://github.com/MIT-RLX/rlx.git", version = "0.2.14", branch = "main", default-features = false }
 rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 
