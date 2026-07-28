@@ -1,4 +1,6 @@
-- **MLX community models**: wire huggingface.co/mlx-community packs through rlx-models (`MlxLoader` / `Qwen3Runner::from_mlx_packed`).
-- Catalog entries for Qwen3 0.6B / 1.7B / 4B 4-bit; snapshot download for `tags: ["mlx"]`.
-- Local discovery surfaces safetensors snapshot dirs (not GGUF-only); prefer MLX device when loading packs.
-- `llm-model-discovery` (opt-in until the rlx-models pin is bumped) gates discovery + `from_mlx_packed`.
+### LLM
+
+- **MLX community model path**: Wire huggingface.co/mlx-community packs through `rlx-models` (`MlxLoader` / `Qwen3Runner::from_mlx_packed`).
+- **Catalog entries for MLX Qwen3**: Add Qwen3 0.6B / 1.7B / 4B 4-bit entries and snapshot download handling for `tags: ["mlx"]`.
+- **Discovery + loader behavior**: Surface safetensors snapshot directories (not GGUF-only) in local discovery and prefer the MLX device when loading compatible packs.
+- **Feature-gated rollout**: Keep discovery and `from_mlx_packed` behind `llm-model-discovery` until the `rlx-models` pin is bumped.
