@@ -6,6 +6,7 @@
 - **Node.js** ≥ 20 with npm
 - **Tauri CLI**: installed via `npm install` (workspace devDependency)
 - **Platform SDKs**: Xcode (macOS), Visual Studio Build Tools + LLVM (Windows), build-essential (Linux)
+- **CMake** (required by `llama-cpp-sys-4`)
 - **Vulkan SDK** (Linux/Windows, for `llm-vulkan` feature)
 
 ## Quick Start
