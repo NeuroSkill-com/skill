@@ -967,7 +967,7 @@ if (subcommand === "dev" && !tuiTauriPane) {
 
     // Find the built binary (target-dir = src-tauri/target per .cargo/config.toml)
     const targetDir = resolve(root, "src-tauri", "target");
-    const triple = explicitTarget || "";
+    const triple = explicitTarget || process.env.CARGO_BUILD_TARGET || "";
     const candidates = [
       resolve(targetDir, triple, "debug", "skill-daemon"),
       resolve(targetDir, "debug", "skill-daemon"),
@@ -1088,7 +1088,7 @@ if (!tuiDaemonPane) {
     if (isMac && subcommand === "build") {
       const isDebugBuild = rawSubArgs.includes("--debug");
       const profile = isDebugBuild ? "debug" : "release";
-      const triple = explicitTarget || "";
+      const triple = explicitTarget || process.env.CARGO_BUILD_TARGET || "";
       const appCandidates = [
         resolve(root, "src-tauri", "target", triple, profile, "bundle", "macos", "NeuroSkill.app"),
         resolve(root, "src-tauri", "target", profile, "bundle", "macos", "NeuroSkill.app"),
