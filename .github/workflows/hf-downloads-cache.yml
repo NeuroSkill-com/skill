@@ -73,16 +73,16 @@ jobs:
           git push --force origin "$BRANCH"
 
           BODY="$(cat <<EOF
-            ## Summary
-            - Refresh \`src-tauri/hf_downloads_cache.json\` from HuggingFace Hub
-            - Catalog repos + top mlx-community models sorted by downloads
-            - Used by the LLM picker to sort families by popularity (desc)
+          ## Summary
+          - Refresh \`src-tauri/hf_downloads_cache.json\` from HuggingFace Hub
+          - Catalog repos + top mlx-community models sorted by downloads
+          - Used by the LLM picker to sort families by popularity (desc)
 
-            ## Test plan
-            - [ ] \`npm run sync:hf:downloads:check\`
-            - [ ] Settings → LLM family dropdown shows popular models first
-            EOF
-            )"
+          ## Test plan
+          - [ ] \`npm run sync:hf:downloads:check\`
+          - [ ] Settings → LLM family dropdown shows popular models first
+          EOF
+          )"
 
           if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
             echo "PR already open for $BRANCH — branch updated in place."
