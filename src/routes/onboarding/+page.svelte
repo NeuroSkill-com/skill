@@ -881,7 +881,11 @@ onMount(async () => {
     }
   } catch {}
 
-  status = await getDeviceStatus<DeviceStatus>();
+  try {
+    status = await getDeviceStatus<DeviceStatus>();
+  } catch (e) {
+    console.error(e);
+  }
   unsubs.push(
     await listen<DeviceStatus>("status", (ev) => {
       status = ev.payload;
