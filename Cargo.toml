@@ -109,6 +109,7 @@ rlx-nemo         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main"
 rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-distributed  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-models-core   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 rlx-llama32       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 rlx-vjepa2        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
@@ -118,6 +119,7 @@ rlx-qwen3         = { git = "https://github.com/MIT-RLX/rlx-models.git", branch 
 rlx-qwen35        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 rlx-cli           = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 rlx-llada2        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
+rlx-assets        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
 
 # ── Workspace dependencies ─────────────────────────────────────────────────────
 #
