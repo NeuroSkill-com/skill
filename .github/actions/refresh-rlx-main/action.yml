@@ -1,0 +1,30 @@
+name: Refresh rlx to main
+description: >-
+  Force the rlx and rlx-models git dependencies to the tip of `main` before the
+  build, so every GitHub build compiles the latest upstream — not the commit
+  pinned in Cargo.lock. Cargo.lock pins are a moving target here (skill and rlx
+  are co-developed); this makes "latest main" the CI contract. Run AFTER the Rust
+  toolchain + cache are set up and BEFORE any `--locked` cargo invocation (this
+  step rewrites Cargo.lock; the subsequent `--locked` build then reads the fresh
+  lock). No-op safe: if main is unchanged the update is a fast metadata refresh.
+
+runs:
+  using: composite
+  steps:
+    - name: Refresh rlx + rlx-models to tip of main
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Refresh rlx + rlx-models to tip of main"
+        before="$(grep -oE 'MIT-RLX/rlx(-models)?\.git[^\"]*#[0-9a-f]{40}' Cargo.lock | sort -u || true)"
+        # Both crates come from a single git source each; updating one package per
+        # source advances that whole source (url+branch) to the latest main commit.
+        # Also reconciles any workspace [patch] additions into Cargo.lock so the
+        # following `--locked` build stays consistent.
+        cargo update -p rlx -p rlx-models-core
+        echo "rlx / rlx-models git commits now pinned in Cargo.lock:"
+        grep -oE 'MIT-RLX/rlx(-models)?\.git[^\"]*#[0-9a-f]{40}' Cargo.lock | sort -u || true
+        if [ "$before" != "$(grep -oE 'MIT-RLX/rlx(-models)?\.git[^\"]*#[0-9a-f]{40}' Cargo.lock | sort -u || true)" ]; then
+          echo "::notice::rlx / rlx-models advanced to newer main commit(s)."
+        fi
+        echo "::endgroup::"

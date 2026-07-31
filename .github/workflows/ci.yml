@@ -166,6 +166,11 @@ jobs:
             vulkan-sdk
           version: tauri-rust-check-v7
 
+      # Always lint/test against the latest rlx / rlx-models main (rewrites
+      # Cargo.lock pins before the `--locked` clippy/test steps below).
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
+
       # clippy (workspace crates — no Tauri app / espeak link)
       - name: cargo clippy (workspace crates)
         env:
@@ -539,6 +544,11 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
+      # Always lint against the latest rlx / rlx-models main (rewrites Cargo.lock
+      # pins before the `--locked` clippy step below).
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
+
       - name: Install protoc (Windows)
         run: node scripts/ci.mjs install-protoc-windows
 
@@ -693,6 +703,10 @@ jobs:
           path: ~/.cache/huggingface
           key: hf-llm-e2e-v1
 
+      # Latest rlx / rlx-models main + reconcile Cargo.lock before the --locked test.
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
+
       - name: Run LLM E2E test
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -784,6 +798,10 @@ jobs:
             protobuf-compiler libopenblas-dev
           version: lsl-e2e-v2
 
+      # Latest rlx / rlx-models main + reconcile Cargo.lock before the --locked test.
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
+
       - name: Run LSL E2E test
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -874,6 +892,10 @@ jobs:
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
+
+      # Cover the latest rlx / rlx-models main + reconcile Cargo.lock (the patch).
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
 
       - name: Generate coverage (lcov + threshold)
         env:

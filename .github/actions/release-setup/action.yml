@@ -103,6 +103,11 @@ runs:
         cache-targets: false
         cache-on-failure: false
 
+    # Always build the latest rlx / rlx-models main (rewrites Cargo.lock pins).
+    # Must run before the release job's `cargo tauri build --locked`.
+    - name: Refresh rlx to main
+      uses: ./.github/actions/refresh-rlx-main
+
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:

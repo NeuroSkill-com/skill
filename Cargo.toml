@@ -75,6 +75,12 @@ glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 eegdino          = { path = "patches/eegdino-0.2.0" }
 # block 0.1.6: local fix for future Rust incompatibility (uninhabited extern static)
 block            = { path = "patches/block-0.1.6" }
+# gpu-allocator 0.28.0: pin its `windows` dep to the 0.62 bucket. wgpu-hal 30.0.0
+# uses `windows 0.62`, but gpu-allocator's upstream `windows >=0.53,<=0.62` lets the
+# resolver attach it to the 0.61 node the Tauri stack anchors — the version skew
+# breaks the D3D12 suballocator on Windows (rc.18+ release failures). See the patch's
+# Cargo.toml for detail. Vendored copy differs from crates.io only in that pin.
+gpu-allocator    = { path = "patches/gpu-allocator-0.28.0" }
 # Minimal [patch] set that keeps crates.io out of the lock (verified): rlx-models
 # still declares `version = "^0.2.x"` registry deps on the runtime stack, and
 # third-party crates (tribev2, …) pull registry `rlx-models-*`. Dropping any of
