@@ -1,6 +1,6 @@
 [package]
 name = "skill-daemon"
-version = "0.0.131-rc.19"
+version = "0.0.131-rc.20"
 edition = "2021"
 license = "GPL-3.0-only"
 
