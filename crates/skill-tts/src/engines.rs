@@ -111,6 +111,7 @@ impl Synthesizer for BenchSynth {
             device: self.device,
             clone,
             seed: 0,
+            deterministic: true,
         };
         let res = self
             .adapter
