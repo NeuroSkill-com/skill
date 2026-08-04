@@ -5823,6 +5823,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - vendored gpu allocator
 - updated cache
 
+## [0.0.131-rc.21] — 2026-08-04
+
+### Features
+
+- new distributed
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features
