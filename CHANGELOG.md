@@ -5829,6 +5829,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - new distributed
 
+## [0.0.131-rc.22] — 2026-08-04
+
+### Features
+
+- lock
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features
