@@ -5835,6 +5835,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - lock
 
+## [0.0.131-rc.23] — 2026-08-09
+
+### Features
+
+- updated inference
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features

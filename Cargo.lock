@@ -197,7 +197,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -208,7 +208,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2253,7 +2253,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc2776f0c61eca1ca32528f85548abd1a4be8fb53d1b21c013e4f18da1e7090"
 dependencies = [
  "data-encoding",
- "syn 2.0.119",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2496,7 +2496,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2988,7 +2988,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5274,7 +5274,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5651,7 +5651,7 @@ dependencies = [
 [[package]]
 name = "kitten_tts_mini_rlx"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -6461,7 +6461,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7185,7 +7185,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9769,7 +9769,7 @@ dependencies = [
 [[package]]
 name = "rlx"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "rlx-driver",
@@ -9784,7 +9784,7 @@ dependencies = [
 [[package]]
 name = "rlx-asr"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-gguf",
@@ -9798,7 +9798,7 @@ dependencies = [
 [[package]]
 name = "rlx-assets"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "memmap2",
@@ -9812,7 +9812,7 @@ dependencies = [
 [[package]]
 name = "rlx-autodiff"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "half",
  "rlx-fusion",
@@ -9822,7 +9822,7 @@ dependencies = [
 [[package]]
 name = "rlx-bert"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -9837,7 +9837,7 @@ dependencies = [
 [[package]]
 name = "rlx-bioclip2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -9857,7 +9857,7 @@ dependencies = [
 [[package]]
 name = "rlx-bonsai"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9871,7 +9871,7 @@ dependencies = [
 [[package]]
 name = "rlx-chatterbox"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -9887,7 +9887,7 @@ dependencies = [
 [[package]]
 name = "rlx-cli"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "clap",
@@ -9902,7 +9902,7 @@ dependencies = [
 [[package]]
 name = "rlx-clinicalbert"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-bert",
@@ -9920,7 +9920,7 @@ dependencies = [
 [[package]]
 name = "rlx-cohere"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9931,7 +9931,7 @@ dependencies = [
 [[package]]
 name = "rlx-compile"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlx-autodiff",
  "rlx-fusion",
@@ -9941,7 +9941,7 @@ dependencies = [
 [[package]]
 name = "rlx-conformer-ctc"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9956,7 +9956,7 @@ dependencies = [
 [[package]]
 name = "rlx-coreml"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "bytemuck",
  "cc",
@@ -9974,7 +9974,7 @@ dependencies = [
 [[package]]
 name = "rlx-cpu"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "half",
  "rayon",
@@ -9988,7 +9988,7 @@ dependencies = [
 [[package]]
 name = "rlx-cuda"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "bytemuck",
  "cudarc",
@@ -10007,7 +10007,7 @@ dependencies = [
 [[package]]
 name = "rlx-dac"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -10026,7 +10026,7 @@ dependencies = [
 [[package]]
 name = "rlx-dduf"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "half",
@@ -10038,12 +10038,12 @@ dependencies = [
 [[package]]
 name = "rlx-diamond"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 
 [[package]]
 name = "rlx-dinov2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -10062,7 +10062,7 @@ dependencies = [
 [[package]]
 name = "rlx-dinov3"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -10079,7 +10079,7 @@ dependencies = [
 [[package]]
 name = "rlx-distributed"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "rlx-driver",
@@ -10093,7 +10093,7 @@ dependencies = [
 [[package]]
 name = "rlx-driver"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "half",
  "rlx-ir",
@@ -10102,9 +10102,10 @@ dependencies = [
 [[package]]
 name = "rlx-embed"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
+ "hf-hub",
  "rlx-bert",
  "rlx-cpu",
  "rlx-flow",
@@ -10124,7 +10125,7 @@ dependencies = [
 [[package]]
 name = "rlx-encodec"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10141,7 +10142,7 @@ dependencies = [
 [[package]]
 name = "rlx-f5tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10153,7 +10154,7 @@ dependencies = [
 [[package]]
 name = "rlx-fara"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -10169,7 +10170,7 @@ dependencies = [
 [[package]]
 name = "rlx-fft"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "getrandom 0.3.4",
@@ -10192,7 +10193,7 @@ dependencies = [
 [[package]]
 name = "rlx-florence2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10213,7 +10214,7 @@ dependencies = [
 [[package]]
 name = "rlx-flow"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "rlx-ir",
@@ -10224,7 +10225,7 @@ dependencies = [
 [[package]]
 name = "rlx-flux2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10249,7 +10250,7 @@ dependencies = [
 [[package]]
 name = "rlx-funasr"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10271,7 +10272,7 @@ dependencies = [
 [[package]]
 name = "rlx-fusion"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlx-ir",
 ]
@@ -10279,7 +10280,7 @@ dependencies = [
 [[package]]
 name = "rlx-gemma"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10304,7 +10305,7 @@ dependencies = [
 [[package]]
 name = "rlx-gepard"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "clap",
@@ -10328,7 +10329,7 @@ dependencies = [
 [[package]]
 name = "rlx-gguf"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10340,7 +10341,7 @@ dependencies = [
 [[package]]
 name = "rlx-gpu-host"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "bytemuck",
  "half",
@@ -10353,7 +10354,7 @@ dependencies = [
 [[package]]
 name = "rlx-gpu-kernels"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlxsl",
 ]
@@ -10361,7 +10362,7 @@ dependencies = [
 [[package]]
 name = "rlx-granite"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10372,7 +10373,7 @@ dependencies = [
 [[package]]
 name = "rlx-hoct"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -10392,7 +10393,7 @@ dependencies = [
 [[package]]
 name = "rlx-inflect-nano"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -10412,7 +10413,7 @@ dependencies = [
 [[package]]
 name = "rlx-ir"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "aes 0.9.1",
  "bincode",
@@ -10424,7 +10425,7 @@ dependencies = [
 [[package]]
 name = "rlx-kittentts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "espeak-ng",
@@ -10446,7 +10447,7 @@ dependencies = [
 [[package]]
 name = "rlx-kokoro"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -10461,7 +10462,7 @@ dependencies = [
 [[package]]
 name = "rlx-kyutai-tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10483,7 +10484,7 @@ dependencies = [
 [[package]]
 name = "rlx-lfm"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10502,7 +10503,7 @@ dependencies = [
 [[package]]
 name = "rlx-lfm-vl"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -10523,7 +10524,7 @@ dependencies = [
 [[package]]
 name = "rlx-llada2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10543,7 +10544,7 @@ dependencies = [
 [[package]]
 name = "rlx-llama-base"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-gguf",
@@ -10553,7 +10554,7 @@ dependencies = [
 [[package]]
 name = "rlx-llama32"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10575,7 +10576,7 @@ dependencies = [
 [[package]]
 name = "rlx-llama4"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10594,7 +10595,7 @@ dependencies = [
 [[package]]
 name = "rlx-locateanything"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -10613,7 +10614,7 @@ dependencies = [
 [[package]]
 name = "rlx-luxtts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -10628,7 +10629,7 @@ dependencies = [
 [[package]]
 name = "rlx-macros"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10638,7 +10639,7 @@ dependencies = [
 [[package]]
 name = "rlx-maya1"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -10649,7 +10650,7 @@ dependencies = [
 [[package]]
 name = "rlx-melotts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -10659,7 +10660,7 @@ dependencies = [
 [[package]]
 name = "rlx-metal"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "bytemuck",
  "core-graphics-types 0.1.3",
@@ -10681,7 +10682,7 @@ dependencies = [
 [[package]]
 name = "rlx-metavoice"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -10701,7 +10702,7 @@ dependencies = [
 [[package]]
 name = "rlx-mimi"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -10721,7 +10722,7 @@ dependencies = [
 [[package]]
 name = "rlx-minicpm5"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10735,7 +10736,7 @@ dependencies = [
 [[package]]
 name = "rlx-minimax"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10754,7 +10755,7 @@ dependencies = [
 [[package]]
 name = "rlx-miotts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "clap",
@@ -10772,7 +10773,7 @@ dependencies = [
 [[package]]
 name = "rlx-miratts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -10787,7 +10788,7 @@ dependencies = [
 [[package]]
 name = "rlx-mistral"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10799,7 +10800,7 @@ dependencies = [
 [[package]]
 name = "rlx-mistral-vl"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -10817,7 +10818,7 @@ dependencies = [
 [[package]]
 name = "rlx-mllama"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -10837,7 +10838,7 @@ dependencies = [
 [[package]]
 name = "rlx-mlx"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "half",
  "libc",
@@ -10855,7 +10856,7 @@ dependencies = [
 [[package]]
 name = "rlx-mlx-io"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "half",
@@ -10872,7 +10873,7 @@ dependencies = [
 [[package]]
 name = "rlx-mlx-sys"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "cc",
  "cmake",
@@ -10881,7 +10882,7 @@ dependencies = [
 [[package]]
 name = "rlx-models"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10970,6 +10971,7 @@ dependencies = [
  "rlx-wake",
  "rlx-wakeword",
  "rlx-wav2vec2-bert",
+ "rlx-wgpu",
  "rlx-whisper",
  "rlx-zipvoice",
  "safetensors 0.7.0",
@@ -10980,7 +10982,7 @@ dependencies = [
 [[package]]
 name = "rlx-models-core"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11008,7 +11010,7 @@ dependencies = [
 [[package]]
 name = "rlx-moshi"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -11030,7 +11032,7 @@ dependencies = [
 [[package]]
 name = "rlx-moss-nano"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -11046,7 +11048,7 @@ dependencies = [
 [[package]]
 name = "rlx-nanbeige"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11062,7 +11064,7 @@ dependencies = [
 [[package]]
 name = "rlx-nanocodec"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -11077,7 +11079,7 @@ dependencies = [
 [[package]]
 name = "rlx-nanowakeword"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11087,7 +11089,7 @@ dependencies = [
 [[package]]
 name = "rlx-nemo"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "flate2",
@@ -11099,7 +11101,7 @@ dependencies = [
 [[package]]
 name = "rlx-nemotron"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11119,7 +11121,7 @@ dependencies = [
 [[package]]
 name = "rlx-nemotron-asr"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11138,7 +11140,7 @@ dependencies = [
 [[package]]
 name = "rlx-neutrino"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-gguf",
@@ -11149,7 +11151,7 @@ dependencies = [
 [[package]]
 name = "rlx-neutts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "encoding_rs",
@@ -11172,7 +11174,7 @@ dependencies = [
 [[package]]
 name = "rlx-nomic"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -11187,7 +11189,7 @@ dependencies = [
 [[package]]
 name = "rlx-ocr"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11207,7 +11209,7 @@ dependencies = [
 [[package]]
 name = "rlx-omnicoder"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11218,7 +11220,7 @@ dependencies = [
 [[package]]
 name = "rlx-onnx-import"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11236,7 +11238,7 @@ dependencies = [
 [[package]]
 name = "rlx-onnx-proto"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "protobuf",
 ]
@@ -11244,7 +11246,7 @@ dependencies = [
 [[package]]
 name = "rlx-openwakeword"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11254,7 +11256,7 @@ dependencies = [
 [[package]]
 name = "rlx-opt"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlx-autodiff",
  "rlx-compile",
@@ -11265,7 +11267,7 @@ dependencies = [
 [[package]]
 name = "rlx-orpheus"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -11292,7 +11294,7 @@ dependencies = [
 [[package]]
 name = "rlx-parlertts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -11311,7 +11313,7 @@ dependencies = [
 [[package]]
 name = "rlx-phi"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11323,7 +11325,7 @@ dependencies = [
 [[package]]
 name = "rlx-piper"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -11337,7 +11339,7 @@ dependencies = [
 [[package]]
 name = "rlx-pkg"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -11359,7 +11361,7 @@ dependencies = [
 [[package]]
 name = "rlx-pocket-tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -11378,7 +11380,7 @@ dependencies = [
 [[package]]
 name = "rlx-porcupine"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11388,11 +11390,13 @@ dependencies = [
 [[package]]
 name = "rlx-qwen3"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
+ "hf-hub",
  "rlx-cli",
  "rlx-distributed",
+ "rlx-embed",
  "rlx-flow",
  "rlx-gguf",
  "rlx-ir",
@@ -11402,12 +11406,13 @@ dependencies = [
  "safetensors 0.7.0",
  "serde",
  "serde_json",
+ "tokenizers",
 ]
 
 [[package]]
 name = "rlx-qwen3-asr"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11427,7 +11432,7 @@ dependencies = [
 [[package]]
 name = "rlx-qwen3-tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -11452,7 +11457,7 @@ dependencies = [
 [[package]]
 name = "rlx-qwen3-vl"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -11473,7 +11478,7 @@ dependencies = [
 [[package]]
 name = "rlx-qwen35"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -11496,7 +11501,7 @@ dependencies = [
 [[package]]
 name = "rlx-rocm"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "libloading 0.8.9",
  "rlx-cpu",
@@ -11513,11 +11518,12 @@ dependencies = [
 [[package]]
 name = "rlx-runtime"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "half",
  "inventory",
+ "memmap2",
  "rayon",
  "rlx-compile",
  "rlx-coreml",
@@ -11542,7 +11548,7 @@ dependencies = [
 [[package]]
 name = "rlx-sam"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -11562,7 +11568,7 @@ dependencies = [
 [[package]]
 name = "rlx-sam-ir"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cpu",
@@ -11576,7 +11582,7 @@ dependencies = [
 [[package]]
 name = "rlx-sam2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11596,7 +11602,7 @@ dependencies = [
 [[package]]
 name = "rlx-sam3"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11616,7 +11622,7 @@ dependencies = [
 [[package]]
 name = "rlx-sesame"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "clap",
@@ -11640,7 +11646,7 @@ dependencies = [
 [[package]]
 name = "rlx-soprano"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11662,7 +11668,7 @@ dependencies = [
 [[package]]
 name = "rlx-ssm"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cpu",
@@ -11673,7 +11679,7 @@ dependencies = [
 [[package]]
 name = "rlx-styletts2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "clap",
@@ -11686,7 +11692,7 @@ dependencies = [
 [[package]]
 name = "rlx-supertonic"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -11700,7 +11706,7 @@ dependencies = [
 [[package]]
 name = "rlx-tensor"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlx-ir",
  "rlx-runtime",
@@ -11709,7 +11715,7 @@ dependencies = [
 [[package]]
 name = "rlx-text"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "anyhow",
  "minijinja",
@@ -11723,7 +11729,7 @@ dependencies = [
 [[package]]
 name = "rlx-tiny-tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -11748,7 +11754,7 @@ dependencies = [
 [[package]]
 name = "rlx-tinyllama"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11762,7 +11768,7 @@ dependencies = [
 [[package]]
 name = "rlx-trellis2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11784,7 +11790,7 @@ dependencies = [
 [[package]]
 name = "rlx-tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -11806,7 +11812,7 @@ dependencies = [
 [[package]]
 name = "rlx-tts-bench"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "clap",
@@ -11844,7 +11850,7 @@ dependencies = [
 [[package]]
 name = "rlx-umap"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "crossbeam-channel",
  "ctrlc",
@@ -11867,7 +11873,7 @@ dependencies = [
 [[package]]
 name = "rlx-unfuse"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlx-ir",
 ]
@@ -11875,7 +11881,7 @@ dependencies = [
 [[package]]
 name = "rlx-uni2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "image",
@@ -11892,7 +11898,7 @@ dependencies = [
 [[package]]
 name = "rlx-unlimited-ocr"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "half",
@@ -11912,7 +11918,7 @@ dependencies = [
 [[package]]
 name = "rlx-vad"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11926,7 +11932,7 @@ dependencies = [
 [[package]]
 name = "rlx-vision"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -11941,7 +11947,7 @@ dependencies = [
 [[package]]
 name = "rlx-vjepa2"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11959,7 +11965,7 @@ dependencies = [
 [[package]]
 name = "rlx-vlm-base"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
 ]
@@ -11967,7 +11973,7 @@ dependencies = [
 [[package]]
 name = "rlx-voxrt"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11977,7 +11983,7 @@ dependencies = [
 [[package]]
 name = "rlx-voxtral"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11997,7 +12003,7 @@ dependencies = [
 [[package]]
 name = "rlx-voxtral-tts"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -12023,7 +12029,7 @@ dependencies = [
 [[package]]
 name = "rlx-wake"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -12036,7 +12042,7 @@ dependencies = [
 [[package]]
 name = "rlx-wakeword"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-vad",
@@ -12049,12 +12055,12 @@ dependencies = [
 [[package]]
 name = "rlx-wakeword-core"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 
 [[package]]
 name = "rlx-wav2vec2-bert"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -12072,7 +12078,7 @@ dependencies = [
 [[package]]
 name = "rlx-wgpu"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "bytemuck",
  "half",
@@ -12093,7 +12099,7 @@ dependencies = [
 [[package]]
 name = "rlx-whisper"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rayon",
@@ -12113,7 +12119,7 @@ dependencies = [
 [[package]]
 name = "rlx-xcodec"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "rlx-ir",
@@ -12127,7 +12133,7 @@ dependencies = [
 [[package]]
 name = "rlx-zipvoice"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -12138,7 +12144,7 @@ dependencies = [
 [[package]]
 name = "rlx-zonos"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#22ff89e1ebd17d9156122ad7341d655da2cb3b8c"
+source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#ea0cb41e9ee3eed8142b5c6321f444d508e405b0"
 dependencies = [
  "anyhow",
  "hound",
@@ -12157,7 +12163,7 @@ dependencies = [
 [[package]]
 name = "rlxsl"
 version = "0.2.14"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#26829018420a1c5453eb4ea24f7c5e961113d7a8"
+source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#889432ad503c82944971a65cd1aec225fa7440d0"
 dependencies = [
  "rlx-ir",
 ]
@@ -12316,7 +12322,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12383,7 +12389,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12610,7 +12616,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -13099,7 +13105,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skill"
-version = "0.0.131-rc.22"
+version = "0.0.131-rc.23"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -13228,7 +13234,7 @@ dependencies = [
 
 [[package]]
 name = "skill-daemon"
-version = "0.0.131-rc.22"
+version = "0.0.131-rc.23"
 dependencies = [
  "antneuro",
  "anyhow",
@@ -13784,7 +13790,7 @@ dependencies = [
 
 [[package]]
 name = "skill-tty"
-version = "0.0.131-rc.22"
+version = "0.0.131-rc.23"
 dependencies = [
  "anyhow",
  "chrono",
@@ -13838,7 +13844,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -13982,7 +13988,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -14868,7 +14874,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -14910,7 +14916,7 @@ dependencies = [
  "parking_lot",
  "rustix 1.1.4",
  "signal-hook",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -15602,7 +15608,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -15818,7 +15824,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -16803,7 +16809,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
