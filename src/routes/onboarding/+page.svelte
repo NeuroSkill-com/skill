@@ -584,8 +584,9 @@ function pickFamilyTarget(entries: LlmModelEntry[], familyId: string, familyRe: 
  *
  * Priority chain:
  *  1. Already-downloaded model (any family) — skip download.
- *  2. LFM2.5 1.2B Instruct — default bootstrap family.
- *  3. Any recommended model, smallest first.
+ *  2. Qwen3.5 0.8B — default bootstrap family (fastest optimized decode; HNSW long-context).
+ *  3. Qwen3 0.6B — fallback tiny family.
+ *  4. Any recommended model, smallest first.
  */
 function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
   // If a catalog model was already downloaded through the app, prefer it (skip
@@ -595,7 +596,8 @@ function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
   if (downloaded) return downloaded;
 
   return (
-    pickFamilyTarget(entries, "lfm25-1.2b-instruct", /lfm2\.5\s*1\.2b.*instruct/i) ??
+    pickFamilyTarget(entries, "qwen35-0.8b", /qwen3\.?5\s*0\.8b/i) ??
+    pickFamilyTarget(entries, "qwen3-0.6b", /qwen3\s*0\.6b/i) ??
     entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
     null
   );

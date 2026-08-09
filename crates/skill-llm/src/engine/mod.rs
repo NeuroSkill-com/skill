@@ -44,7 +44,7 @@ pub mod tool_orchestration;
 
 pub use logging::{new_log_buffer, push_log, unix_ts_ms, LlmLogBuffer, LlmLogEntry, LlmLogFile};
 
-pub use protocol::{ChatRequest, CompletionRequest, EmbeddingsRequest, GenParams, InferRequest, InferToken};
+pub use protocol::{ChatRequest, CompletionRequest, EmbeddingsRequest, GenMetrics, GenParams, InferRequest, InferToken};
 
 pub use state::{cell_status, new_state_cell, shutdown_cell, LlmServerState, LlmStateCell, LlmStatus};
 

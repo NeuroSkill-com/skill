@@ -117,7 +117,12 @@ pub(super) fn run_actor(
                 params,
                 token_tx,
             } => {
-                let prompt = render_chat(&chat_template, &messages);
+                // VLM runners (qwen35 / qwen3-vl) split the prompt on a single
+                // `<__media__>` marker and splice the vision embeddings there —
+                // `assemble` ERRORS if the prompt has no marker. The chat template
+                // renders text only, so inject exactly one marker into the current
+                // (last user) turn when images are attached.
+                let prompt = render_chat(&chat_template, &messages, !images.is_empty());
                 let prompt = match prompt {
                     Ok(p) => p,
                     Err(e) => {
@@ -190,22 +195,19 @@ pub(super) fn run_actor(
 /// MiniCPM5 GGUF metadata embeds a tool-agent Jinja template that calls
 /// Python string methods (`startswith`, …) unsupported by minijinja. Use a
 /// ChatML subset that matches plain chat + generation without tools.
-fn minicpm5_chat_template(model_path: &Path) -> anyhow::Result<rlx_models::run::ChatTemplate> {
+/// Standard ChatML template (`<|im_start|>role\n…<|im_end|>`) with the GGUF's
+/// bos/eos tokens. Used as a fallback for models whose GGUF omits an embedded
+/// `chat_template` (Qwen3/3.5 GGUFs ship the im_start/im_end tokens but no Jinja
+/// template) so we don't drop to a role:content concat that breaks EOS/turns.
+pub(crate) fn chatml_template(model_path: &Path) -> anyhow::Result<rlx_models::run::ChatTemplate> {
     use rlx_models::run::ChatTemplate;
     let im_end = format!("<|{}|>", "im_end");
+    // One uniform ChatML turn per message (role covers system/user/assistant).
+    // NB: plain `{% %}` tags (no `-` strip) so the structural newlines after
+    // `<|im_end|>` and `<|im_start|>assistant` survive — stripping them collapses
+    // the turn/EOS framing and the model never stops (repeats past one answer).
     let source = format!(
-        "{{{{ bos_token }}}}{{%- for m in messages -%}}\
-        {{%- if m.role == 'system' -%}}\
-        <|im_start|>system\n{{{{ m.content }}}}{im_end}\n\
-        {{%- elif m.role == 'user' or (m.role == 'system' and not loop.first) -%}}\
-        <|im_start|>{{{{ m.role }}}}\n{{{{ m.content }}}}{im_end}\n\
-        {{%- elif m.role == 'assistant' -%}}\
-        <|im_start|>assistant\n{{{{ m.content }}}}{im_end}\n\
-        {{%- endif -%}}\
-        {{%- endfor -%}}\
-        {{%- if add_generation_prompt -%}}\
-        <|im_start|>assistant\n\
-        {{%- endif -%}}",
+        "{{% for m in messages %}}<|im_start|>{{{{ m.role }}}}\n{{{{ m.content }}}}{im_end}\n{{% endfor %}}{{% if add_generation_prompt %}}<|im_start|>assistant\n{{% endif %}}",
         im_end = im_end,
     );
     let mut tpl = ChatTemplate::from_source(source)?;
@@ -226,7 +228,7 @@ fn resolve_chat_template(
     log_file: Option<&LlmLogFile>,
 ) -> Option<rlx_models::run::ChatTemplate> {
     if family == "minicpm5" {
-        match minicpm5_chat_template(model_path) {
+        match chatml_template(model_path) {
             Ok(t) => {
                 llm_info!(
                     app,
@@ -250,6 +252,22 @@ fn resolve_chat_template(
     match rlx_models::run::auto_chat_template(model_path) {
         Ok(t) => Some(t),
         Err(e) => {
+            // Qwen3/3.5 GGUFs carry the ChatML special tokens but no embedded Jinja
+            // chat_template — without a template render_chat drops to a role:content
+            // concat that lacks the `<|im_start|>assistant` / `<|im_end|>` framing,
+            // so the model never emits its turn-ending EOS and repeats past one
+            // answer. Fall back to a built-in ChatML template instead.
+            if family.starts_with("qwen") {
+                if let Ok(t) = chatml_template(model_path) {
+                    llm_info!(
+                        app,
+                        log_buf,
+                        log_file,
+                        "{family}: GGUF has no chat_template ({e}) — using built-in ChatML"
+                    );
+                    return Some(t);
+                }
+            }
             llm_warn!(
                 app,
                 log_buf,
@@ -267,9 +285,10 @@ fn resolve_chat_template(
 fn render_chat(
     template: &Option<rlx_models::run::ChatTemplate>,
     messages: &[serde_json::Value],
+    with_media: bool,
 ) -> anyhow::Result<String> {
     use rlx_models::run::ChatMessage;
-    let msgs: Vec<ChatMessage> = messages
+    let mut msgs: Vec<ChatMessage> = messages
         .iter()
         .map(|m| {
             let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user").to_string();
@@ -293,12 +312,24 @@ fn render_chat(
             ChatMessage { role, content }
         })
         .collect();
+    // Place the single vision marker at the start of the current (last user)
+    // turn — image before the question — unless one is already present. The VLM
+    // runner replaces it with `<|vision_start|>…<|vision_end|>` + image embeds.
+    if with_media && !msgs.iter().any(|m| m.content.contains(MEDIA_MARKER)) {
+        if let Some(last_user) = msgs.iter_mut().rev().find(|m| m.role == "user") {
+            last_user.content = format!("{MEDIA_MARKER}{}", last_user.content);
+        }
+    }
     if let Some(tpl) = template {
         tpl.render(&msgs, true).or_else(|_| simple_render_chat(&msgs))
     } else {
         simple_render_chat(&msgs)
     }
 }
+
+/// Vision placeholder the qwen35 / qwen3-vl runners split on to splice image
+/// embeddings (their `MEDIA_MARKER`; not re-exported, kept in sync here).
+const MEDIA_MARKER: &str = "<__media__>";
 
 fn simple_render_chat(msgs: &[rlx_models::run::ChatMessage]) -> anyhow::Result<String> {
     let mut out = String::new();

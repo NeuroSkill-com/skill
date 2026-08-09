@@ -47,6 +47,24 @@ pub enum InferRequest {
     },
 }
 
+/// Post-generation performance + long-context KV-store telemetry, surfaced to
+/// the chat UI (throughput readout + a live view of how the HNSW KV memory grows).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GenMetrics {
+    /// Time to first token (prefill + first decode), milliseconds.
+    pub prefill_ms: f64,
+    /// Prefill throughput: prompt tokens ÷ prefill seconds.
+    pub prefill_tps: f64,
+    /// Steady-state decode throughput (tokens/sec, excluding the first token).
+    pub decode_tps: f64,
+    /// HNSW KV context-store occupancy when a long-context store is enabled
+    /// (rlx-qwen3). `0` means no store / not applicable.
+    pub kv_blocks: u64,
+    pub kv_tokens: u64,
+    pub kv_disk_bytes: u64,
+}
+
 pub enum InferToken {
     /// A piece of decoded text to stream to the client.
     Delta(String),
@@ -56,6 +74,8 @@ pub enum InferToken {
         prompt_tokens: usize,
         completion_tokens: usize,
         n_ctx: usize,
+        /// Throughput + KV-store telemetry for this generation.
+        metrics: GenMetrics,
     },
     /// Generation aborted with an error.
     Error(String),

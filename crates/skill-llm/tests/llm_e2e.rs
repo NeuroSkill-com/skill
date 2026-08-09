@@ -403,6 +403,7 @@ async fn collect_tokens(
                 prompt_tokens,
                 completion_tokens,
                 n_ctx,
+                ..
             } => {
                 fr = finish_reason;
                 pt = prompt_tokens;

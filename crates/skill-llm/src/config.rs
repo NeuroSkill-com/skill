@@ -289,7 +289,11 @@ fn default_rlx_device() -> String {
     }
 }
 fn default_rlx_max_seq() -> usize {
-    128
+    // Resident decode window (long history spills to the HNSW KV store). 128 was
+    // far too small — it truncated a single reasoning-model turn mid-answer
+    // ("decode cache reached max_seq"). 2048 fits a think+answer turn; KV for a
+    // 0.8B at 2048 is ~tens of MB.
+    2048
 }
 
 impl Default for LlmConfig {

@@ -84,6 +84,7 @@ where
                 prompt_tokens: pt,
                 completion_tokens: ct,
                 n_ctx: nc,
+                ..
             } => {
                 finish_reason = fr;
                 prompt_tokens = pt;

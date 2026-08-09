@@ -630,7 +630,7 @@ function pickBootstrapModel(entries: LlmCatalogEntryLite[]): LlmCatalogEntryLite
   if (textModels.length === 0) return null;
 
   const family = textModels.filter(
-    (e) => e.family_id === "lfm25-1.2b-instruct" || /lfm2\.5\s*1\.2b.*instruct/i.test(e.family_name),
+    (e) => e.family_id === "qwen3-0.6b" || /qwen3\s*0\.6b/i.test(e.family_name),
   );
   if (family.length > 0) {
     const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);

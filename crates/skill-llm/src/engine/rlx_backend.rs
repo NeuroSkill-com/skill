@@ -18,7 +18,7 @@ use rlx_models::LmRunner;
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedSender;
 
-use super::protocol::{GenParams, InferToken};
+use super::protocol::{GenMetrics, GenParams, InferToken};
 use crate::config::LlmConfig;
 
 fn peek_gguf_arch(path: &Path) -> Option<String> {
@@ -561,30 +561,81 @@ fn gpu_plan(path: &Path, config: &LlmConfig) -> (rlx::runtime::Device, bool) {
     (device, packed)
 }
 
-/// Build a Qwen3 GGUF runner with explicit device + packed weights.
-/// Returns `None` when the model isn't Qwen3, when the plan resolves to CPU
-/// (the default `auto_runner` covers that), or when the GPU build fails
-/// (graceful CPU fallback).
+/// Build a Qwen3 GGUF runner with explicit device + packed weights, and turn on
+/// the long-context HNSW KV store + dual-encoder (backend-agnostic). Handles CPU
+/// too (via the concrete runner, not `auto_runner`) so the store applies on every
+/// backend. Returns `None` when the model isn't Qwen3 or the build fails
+/// (graceful fallback to `auto_runner`).
 fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<dyn LmRunner>> {
     if !looks_like_qwen3(path) {
         return None;
     }
     let (device, packed) = gpu_plan(path, config);
-    if device == rlx::runtime::Device::Cpu {
-        return None;
-    }
-    match rlx_models::run::Qwen3Runner::builder()
+    let mut runner = match rlx_models::run::Qwen3Runner::builder()
         .weights(path)
         .device(device)
         .packed_weights(packed)
         .build()
     {
-        Ok(runner) => Some(Box::new(runner) as Box<dyn LmRunner>),
+        Ok(runner) => runner,
         Err(e) => {
-            eprintln!("[rlx] Qwen3 on {device:?} failed to build ({e}); falling back to CPU auto_runner");
-            None
+            eprintln!("[rlx] Qwen3 on {device:?} failed to build ({e}); falling back to auto_runner");
+            return None;
+        }
+    };
+    maybe_enable_qwen3_kv_store(&mut runner, path, device);
+    Some(Box::new(runner) as Box<dyn LmRunner>)
+}
+
+/// Enable rlx-qwen3 long-context memory (disk-tiered HNSW KV context store +
+/// dual-encoder semantic recall) on a freshly built Qwen3 runner, before it is
+/// boxed into `dyn LmRunner`. Opt out with `SKILL_QWEN3_KV_STORE=0`. Best-effort:
+/// any failure logs and leaves a plain bounded-context runner.
+fn maybe_enable_qwen3_kv_store(
+    runner: &mut rlx_models::run::Qwen3Runner,
+    weights: &Path,
+    device: rlx::runtime::Device,
+) {
+    let off = std::env::var("SKILL_QWEN3_KV_STORE")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "off" | "false" | "no"))
+        .unwrap_or(false);
+    if off {
+        return;
+    }
+    let cfg = rlx_models::run::KvStoreConfig::new().capacity_tokens(1_000_000).topk(16);
+    let repo =
+        std::env::var("SKILL_QWEN3_EMBED_REPO").unwrap_or_else(|_| "BAAI/bge-small-en-v1.5".to_string());
+    match resolve_qwen3_tokenizer(weights) {
+        Some(tok) => match runner.enable_kv_store_with_encoder(cfg, &tok, &repo, device) {
+            Ok(()) => eprintln!("[rlx] qwen3 long-context: HNSW KV store (1M) + dual-encoder {repo}"),
+            Err(e) => eprintln!("[rlx] qwen3 KV store + dual-encoder disabled: {e}"),
+        },
+        None => match runner.enable_kv_store(cfg) {
+            Ok(()) => eprintln!("[rlx] qwen3 long-context: HNSW KV store (1M, K-space; no tokenizer)"),
+            Err(e) => eprintln!("[rlx] qwen3 KV store disabled: {e}"),
+        },
+    }
+}
+
+/// Resolve a Qwen3 `tokenizer.json` (for the dual-encoder to detokenize KV
+/// blocks). Env override → sibling of the GGUF → cached/download from the shared
+/// Qwen3 base repo (the tokenizer is identical across Qwen3 sizes).
+fn resolve_qwen3_tokenizer(weights: &Path) -> Option<PathBuf> {
+    if let Ok(raw) = std::env::var("SKILL_QWEN3_TOKENIZER") {
+        let p = PathBuf::from(raw);
+        if p.is_file() {
+            return Some(p);
         }
     }
+    if let Some(parent) = weights.parent() {
+        let sibling = parent.join("tokenizer.json");
+        if sibling.is_file() {
+            return Some(sibling);
+        }
+    }
+    let repo =
+        std::env::var("SKILL_QWEN3_TOKENIZER_REPO").unwrap_or_else(|_| "Qwen/Qwen3-0.6B".to_string());
+    hf_hub::api::sync::Api::new().ok()?.model(repo).get("tokenizer.json").ok()
 }
 
 /// Build a Qwen3.5 / 3.6 runner with explicit device + seq caps.
@@ -669,6 +720,35 @@ pub(super) struct RlxTextRunner {
     family: &'static str,
     weights_path: PathBuf,
     explicit_tokenizer: Option<PathBuf>,
+}
+
+/// Hide a leading, whitespace-only `<think>…</think>` block from streamed output.
+///
+/// Qwen3.5 (reasoning model) emits an empty `<think>\n\n</think>` prefix even when
+/// the assistant has nothing to reason about, which would otherwise show up as a
+/// blank block at the top of every chat reply. This returns the visible suffix:
+/// - a resolved empty block → the text after `</think>` (leading whitespace trimmed);
+/// - a NON-empty block (real reasoning) → the input unchanged (nothing hidden);
+/// - a block still being generated (`</think>` not yet seen), or a partial prefix
+///   of the opening tag → `""`, so the streamer buffers until the block resolves.
+///
+/// The returned slice always borrows from `s`, so byte offsets into it are stable
+/// as `s` grows token-by-token (the visible prefix never changes once non-empty).
+fn visible_after_empty_think(s: &str) -> &str {
+    const OPEN: &str = "<think>";
+    const CLOSE: &str = "</think>";
+    let trimmed = s.trim_start();
+    if let Some(rest) = trimmed.strip_prefix(OPEN) {
+        match rest.find(CLOSE) {
+            Some(end) if rest[..end].trim().is_empty() => rest[end + CLOSE.len()..].trim_start(),
+            Some(_) => s, // real reasoning content — leave intact
+            None => "",   // think block still open — buffer
+        }
+    } else if !trimmed.is_empty() && OPEN.starts_with(trimmed) {
+        "" // partial "<think>" prefix in progress — buffer
+    } else {
+        s
+    }
 }
 
 impl RlxTextRunner {
@@ -801,7 +881,31 @@ impl RlxTextRunner {
         // Track the full accumulated text for stop-string matching.
         let mut accumulated_text = String::new();
 
+        // Chat-turn EOS token(s). The rlx runner stops on the GGUF's `eos_token_id`,
+        // but Qwen chat ends each assistant turn with `<|im_end|>` — a SPECIAL token
+        // that detokenization skips, so it can't be a stop-STRING. Without stopping
+        // on its id the model runs to the token cap, hallucinating extra turns. Stop
+        // on the id directly (empty for non-ChatML models → no behaviour change).
+        // `<|im_end|>` ends a ChatML turn; some qwen35 finetunes (e.g. Fara) instead
+        // terminate the assistant reply with `<|endoftext|>`. Both are special tokens
+        // detok skips, so stop on their ids directly (else generation runs to the cap).
+        let chat_eos: Vec<u32> = ["<|im_end|>", "<|endoftext|>"]
+            .iter()
+            .filter_map(|t| auto_tokenize(&self.weights_path, t, self.explicit_tokenizer.as_deref()).ok())
+            .filter(|ids| ids.len() == 1)
+            .map(|ids| ids[0])
+            .collect();
+
+        // Time-to-first-token (prefill boundary), captured inside the decode loop.
+        let t_first: std::cell::Cell<Option<std::time::Instant>> = std::cell::Cell::new(None);
+
         let mut on_token = |tok: u32| -> bool {
+            if chat_eos.contains(&tok) {
+                return false; // assistant turn ended — don't emit the special token
+            }
+            if t_first.get().is_none() {
+                t_first.set(Some(std::time::Instant::now()));
+            }
             completion_tokens += 1;
             all_ids.push(tok);
             // Decode the full sequence and emit the new suffix.
@@ -809,9 +913,13 @@ impl RlxTextRunner {
                 Ok(s) => s,
                 Err(_) => return true,
             };
-            if decoded.len() > emitted_len {
-                let piece = decoded[emitted_len..].to_string();
-                emitted_len = decoded.len();
+            // Suppress a leading empty <think></think> (Qwen3.5 reasoning prefix)
+            // from what the user sees. `visible` borrows `decoded`; its prefix is
+            // stable once non-empty, so `emitted_len` stays a valid byte offset.
+            let visible = visible_after_empty_think(&decoded);
+            if visible.len() > emitted_len {
+                let piece = visible[emitted_len..].to_string();
+                emitted_len = visible.len();
                 if !piece.is_empty() {
                     accumulated_text.push_str(&piece);
                     token_tx_inner.send(InferToken::Delta(piece)).ok();
@@ -825,9 +933,11 @@ impl RlxTextRunner {
             true
         };
 
+        let t_gen_start = std::time::Instant::now();
         let result = self
             .runner
             .generate(&prompt_ids, max_tokens, &mut on_token as &mut dyn FnMut(u32) -> bool);
+        let t_end = std::time::Instant::now();
 
         if let Err(e) = result {
             token_tx
@@ -841,12 +951,29 @@ impl RlxTextRunner {
         } else {
             "length"
         };
+        let prompt_tokens = prompt_ids.len();
+        let prefill_secs = t_first.get().map(|t| (t - t_gen_start).as_secs_f64()).unwrap_or(0.0);
+        let decode_secs = t_first.get().map(|t| (t_end - t).as_secs_f64()).unwrap_or(0.0);
+        let (kv_blocks, kv_tokens, kv_disk_bytes) = self.runner.kv_store_stats().unwrap_or((0, 0, 0));
+        let metrics = GenMetrics {
+            prefill_ms: prefill_secs * 1000.0,
+            prefill_tps: if prefill_secs > 0.0 { prompt_tokens as f64 / prefill_secs } else { 0.0 },
+            decode_tps: if decode_secs > 0.0 && completion_tokens > 1 {
+                (completion_tokens - 1) as f64 / decode_secs
+            } else {
+                0.0
+            },
+            kv_blocks: kv_blocks as u64,
+            kv_tokens: kv_tokens as u64,
+            kv_disk_bytes: kv_disk_bytes as u64,
+        };
         token_tx
             .send(InferToken::Done {
                 finish_reason: finish_reason.into(),
-                prompt_tokens: prompt_ids.len(),
+                prompt_tokens,
                 completion_tokens,
-                n_ctx: prompt_ids.len().saturating_add(completion_tokens),
+                n_ctx: prompt_tokens.saturating_add(completion_tokens),
+                metrics,
             })
             .ok();
     }
@@ -897,16 +1024,31 @@ impl RlxTextRunner {
         let explicit = self.explicit_tokenizer.clone();
         let token_tx_inner = token_tx.clone();
 
+        // Same chat-turn EOS as the text path: Qwen3.5-VL ends its assistant turn
+        // with `<|im_end|>` or `<|endoftext|>` (special tokens detok skips, so they
+        // can't be stop STRINGS). Without this the VLM answer runs to the cap.
+        let chat_eos: Vec<u32> = ["<|im_end|>", "<|endoftext|>"]
+            .iter()
+            .filter_map(|t| auto_tokenize(&self.weights_path, t, self.explicit_tokenizer.as_deref()).ok())
+            .filter(|ids| ids.len() == 1)
+            .map(|ids| ids[0])
+            .collect();
+
         let mut on_token = |tok: u32| -> bool {
+            if chat_eos.contains(&tok) {
+                return false; // assistant turn ended — don't emit the special token
+            }
             completion_tokens += 1;
             all_ids.push(tok);
             let decoded = match auto_detokenize(&weights, &all_ids, explicit.as_deref(), true) {
                 Ok(s) => s,
                 Err(_) => return true,
             };
-            if decoded.len() > emitted_len {
-                let piece = decoded[emitted_len..].to_string();
-                emitted_len = decoded.len();
+            // Hide the leading empty <think></think> block, same as the text path.
+            let visible = visible_after_empty_think(&decoded);
+            if visible.len() > emitted_len {
+                let piece = visible[emitted_len..].to_string();
+                emitted_len = visible.len();
                 if !piece.is_empty() {
                     accumulated_text.push_str(&piece);
                     token_tx_inner.send(InferToken::Delta(piece)).ok();
@@ -946,6 +1088,7 @@ impl RlxTextRunner {
                 prompt_tokens: 0,
                 completion_tokens,
                 n_ctx: completion_tokens,
+                metrics: GenMetrics::default(),
             })
             .ok();
     }
@@ -993,5 +1136,328 @@ mod device_tests {
             d,
             Device::Cpu | Device::Metal | Device::Mlx | Device::Cuda | Device::Gpu | Device::Rocm
         ));
+    }
+}
+
+#[cfg(all(test, feature = "llm-rlx"))]
+mod kv_store_runtime_tests {
+    use crate::config::LlmConfig;
+    use crate::engine::protocol::{GenParams, InferToken};
+    use std::path::PathBuf;
+    use tokio::sync::mpsc::unbounded_channel;
+
+    /// End-to-end runtime check of the Qwen3-0.6B long-context path: loading the
+    /// GGUF must enable the HNSW KV store + bge dual-encoder (via
+    /// `maybe_enable_qwen3_kv_store` → `enable_kv_store_with_encoder`) without
+    /// error, and decoding with the store attached must produce coherent text.
+    ///
+    /// Ignored — needs the Qwen3-0.6B GGUF (env `QWEN3_GGUF`, else the sibling
+    /// rlx-models weights) and, on first run, network for the bge encoder. Run:
+    ///   QWEN3_DEVICE=cpu cargo test -p skill-llm --features apple \
+    ///     qwen3_0_6b_kv_store_end_to_end -- --ignored --nocapture
+    #[test]
+    #[ignore = "runtime: needs Qwen3-0.6B GGUF + network for bge dual-encoder"]
+    fn qwen3_0_6b_kv_store_end_to_end() {
+        let gguf = std::env::var("QWEN3_GGUF").unwrap_or_else(|_| {
+            "/Users/Shared/rlx-models/weights/lm/qwen3-0.6b-gguf/Qwen3-0.6B-Q4_K_M.gguf".to_string()
+        });
+        let path = PathBuf::from(&gguf);
+        assert!(path.is_file(), "GGUF not found: {gguf}");
+
+        let cfg = LlmConfig {
+            rlx_device: std::env::var("QWEN3_DEVICE").unwrap_or_else(|_| "cpu".into()),
+            ..LlmConfig::default()
+        };
+
+        // Routes through try_qwen3_runner_with_device → maybe_enable_qwen3_kv_store
+        // → enable_kv_store_with_encoder. The "[rlx] qwen3 long-context: …" line
+        // prints here under --nocapture; a failure to enable the store panics.
+        let mut runner = super::RlxTextRunner::load_with_mmproj(&path, None, &cfg)
+            .expect("load Qwen3-0.6B with KV store + dual-encoder");
+        assert_eq!(runner.family(), "qwen3");
+
+        let mk_params = |max_tokens: usize| GenParams {
+            max_tokens,
+            temperature: 0.0,
+            thinking_budget: Some(0), // skip <think> for the tiny 0.6B
+            ..GenParams::default()
+        };
+        let prompt = "Q: What is the capital of France? Answer in one word.\nA:";
+
+        // Warmup: first generation compiles the decode buckets (slow) — discard.
+        let (wtx, mut _wrx) = unbounded_channel::<InferToken>();
+        runner.generate(prompt, mk_params(8), wtx);
+
+        // Measured run: steady-state throughput + KV telemetry.
+        let (tx, mut rx) = unbounded_channel::<InferToken>();
+        runner.generate(prompt, mk_params(64), tx);
+
+        let mut text = String::new();
+        let mut done = false;
+        while let Ok(tok) = rx.try_recv() {
+            match tok {
+                InferToken::Delta(s) => text.push_str(&s),
+                InferToken::Done { completion_tokens, n_ctx, metrics, .. } => {
+                    done = true;
+                    eprintln!(
+                        "[speed] device={} · {} tokens (n_ctx={}) · prefill {:.1} ms ({:.0} tok/s) · decode {:.1} tok/s",
+                        cfg.rlx_device, completion_tokens, n_ctx,
+                        metrics.prefill_ms, metrics.prefill_tps, metrics.decode_tps
+                    );
+                    eprintln!(
+                        "[kv-store] blocks={} tokens={} disk_bytes={}",
+                        metrics.kv_blocks, metrics.kv_tokens, metrics.kv_disk_bytes
+                    );
+                }
+                InferToken::Error(e) => panic!("generation error: {e}"),
+            }
+        }
+        eprintln!("[test] output={text:?}");
+        assert!(done, "generation did not finish (no Done token)");
+        assert!(!text.trim().is_empty(), "generation produced no text");
+    }
+
+    /// End-to-end runtime check of the DEFAULT Qwen3.5-0.8B path through the exact
+    /// engine the daemon uses (`RlxTextRunner::load_with_mmproj` → try_qwen35_runner
+    /// → generate). Verifies arch detection, tokenizer, runner selection, and
+    /// coherent output. Run:
+    ///   cargo test -p skill-llm --release --features llm-rlx-metal \
+    ///     qwen35_0_8b_end_to_end -- --ignored --nocapture
+    #[ignore = "runtime: needs Qwen3.5-0.8B GGUF + a GPU backend + tokenizer"]
+    #[test]
+    fn qwen35_0_8b_end_to_end() {
+        let gguf = std::env::var("QWEN35_GGUF").unwrap_or_else(|_| {
+            "/Users/Shared/weights/qwen3.5-0.8b-gguf/Qwen3.5-0.8B-Q4_K_M.gguf".to_string()
+        });
+        let path = PathBuf::from(&gguf);
+        assert!(path.is_file(), "GGUF not found: {gguf}");
+
+        // Default config (verifies OOTB max_seq is adequate), only overriding the
+        // device so the test runs on GPU.
+        let cfg = LlmConfig {
+            rlx_device: std::env::var("QWEN35_DEVICE").unwrap_or_else(|_| "metal".into()),
+            n_gpu_layers: 999,
+            ..LlmConfig::default()
+        };
+
+        let mut runner = super::RlxTextRunner::load_with_mmproj(&path, None, &cfg)
+            .expect("load Qwen3.5-0.8B via skill-llm engine");
+        assert_eq!(runner.family(), "qwen35", "expected qwen35 runner");
+
+        // The Qwen3.5 GGUF's embedded chat template fails to render in rlx-models,
+        // so the daemon (resolve_chat_template) falls back to a built-in ChatML
+        // template for qwen — use the exact same one here.
+        let tpl = crate::engine::rlx_actor::chatml_template(&path)
+            .expect("build ChatML template for qwen35");
+        let user = |c: &str| rlx_models::run::ChatMessage { role: "user".into(), content: c.into() };
+        let asst = |c: &str| rlx_models::run::ChatMessage { role: "assistant".into(), content: c.into() };
+        let render = |m: &[rlx_models::run::ChatMessage]| tpl.render(m, true).expect("render chatml");
+
+        // Run one turn to completion, returning the exact streamed text. The daemon
+        // now strips the leading empty <think></think> itself, so the caller sees a
+        // clean answer with no reasoning tags — assert that here rather than
+        // re-stripping in the test.
+        fn run_chat(runner: &mut super::RlxTextRunner, prompt: &str, cap: usize) -> (String, usize) {
+            let params = GenParams {
+                max_tokens: cap,
+                temperature: 0.0,
+                thinking_budget: Some(0),
+                ..GenParams::default()
+            };
+            let (tx, mut rx) = unbounded_channel::<InferToken>();
+            runner.generate(prompt, params, tx);
+            let (mut text, mut n) = (String::new(), 0usize);
+            while let Ok(tok) = rx.try_recv() {
+                match tok {
+                    InferToken::Delta(s) => text.push_str(&s),
+                    InferToken::Done { completion_tokens, .. } => n = completion_tokens,
+                    InferToken::Error(e) => panic!("generation error: {e}"),
+                }
+            }
+            assert!(
+                !text.contains("<think>") && !text.contains("</think>"),
+                "empty <think> block leaked into streamed output: {text:?}"
+            );
+            (text.trim().to_string(), n)
+        }
+
+        // 1) Factual, single word. Also the first call — pays decode-bucket compile.
+        let (a1, n1) = run_chat(
+            &mut runner,
+            &render(&[user("What is the capital of France? Reply with only the city name.")]),
+            64,
+        );
+        eprintln!("[case1 capital] device={} n={n1} out={a1:?}", cfg.rlx_device);
+        assert!(n1 < 64, "case1 did not stop on EOS: {a1:?}");
+        assert!(a1.to_lowercase().contains("paris"), "case1 wrong answer: {a1:?}");
+
+        // 2) A DIFFERENT prompt on the SAME runner. Regression guard for the
+        //    GPU-resident-KV leak: before the fix the second generate() reused the
+        //    first turn's resident K/V (same decode bucket, no re-seed) and answered
+        //    the previous question — here it would echo "Paris" / a capital instead of
+        //    explaining a computer. Must be a fresh, on-topic answer.
+        let (a2, n2) = run_chat(
+            &mut runner,
+            &render(&[user("Explain how a computer works in one sentence.")]),
+            128,
+        );
+        eprintln!("[case2 explain] n={n2} out={a2:?}");
+        assert!(n2 < 128, "case2 did not stop on EOS: {a2:?}");
+        assert!(a2.split_whitespace().count() >= 5, "case2 degenerate: {a2:?}");
+        assert!(
+            !a2.to_lowercase().contains("paris"),
+            "case2 leaked case1's answer (resident-KV not re-seeded): {a2:?}"
+        );
+
+        // 3) Multi-turn — the ChatML template must carry history so the model recalls
+        //    the name from the earlier turn.
+        let convo = [
+            user("My name is Alice."),
+            asst("Nice to meet you, Alice! How can I help?"),
+            user("What is my name?"),
+        ];
+        let (a3, n3) = run_chat(&mut runner, &render(&convo), 64);
+        eprintln!("[case3 multiturn] n={n3} out={a3:?}");
+        assert!(n3 < 64, "case3 did not stop on EOS: {a3:?}");
+        assert!(a3.to_lowercase().contains("alice"), "case3 lost history: {a3:?}");
+    }
+
+    #[test]
+    fn empty_think_block_is_stripped() {
+        use super::visible_after_empty_think as vis;
+        // Resolved empty block → text after </think>, leading whitespace trimmed.
+        assert_eq!(vis("<think>\n\n</think>\n\nParis"), "Paris");
+        assert_eq!(vis("<think></think>Hello"), "Hello");
+        // No think block → passthrough.
+        assert_eq!(vis("Just an answer."), "Just an answer.");
+        // Real reasoning content → left fully intact (nothing hidden).
+        let reasoning = "<think>let me count</think>\n\n4";
+        assert_eq!(vis(reasoning), reasoning);
+        // Mid-stream: block still open, or a partial opening tag → buffer ("").
+        assert_eq!(vis("<think>\n\n"), "");
+        assert_eq!(vis("<thi"), "");
+        assert_eq!(vis("<think>"), "");
+        // Streaming an empty block emits nothing until it resolves, then the answer:
+        // simulate the growing decoded string and confirm the visible prefix is stable.
+        assert_eq!(vis("<think>\n\n</think>\n\nPa"), "Pa");
+        assert_eq!(vis("<think>\n\n</think>\n\nParis."), "Paris.");
+    }
+
+    /// End-to-end VISUAL inference through the exact daemon engine
+    /// (`load_with_mmproj` → try_qwen35_runner(mmproj) → generate_multimodal).
+    /// Uses Fara1.5-4B (qwen35 arch) + its mmproj GGUF. Feeds a synthetic blue
+    /// circle on white and checks the model actually SEES it (names the colour) —
+    /// a text-only model can't know the colour, so "blue" proves the vision path.
+    /// Run:
+    ///   cargo test -p skill-llm --release --features llm-rlx-metal \
+    ///     fara_vlm_end_to_end -- --ignored --nocapture
+    #[ignore = "runtime: needs Fara1.5-4B GGUF + mmproj + a GPU backend"]
+    #[test]
+    fn fara_vlm_end_to_end() {
+        use std::io::Cursor;
+
+        let gguf = std::env::var("FARA_GGUF").unwrap_or_else(|_| {
+            "/Users/Shared/weights/fara1.5-4b-gguf/Fara1.5-4B-Q4_K_M.gguf".to_string()
+        });
+        let mmproj = std::env::var("FARA_MMPROJ").unwrap_or_else(|_| {
+            "/Users/Shared/weights/fara1.5-4b-gguf/mmproj-Fara1.5-4B-f16.gguf".to_string()
+        });
+        let (path, mmp) = (PathBuf::from(&gguf), PathBuf::from(&mmproj));
+        assert!(path.is_file(), "Fara GGUF not found: {gguf}");
+        assert!(mmp.is_file(), "Fara mmproj not found: {mmproj}");
+
+        // The vision encoder floors an image to ~1024 tokens, so max_seq must clear
+        // that plus the prompt + answer.
+        let cfg = LlmConfig {
+            rlx_device: std::env::var("FARA_DEVICE").unwrap_or_else(|_| "metal".into()),
+            n_gpu_layers: 999,
+            rlx_max_seq: 1280,
+            ..LlmConfig::default()
+        };
+
+        let mut runner = super::RlxTextRunner::load_with_mmproj(&path, Some(&mmp), &cfg)
+            .expect("load Fara1.5-4B + mmproj via skill-llm engine");
+        assert_eq!(runner.family(), "qwen35", "expected qwen35 runner for Fara");
+        assert!(runner.supports_multimodal(), "mmproj vision encoder not attached");
+
+        // Synthetic 128×128 image: a solid blue circle on white. PNG-encoded like a
+        // real chat attachment (generate_multimodal decodes the bytes itself).
+        let (w, h) = (128u32, 128u32);
+        let mut img = image::RgbImage::from_pixel(w, h, image::Rgb([255, 255, 255]));
+        let (cx, cy, r2) = (64.0f32, 64.0f32, 40.0f32 * 40.0f32);
+        for y in 0..h {
+            for x in 0..w {
+                let (dx, dy) = (x as f32 - cx, y as f32 - cy);
+                if dx * dx + dy * dy <= r2 {
+                    img.put_pixel(x, y, image::Rgb([30, 90, 220]));
+                }
+            }
+        }
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("encode test png");
+
+        // The daemon actor injects the <__media__> marker into the user turn; build
+        // the same framed prompt here (marker at the start = image before the text).
+        let tpl = crate::engine::rlx_actor::chatml_template(&path)
+            .expect("build ChatML template for Fara");
+        let msgs = [rlx_models::run::ChatMessage {
+            role: "user".into(),
+            content: "<__media__>What is the main shape and its color in this image? \
+                      Answer in one short sentence."
+                .into(),
+        }];
+        let prompt = tpl.render(&msgs, true).expect("render chatml");
+
+        // Drive one image turn to completion.
+        fn run_vlm(runner: &mut super::RlxTextRunner, prompt: &str, png: &[u8]) -> (String, usize) {
+            let params = GenParams {
+                max_tokens: 96,
+                temperature: 0.0,
+                thinking_budget: Some(0),
+                ..GenParams::default()
+            };
+            let (tx, mut rx) = unbounded_channel::<InferToken>();
+            runner.generate_multimodal(prompt, std::slice::from_ref(&png.to_vec()), params, tx);
+            let (mut text, mut n, mut done) = (String::new(), 0usize, false);
+            while let Ok(tok) = rx.try_recv() {
+                match tok {
+                    InferToken::Delta(s) => text.push_str(&s),
+                    InferToken::Done { completion_tokens, .. } => {
+                        n = completion_tokens;
+                        done = true;
+                    }
+                    InferToken::Error(e) => panic!("multimodal generation error: {e}"),
+                }
+            }
+            assert!(done, "multimodal generation did not finish");
+            (text.trim().to_string(), n)
+        }
+
+        let check = |label: &str, out: &str, n: usize| {
+            eprintln!("[fara vlm {label}] n={n} out={out:?}");
+            assert!(!out.is_empty(), "{label}: no text");
+            assert!(
+                !out.contains("<think>") && !out.contains("</think>"),
+                "{label}: think block leaked: {out:?}"
+            );
+            assert!(n < 96, "{label}: did not stop on EOS: {out:?}");
+            let low = out.to_lowercase();
+            assert!(low.contains("blue"), "{label}: colour not perceived (vision broken?): {out:?}");
+            assert!(
+                low.contains("circle") || low.contains("round") || low.contains("disc") || low.contains("dot"),
+                "{label}: shape not perceived: {out:?}"
+            );
+        };
+
+        // Turn 1: cold — compiles + caches the vision graph for this size.
+        let (o1, n1) = run_vlm(&mut runner, &prompt, &png);
+        check("turn1-cold", &o1, n1);
+        // Turn 2: SAME size on the SAME runner → warm cached graph (no recompile,
+        // params resident). Also a fresh sequence: guards the VLM resident-KV reset
+        // (must re-perceive the image, not echo turn 1).
+        let (o2, n2) = run_vlm(&mut runner, &prompt, &png);
+        check("turn2-warm", &o2, n2);
     }
 }

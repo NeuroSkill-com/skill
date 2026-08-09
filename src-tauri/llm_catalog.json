@@ -1,7 +1,37 @@
 {
-  "active_model": "Qwen_Qwen3.5-27B-Q4_0.gguf",
+  "active_model": "Qwen3.5-0.8B-Q4_K_M.gguf",
   "active_mmproj": "",
   "families": {
+    "qwen35-0.8b": {
+      "name": "Qwen3.5 0.8B",
+      "description": "Alibaba's Qwen3.5 0.8B — compact hybrid (Gated DeltaNet + attention) model with the fastest optimized decode path (~55-71 tok/s on Metal). Long context via on-device HNSW KV memory.",
+      "repo": "eugenehp/Qwen3.5-0.8B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "tiny",
+        "long-context"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 0.8,
+      "max_context_length": 131072
+    },
+    "qwen3-0.6b": {
+      "name": "Qwen3 0.6B",
+      "description": "Alibaba's ultra-compact 0.6B model — runs on any machine. Long context via on-device HNSW KV memory.",
+      "repo": "unsloth/Qwen3-0.6B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "tiny",
+        "long-context"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 0.6,
+      "max_context_length": 32768
+    },
     "qwen35-4b": {
       "name": "Qwen3.5 4B",
       "description": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
@@ -571,6 +601,14 @@
     }
   },
   "models": [
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 0.4,
+      "description": "Recommended — tiny & fast, HNSW-extended long context",
+      "recommended": true
+    },
     {
       "family": "qwen35-4b",
       "filename": "Qwen_Qwen3.5-4B-Q2_K.gguf",

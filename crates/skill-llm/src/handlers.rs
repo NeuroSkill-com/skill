@@ -284,7 +284,7 @@ async fn stream_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, m
                     })).unwrap_or_default();
                     yield Ok::<sse::Event, String>(sse::Event::default().data(data));
                 }
-                InferToken::Done { finish_reason, prompt_tokens, completion_tokens, n_ctx } => {
+                InferToken::Done { finish_reason, prompt_tokens, completion_tokens, n_ctx, metrics } => {
                     let data = serde_json::to_string(&json!({
                         "id": id, "object": "chat.completion.chunk",
                         "created": ts, "model": model_name,
@@ -294,6 +294,12 @@ async fn stream_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, m
                             "completion_tokens": completion_tokens,
                             "total_tokens":      prompt_tokens + completion_tokens,
                             "n_ctx":             n_ctx,
+                            "prefill_ms":        metrics.prefill_ms,
+                            "prefill_tps":       metrics.prefill_tps,
+                            "decode_tps":        metrics.decode_tps,
+                            "kv_blocks":         metrics.kv_blocks,
+                            "kv_tokens":         metrics.kv_tokens,
+                            "kv_disk_bytes":     metrics.kv_disk_bytes,
                         },
                     })).unwrap_or_default();
                     yield Ok(sse::Event::default().data(data));
@@ -332,6 +338,7 @@ async fn collect_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, 
                 prompt_tokens: pt,
                 completion_tokens: ct,
                 n_ctx: nc,
+                ..
             } => {
                 finish_reason = fr;
                 prompt_tokens = pt;
