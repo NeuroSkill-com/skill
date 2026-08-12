@@ -282,7 +282,7 @@ fn resolve_chat_template(
 /// Render a list of `{"role","content"}` chat messages via the resolved
 /// chat template. Falls back to a simple `"<role>: <content>\n"` concat
 /// when no template was loaded.
-fn render_chat(
+pub(crate) fn render_chat(
     template: &Option<rlx_models::run::ChatTemplate>,
     messages: &[serde_json::Value],
     with_media: bool,

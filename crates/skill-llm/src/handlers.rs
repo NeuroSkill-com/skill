@@ -284,6 +284,7 @@ async fn stream_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, m
                     })).unwrap_or_default();
                     yield Ok::<sse::Event, String>(sse::Event::default().data(data));
                 }
+                InferToken::Status(_) => {}
                 InferToken::Done { finish_reason, prompt_tokens, completion_tokens, n_ctx, metrics } => {
                     let data = serde_json::to_string(&json!({
                         "id": id, "object": "chat.completion.chunk",
@@ -333,6 +334,7 @@ async fn collect_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, 
     while let Some(tok) = tok_rx.recv().await {
         match tok {
             InferToken::Delta(t) => text.push_str(&t),
+            InferToken::Status(_) => {}
             InferToken::Done {
                 finish_reason: fr,
                 prompt_tokens: pt,
@@ -385,6 +387,7 @@ async fn stream_completion_response(mut tok_rx: mpsc::UnboundedReceiver<InferTok
                     })).unwrap_or_default();
                     yield Ok::<sse::Event, String>(sse::Event::default().data(data));
                 }
+                InferToken::Status(_) => {}
                 InferToken::Done { finish_reason, .. } => {
                     let data = serde_json::to_string(&json!({
                         "id": id, "object": "text_completion.chunk",
@@ -419,6 +422,7 @@ async fn collect_completion_response(mut tok_rx: mpsc::UnboundedReceiver<InferTo
     while let Some(tok) = tok_rx.recv().await {
         match tok {
             InferToken::Delta(t) => text.push_str(&t),
+            InferToken::Status(_) => {}
             InferToken::Done { finish_reason: fr, .. } => {
                 finish_reason = fr;
                 break;

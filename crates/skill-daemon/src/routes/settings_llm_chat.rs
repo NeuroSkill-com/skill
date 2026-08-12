@@ -13,6 +13,70 @@ use crate::{
     state::AppState,
 };
 
+/// Largest byte offset `<= buf.len() - back` that lands on a UTF-8 char
+/// boundary. The streaming `<think>` splitter holds back the last `back` bytes
+/// of `buf` (a possible partial `<think>`/`</think>` tag split across deltas)
+/// before flushing the rest; slicing at a raw `len - back` offset panics when
+/// that offset falls inside a multi-byte character (CJK, emoji), so we floor it.
+/// Tags are ASCII, so flooring never hides a real partial tag.
+fn flush_boundary(buf: &str, back: usize) -> usize {
+    let mut safe = buf.len().saturating_sub(back);
+    while safe > 0 && !buf.is_char_boundary(safe) {
+        safe -= 1;
+    }
+    safe
+}
+
+/// A piece of streamed model output, routed by `<think>` tags.
+#[derive(Debug, PartialEq, Eq)]
+enum ThinkPart {
+    Reasoning(String),
+    Content(String),
+}
+
+/// Append `delta` to `buf`, then split off any now-emittable reasoning/content,
+/// tracking `<think>...</think>` state in `in_think`. A possible partial tag (and
+/// any trailing multi-byte char) is held back in `buf` for the next delta; every
+/// slice goes through [`flush_boundary`], so a CJK/emoji char split across deltas
+/// is never sliced mid-byte — the daemon aborts on ANY panic in this streaming
+/// task, so this path must be panic-free. The caller flushes the remaining `buf`
+/// once the stream ends.
+fn split_think_delta(delta: &str, in_think: &mut bool, buf: &mut String, out: &mut Vec<ThinkPart>) {
+    buf.push_str(delta);
+    loop {
+        if *in_think {
+            if let Some(end) = buf.find("</think>") {
+                if end > 0 {
+                    out.push(ThinkPart::Reasoning(buf[..end].to_string()));
+                }
+                *buf = buf[end + "</think>".len()..].to_string();
+                *in_think = false;
+                continue;
+            }
+            let safe = flush_boundary(buf, 8);
+            if safe > 0 {
+                out.push(ThinkPart::Reasoning(buf[..safe].to_string()));
+                *buf = buf[safe..].to_string();
+            }
+            break;
+        } else if let Some(start) = buf.find("<think>") {
+            if start > 0 {
+                out.push(ThinkPart::Content(buf[..start].to_string()));
+            }
+            *buf = buf[start + "<think>".len()..].to_string();
+            *in_think = true;
+            continue;
+        } else {
+            let safe = flush_boundary(buf, 7);
+            if safe > 0 {
+                out.push(ThinkPart::Content(buf[..safe].to_string()));
+                *buf = buf[safe..].to_string();
+            }
+            break;
+        }
+    }
+}
+
 pub(crate) async fn chat_last_session_impl(State(state): State<AppState>) -> Json<ChatSessionResponse> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let out = tokio::task::spawn_blocking(move || {
@@ -268,69 +332,41 @@ pub(crate) async fn llm_chat_completions_impl(
                 let result = skill_llm::run_chat_with_builtin_tools(
                     &srv, req.messages, params, Vec::new(),
                     |delta| {
-                        buf.push_str(delta);
-
-                        // Process buffered text for think tag boundaries
-                        loop {
-                            if in_think {
-                                if let Some(end) = buf.find("</think>") {
-                                    let thinking = &buf[..end];
-                                    if !thinking.is_empty() {
-                                        let chunk = serde_json::json!({
-                                            "id": &chat_id2,
-                                            "object": "chat.completion.chunk",
-                                            "choices": [{"index": 0, "delta": {"reasoning_content": thinking}, "finish_reason": serde_json::Value::Null}],
-                                        });
-                                        let _ = tx.try_send(format!("data: {}\n\n", chunk));
-                                    }
-                                    buf = buf[end + "</think>".len()..].to_string();
-                                    in_think = false;
-                                    continue;
-                                }
-                                // Still inside think — might have partial </think> at end
-                                // Flush everything except last 8 chars (len of "</think>")
-                                let safe = buf.len().saturating_sub(8);
-                                if safe > 0 {
-                                    let chunk = serde_json::json!({
-                                        "id": &chat_id2,
-                                        "object": "chat.completion.chunk",
-                                        "choices": [{"index": 0, "delta": {"reasoning_content": &buf[..safe]}, "finish_reason": serde_json::Value::Null}],
-                                    });
-                                    let _ = tx.try_send(format!("data: {}\n\n", chunk));
-                                    buf = buf[safe..].to_string();
-                                }
-                                break;
-                            } else {
-                                if let Some(start) = buf.find("<think>") {
-                                    let before = &buf[..start];
-                                    if !before.is_empty() {
-                                        let chunk = serde_json::json!({
-                                            "id": &chat_id2,
-                                            "object": "chat.completion.chunk",
-                                            "choices": [{"index": 0, "delta": {"content": before}, "finish_reason": serde_json::Value::Null}],
-                                        });
-                                        let _ = tx.try_send(format!("data: {}\n\n", chunk));
-                                    }
-                                    buf = buf[start + "<think>".len()..].to_string();
-                                    in_think = true;
-                                    continue;
-                                }
-                                // No <think> tag — might have partial at end
-                                let safe = buf.len().saturating_sub(7);
-                                if safe > 0 {
-                                    let chunk = serde_json::json!({
-                                        "id": &chat_id2,
-                                        "object": "chat.completion.chunk",
-                                        "choices": [{"index": 0, "delta": {"content": &buf[..safe]}, "finish_reason": serde_json::Value::Null}],
-                                    });
-                                    let _ = tx.try_send(format!("data: {}\n\n", chunk));
-                                    buf = buf[safe..].to_string();
-                                }
-                                break;
-                            }
+                        // Split the delta into reasoning/content, holding back a
+                        // partial tag or multi-byte char (panic-free — see
+                        // `split_think_delta`). Then emit each piece as an SSE chunk.
+                        let mut parts: Vec<ThinkPart> = Vec::new();
+                        split_think_delta(delta, &mut in_think, &mut buf, &mut parts);
+                        for part in parts {
+                            let (field, text) = match part {
+                                ThinkPart::Reasoning(t) => ("reasoning_content", t),
+                                ThinkPart::Content(t) => ("content", t),
+                            };
+                            let mut delta_obj = serde_json::Map::new();
+                            delta_obj.insert(field.to_string(), serde_json::Value::String(text));
+                            let chunk = serde_json::json!({
+                                "id": &chat_id2,
+                                "object": "chat.completion.chunk",
+                                "choices": [{"index": 0, "delta": delta_obj, "finish_reason": serde_json::Value::Null}],
+                            });
+                            let _ = tx.try_send(format!("data: {}\n\n", chunk));
                         }
                     },
-                    |_evt| {},
+                    |evt| {
+                        // Forward real generation-phase markers ("vision" /
+                        // "prefill") as an SSE chunk with a `phase` delta field so
+                        // the client can show accurate progress during the
+                        // pre-token lead-in. Backward-compatible: content-only
+                        // consumers ignore the extra field.
+                        if let skill_llm::ToolEvent::Phase { phase } = evt {
+                            let chunk = serde_json::json!({
+                                "id": &chat_id2,
+                                "object": "chat.completion.chunk",
+                                "choices": [{"index": 0, "delta": {"phase": phase}, "finish_reason": serde_json::Value::Null}],
+                            });
+                            let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                        }
+                    },
                 ).await;
 
                 // Flush remaining buffer
@@ -546,4 +582,123 @@ pub(crate) async fn llm_cancel_tool_call_impl(
         let _ = req;
     }
     Json(serde_json::json!({"ok": true}))
+}
+
+#[cfg(test)]
+mod flush_boundary_tests {
+    use super::flush_boundary;
+
+    /// Reproduces the daemon crash: the model streams multi-byte output (Fara,
+    /// multilingual, emitted "三" = "three"). A raw `len - 7` slice landed inside
+    /// the 3-byte char and panicked ("not a char boundary"); flush_boundary must
+    /// floor to the char start so `buf[..safe]`/`buf[safe..]` never panic.
+    #[test]
+    fn floors_into_multibyte_char() {
+        let buf = "三"; // 3 bytes, one char
+        for back in 0..=4 {
+            let safe = flush_boundary(buf, back);
+            assert!(buf.is_char_boundary(safe), "back={back} gave mid-char offset {safe}");
+            // Must not panic — exercise both halves the splitter slices.
+            let _ = (&buf[..safe], &buf[safe..]);
+        }
+    }
+
+    /// ASCII behaves exactly like the old `len - back` (no flooring needed).
+    #[test]
+    fn ascii_is_exact() {
+        let buf = "hello world"; // 11 bytes
+        assert_eq!(flush_boundary(buf, 7), 4);
+        assert_eq!(flush_boundary(buf, 0), 11);
+        assert_eq!(flush_boundary(buf, 100), 0); // saturates
+    }
+
+    /// Mixed ASCII + CJK tail: holding back 1 byte lands raw offset 6 inside the
+    /// 3-byte "三"; flooring must back it down to 4 so "red " flushes and the
+    /// multi-byte char is held whole (this is the exact daemon-crash shape).
+    #[test]
+    fn mixed_ascii_and_cjk() {
+        let buf = "red 三"; // "red " = 4 bytes, "三" = 3 bytes → 7 total
+        let safe = flush_boundary(buf, 1);
+        assert_eq!(safe, 4, "raw offset 6 is mid-char; must floor to 4");
+        assert!(buf.is_char_boundary(safe));
+        assert_eq!(&buf[..safe], "red ");
+        let _ = &buf[safe..]; // "三" — must not panic
+    }
+}
+
+#[cfg(test)]
+mod split_think_tests {
+    use super::{split_think_delta, ThinkPart};
+
+    /// Drive `split_think_delta` over a list of deltas exactly as the SSE handler
+    /// does (including the end-of-stream flush of the held-back tail), returning
+    /// the reconstructed (reasoning, content) strings.
+    fn run(deltas: &[&str]) -> (String, String) {
+        let mut in_think = false;
+        let mut buf = String::new();
+        let mut parts: Vec<ThinkPart> = Vec::new();
+        for d in deltas {
+            split_think_delta(d, &mut in_think, &mut buf, &mut parts);
+        }
+        // End-of-stream flush (mirrors the handler's post-loop flush of `buf`).
+        if !buf.is_empty() {
+            parts.push(if in_think {
+                ThinkPart::Reasoning(buf.clone())
+            } else {
+                ThinkPart::Content(buf.clone())
+            });
+        }
+        let mut reasoning = String::new();
+        let mut content = String::new();
+        for p in parts {
+            match p {
+                ThinkPart::Reasoning(t) => reasoning.push_str(&t),
+                ThinkPart::Content(t) => content.push_str(&t),
+            }
+        }
+        (reasoning, content)
+    }
+
+    #[test]
+    fn whole_delta_with_think_and_cjk() {
+        let (r, c) = run(&["<think>reasoning here</think>红、绿、蓝是三原色。"]);
+        assert_eq!(r, "reasoning here");
+        assert_eq!(c, "红、绿、蓝是三原色。");
+    }
+
+    /// The exact daemon-crash scenario: multilingual (CJK) content streamed so the
+    /// 7-byte content hold-back repeatedly lands inside a 3-byte char. Must not
+    /// panic and must reconstruct the full string.
+    #[test]
+    fn cjk_content_split_at_char_boundaries() {
+        let text = "三原色：红绿蓝。🎨 mixed 日本語 and emoji 😀 end.";
+        // Feed as many small deltas split ONLY at char boundaries, but 1 char each
+        // so the tail is always a fresh multi-byte char under the 7-byte hold-back.
+        let deltas: Vec<String> = text.chars().map(|ch| ch.to_string()).collect();
+        let refs: Vec<&str> = deltas.iter().map(String::as_str).collect();
+        let (r, c) = run(&refs);
+        assert_eq!(r, "");
+        assert_eq!(c, text, "CJK/emoji content must round-trip without loss or panic");
+    }
+
+    /// Empty `<think>` block (reasoning models emit `<think>\n\n</think>`) followed
+    /// by CJK, fed char-by-char across the tag + char boundaries.
+    #[test]
+    fn empty_think_prefix_then_cjk_charwise() {
+        let text = "<think>\n\n</think>答案是：蓝色🌊";
+        let deltas: Vec<String> = text.chars().map(|ch| ch.to_string()).collect();
+        let refs: Vec<&str> = deltas.iter().map(String::as_str).collect();
+        let (r, c) = run(&refs);
+        assert_eq!(r, "\n\n");
+        assert_eq!(c, "答案是：蓝色🌊");
+    }
+
+    /// A `<think>` tag itself split across deltas must still be detected (not
+    /// leaked into content) and CJK reasoning must round-trip.
+    #[test]
+    fn think_tag_split_across_deltas() {
+        let (r, c) = run(&["<thi", "nk>推", "理内容", "</thin", "k>结果"]);
+        assert_eq!(r, "推理内容");
+        assert_eq!(c, "结果");
+    }
 }

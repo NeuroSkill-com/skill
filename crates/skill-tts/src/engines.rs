@@ -933,7 +933,17 @@ fn ensure_current(cur: &mut Option<Current>) -> Result<()> {
 
     LOADING.store(true, Ordering::Release);
     READY.store(false, Ordering::Release);
-    let built = build_synthesizer(&engine, &model);
+    // A model whose rlx graph fails to build can PANIC deep in the backend
+    // (e.g. a `layer_norm` rank assert) instead of returning `Err`. This runs on
+    // the TTS worker thread, and a panic crossing rlx FFI aborts the WHOLE daemon
+    // ("failed to initiate panic"), so contain it and treat a build panic as an
+    // ordinary load failure the caller already handles.
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| build_synthesizer(&engine, &model)))
+        .unwrap_or_else(|_| {
+            Err(anyhow::anyhow!(
+                "TTS engine build panicked (engine={engine}, model={model})"
+            ))
+        });
     LOADING.store(false, Ordering::Release);
 
     match built {
@@ -979,7 +989,11 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     .map_err(|e| tts_log!("tts", "could not open audio: {e}"))
                     .ok();
                 if let (Some(c), Some(s)) = (current.as_mut(), stream.as_ref()) {
-                    match c.synth.synthesize(&text, &voice) {
+                    // Contain a panic in the rlx synthesis path too (see ensure_current).
+                    let synth =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.synth.synthesize(&text, &voice)))
+                            .unwrap_or_else(|_| Err(anyhow::anyhow!("TTS synthesize panicked")));
+                    match synth {
                         Ok((pcm, sr)) => play_f32_audio(s, pcm, sr),
                         Err(e) => tts_log!("tts", "synthesis error: {e}"),
                     }
@@ -1090,12 +1104,15 @@ mod tests {
     impl EnvVarGuard {
         fn set(key: &'static str, val: &str) -> Self {
             let prev = std::env::var(key).ok();
+            // SAFETY: test-only guard; the environment is mutated single-threaded
+            // within a test, with no other thread concurrently reading it.
             unsafe { std::env::set_var(key, val) };
             Self { key, prev }
         }
 
         fn unset(key: &'static str) -> Self {
             let prev = std::env::var(key).ok();
+            // SAFETY: see `set` — single-threaded test env mutation.
             unsafe { std::env::remove_var(key) };
             Self { key, prev }
         }
@@ -1104,7 +1121,9 @@ mod tests {
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
             match &self.prev {
+                // SAFETY: see `set` — single-threaded test env restore.
                 Some(v) => unsafe { std::env::set_var(self.key, v) },
+                // SAFETY: see `set` — single-threaded test env restore.
                 None => unsafe { std::env::remove_var(self.key) },
             }
         }

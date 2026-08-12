@@ -608,6 +608,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "Ajouter",
   "llm.discovered.addDirPlaceholder": "/chemin/vers/modèles",
   "llm.discovered.removeDir": "Retirer",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "Détail de l'image",
+  "llm.vision.detailDesc":
+    "Quantité de détails visuels que le modèle lit dans chaque image. Moins de jetons répondent plus vite ; plus de jetons perçoivent des détails plus fins (mieux pour le texte dense ou les documents).",
+  "llm.vision.detailFast": "Rapide",
+  "llm.vision.detailBalanced": "Équilibré",
+  "llm.vision.detailHigh": "Détaillé",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "Traitement…",
+  "chat.analyzingImage": "Analyse de l'image…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "Lecture de l'image…",
+  "chat.phasePrefill": "Préparation de la réponse…",
 };
 
 export default llm;

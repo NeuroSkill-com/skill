@@ -1810,7 +1810,7 @@ mod tests {
 
     #[test]
     fn r2f_rounds_to_2_decimals() {
-        assert_eq!(r2f(3.14159), 3.14);
+        assert_eq!(r2f(8.21432), 8.21);
         assert_eq!(r2f(1.006), 1.01);
         assert_eq!(r2f(0.0), 0.0);
         assert_eq!(r2f(-2.567), -2.57);

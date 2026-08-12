@@ -400,7 +400,7 @@ mod tests {
 
         let src = skill_dir.join("Screenshot tiny.png");
         // Write < 10KB of data.
-        std::fs::write(&src, &[0u8; 100]).unwrap();
+        std::fs::write(&src, [0u8; 100]).unwrap();
 
         let result = import_user_screenshot(&skill_dir, &src);
         assert!(result.is_none(), "should reject tiny files");

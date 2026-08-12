@@ -198,12 +198,19 @@ mkdir -p "$deb_build_root/DEBIAN"
 cp -a "$stage_root/." "$deb_build_root/"
 
 installed_size="$(du -sk "$deb_build_root/opt/neuroskill" | awk '{print $1}')"
+# Runtime dependency: the CPU backend (rlx-cpu) is built against OpenBLAS
+# (CI/release install libopenblas-dev), so the shipped binary dynamically
+# links libopenblas.so.0 and needs it present at runtime. libopenblas0 is a
+# metapackage that resolves to the DYNAMIC_ARCH build (auto-tuned per CPU,
+# incl. aarch64/Raspberry Pi). Without it the daemon fails to load on a
+# machine that has no BLAS installed.
 cat > "$deb_build_root/DEBIAN/control" <<EOF
 Package: neuroskill
 Version: $version
 Section: utils
 Priority: optional
 Architecture: $deb_arch
+Depends: libopenblas0
 Maintainer: NeuroSkill <support@neuroskill.com>
 Installed-Size: $installed_size
 Description: Neurofeedback and local AI assistant
@@ -224,6 +231,7 @@ Release:        1
 Summary:        Neurofeedback and local AI assistant
 License:        GPL-3.0-only
 BuildArch:      $rpm_arch
+Requires:       openblas
 Source0:        neuroskill-root.tar.gz
 
 %description

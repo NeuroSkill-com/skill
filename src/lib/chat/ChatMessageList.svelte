@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { tick } from "svelte";
 import ChatToolCard from "$lib/chat/ChatToolCard.svelte";
 import type { Message, ServerStatus } from "$lib/chat/chat-types";
-import { cleanLeadInForDisplay } from "$lib/chat/chat-utils";
+import { cleanLeadInForDisplay, processingLabelKey } from "$lib/chat/chat-utils";
 import { fmtMs } from "$lib/format";
 import { t } from "$lib/i18n/index.svelte";
 import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
@@ -20,6 +20,8 @@ interface Props {
   generating: boolean;
   streamStartMs: number;
   streamTokens: number;
+  /** performance.now() when the current turn started — drives the lead-in timer */
+  genStartMs: number;
   /** Callback to update a single message by id */
   onUpdateMessage: (id: number, patch: Partial<Message>) => void;
   /** Callback to update a specific toolUse entry */
@@ -38,6 +40,7 @@ let {
   generating,
   streamStartMs,
   streamTokens,
+  genStartMs,
   onUpdateMessage,
   onUpdateToolUse,
   onCancelToolCall,
@@ -49,6 +52,20 @@ let {
 let msgsEl = $state<HTMLElement | null>(null);
 let pinned = $state(true);
 let copiedMsgId = $state<number | null>(null);
+
+// Live clock that ticks ONLY during the pre-token lead-in (vision encode +
+// prefill), so the "Processing…" indicator can show elapsed seconds even though
+// there's no token delta to trigger a re-render. Stops as soon as the first
+// token streams or generation ends (the effect re-runs and skips the interval).
+let nowMs = $state(0);
+$effect(() => {
+  if (!generating || streamTokens > 0) return;
+  nowMs = performance.now();
+  const id = setInterval(() => {
+    nowMs = performance.now();
+  }, 400);
+  return () => clearInterval(id);
+});
 
 const ALL_LOADING_STEPS: {
   key: string;
@@ -254,7 +271,15 @@ function copyMessage(msg: Message) {
                               style="animation-delay:{i*0.12}s"></span>
                       {/each}
                     </span>
-                    <span class="text-ui-base">{t("chat.thinking")}</span>
+                    <span class="text-ui-base animate-pulse">
+                      {t(processingLabelKey(msg.phase, msg.processingImage))}
+                    </span>
+                    {#if genStartMs > 0}
+                      {@const leadSec = (nowMs - genStartMs) / 1000}
+                      {#if leadSec >= 2}
+                        <span class="text-ui-xs text-violet-500/50 tabular-nums">{leadSec.toFixed(0)}s</span>
+                      {/if}
+                    {/if}
                   {:else}
                     <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0
                          transition-transform {msg.thinkOpen ? 'rotate-90' : ''}">

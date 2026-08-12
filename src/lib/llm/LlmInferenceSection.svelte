@@ -17,6 +17,7 @@ interface LlmConfigView {
   autoload_mmproj: boolean;
   no_mmproj_gpu: boolean;
   verbose: boolean;
+  vision_min_tokens: number | null;
   flash_attention: boolean;
   offload_kqv: boolean;
   gpu_memory_threshold: number;
@@ -39,6 +40,7 @@ interface Props {
   onSetApiKey: (val: string | null) => void | Promise<void>;
   onToggleAutoloadMmproj: () => void | Promise<void>;
   onToggleNoMmprojGpu: () => void | Promise<void>;
+  onSetVisionMinTokens: (val: number | null) => void | Promise<void>;
   onSetGpuMemoryThreshold: (val: number) => void | Promise<void>;
   onSetGpuMemoryGenThreshold: (val: number) => void | Promise<void>;
   onSetCacheTypeK: (val: string) => void | Promise<void>;
@@ -64,6 +66,7 @@ let {
   onSetApiKey,
   onToggleAutoloadMmproj,
   onToggleNoMmprojGpu,
+  onSetVisionMinTokens,
   onSetGpuMemoryThreshold,
   onSetGpuMemoryGenThreshold,
   onSetCacheTypeK,
@@ -81,6 +84,14 @@ const KV_TYPES = [
   { tag: "q8_0", label: "Q8_0" },
   { tag: "q5_0", label: "Q5_0" },
   { tag: "q4_0", label: "Q4_0" },
+] as const;
+
+// Vision-token floor presets for VLM image inputs: fewer tokens = faster image
+// encode + prefill (lower latency), coarser detail. `576` is the model default.
+const VISION_DETAIL = [
+  { tokens: 256, labelKey: "llm.vision.detailFast" },
+  { tokens: 576, labelKey: "llm.vision.detailBalanced" },
+  { tokens: 1024, labelKey: "llm.vision.detailHigh" },
 ] as const;
 
 let showAdvanced = $state(false);
@@ -245,6 +256,24 @@ const curlSnippet = $derived(
               ontoggle={onToggleNoMmprojGpu}
               showBadge={false}
             />
+
+            <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-ui-lg font-semibold text-foreground">{t("llm.vision.detail")}</span>
+                <span class="text-ui-base text-muted-foreground leading-relaxed">{t("llm.vision.detailDesc")}</span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                {#each VISION_DETAIL as { tokens, labelKey }}
+                  <button onclick={() => onSetVisionMinTokens(tokens)}
+                    class="rounded-lg border px-2.5 py-1 text-ui-sm font-semibold transition-all cursor-pointer
+                         {(config.vision_min_tokens ?? 576) === tokens
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                    {t(labelKey)} · {tokens}
+                  </button>
+                {/each}
+              </div>
+            </div>
           {/if}
         {/if}
 

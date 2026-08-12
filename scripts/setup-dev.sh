@@ -18,7 +18,7 @@
 #   Linux:
 #     - protobuf-compiler, libprotobuf-dev
 #     - build-essential, cmake, pkg-config
-#     - libssl-dev, libgtk-3-dev, libwebkit2gtk-4.1-dev, libjavascriptcoregtk-4.1-dev
+#     - libssl-dev, libopenblas-dev (CPU BLAS/linalg), libgtk-3-dev, libwebkit2gtk-4.1-dev, libjavascriptcoregtk-4.1-dev
 #     - libappindicator3-dev (tray icon)
 #     - sccache, mold, clang (build acceleration)
 #
@@ -192,7 +192,7 @@ elif [[ "$OS" == "Linux" ]]; then
     APT_DEPS=(
       build-essential cmake pkg-config
       protobuf-compiler libprotobuf-dev
-      libssl-dev
+      libssl-dev libopenblas-dev
       libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
       libayatana-appindicator3-dev
       curl wget file

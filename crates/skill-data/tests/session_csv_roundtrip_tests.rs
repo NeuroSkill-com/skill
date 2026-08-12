@@ -39,7 +39,7 @@ fn build_metrics_header_8ch() {
 #[test]
 fn build_metrics_header_1ch() {
     let h = build_metrics_header(&["Cz"]);
-    assert_eq!(h.len(), 1 + 1 * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
+    assert_eq!(h.len(), 1 + 12 + METRICS_CROSS_CHANNEL_HEADER.len());
 }
 
 // ── CsvState: EEG write ──────────────────────────────────────────────────────

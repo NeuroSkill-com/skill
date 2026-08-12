@@ -8,6 +8,32 @@
  * allow independent unit testing.
  */
 
+import type { TranslationKey } from "$lib/i18n/keys";
+
+// ── Generation-phase progress labels ────────────────────────────────────────
+
+/** Backend generation-phase identifiers, delivered on `status` chunks during
+ *  the pre-token lead-in (see `ChatChunkStatus`). Kept here so the string
+ *  literals live in exactly one place on the frontend. */
+export const GEN_PHASE = {
+  vision: "vision",
+  prefill: "prefill",
+} as const;
+
+/** i18n key for the pre-token "processing" indicator: the real backend phase
+ *  when known ("vision" → reading image, "prefill" → preparing response),
+ *  otherwise the image/text fallback. */
+export function processingLabelKey(phase: string | undefined, hasImage: boolean | undefined): TranslationKey {
+  switch (phase) {
+    case GEN_PHASE.vision:
+      return "chat.phaseVision";
+    case GEN_PHASE.prefill:
+      return "chat.phasePrefill";
+    default:
+      return hasImage ? "chat.analyzingImage" : "chat.processing";
+  }
+}
+
 // ── Tool-call stripping ─────────────────────────────────────────────────────
 
 /** Known built-in tool names — must stay in sync with KNOWN_TOOL_NAMES in tools.rs */

@@ -27,6 +27,11 @@ pub enum ChatChunk {
     Delta {
         content: String,
     },
+    /// Real generation-phase marker for the progress UI ("vision" while the
+    /// image is encoded, "prefill" during the LM prefill). No visible content.
+    Status {
+        phase: String,
+    },
     /// Legacy event — still emitted for backwards compatibility.
     ToolUse {
         tool: String,
@@ -67,11 +72,15 @@ pub enum ChatChunk {
 /// server entirely — no CORS, no port lookup, no WebSocket required.
 ///
 /// Tokens arrive on `channel` as `ChatChunk` messages in order:
-/// zero or more `Delta`, then exactly one `Done` **or** one `Error`.
-/// An `Error { message: "aborted" }` is sent when `abort_llm_stream` is called.
+/// zero or more `Delta` (emitted **live** as each token is generated), then
+/// exactly one `Done` **or** one `Error`. An `Error { message: "aborted" }` is
+/// sent when `abort_llm_stream` is called.
 ///
-/// The command blocks (async-awaits) until generation finishes, is aborted,
-/// or the channel is closed by the JS side.
+/// Internally this consumes the daemon's SSE stream (`stream: true`) and
+/// forwards each delta as it arrives — previously it buffered the whole reply
+/// and emitted it as a single delta, which felt like a long freeze then a dump
+/// (worst on slow image turns). The blocking SSE read runs on a blocking thread
+/// so it never stalls the async runtime.
 #[tauri::command]
 pub async fn chat_completions_ipc(
     messages: Vec<serde_json::Value>,
@@ -79,35 +88,45 @@ pub async fn chat_completions_ipc(
     channel: tauri::ipc::Channel<ChatChunk>,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let body = crate::daemon_cmds::llm_chat_completions(messages, params)?;
+    let forward = channel.clone();
+    let phase_forward = channel.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::daemon_cmds::llm_chat_completions_stream(
+            messages,
+            params,
+            |piece| {
+                // Forward each token piece; `send` fails once the UI closes the
+                // channel — return false to stop generation early.
+                forward
+                    .send(ChatChunk::Delta {
+                        content: piece.to_string(),
+                    })
+                    .is_ok()
+            },
+            |phase| {
+                // Real phase marker during the pre-token lead-in.
+                let _ = phase_forward.send(ChatChunk::Status {
+                    phase: phase.to_string(),
+                });
+            },
+        )
+    })
+    .await
+    .map_err(|err| err.to_string())?;
 
-    let content = body
-        .get("content")
-        .and_then(|x| x.as_str())
-        .unwrap_or("")
-        .to_string();
-    if !content.is_empty() {
-        let _ = channel.send(ChatChunk::Delta { content });
+    match result {
+        Ok(done) => {
+            let _ = channel.send(ChatChunk::Done {
+                finish_reason: done.finish_reason,
+                prompt_tokens: done.prompt_tokens,
+                completion_tokens: done.completion_tokens,
+                n_ctx: done.n_ctx,
+            });
+        }
+        Err(message) => {
+            let _ = channel.send(ChatChunk::Error { message });
+        }
     }
-    let _ = channel.send(ChatChunk::Done {
-        finish_reason: body
-            .get("finish_reason")
-            .and_then(|x| x.as_str())
-            .unwrap_or("stop")
-            .to_string(),
-        prompt_tokens: body
-            .get("prompt_tokens")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0) as usize,
-        completion_tokens: body
-            .get("completion_tokens")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0) as usize,
-        n_ctx: body
-            .get("n_ctx")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0) as usize,
-    });
 
     Ok(())
 }

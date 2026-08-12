@@ -584,6 +584,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "添加",
   "llm.discovered.addDirPlaceholder": "/模型/路径",
   "llm.discovered.removeDir": "移除",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "图像细节",
+  "llm.vision.detailDesc":
+    "模型从每张图像中读取的视觉细节量。令牌越少响应越快；令牌越多可看到越精细的细节（更适合密集文本或文档）。",
+  "llm.vision.detailFast": "快速",
+  "llm.vision.detailBalanced": "均衡",
+  "llm.vision.detailHigh": "详细",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "处理中…",
+  "chat.analyzingImage": "正在分析图像…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "正在读取图像…",
+  "chat.phasePrefill": "正在准备回复…",
 };
 
 export default llm;

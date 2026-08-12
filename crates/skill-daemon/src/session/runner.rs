@@ -1748,7 +1748,7 @@ mod tests {
         // broadcasts (one per 256 samples).
         // PPG at ~64 Hz (every 4th EEG sample), 3 channels, 1 sample per frame.
         // Expected: 128 PPG iterations × 3 channels × 1 sample = 384 total PPG samples.
-        let expected_ppg_samples: u64 = 128 * 3 * 1;
+        let expected_ppg_samples: u64 = 128 * 3;
         for i in 0..512_usize {
             let ts = i as f64 / 256.0;
             adapter.push(DeviceEvent::Eeg(EegFrame {

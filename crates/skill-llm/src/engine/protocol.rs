@@ -68,6 +68,11 @@ pub struct GenMetrics {
 pub enum InferToken {
     /// A piece of decoded text to stream to the client.
     Delta(String),
+    /// A generation-phase marker for progress UI ("vision" while the image is
+    /// being encoded, "prefill" during the LM prefill). Carries no visible text
+    /// and never contributes to the completion — consumers that only care about
+    /// content can ignore it.
+    Status(String),
     /// Generation finished normally.
     Done {
         finish_reason: String,

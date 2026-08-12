@@ -616,6 +616,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "Añadir",
   "llm.discovered.addDirPlaceholder": "/ruta/a/modelos",
   "llm.discovered.removeDir": "Quitar",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "Detalle de imagen",
+  "llm.vision.detailDesc":
+    "Cuánto detalle visual lee el modelo de cada imagen. Menos tokens responden más rápido; más tokens captan detalles más finos (mejor para texto denso o documentos).",
+  "llm.vision.detailFast": "Rápido",
+  "llm.vision.detailBalanced": "Equilibrado",
+  "llm.vision.detailHigh": "Detallado",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "Procesando…",
+  "chat.analyzingImage": "Analizando imagen…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "Leyendo imagen…",
+  "chat.phasePrefill": "Preparando respuesta…",
 };
 
 export default llm;

@@ -596,6 +596,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "추가",
   "llm.discovered.addDirPlaceholder": "/모델/경로",
   "llm.discovered.removeDir": "제거",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "이미지 세부 정보",
+  "llm.vision.detailDesc":
+    "모델이 각 이미지에서 읽는 시각적 세부 정보의 양입니다. 토큰이 적으면 응답이 빠르고, 많으면 더 세밀한 부분까지 인식합니다(빽빽한 텍스트나 문서에 적합).",
+  "llm.vision.detailFast": "빠름",
+  "llm.vision.detailBalanced": "균형",
+  "llm.vision.detailHigh": "상세",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "처리 중…",
+  "chat.analyzingImage": "이미지 분석 중…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "이미지 읽는 중…",
+  "chat.phasePrefill": "응답 준비 중…",
 };
 
 export default llm;

@@ -22,6 +22,10 @@ pub(crate) async fn set_llm_config(
     let prev_gpu_layers = state.llm_config.lock().map(|g| g.n_gpu_layers).unwrap_or(0);
     #[cfg(feature = "llm")]
     let prev_ctx_size = state.llm_config.lock().map(|g| g.ctx_size).ok();
+    // The vision-token floor is read when the runner is built, so a change needs
+    // a model reload to take effect.
+    #[cfg(feature = "llm")]
+    let prev_vision_min_tokens = state.llm_config.lock().map(|g| g.vision_min_tokens).ok();
 
     let location_enabled = load_user_settings(&state).location_enabled;
     let config = config.clone();
@@ -55,9 +59,11 @@ pub(crate) async fn set_llm_config(
                 }
             }
 
-            // If n_gpu_layers or ctx_size changed, the model must be reloaded.
+            // If n_gpu_layers, ctx_size, or the vision-token floor changed, the
+            // model must be reloaded.
             let ctx_changed = prev_ctx_size.is_some_and(|prev| prev != config.ctx_size);
-            if config.n_gpu_layers != prev_gpu_layers || ctx_changed {
+            let vision_changed = prev_vision_min_tokens.is_some_and(|prev| prev != config.vision_min_tokens);
+            if config.n_gpu_layers != prev_gpu_layers || ctx_changed || vision_changed {
                 skill_llm::shutdown_cell(&state.llm_state_cell);
                 if let Ok(mut st) = state.llm_status.lock() {
                     *st = "stopped".to_string();

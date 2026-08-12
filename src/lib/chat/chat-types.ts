@@ -49,6 +49,12 @@ export interface Message {
   thinkOpen?: boolean;
   /** True while we're streaming tokens in */
   pending?: boolean;
+  /** This turn sent an image — show an "analyzing image" processing hint during
+   *  the vision-encode/prefill lead-in (before the first token streams). */
+  processingImage?: boolean;
+  /** Real backend generation phase during the lead-in ("vision" | "prefill"),
+   *  set from `status` chunks; drives the phase-accurate processing label. */
+  phase?: string;
   /** ms taken for first token */
   ttft?: number;
   /** ms for full response */
@@ -109,6 +115,12 @@ export interface ChatChunkError {
   type: "error";
   message: string;
 }
+/** Real generation-phase marker for the progress UI during the pre-token lead-in
+ *  ("vision" while the image is encoded, "prefill" during the LM prefill). */
+export interface ChatChunkStatus {
+  type: "status";
+  phase: string;
+}
 export type ChatChunk =
   | ChatChunkDelta
   | ChatChunkToolUse
@@ -116,7 +128,8 @@ export type ChatChunk =
   | ChatChunkToolExecEnd
   | ChatChunkToolCancelled
   | ChatChunkDone
-  | ChatChunkError;
+  | ChatChunkError
+  | ChatChunkStatus;
 
 // ── Thinking budget ─────────────────────────────────────────────────────────
 

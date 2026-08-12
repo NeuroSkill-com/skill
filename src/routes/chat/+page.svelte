@@ -154,6 +154,7 @@ let generating = $state(false);
 let aborting = $state(false);
 let streamStartMs = $state(0);
 let streamTokens = $state(0);
+let genStartMs = $state(0);
 let realPromptTokens = $state<number | null>(null);
 let streamCompletionToks = $state(0);
 let msgId = $state(0);
@@ -629,9 +630,7 @@ function pickBootstrapModel(entries: LlmCatalogEntryLite[]): LlmCatalogEntryLite
   const textModels = entries.filter((e) => !e.is_mmproj);
   if (textModels.length === 0) return null;
 
-  const family = textModels.filter(
-    (e) => e.family_id === "qwen3-0.6b" || /qwen3\s*0\.6b/i.test(e.family_name),
-  );
+  const family = textModels.filter((e) => e.family_id === "qwen3-0.6b" || /qwen3\s*0\.6b/i.test(e.family_name));
   if (family.length > 0) {
     const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
     return (
@@ -755,7 +754,15 @@ async function sendMessage() {
     daemonInvoke("save_chat_message", { sessionId, role: "user", content: text, thinking: null }).catch((_e) => {});
   }
 
-  const assistantMsg: Message = { id: ++msgId, role: "assistant", content: "", pending: true };
+  const assistantMsg: Message = {
+    id: ++msgId,
+    role: "assistant",
+    content: "",
+    pending: true,
+    // Image turns have a longer silent lead-in (vision encode + prefill) before
+    // the first token streams — surface an "analyzing image" processing hint.
+    processingImage: sentAttachments.length > 0,
+  };
   messages = [...messages, assistantMsg];
   await msgListRef?.scrollBottom(true);
 
@@ -763,6 +770,9 @@ async function sendMessage() {
   realPromptTokens = null;
   streamCompletionToks = 0;
   const t0 = performance.now();
+  // Start of the pre-token lead-in (vision encode + prefill) — drives the live
+  // elapsed readout in the "Processing…" indicator before the first token.
+  genStartMs = performance.now();
   let ttft: number | undefined;
 
   // Build API messages
@@ -884,6 +894,10 @@ async function sendMessage() {
         }
         return m;
       });
+    } else if (chunk.type === "status") {
+      // Real backend generation phase during the pre-token lead-in
+      // ("vision" → reading image, "prefill" → preparing response).
+      updateMessage(assistantMsg.id, { phase: chunk.phase });
     } else if (chunk.type === "done") {
       const elapsed = performance.now() - t0;
       const { leadIn, thinking, content } = mergeWithFrozen(parseAssistantOutput(rawAcc));
@@ -1642,6 +1656,7 @@ onDestroy(() => {
         {generating}
         {streamStartMs}
         {streamTokens}
+        {genStartMs}
         onUpdateMessage={updateMessage}
         onUpdateToolUse={updateToolUse}
         onCancelToolCall={cancelToolCall}

@@ -1450,7 +1450,7 @@ mod session_listing_tests {
 
         let sessions = super::list_sessions_for_day(day, dir.path(), None);
         // Should skip corrupt JSON, still return valid one
-        assert!(sessions.len() >= 1);
+        assert!(!sessions.is_empty());
         // The orphaned CSV (corrupt JSON means no sidecar match) may or may not appear
     }
 

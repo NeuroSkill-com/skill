@@ -127,6 +127,16 @@ pub struct LlmConfig {
     #[serde(default)]
     pub verbose: bool,
 
+    /// Minimum vision-token floor for VLM image inputs (qwen3.5 / Fara).
+    ///
+    /// Fewer tokens = faster image encode **and** a shorter multimodal prefill
+    /// (lower latency), at some loss of fine detail; more tokens = higher fidelity
+    /// on dense / text-heavy images. `None` = the model's built-in default. The UI
+    /// surfaces presets: `256` (fast) / `576` (balanced) / `1024` (detailed).
+    /// Applied to the runner via `RLX_QWEN35_VISION_MIN_TOKENS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vision_min_tokens: Option<u32>,
+
     /// Auto-start the LLM server when the app launches (if a model is
     /// downloaded and selected).  Default: `false`.
     #[serde(default)]
@@ -312,6 +322,7 @@ impl Default for LlmConfig {
             no_mmproj_gpu: false,
             autoload_mmproj: default_autoload_mmproj(),
             verbose: false,
+            vision_min_tokens: None,
             autostart: false,
             n_batch: None,
             n_ubatch: None,

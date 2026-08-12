@@ -41,6 +41,7 @@ import { openSettings } from "$lib/navigation";
 import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { DeviceStatus } from "$lib/types";
+import { log } from "$lib/utils/logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface CalibrationAction {
@@ -886,7 +887,7 @@ onMount(async () => {
   try {
     status = await getDeviceStatus<DeviceStatus>();
   } catch (e) {
-    console.error(e);
+    log.error(e);
   }
   unsubs.push(
     await listen<DeviceStatus>("status", (ev) => {

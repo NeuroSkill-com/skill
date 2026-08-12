@@ -56,12 +56,14 @@ impl ToolCallStreamSanitizer {
 
 // ── Collect infer output ──────────────────────────────────────────────────────
 
-async fn collect_infer_output<F>(
+async fn collect_infer_output<F, S>(
     mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
     mut on_visible_delta: F,
+    mut on_status: S,
 ) -> anyhow::Result<(String, String, usize, usize, usize)>
 where
     F: FnMut(&str),
+    S: FnMut(&str),
 {
     let mut text = String::new();
     let mut finish_reason = "stop".to_string();
@@ -78,6 +80,9 @@ where
                 if !visible.is_empty() {
                     on_visible_delta(&visible);
                 }
+            }
+            InferToken::Status(phase) => {
+                on_status(&phase);
             }
             InferToken::Done {
                 finish_reason: fr,
@@ -252,6 +257,10 @@ pub enum ToolEvent {
         completion_tokens: usize,
         tool_calls_count: usize,
     },
+    /// Generation-phase marker for progress UI ("vision" while the image is
+    /// encoded, "prefill" during the LM prefill). No visible text; surfaced by
+    /// the runner during the pre-token multimodal lead-in.
+    Phase { phase: String },
 }
 
 // ── Main orchestration loop ───────────────────────────────────────────────────
@@ -378,11 +387,18 @@ where
             })
             .context("LLM actor has exited")?;
 
-        let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) =
-            collect_infer_output(tok_rx, |delta| {
+        let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) = collect_infer_output(
+            tok_rx,
+            |delta| {
                 on_visible_delta(delta);
-            })
-            .await?;
+            },
+            |phase| {
+                on_tool_event(ToolEvent::Phase {
+                    phase: phase.to_string(),
+                });
+            },
+        )
+        .await?;
         cumulative_prompt_tokens += prompt_tokens;
         cumulative_completion_tokens += completion_tokens;
         let tool_calls = tools::extract_tool_calls(&assistant_text);

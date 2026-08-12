@@ -6,6 +6,7 @@ import {
   cleanLeadInForDisplay,
   detectToolDanger,
   parseAssistantOutput,
+  processingLabelKey,
   stripToolCallFences,
 } from "$lib/chat/chat-utils";
 
@@ -186,5 +187,27 @@ describe("parseAssistantOutput", () => {
     expect(result.content).toBe("");
     expect(result.thinking).toBe("");
     expect(result.leadIn).toBe("");
+  });
+});
+
+// ── processingLabelKey ──────────────────────────────────────────────────────
+
+describe("processingLabelKey", () => {
+  it("maps the real backend phase when present", () => {
+    expect(processingLabelKey("vision", true)).toBe("chat.phaseVision");
+    expect(processingLabelKey("prefill", true)).toBe("chat.phasePrefill");
+    // Backend phase wins over the image hint.
+    expect(processingLabelKey("prefill", false)).toBe("chat.phasePrefill");
+  });
+
+  it("falls back to the image/text hint before any phase arrives", () => {
+    expect(processingLabelKey(undefined, true)).toBe("chat.analyzingImage");
+    expect(processingLabelKey(undefined, false)).toBe("chat.processing");
+    expect(processingLabelKey(undefined, undefined)).toBe("chat.processing");
+  });
+
+  it("treats an unknown phase as the generic fallback", () => {
+    expect(processingLabelKey("something-else", false)).toBe("chat.processing");
+    expect(processingLabelKey("something-else", true)).toBe("chat.analyzingImage");
   });
 });

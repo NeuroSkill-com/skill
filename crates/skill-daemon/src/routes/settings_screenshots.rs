@@ -420,8 +420,8 @@ mod tests {
     async fn screenshot_config_roundtrip() {
         let (_td, state) = mk_state();
         let cfg = get_screenshot_config(State(state.clone())).await.0;
-        // Should return a valid config object with an interval field
-        assert!(cfg.interval_secs > 0 || cfg.interval_secs == 0);
+        // Should return a valid config object with a sane (nonzero) default interval.
+        assert!(cfg.interval_secs > 0);
     }
 
     #[tokio::test]

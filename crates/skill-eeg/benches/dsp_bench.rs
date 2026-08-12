@@ -55,7 +55,7 @@ fn bench_fft(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(not(any(feature = "rlx-fft", feature = "gpu")))]
+#[cfg(not(feature = "rlx-fft"))]
 fn bench_fft(c: &mut Criterion) {
     use skill_eeg::cpu_fft::{fft_batch, ifft_batch};
 
@@ -108,7 +108,7 @@ fn bench_psd(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(not(any(feature = "rlx-fft", feature = "gpu")))]
+#[cfg(not(feature = "rlx-fft"))]
 fn bench_psd(c: &mut Criterion) {
     use skill_eeg::cpu_fft::psd;
     let mut group = c.benchmark_group("psd");

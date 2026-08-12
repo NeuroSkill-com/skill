@@ -64,6 +64,7 @@ async fn collect_tokens(
     while let Some(tok) = rx.recv().await {
         match tok {
             skill_llm::InferToken::Delta(t) => text.push_str(&t),
+            skill_llm::InferToken::Status(_) => {}
             skill_llm::InferToken::Done {
                 finish_reason,
                 prompt_tokens,

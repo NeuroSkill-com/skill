@@ -597,6 +597,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "Додати",
   "llm.discovered.addDirPlaceholder": "/шлях/до/моделей",
   "llm.discovered.removeDir": "Вилучити",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "Деталізація зображення",
+  "llm.vision.detailDesc":
+    "Скільки візуальних деталей модель зчитує з кожного зображення. Менше токенів — швидша відповідь; більше токенів — тонші деталі (краще для щільного тексту чи документів).",
+  "llm.vision.detailFast": "Швидко",
+  "llm.vision.detailBalanced": "Збалансовано",
+  "llm.vision.detailHigh": "Детально",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "Обробка…",
+  "chat.analyzingImage": "Аналіз зображення…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "Читання зображення…",
+  "chat.phasePrefill": "Підготовка відповіді…",
 };
 
 export default llm;

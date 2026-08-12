@@ -530,6 +530,7 @@ async fn validate_llm(State(state): State<AppState>, Json(req): Json<ValidateReq
                 while let Some(tok) = rx.recv().await {
                     match tok {
                         skill_llm::InferToken::Delta(t) => text.push_str(&t),
+                        skill_llm::InferToken::Status(_) => {}
                         skill_llm::InferToken::Error(e) => {
                             err = Some(e);
                             break;

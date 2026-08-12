@@ -18,3 +18,6 @@
 
 mod stats;
 pub use stats::*;
+
+mod resources;
+pub use resources::{system_resources, SystemResources};

@@ -584,6 +584,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "הוסף",
   "llm.discovered.addDirPlaceholder": "/נתיב/למודלים",
   "llm.discovered.removeDir": "הסר",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "פירוט תמונה",
+  "llm.vision.detailDesc":
+    "כמה פירוט חזותי המודל קורא מכל תמונה. פחות אסימונים מגיבים מהר יותר; יותר אסימונים קולטים פרטים עדינים יותר (טוב יותר לטקסט צפוף או מסמכים).",
+  "llm.vision.detailFast": "מהיר",
+  "llm.vision.detailBalanced": "מאוזן",
+  "llm.vision.detailHigh": "מפורט",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "מעבד…",
+  "chat.analyzingImage": "מנתח תמונה…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "קורא תמונה…",
+  "chat.phasePrefill": "מכין תשובה…",
 };
 
 export default llm;

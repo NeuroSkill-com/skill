@@ -8,6 +8,21 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+### Features
+
+- **Qwen3.5-0.8B is the default LLM**: compact, fast (~55–71 tok/s Metal), tool-capable. The catalog now lists it (`recommended`) with the full **unsloth** (`unsloth/Qwen3.5-0.8B-GGUF`, incl. Dynamic-2.0 `UD-*` quants) and **bartowski** (`bartowski/Qwen_Qwen3.5-0.8B-GGUF`, full IQ*/Q* lineup) GGUF sets, plus vision mmproj projectors.
+- **Runtime hardware-adaptive model loading**: the LLM runner probes actual RAM, swap, free disk, CPU count and power state (`skill-gpu::system_resources`) and adapts — shedding the resident warm-up prefill graph and clamping context under memory/swap pressure or on battery — instead of a fixed config. The decode/prefill window now tracks the memory-aware `ctx_size`, so tool-augmented prompts fit.
+
+### Fixes
+
+- **Daemon crash on multibyte streamed output**: the SSE `<think>` splitter sliced the buffer at raw byte offsets, aborting the daemon on CJK/emoji model output (`not a char boundary`). Now char-boundary-safe (`flush_boundary`) with the splitter extracted + tested.
+- **Daemon abort on model compile failure**: an invalid model graph (e.g. whisper ASR) panicked on rlx's parallel compile threads and hard-aborted the process; the compiler now returns a recoverable error, and ASR (whisper) loads. TTS worker panics are also contained.
+
+### Build
+
+- **Linux dev setup lists `libopenblas-dev`**: the CPU backend links `-lopenblas` (BLAS/linalg) on Linux; `scripts/setup-dev.sh` and `docs/LINUX.md` now include it, so a fresh Linux/aarch64 (incl. Raspberry Pi) build no longer compiles all crates only to fail at the final link with `cannot find -lopenblas`. Verified: the full `skill-daemon` suite builds, links and passes (399/0) on Docker `linux/arm64`.
+- **Linux packages declare the OpenBLAS runtime dependency**: the release `.deb` and `.rpm` (`scripts/package-linux-system-bundles.sh`) now carry `Depends: libopenblas0` / `Requires: openblas`. The shipped binary dynamically links `libopenblas.so.0`, so on a machine with no BLAS installed it previously failed to start; the package now pulls the (DYNAMIC_ARCH, per-CPU auto-tuned) OpenBLAS runtime automatically, including on aarch64/Raspberry Pi.
+
 ## [0.0.129] — 2026-04-24
 
 ### Features

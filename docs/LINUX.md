@@ -26,11 +26,17 @@ sudo apt install -y \
   file \
   pkg-config \
   libssl-dev \
+  libopenblas-dev \
   clang \
   cmake \
   git \
   libtool
 ```
+
+> `libopenblas-dev` is required by the CPU backend (`rlx-cpu`) on Linux — it
+> links `-lopenblas` for BLAS/linalg. Without it the build compiles fine but
+> fails at the final link with `cannot find -lopenblas` (x86_64 and aarch64
+> alike; on aarch64/Raspberry Pi it also gates the linalg fallback).
 
 ## 2) Node.js (LTS) + npm
 

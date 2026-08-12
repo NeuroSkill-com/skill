@@ -603,6 +603,22 @@ const llm: Record<string, string> = {
   "llm.discovered.addDir": "追加",
   "llm.discovered.addDirPlaceholder": "/モデルへのパス",
   "llm.discovered.removeDir": "削除",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "llm.vision.detail": "画像の詳細度",
+  "llm.vision.detailDesc":
+    "モデルが各画像から読み取る視覚的な詳細の量。トークンが少ないほど応答が速くなり、多いほど細部まで認識します（密なテキストや文書に適しています）。",
+  "llm.vision.detailFast": "高速",
+  "llm.vision.detailBalanced": "バランス",
+  "llm.vision.detailHigh": "詳細",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.processing": "処理中…",
+  "chat.analyzingImage": "画像を解析中…",
+
+  // ── Auto-synced from en/ (2026-08-10) ──
+  "chat.phaseVision": "画像を読み取り中…",
+  "chat.phasePrefill": "応答を準備中…",
 };
 
 export default llm;

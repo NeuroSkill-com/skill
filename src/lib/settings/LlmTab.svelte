@@ -74,6 +74,7 @@ interface LlmConfig {
   no_mmproj_gpu: boolean;
   autoload_mmproj: boolean;
   verbose: boolean;
+  vision_min_tokens: number | null;
   flash_attention: boolean;
   offload_kqv: boolean;
   gpu_memory_threshold: number;
@@ -139,6 +140,7 @@ let config = $state<LlmConfig>({
   no_mmproj_gpu: false,
   autoload_mmproj: true,
   verbose: false,
+  vision_min_tokens: null,
   flash_attention: true,
   offload_kqv: true,
   gpu_memory_threshold: 0.5,
@@ -467,6 +469,7 @@ onDestroy(() => {
   onSetApiKey={async (val) => { config = { ...config, api_key: val }; await saveConfig(); }}
   onToggleAutoloadMmproj={async () => { config = { ...config, autoload_mmproj: !config.autoload_mmproj }; await saveConfig(); }}
   onToggleNoMmprojGpu={async () => { config = { ...config, no_mmproj_gpu: !config.no_mmproj_gpu }; await saveConfig(); }}
+  onSetVisionMinTokens={async (val) => { config = { ...config, vision_min_tokens: val }; await saveConfig(); }}
   onSetGpuMemoryThreshold={async (val) => { config = { ...config, gpu_memory_threshold: val }; await saveConfig(); }}
   onSetGpuMemoryGenThreshold={async (val) => { config = { ...config, gpu_memory_gen_threshold: val }; await saveConfig(); }}
   onSetCacheTypeK={async (val) => { config = { ...config, cache_type_k: val }; await saveConfig(); }}

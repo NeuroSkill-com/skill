@@ -36,6 +36,7 @@ async fn collect_tokens(
     while let Some(tok) = rx.recv().await {
         match tok {
             InferToken::Delta(t) => text.push_str(&t),
+            InferToken::Status(_) => {}
             InferToken::Done {
                 finish_reason,
                 prompt_tokens,

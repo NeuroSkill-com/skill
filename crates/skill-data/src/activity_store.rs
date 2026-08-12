@@ -7463,7 +7463,7 @@ mod tests {
         let patterns = store.browser_copypaste_patterns(0);
         assert_eq!(patterns.copies, 3);
         assert_eq!(patterns.pastes, 1);
-        assert!(patterns.top_domains.len() >= 1);
+        assert!(!patterns.top_domains.is_empty());
     }
 
     // ── Feedback system tests ───────────────────────────────────────────
@@ -7637,7 +7637,7 @@ mod tests {
 
         let digest = store.weekly_digest(week_start);
         assert!(digest.browser_events >= 11);
-        assert!(digest.browser_top_domains.len() >= 1);
+        assert!(!digest.browser_top_domains.is_empty());
         assert_eq!(digest.browser_video_watched_secs, 300);
     }
 

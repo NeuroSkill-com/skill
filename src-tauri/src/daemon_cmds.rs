@@ -920,6 +920,10 @@ pub(crate) fn llm_set_autoload_mmproj(enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+// Buffered sibling of `llm_chat_completions_stream`; the UI uses the streaming
+// path, but this mirrors the daemon's non-streaming endpoint and is exercised
+// by the tests below.
+#[allow(dead_code)]
 pub(crate) fn llm_chat_completions(
     messages: Vec<serde_json::Value>,
     params: serde_json::Value,
@@ -932,6 +936,154 @@ pub(crate) fn llm_chat_completions(
         "/v1/llm/chat-completions",
         &serde_json::json!({"messages": messages, "params": params}),
     )
+}
+
+/// Terminal info from a streamed chat completion.
+pub(crate) struct StreamDone {
+    pub finish_reason: String,
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub n_ctx: usize,
+}
+
+/// Streaming variant of [`llm_chat_completions`]: asks the daemon for SSE
+/// (`stream: true`) and invokes `on_delta` with each content piece **as it is
+/// generated**, so the caller can forward tokens to the UI live instead of
+/// buffering the whole reply. Reasoning is re-wrapped in `<think>…</think>` so
+/// the caller sees the same raw stream the buffered path returned. `on_delta`
+/// returns `false` to stop early (e.g. the IPC channel was closed by the UI).
+///
+/// This is a blocking call (synchronous SSE read) — run it on a blocking thread.
+pub(crate) fn llm_chat_completions_stream(
+    messages: Vec<serde_json::Value>,
+    params: serde_json::Value,
+    mut on_delta: impl FnMut(&str) -> bool,
+    mut on_phase: impl FnMut(&str),
+) -> Result<StreamDone, String> {
+    use std::io::{BufRead, BufReader};
+
+    let base_url = daemon_base_url();
+    let token = load_daemon_token()?;
+    let url = format!("{base_url}/v1/llm/chat-completions");
+    let payload = serde_json::to_string(&serde_json::json!({
+        "messages": messages,
+        "params": params,
+        "stream": true,
+    }))
+    .map_err(|err| err.to_string())?;
+
+    // A chat stream runs for however long generation takes, so it must NOT use
+    // the shared 5 s-global-timeout agent. Use a dedicated agent with no global
+    // deadline (abort is driven by the UI closing the channel / `abort-stream`).
+    let agent = ureq::config::Config::builder()
+        .timeout_global(None)
+        .build()
+        .new_agent();
+
+    let response = agent
+        .post(&url)
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Content-Type", "application/json")
+        .header("Accept", "text/event-stream")
+        .send(payload.as_str())
+        .map_err(|err| err.to_string())?;
+
+    let reader = BufReader::new(response.into_body().into_reader());
+    let mut done = StreamDone {
+        finish_reason: "stop".to_string(),
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        n_ctx: 0,
+    };
+    let mut in_think = false;
+    let mut stopped = false;
+
+    for line in reader.lines() {
+        let Ok(line) = line else { break };
+        // SSE frames are `data: {json}` (blank lines separate events).
+        let Some(data) = line.strip_prefix("data:") else {
+            continue;
+        };
+        let data = data.trim();
+        if data.is_empty() {
+            continue;
+        }
+        if data == "[DONE]" {
+            break;
+        }
+        let Ok(chunk) = serde_json::from_str::<serde_json::Value>(data) else {
+            continue;
+        };
+        if let Some(err) = chunk.get("error") {
+            let msg = err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("stream error");
+            return Err(msg.to_string());
+        }
+        if let Some(choice) = chunk.get("choices").and_then(|c| c.get(0)) {
+            if let Some(delta) = choice.get("delta") {
+                // Real generation-phase marker ("vision" / "prefill"), emitted by
+                // the daemon during the pre-token lead-in. Carries no content.
+                if let Some(ph) = delta.get("phase").and_then(|x| x.as_str()) {
+                    on_phase(ph);
+                }
+                // Reasoning first, wrapped so the caller's `<think>` parser sees it.
+                if let Some(r) = delta.get("reasoning_content").and_then(|x| x.as_str()) {
+                    if !r.is_empty() {
+                        if !in_think {
+                            if !on_delta("<think>") {
+                                stopped = true;
+                                break;
+                            }
+                            in_think = true;
+                        }
+                        if !on_delta(r) {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                }
+                if let Some(c) = delta.get("content").and_then(|x| x.as_str()) {
+                    if !c.is_empty() {
+                        if in_think {
+                            if !on_delta("</think>") {
+                                stopped = true;
+                                break;
+                            }
+                            in_think = false;
+                        }
+                        if !on_delta(c) {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if let Some(fr) = choice.get("finish_reason").and_then(|x| x.as_str()) {
+                done.finish_reason = fr.to_string();
+            }
+        }
+        if let Some(usage) = chunk.get("usage") {
+            done.prompt_tokens = usage
+                .get("prompt_tokens")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(done.prompt_tokens as u64) as usize;
+            done.completion_tokens = usage
+                .get("completion_tokens")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(done.completion_tokens as u64)
+                as usize;
+        }
+        if let Some(n) = chunk.get("n_ctx").and_then(serde_json::Value::as_u64) {
+            done.n_ctx = n as usize;
+        }
+    }
+    // Close an unbalanced think block so the caller's parser terminates cleanly.
+    if in_think && !stopped {
+        let _ = on_delta("</think>");
+    }
+    Ok(done)
 }
 
 pub(crate) fn llm_abort_stream() -> Result<(), String> {
