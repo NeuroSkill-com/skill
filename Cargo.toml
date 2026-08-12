@@ -73,8 +73,6 @@ glib-macros     = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch 
 # tribev2: using crates.io 0.1.0 (no patch needed — restore path dep when developing locally)
 # eegdino 0.2.0: device_label missing OneApi/Hexagon arms for rlx 0.2.10
 eegdino          = { path = "patches/eegdino-0.2.0" }
-# block 0.1.6: local fix for future Rust incompatibility (uninhabited extern static)
-block            = { path = "patches/block-0.1.6" }
 # gpu-allocator 0.28.0: pin its `windows` dep to the 0.62 bucket. wgpu-hal 30.0.0
 # uses `windows 0.62`, but gpu-allocator's upstream `windows >=0.53,<=0.62` lets the
 # resolver attach it to the 0.61 node the Tauri stack anchors — the version skew

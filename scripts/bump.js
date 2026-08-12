@@ -264,9 +264,11 @@ function formatDuration(ms) {
  * Detect warning lines in command output — treat any warning as fatal.
  * Returns array of warning lines.
  *
- * Cargo future-incompat notices (e.g. transitive `block` via `metal`/`rlx-metal`)
- * are excluded: clippy still exits 0 with `-D warnings`, and those deps are not
- * fixable here until upstream migrates off the unmaintained `objc`/`block` stack.
+ * Cargo future-incompat notices from dependencies are excluded: clippy still
+ * exits 0 with `-D warnings`, and they are not fixable from this repo. The
+ * long-standing offender was `block 0.1.6`, pulled in transitively by the
+ * `metal` crate; rlx-metal has since replaced metal-rs with its own bindings,
+ * so that one is gone once rlx-models main carries the switch.
  */
 function extractWarnings(output) {
   return output.split("\n").filter(
