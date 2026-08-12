@@ -28,27 +28,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(cd "${REPO_ROOT}/.." && pwd)"
-CONFIG_DIR="${REPO_ROOT}/.cargo"
+CONFIG_DIR="${PARENT}/.cargo"
 CONFIG="${CONFIG_DIR}/config.toml"
-# Earlier versions wrote to ${PARENT}/.cargo/config.toml. cargo walks CWD
-# upward, and PARENT is an ANCESTOR of the sibling rlx / rlx-models checkouts,
-# so skill's [patch] tables were applied to *their* builds too — where none of
-# these crates are in the graph. That cost 214 "patch `…` was not used in the
-# crate graph" warnings on every cargo command run inside rlx. Keeping the old
-# path here only so an existing override gets cleaned up on the next run.
-LEGACY_CONFIG="${PARENT}/.cargo/config.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
-
-# Remove the old parent-scope override, but only if this script authored it.
-prune_legacy_override() {
-  [[ "${LEGACY_CONFIG}" == "${CONFIG}" ]] && return 0
-  if [[ -f "${LEGACY_CONFIG}" ]] && grep -qF "${MARK}" "${LEGACY_CONFIG}"; then
-    rm -f "${LEGACY_CONFIG}"
-    rmdir "$(dirname "${LEGACY_CONFIG}")" 2>/dev/null || true
-    echo "ensure-rlx: removed legacy parent-scope override ${LEGACY_CONFIG}"
-    echo "  (it also applied to sibling rlx / rlx-models builds — now repo-scoped)"
-  fi
-}
 
 # Must match the `git =` URLs in Cargo.toml [workspace.dependencies].
 RLX_GIT="https://github.com/MIT-RLX/rlx.git"
