@@ -474,6 +474,12 @@
     "desc": "로그에 원시 llama.cpp / clip_model_loader 출력을 표시합니다. 기본적으로 꺼져 있습니다 — 모델 로딩 디버깅 시에만 활성화하세요."
   },
   {
+    "tab": "llm",
+    "key": "llm.vision.detail",
+    "label": "이미지 세부 정보",
+    "desc": "모델이 각 이미지에서 읽는 시각적 세부 정보의 양입니다. 토큰이 적으면 응답이 빠르고, 많으면 더 세밀한 부분까지 인식합니다(빽빽한 텍스트나 문서에 적합)."
+  },
+  {
     "tab": "lsl",
     "key": "lsl.autoConnect",
     "label": "자동 연결",

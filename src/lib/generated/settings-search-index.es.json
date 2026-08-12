@@ -474,6 +474,12 @@
     "desc": "Muestra la salida sin procesar de llama.cpp/clip_model_loader en el registro. Desactivado de forma predeterminada: solo se activa al depurar la carga del modelo."
   },
   {
+    "tab": "llm",
+    "key": "llm.vision.detail",
+    "label": "Detalle de imagen",
+    "desc": "Cuánto detalle visual lee el modelo de cada imagen. Menos tokens responden más rápido; más tokens captan detalles más finos (mejor para texto denso o documentos)."
+  },
+  {
     "tab": "lsl",
     "key": "lsl.autoConnect",
     "label": "Auto-Connect",

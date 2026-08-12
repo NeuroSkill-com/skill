@@ -474,6 +474,12 @@
     "desc": "Show raw llama.cpp / clip_model_loader output in the log. Off by default — only enable when debugging model loading."
   },
   {
+    "tab": "llm",
+    "key": "llm.vision.detail",
+    "label": "Image detail",
+    "desc": "How much visual detail the model reads from each image. Fewer tokens respond faster; more tokens see finer detail (better for dense text or documents)."
+  },
+  {
     "tab": "lsl",
     "key": "lsl.autoConnect",
     "label": "Auto-Connect",

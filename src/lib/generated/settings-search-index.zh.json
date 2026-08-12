@@ -474,6 +474,12 @@
     "desc": "在日志中显示原始 llama.cpp / clip_model_loader 输出。默认关闭 — 仅在调试模型加载时启用。"
   },
   {
+    "tab": "llm",
+    "key": "llm.vision.detail",
+    "label": "图像细节",
+    "desc": "模型从每张图像中读取的视觉细节量。令牌越少响应越快；令牌越多可看到越精细的细节（更适合密集文本或文档）。"
+  },
+  {
     "tab": "lsl",
     "key": "lsl.autoConnect",
     "label": "自动连接",

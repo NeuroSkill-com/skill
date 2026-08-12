@@ -474,6 +474,12 @@
     "desc": "Afficher la sortie brute de lama.cpp / clip_model_loader dans le journal. Désactivé par défaut."
   },
   {
+    "tab": "llm",
+    "key": "llm.vision.detail",
+    "label": "Détail de l'image",
+    "desc": "Quantité de détails visuels que le modèle lit dans chaque image. Moins de jetons répondent plus vite ; plus de jetons perçoivent des détails plus fins (mieux pour le texte dense ou les documents)."
+  },
+  {
     "tab": "lsl",
     "key": "lsl.autoConnect",
     "label": "Auto-Connect",

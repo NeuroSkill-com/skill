@@ -474,6 +474,12 @@
     "desc": "Zeigt die Rohausgabe von llama.cpp/clip_model_loader im Protokoll an. Standardmäßig deaktiviert."
   },
   {
+    "tab": "llm",
+    "key": "llm.vision.detail",
+    "label": "Bilddetails",
+    "desc": "Wie viele visuelle Details das Modell aus jedem Bild liest. Weniger Token antworten schneller; mehr Token erfassen feinere Details (besser für dichten Text oder Dokumente)."
+  },
+  {
     "tab": "lsl",
     "key": "lsl.autoConnect",
     "label": "Auto-Connect",
