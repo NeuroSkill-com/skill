@@ -9,11 +9,7 @@
 #
 # Locally, this generates cargo `[patch."<git-url>"]` overrides so builds
 # resolve rlx AND rlx-models from your sibling checkouts:
-#   • the override lives in this repo's own .cargo/config.toml (gitignored, so
-#     it is never committed). It must NOT go in ../.cargo: that directory is an
-#     ancestor of the sibling rlx / rlx-models checkouts, and cargo would apply
-#     these patches to their builds too — emitting hundreds of spurious
-#     "patch was not used in the crate graph" warnings there;
+#   • the override lives OUTSIDE the repo (../.cargo/config.toml);
 #   • [patch] rewrites Cargo.lock to path-based on local builds, so we mark
 #     Cargo.lock `skip-worktree`: local churn is ignored by git and the
 #     committed git-pinned lock stays intact for CI / `--locked` builds.
@@ -57,7 +53,6 @@ lock_unprotect() {
 
 # Remove our override (if any) and resume tracking Cargo.lock at its committed state.
 disable_override() {
-  prune_legacy_override
   if [[ -f "${CONFIG}" ]] && grep -qF "${MARK}" "${CONFIG}"; then
     rm -f "${CONFIG}"
     echo "ensure-rlx: removed local override ${CONFIG}"
@@ -78,10 +73,6 @@ fi
 case "${1:-}" in
   off|--off|disable|--disable) disable_override; exit 0 ;;
 esac
-
-# Migrate away from the parent-scope override before anything below can take
-# the "already active" fast path and leave it in place.
-prune_legacy_override
 
 resolve_root() { # $1 = env value, $2 = <repo>/<pathfile>, $3 = default
   if [[ -n "${1:-}" ]]; then
