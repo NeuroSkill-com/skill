@@ -8,6 +8,11 @@ node_modules
 !.env.example
 !.envrc
 rlx.path
+rlx-models.path
+# Local rlx/rlx-models [patch] overlay written by scripts/ensure-rlx.sh.
+# Repo-scoped on purpose: in ../.cargo it would also apply to the sibling rlx
+# and rlx-models builds. Never commit it — CI resolves rlx* from Cargo.lock.
+/.cargo/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 

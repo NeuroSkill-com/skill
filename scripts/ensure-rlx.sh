@@ -9,7 +9,11 @@
 #
 # Locally, this generates cargo `[patch."<git-url>"]` overrides so builds
 # resolve rlx AND rlx-models from your sibling checkouts:
-#   • the override lives OUTSIDE the repo (../.cargo/config.toml);
+#   • the override lives in this repo's own .cargo/config.toml (gitignored, so
+#     it is never committed). It must NOT go in ../.cargo: that directory is an
+#     ancestor of the sibling rlx / rlx-models checkouts, and cargo would apply
+#     these patches to their builds too — emitting hundreds of spurious
+#     "patch was not used in the crate graph" warnings there;
 #   • [patch] rewrites Cargo.lock to path-based on local builds, so we mark
 #     Cargo.lock `skip-worktree`: local churn is ignored by git and the
 #     committed git-pinned lock stays intact for CI / `--locked` builds.
@@ -24,9 +28,27 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(cd "${REPO_ROOT}/.." && pwd)"
-CONFIG_DIR="${PARENT}/.cargo"
+CONFIG_DIR="${REPO_ROOT}/.cargo"
 CONFIG="${CONFIG_DIR}/config.toml"
+# Earlier versions wrote to ${PARENT}/.cargo/config.toml. cargo walks CWD
+# upward, and PARENT is an ANCESTOR of the sibling rlx / rlx-models checkouts,
+# so skill's [patch] tables were applied to *their* builds too — where none of
+# these crates are in the graph. That cost 214 "patch `…` was not used in the
+# crate graph" warnings on every cargo command run inside rlx. Keeping the old
+# path here only so an existing override gets cleaned up on the next run.
+LEGACY_CONFIG="${PARENT}/.cargo/config.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
+
+# Remove the old parent-scope override, but only if this script authored it.
+prune_legacy_override() {
+  [[ "${LEGACY_CONFIG}" == "${CONFIG}" ]] && return 0
+  if [[ -f "${LEGACY_CONFIG}" ]] && grep -qF "${MARK}" "${LEGACY_CONFIG}"; then
+    rm -f "${LEGACY_CONFIG}"
+    rmdir "$(dirname "${LEGACY_CONFIG}")" 2>/dev/null || true
+    echo "ensure-rlx: removed legacy parent-scope override ${LEGACY_CONFIG}"
+    echo "  (it also applied to sibling rlx / rlx-models builds — now repo-scoped)"
+  fi
+}
 
 # Must match the `git =` URLs in Cargo.toml [workspace.dependencies].
 RLX_GIT="https://github.com/MIT-RLX/rlx.git"
@@ -53,6 +75,7 @@ lock_unprotect() {
 
 # Remove our override (if any) and resume tracking Cargo.lock at its committed state.
 disable_override() {
+  prune_legacy_override
   if [[ -f "${CONFIG}" ]] && grep -qF "${MARK}" "${CONFIG}"; then
     rm -f "${CONFIG}"
     echo "ensure-rlx: removed local override ${CONFIG}"
@@ -73,6 +96,10 @@ fi
 case "${1:-}" in
   off|--off|disable|--disable) disable_override; exit 0 ;;
 esac
+
+# Migrate away from the parent-scope override before anything below can take
+# the "already active" fast path and leave it in place.
+prune_legacy_override
 
 resolve_root() { # $1 = env value, $2 = <repo>/<pathfile>, $3 = default
   if [[ -n "${1:-}" ]]; then
