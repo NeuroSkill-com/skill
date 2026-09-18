@@ -3,6 +3,7 @@
 
 use axum::{extract::State, Json};
 use base64::Engine as _;
+#[cfg(feature = "llm")]
 use tokio_stream::StreamExt as _;
 
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
 /// before flushing the rest; slicing at a raw `len - back` offset panics when
 /// that offset falls inside a multi-byte character (CJK, emoji), so we floor it.
 /// Tags are ASCII, so flooring never hides a real partial tag.
+#[cfg(feature = "llm")]
 fn flush_boundary(buf: &str, back: usize) -> usize {
     let mut safe = buf.len().saturating_sub(back);
     while safe > 0 && !buf.is_char_boundary(safe) {
@@ -29,6 +31,7 @@ fn flush_boundary(buf: &str, back: usize) -> usize {
 
 /// A piece of streamed model output, routed by `<think>` tags.
 #[derive(Debug, PartialEq, Eq)]
+#[cfg(feature = "llm")]
 enum ThinkPart {
     Reasoning(String),
     Content(String),
@@ -41,6 +44,7 @@ enum ThinkPart {
 /// is never sliced mid-byte — the daemon aborts on ANY panic in this streaming
 /// task, so this path must be panic-free. The caller flushes the remaining `buf`
 /// once the stream ends.
+#[cfg(feature = "llm")]
 fn split_think_delta(delta: &str, in_think: &mut bool, buf: &mut String, out: &mut Vec<ThinkPart>) {
     buf.push_str(delta);
     loop {
@@ -551,6 +555,7 @@ pub(crate) async fn llm_ocr_impl(
     }
 }
 
+#[cfg_attr(not(feature = "llm"), allow(unused_variables))]
 pub(crate) async fn llm_abort_stream_impl(State(state): State<AppState>) -> Json<serde_json::Value> {
     #[cfg(feature = "llm")]
     {
@@ -563,6 +568,7 @@ pub(crate) async fn llm_abort_stream_impl(State(state): State<AppState>) -> Json
     Json(serde_json::json!({"ok": true}))
 }
 
+#[cfg_attr(not(feature = "llm"), allow(unused_variables))]
 pub(crate) async fn llm_cancel_tool_call_impl(
     State(state): State<AppState>,
     Json(req): Json<ToolCancelRequest>,

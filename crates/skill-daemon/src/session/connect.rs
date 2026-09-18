@@ -7,7 +7,7 @@ use std::time::Duration;
 use skill_daemon_common::DeviceLogEntry;
 use skill_devices::session::DeviceAdapter;
 use tokio::sync::oneshot;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use super::connect_ble;
 use super::connect_wired;
@@ -66,7 +66,24 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
                 run_adapter_session(state2.clone(), cancel_rx, adapter).await;
             }
             Err(e) => {
-                error!(%e, %target, "device connect failed");
+                // A failed attempt while auto-reconnect still has budget left
+                // is expected, not exceptional: a BLE headband that is asleep,
+                // out of range, or still tearing down its previous link simply
+                // is not connectable yet. Logging every one of those at ERROR
+                // turned normal wake-up latency into a wall of red (7 ERROR
+                // lines was a routine boot). Stay at WARN until the retry
+                // budget is actually exhausted, then report it as an error.
+                let retrying = state2
+                    .reconnect
+                    .lock()
+                    .ok()
+                    .map(|rc| rc.pending && rc.attempt < skill_daemon_state::reconnect_state::MAX_RETRY_ATTEMPTS)
+                    .unwrap_or(false);
+                if retrying {
+                    warn!(%e, %target, "device connect failed — will retry");
+                } else {
+                    error!(%e, %target, "device connect failed");
+                }
                 push_device_log_static(
                     &state2,
                     "session",

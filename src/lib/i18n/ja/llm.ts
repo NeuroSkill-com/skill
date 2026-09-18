@@ -35,6 +35,9 @@ const llm: Record<string, string> = {
   "model.download": "重みをダウンロード",
   "model.retry": "ダウンロードを再試行",
   "model.cancelDownload": "キャンセル",
+  "model.autoDownloadWeights": "重みを自動でダウンロード",
+  "model.autoDownloadWeightsDesc":
+    "記録の開始時にエンコーダーの重みがなければ取得します。既定ではオフ — 既定のエンコーダー ZUNA は 3.8 億パラメータのモデルです。",
   "model.downloading": "ダウンロード中…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "ダウンロードがキャンセルされました。",

@@ -79,6 +79,12 @@ eegdino          = { path = "patches/eegdino-0.2.0" }
 # breaks the D3D12 suballocator on Windows (rc.18+ release failures). See the patch's
 # Cargo.toml for detail. Vendored copy differs from crates.io only in that pin.
 gpu-allocator    = { path = "patches/gpu-allocator-0.28.0" }
+# oura-api 0.1.2: bump its `reqwest` dep 0.11 → 0.12. Upstream's newest release
+# pins reqwest 0.11, which pulls the hyper 0.14 stack and with it `h2 0.3.x` —
+# the branch RUSTSEC-2026-0258 is unpatched on (fixed in h2 >= 0.4.16 only).
+# The vendored copy differs from crates.io only in that version bump; see the
+# patch's Cargo.toml. Drop it when upstream ships a reqwest 0.12 release.
+oura-api         = { path = "patches/oura-api-0.1.2" }
 # Minimal [patch] set that keeps crates.io out of the lock (verified): rlx-models
 # still declares `version = "^0.2.x"` registry deps on the runtime stack, and
 # third-party crates (tribev2, …) pull registry `rlx-models-*`. Dropping any of
@@ -150,7 +156,7 @@ zip = { version = "7", features = ["deflate"] }
 # Local sibling checkouts: `bash scripts/ensure-rlx.sh` / `scripts/rlx local`
 # (writes `[patch."<git-url>"]` outside the repo; never commit `../` paths).
 # CI fetches these git URLs from main (commit pinned in Cargo.lock) — no sibling clone.
-rlx          = { git = "https://github.com/MIT-RLX/rlx.git", version = "0.2.14", branch = "main", default-features = false }
+rlx          = { git = "https://github.com/MIT-RLX/rlx.git", version = "0.2.16", branch = "main", default-features = false }
 rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 
@@ -242,9 +248,16 @@ doc_lazy_continuation = "allow"
 
 [profile.dev]
 codegen-units = 8
-# Local/dev checks are CPU-bound and do not need full debug symbols.
-# This cuts compile time and disk I/O significantly.
-debug = 0
+# Local/dev checks are CPU-bound and do not need *full* debug symbols, but
+# `debug = 0` also strips line tables, which leaves panics without a usable
+# location. That cost real time: when `throughput_stress_32ch_2000hz` blew its
+# wall-clock budget under parallel load, the unwinder failed
+# (`_URC_END_OF_STACK`), the binary aborted with no message, and the failing
+# test could only be identified from a macOS crash report.
+#
+# `debug = 1` keeps line tables and drops variable/type info — the useful part
+# of a backtrace at a fraction of the size and link time of `debug = 2`.
+debug = 1
 
 # ── Release profile ──────────────────────────────────────────────────────────
 #

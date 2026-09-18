@@ -843,7 +843,8 @@ impl Default for AsrConfig {
 
 // ── UserSettings (serialised to settings.json) ────────────────────────────────
 
-#[derive(Serialize, Deserialize)]
+// `Clone` lets `load_settings` hand out copies from its parse cache.
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UserSettings {
     pub paired: Vec<PairedDevice>,
@@ -1070,6 +1071,17 @@ pub struct UserSettings {
     /// `"cpu"` uses burn's NdArray backend (no GPU required, slower).
     #[serde(default = "default_exg_inference_device")]
     pub exg_inference_device: String,
+
+    /// Fetch EXG encoder weights automatically when a session starts and they
+    /// are not on disk.
+    ///
+    /// Off by default: the weights resolver only *probes* the HuggingFace
+    /// cache, so a fresh install records every session metrics-only (no
+    /// embeddings) until someone downloads them from Settings. Turning this on
+    /// closes that gap, at the cost of a large unprompted download on the
+    /// first recording — ZUNA, the default backend, is a 380M-parameter model.
+    #[serde(default)]
+    pub exg_auto_download_weights: bool,
 
     /// Embedding reindex behaviour when a model changes.
     #[serde(default)]
@@ -1365,6 +1377,7 @@ impl Default for UserSettings {
             inference_device: default_inference_device(),
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
             exg_inference_device: default_exg_inference_device(),
+            exg_auto_download_weights: false,
             reembed: ReembedConfig::default(),
             daemon_auto_restart: default_daemon_auto_restart(),
             daemon_restart_timeout_secs: default_daemon_restart_timeout(),
@@ -1376,8 +1389,59 @@ fn default_brainmaster_model() -> String {
     "atlantis4".to_string()
 }
 
+/// `(mtime, len)` stamp used to invalidate the parse cache.
+type SettingsStamp = (std::time::SystemTime, u64);
+
+fn settings_stamp(path: &Path) -> Option<SettingsStamp> {
+    let md = std::fs::metadata(path).ok()?;
+    Some((md.modified().ok()?, md.len()))
+}
+
+#[allow(clippy::type_complexity)]
+static SETTINGS_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<PathBuf, (SettingsStamp, UserSettings)>>,
+> = std::sync::OnceLock::new();
+
+/// Parsed `settings.json`, memoised against the file's `(mtime, len)`.
+///
+/// [`load_settings`] reads, parses and runs migrations on every call, and it
+/// sits on hot paths: the screenshot capture loop polls it about once a second,
+/// the embed loop once per job, and there are 60+ call sites in the daemon
+/// alone. Validating a cheap `stat` against the cached stamp turns nearly all
+/// of those into a clone.
+///
+/// Invalidation is keyed on the file rather than an in-process generation
+/// counter because the Tauri shell and the daemon are separate processes
+/// writing the same file — an in-memory-only scheme would go stale across
+/// them. `len` is carried alongside `mtime` so an edit that lands within the
+/// same timestamp tick is still noticed.
 pub fn load_settings(skill_dir: &Path) -> UserSettings {
     let path = settings_path(skill_dir);
+
+    if let Some(stamp) = settings_stamp(&path) {
+        if let Ok(cache) = SETTINGS_CACHE.get_or_init(Default::default).lock() {
+            if let Some((cached_stamp, cached)) = cache.get(&path) {
+                if *cached_stamp == stamp {
+                    return cached.clone();
+                }
+            }
+        }
+    }
+
+    let s = load_settings_from(&path);
+
+    // Re-stat after loading: the loader rewrites the file when a migration
+    // applies, so a stamp taken beforehand can already be stale.
+    if let Some(stamp) = settings_stamp(&path) {
+        if let Ok(mut cache) = SETTINGS_CACHE.get_or_init(Default::default).lock() {
+            cache.insert(path, (stamp, s.clone()));
+        }
+    }
+    s
+}
+
+fn load_settings_from(path: &Path) -> UserSettings {
+    let path = path.to_path_buf();
     let mut s: UserSettings = skill_data::util::load_json_or_default(&path);
     let mut json_dirty = false;
 

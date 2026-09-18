@@ -13,6 +13,23 @@ use skill_constants::{EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SEC
 use tracing::info;
 
 /// Message sent to the background embed worker.
+///
+/// `samples` / `channel_names` are consumed only by the encoder functions,
+/// which are all feature-gated — so with no encoder compiled in they are
+/// genuinely unread. Gated precisely rather than blanket-`allow`ed so the
+/// lint still fires if a shipped configuration stops using them.
+#[cfg_attr(
+    not(any(
+        feature = "embed-zuna",
+        feature = "embed-luna",
+        feature = "embed-reve",
+        feature = "embed-tribev2",
+        feature = "embed-neurorvq",
+        feature = "embed-eegdino",
+        feature = "embed-lumamba",
+    )),
+    allow(dead_code)
+)]
 pub(crate) struct EpochMsg {
     /// Raw µV samples: `[n_channels][EMBEDDING_EPOCH_SAMPLES]`.
     /// Already resampled to MUSE_SAMPLE_RATE (256 Hz).

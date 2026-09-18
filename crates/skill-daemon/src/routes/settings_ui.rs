@@ -73,6 +73,8 @@ pub(crate) struct TtsEngineRequest {
 
 /// Read the persisted TTS engine selection (engine + model/voice overrides).
 pub(crate) async fn get_tts_engine(State(state): State<AppState>) -> Json<serde_json::Value> {
+    // Mutated only by the `voice-tts` block that follows.
+    #[cfg_attr(not(feature = "voice-tts"), allow(unused_mut))]
     let mut s = load_user_settings(&state);
     #[cfg(feature = "voice-tts")]
     {

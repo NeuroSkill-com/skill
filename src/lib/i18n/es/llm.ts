@@ -35,6 +35,9 @@ const llm: Record<string, string> = {
   "model.download": "Descargar pesas",
   "model.retry": "Reintentar descargar",
   "model.cancelDownload": "Cancelar",
+  "model.autoDownloadWeights": "Descargar pesos automáticamente",
+  "model.autoDownloadWeightsDesc":
+    "Descarga los pesos del codificador al iniciar una grabación si faltan. Desactivado por defecto: el codificador ZUNA predeterminado tiene 380 M de parámetros.",
   "model.downloading": "Descargando…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "Descarga cancelada.",

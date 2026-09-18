@@ -34,6 +34,9 @@ const llm: Record<string, string> = {
   "model.download": "가중치 다운로드",
   "model.retry": "다운로드 재시도",
   "model.cancelDownload": "취소",
+  "model.autoDownloadWeights": "가중치 자동 다운로드",
+  "model.autoDownloadWeightsDesc":
+    "녹화를 시작할 때 인코더 가중치가 없으면 내려받습니다. 기본값은 꺼짐 — 기본 인코더 ZUNA는 3억 8천만 파라미터 모델입니다.",
   "model.downloading": "다운로드 중…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "다운로드가 취소되었습니다.",

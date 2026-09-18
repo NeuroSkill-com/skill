@@ -36,6 +36,9 @@ impl EpochStore {
                 ppg_ambient REAL, ppg_infrared REAL, ppg_red REAL, metrics_json TEXT);",
         )
         .ok()?;
+        // Same additive migration as the day store — this opens the very same
+        // table, so both writers must agree on the canonical column.
+        skill_data::util::migrate_embeddings_unix_ms(&conn);
         Some(Self { conn })
     }
 
@@ -43,9 +46,15 @@ impl EpochStore {
         let json = serde_json::to_string(metrics).unwrap_or_default();
         let empty: &[u8] = &[];
         let _ = self.conn.execute(
-            "INSERT INTO embeddings (timestamp, device_name, hnsw_id, eeg_embedding, metrics_json)
-             VALUES (?1, ?2, 0, ?3, ?4)",
-            rusqlite::params![ts_ms, device_name, empty, json],
+            "INSERT INTO embeddings (timestamp, unix_ms, device_name, hnsw_id, eeg_embedding, metrics_json)
+             VALUES (?1, ?2, ?3, 0, ?4, ?5)",
+            rusqlite::params![
+                ts_ms,
+                skill_data::util::epoch_ts_to_unix_ms(ts_ms),
+                device_name,
+                empty,
+                json
+            ],
         );
     }
 }

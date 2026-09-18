@@ -552,3 +552,96 @@ fn clear_embeddings_scales_to_a_5min_chunk() {
     );
     assert!(store.rows_without_ocr().is_empty(), "none need re-OCR");
 }
+
+// ── Paged backfill query ──────────────────────────────────────────────────────
+
+/// `rows_needing_backfill` must agree with `count_needing_backfill`, walk
+/// newest-first, and page cleanly via the `id` cursor — the chunked backfill
+/// relies on all three.
+#[test]
+fn backfill_paging_is_newest_first_and_consistent_with_count() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("store");
+
+    // 5 rows owing work (no ocr_text, no embedding) …
+    for i in 0..5u64 {
+        store.insert(&make_row(20260101000000 + i, &format!("a{i}.webp")));
+    }
+    // … and one fully processed row that must never be returned.
+    let mut done = make_row(20260101000099, "done.webp");
+    done.ocr_text = "already extracted".into();
+    done.embedding = Some(vec![0.1; 4]);
+    done.embedding_dim = 4;
+    done.ocr_embedding = Some(vec![0.2; 4]);
+    done.ocr_embedding_dim = 4;
+    store.insert(&done);
+
+    assert_eq!(store.count_needing_backfill(), 5, "the complete row must be excluded");
+
+    // First page: newest first, bounded by the limit.
+    let page1 = store.rows_needing_backfill(i64::MAX, 2);
+    assert_eq!(page1.len(), 2);
+    assert!(page1[0].id > page1[1].id, "rows must come back newest-first");
+
+    // Cursor paging covers the rest exactly once, with no repeats.
+    let mut seen: Vec<i64> = page1.iter().map(|r| r.id).collect();
+    let mut cursor = *seen.last().unwrap();
+    loop {
+        let page = store.rows_needing_backfill(cursor, 2);
+        if page.is_empty() {
+            break;
+        }
+        for r in &page {
+            assert!(!seen.contains(&r.id), "row {} returned twice", r.id);
+            seen.push(r.id);
+        }
+        cursor = *seen.last().unwrap();
+    }
+    assert_eq!(seen.len(), 5, "paging must cover every owed row exactly once");
+}
+
+/// The per-row flags must distinguish "never OCR'd" from "OCR'd but the text
+/// was never embedded" — the second case must not re-run OCR.
+#[test]
+fn backfill_flags_separate_ocr_from_ocr_embedding() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("store");
+
+    // Has OCR text and a vision embedding, but no OCR embedding.
+    let mut needs_reembed = make_row(20260101000001, "reembed.webp");
+    needs_reembed.ocr_text = "some extracted text".into();
+    needs_reembed.embedding = Some(vec![0.5; 4]);
+    needs_reembed.embedding_dim = 4;
+    store.insert(&needs_reembed);
+
+    let rows = store.rows_needing_backfill(i64::MAX, 10);
+    assert_eq!(rows.len(), 1);
+    let r = &rows[0];
+    assert!(!r.needs_ocr, "text is present — OCR must not be re-run");
+    assert!(r.needs_ocr_embed, "the OCR text still needs embedding");
+    assert!(!r.needs_embed, "the vision embedding is already present");
+    assert_eq!(r.ocr_text, "some extracted text", "existing text comes back inline");
+    assert_eq!(r.timestamp, 20260101000001, "timestamp is the HNSW label");
+}
+
+/// A row that has never been OCR'd reports both kinds of work.
+#[test]
+fn backfill_flags_fresh_row_needs_everything() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("store");
+    store.insert(&make_row(20260101000002, "fresh.webp"));
+
+    let rows = store.rows_needing_backfill(i64::MAX, 10);
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].needs_ocr);
+    assert!(rows[0].needs_embed);
+    assert!(rows[0].ocr_text.is_empty());
+}
+
+#[test]
+fn backfill_empty_store_reports_nothing_owed() {
+    let dir = tempdir().expect("tmpdir");
+    let store = ScreenshotStore::open(dir.path()).expect("store");
+    assert_eq!(store.count_needing_backfill(), 0);
+    assert!(store.rows_needing_backfill(i64::MAX, 10).is_empty());
+}

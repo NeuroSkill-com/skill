@@ -102,6 +102,9 @@ const llm: Record<string, string> = {
   "model.download": "הורד משקולות",
   "model.retry": "נסה שנית",
   "model.cancelDownload": "בטל",
+  "model.autoDownloadWeights": "הורדת משקולות אוטומטית",
+  "model.autoDownloadWeightsDesc":
+    "מוריד את משקולות המקודד כשמתחילה הקלטה והן חסרות. כבוי כברירת מחדל — מקודד ברירת המחדל ZUNA הוא מודל עם 380 מיליון פרמטרים.",
   "model.downloading": "מוריד…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "ההורדה בוטלה.",

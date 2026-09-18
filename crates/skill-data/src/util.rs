@@ -346,6 +346,66 @@ pub fn epoch_ts_to_unix(ts: i64) -> u64 {
     }
 }
 
+/// Convert any historical `embeddings.timestamp` value to Unix **milliseconds**.
+///
+/// Same digit-count discriminator as [`epoch_ts_to_unix`], but preserves the
+/// sub-second precision that unix-ms rows already carry (the two calendar
+/// formats have none). Keep the two in agreement — a reader that disagrees
+/// with the migration would silently mis-order history.
+pub fn epoch_ts_to_unix_ms(ts: i64) -> i64 {
+    let digits = if ts > 0 { (ts as f64).log10() as u32 + 1 } else { 0 };
+    match digits {
+        17 => ts_to_unix(ts / 1000) as i64 * 1000, // YYYYMMDDHHmmss × 1000
+        14 => ts_to_unix(ts) as i64 * 1000,        // YYYYMMDDHHmmss
+        _ => ts,                                   // already Unix milliseconds
+    }
+}
+
+/// Give an `embeddings` table a canonical `unix_ms` column, backfilled from
+/// whichever of the three historical formats each row uses.
+///
+/// **Purely additive — `timestamp` is never rewritten.** Older builds of the
+/// app read `timestamp` directly and still expect the format they wrote, so
+/// normalising it in place would corrupt their view of the user's recordings.
+/// This is the "expand" half of expand/contract: new code can range-query the
+/// single canonical column, old code keeps working, and `timestamp` can only
+/// be retired once no old build remains.
+///
+/// Idempotent: adding the column is attempted every open and ignored once it
+/// exists, and only rows with a `NULL` `unix_ms` are backfilled — so a
+/// half-finished migration (crash, full disk) simply resumes.
+pub fn migrate_embeddings_unix_ms(conn: &rusqlite::Connection) -> usize {
+    // `ADD COLUMN` fails with "duplicate column name" once applied; that is the
+    // idempotency check, so the error is expected and ignored.
+    let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN unix_ms INTEGER", []);
+
+    let pending: Vec<(i64, i64)> = {
+        let Ok(mut stmt) = conn.prepare("SELECT id, timestamp FROM embeddings WHERE unix_ms IS NULL") else {
+            return 0;
+        };
+        let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))) else {
+            return 0;
+        };
+        rows.filter_map(std::result::Result::ok).collect()
+    };
+
+    if !pending.is_empty() {
+        // One transaction: a partial backfill is resumable, but thousands of
+        // individual commits on a day store is not worth the fsyncs.
+        let _ = conn.execute_batch("BEGIN");
+        for (id, ts) in &pending {
+            let _ = conn.execute(
+                "UPDATE embeddings SET unix_ms = ?1 WHERE id = ?2",
+                rusqlite::params![epoch_ts_to_unix_ms(*ts), id],
+            );
+        }
+        let _ = conn.execute_batch("COMMIT");
+    }
+
+    let _ = conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_embeddings_unix_ms ON embeddings(unix_ms);");
+    pending.len()
+}
+
 /// Convert `YYYYMMDDHHmmss` integer → Unix seconds (UTC).
 pub fn ts_to_unix(ts: i64) -> u64 {
     let s = (ts % 100) as u64;

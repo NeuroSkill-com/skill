@@ -34,6 +34,9 @@ const llm: Record<string, string> = {
   "model.download": "下载权重",
   "model.retry": "重试下载",
   "model.cancelDownload": "取消",
+  "model.autoDownloadWeights": "自动下载权重",
+  "model.autoDownloadWeightsDesc":
+    "开始录制时若缺少编码器权重则自动获取。默认关闭 —— 默认编码器 ZUNA 为 3.8 亿参数模型。",
   "model.downloading": "下载中…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "下载已取消。",

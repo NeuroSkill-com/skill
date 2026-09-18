@@ -19,10 +19,12 @@ all-features = false
 unmaintained = "workspace"
 yanked       = "warn"
 ignore = [
-    # gtk 0.18.2 — pulled transitively by tauri → tray-icon → libappindicator.
-    # We cannot upgrade this ourselves; tracked for resolution when Tauri
-    # drops the GTK3 dependency.
-    { id = "RUSTSEC-2024-0415", reason = "transitive via tauri/libappindicator, not directly upgradeable" },
+    # NOTE: gtk 0.18.2 (RUSTSEC-2024-0415, informational "unmaintained", pulled
+    # transitively by tauri → tray-icon → libappindicator) needs no entry here.
+    # `unmaintained = "workspace"` above already scopes that lint to our own
+    # crates, so a transitive unmaintained advisory cannot fail the check — and
+    # an ignore that never matches makes cargo-deny fail with
+    # `advisory-not-detected`. Still tracked for when Tauri drops GTK3.
     # lru 0.12.5 — IterMut unsoundness, patched in >=0.16.3.
     # Pulled transitively; not directly used by workspace code paths that call IterMut.
     #
@@ -341,13 +343,12 @@ skip = [
     { crate = "base64@0.13.1" },
     { crate = "base64@0.21.7" },
     { crate = "bitflags@1.3.2" },
-    { crate = "winreg@0.55.0" },
     { crate = "zip@2.4.2" },
     { crate = "zip@4.6.1" },
     { crate = "zip@7.2.0" },
     { crate = "winnow@0.5.40" },
     { crate = "winnow@0.7.15" },
-    { crate = "winnow@1.0.3" },
+    { crate = "winnow@1.0.4" },
     { crate = "windows_aarch64_gnullvm@0.42.2" },
     { crate = "windows_aarch64_gnullvm@0.48.5" },
     { crate = "windows_aarch64_gnullvm@0.52.6" },

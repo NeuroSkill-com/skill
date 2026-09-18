@@ -391,16 +391,48 @@ fn embed_worker_main(
         info!(recovered_embeddings, "startup HNSW recovery summary");
     }
 
+    // When the encoder did not load, say *why*. `metrics_only` alone is not
+    // actionable: the common cause by far is that the backend's weights were
+    // never fetched (`resolve_hf_weights` only probes the HF cache — nothing
+    // in the session path downloads them), which silently costs the user every
+    // embedding for the whole recording. Distinguishing that from "no compiled
+    // encoder for this backend" lets the UI offer the download that already
+    // exists behind `trigger_weights_download`.
+    let weights_missing = encoder.is_none() && exg_weights_missing(&config);
+
     broadcast_ev(
         &events_tx,
         "EmbedWorkerStatus",
         serde_json::json!({
             "status": if encoder.is_some() { "ready" } else { "metrics_only" },
+            "reason": if encoder.is_some() {
+                serde_json::Value::Null
+            } else if weights_missing {
+                serde_json::Value::from("weights_missing")
+            } else {
+                serde_json::Value::from("encoder_unavailable")
+            },
             "backend": config.model_backend.as_str(),
             "hnsw_rebuilt": hnsw_rebuilt,
             "recovered_embeddings": recovered_embeddings,
         }),
     );
+
+    if weights_missing {
+        warn!(
+            backend = config.model_backend.as_str(),
+            repo = %config.hf_repo,
+            "EXG weights are not downloaded — session will record metrics-only"
+        );
+        broadcast_ev(
+            &events_tx,
+            "ExgWeightsMissing",
+            serde_json::json!({
+                "backend": config.model_backend.as_str(),
+                "repo": config.hf_repo,
+            }),
+        );
+    }
 
     let mut epoch_count = 0u64;
     let mut save_counter = 0u32;
@@ -797,6 +829,23 @@ fn load_encoder_on(config: &ExgModelConfig, device_pref: String) -> Option<Encod
     result
 }
 
+/// Is a missing encoder explained by weights that were never downloaded?
+///
+/// Only ZUNA is probeable here: `skill_exg::resolve_hf_weights` looks for the
+/// ZUNA weights/config pair specifically, and `skill-exg` itself is an optional
+/// dependency. For any other backend we cannot distinguish "not downloaded"
+/// from "not compiled in", so we do not guess — the UI is told
+/// `encoder_unavailable` instead and offers no download that would not help.
+#[cfg(feature = "embed-zuna")]
+fn exg_weights_missing(config: &ExgModelConfig) -> bool {
+    matches!(config.model_backend, ExgModelBackend::Zuna) && skill_exg::resolve_hf_weights(&config.hf_repo).is_none()
+}
+
+#[cfg(not(feature = "embed-zuna"))]
+fn exg_weights_missing(_config: &ExgModelConfig) -> bool {
+    false
+}
+
 /// Load the EEG/EXG encoder, retrying on CPU when the preferred (GPU) device
 /// fails to load or compile the model. A GPU hiccup then yields CPU embeddings
 /// instead of silently degrading the session to metrics-only.
@@ -863,6 +912,20 @@ fn load_zuna(config: &ExgModelConfig, device: rlx::Device) -> Option<ZunaState> 
 
 // ── Per-epoch encoding ──────────────────────────────────────────────────────
 
+// Every arm that reads `msg` is feature-gated; with no encoder compiled in the
+// match is just the catch-all.
+#[cfg_attr(
+    not(any(
+        feature = "embed-zuna",
+        feature = "embed-luna",
+        feature = "embed-reve",
+        feature = "embed-tribev2",
+        feature = "embed-neurorvq",
+        feature = "embed-eegdino",
+        feature = "embed-lumamba",
+    )),
+    allow(unused_variables)
+)]
 fn encode_epoch(encoder: &mut Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
     match encoder {
         #[cfg(feature = "embed-zuna")]

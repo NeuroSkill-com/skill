@@ -34,6 +34,9 @@ const llm: Record<string, string> = {
   "model.download": "Gewichte herunterladen",
   "model.retry": "Erneut versuchen",
   "model.cancelDownload": "Abbrechen",
+  "model.autoDownloadWeights": "Gewichte automatisch herunterladen",
+  "model.autoDownloadWeightsDesc":
+    "Lädt die Gewichte des Encoders beim Start einer Aufnahme herunter, wenn sie fehlen. Standardmäßig aus — der Standard-Encoder ZUNA hat 380 Mio. Parameter.",
   "model.downloading": "Wird heruntergeladen…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "Download abgebrochen.",

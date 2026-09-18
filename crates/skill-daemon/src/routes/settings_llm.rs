@@ -27,6 +27,8 @@ pub(crate) async fn set_llm_config(
     #[cfg(feature = "llm")]
     let prev_vision_min_tokens = state.llm_config.lock().map(|g| g.vision_min_tokens).ok();
 
+    // Read by the `llm`-gated prompt assembly below.
+    #[cfg_attr(not(feature = "llm"), allow(unused_variables))]
     let location_enabled = load_user_settings(&state).location_enabled;
     let config = config.clone();
     let disk_llm = config.clone();
@@ -129,6 +131,10 @@ pub(crate) async fn set_inference_device(
 }
 
 crate::settings_get_value!(get_exg_inference_device => exg_inference_device);
+
+// Opt-in: fetch EXG encoder weights automatically when a session finds them
+// missing. Off by default — see `Settings::exg_auto_download_weights`.
+crate::settings_bool!(get_exg_auto_download_weights, set_exg_auto_download_weights => exg_auto_download_weights);
 
 pub(crate) async fn set_exg_inference_device(
     State(state): State<AppState>,

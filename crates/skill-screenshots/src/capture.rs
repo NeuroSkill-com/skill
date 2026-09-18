@@ -165,18 +165,35 @@ fn load_or_rebuild_hnsw_generic(
     for (ts, emb) in rows {
         idx.insert(emb, ts);
     }
-    if let Err(e) = idx.save(&hnsw_path) {
+    persist_hnsw(&idx, &hnsw_path, label);
+    idx
+}
+
+/// Write `idx` to `path` — or remove a stale file when the index is empty.
+///
+/// `fast_hnsw` serializes a zero-node labeled index happily, but its reader
+/// rejects the result (`payload_count == 0` → "file contains no payload
+/// section").  An empty index that reaches disk therefore fails to load on
+/// every subsequent boot, gets rebuilt — still empty — and is written again,
+/// looping forever.  Leaving no file behind takes the clean `!exists()` path
+/// instead, and the index is saved for real as soon as it has a row.
+fn persist_hnsw(idx: &LabeledIndex<Cosine, i64>, path: &Path, label: &str) {
+    if idx.is_empty() {
+        match std::fs::remove_file(path) {
+            Ok(()) => eprintln!("[screenshot] {label} HNSW is empty — removed stale {}", path.display()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => eprintln!("[screenshot] {label} HNSW stale-file remove error: {e}"),
+        }
+        return;
+    }
+    if let Err(e) = idx.save(path) {
         eprintln!("[screenshot] {label} HNSW save error: {e}");
     }
-    idx
 }
 
 /// Save an HNSW index to `skill_dir/hnsw_file`.
 fn save_hnsw_to(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path, hnsw_file: &str, label: &str) {
-    let path = skill_dir.join(hnsw_file);
-    if let Err(e) = idx.save(&path) {
-        eprintln!("[screenshot] {label} HNSW save error: {e}");
-    }
+    persist_hnsw(idx, &skill_dir.join(hnsw_file), label);
 }
 
 fn load_or_rebuild_hnsw(skill_dir: &Path, store: &ScreenshotStore) -> LabeledIndex<Cosine, i64> {
@@ -594,6 +611,9 @@ pub fn run_screenshot_worker(
     // back to the configured interval over 3 successful sends.
     let mut backoff_multiplier: u64 = 1;
     let mut consecutive_ok: u32 = 0;
+    /// Once pinned at max backoff, log only every Nth drop to keep sustained
+    /// overload visible without flooding the log.
+    const DROP_LOG_EVERY: u64 = 20;
     const MAX_BACKOFF: u64 = 4;
     const BACKOFF_STEPS: [u64; 4] = [1, 2, 3, 4];
 
@@ -763,10 +783,21 @@ pub fn run_screenshot_worker(
                     }
                 }
                 Err(_) => {
-                    metrics.drops.fetch_add(1, Ordering::Relaxed);
+                    let dropped = metrics.drops.fetch_add(1, Ordering::Relaxed) + 1;
                     // Drop — embed thread can't keep up.  Step up the interval
                     // to release pressure (1→2→3→4 × base).
                     consecutive_ok = 0;
+                    if backoff_multiplier >= MAX_BACKOFF && dropped % DROP_LOG_EVERY == 0 {
+                        // Already at max backoff, so the step-up log below no
+                        // longer fires — sustained loss would otherwise be
+                        // silent. Dropped captures are still written to SQLite
+                        // without embeddings, so a later backfill pass picks
+                        // them up; this just makes the loss visible.
+                        eprintln!(
+                            "[screenshot] embed queue still full at max backoff — {dropped} captures dropped so far \
+                             (queued for the next backfill pass)"
+                        );
+                    }
                     if backoff_multiplier < MAX_BACKOFF {
                         let cur_idx = BACKOFF_STEPS.iter().position(|&s| s == backoff_multiplier).unwrap_or(0);
                         backoff_multiplier = BACKOFF_STEPS[(cur_idx + 1).min(BACKOFF_STEPS.len() - 1)];
@@ -825,6 +856,254 @@ fn ensure_image_embedder<'a>(
     cache.as_ref()
 }
 
+/// Is the backfill allowed to run right now?
+///
+/// Screenshots must be on, and — when session-gating is enabled — a session
+/// must actually be streaming. Read live: the answer changes over the life of
+/// the worker, which is the whole reason the backfill is retried rather than
+/// decided once at startup.
+fn backfill_gate_open(ctx: &dyn crate::context::ScreenshotContext) -> bool {
+    let cfg = ctx.config();
+    cfg.enabled && (!cfg.session_only || ctx.is_session_active())
+}
+
+/// Borrowed worker state a backfill chunk needs.
+///
+/// Bundled into a struct so the chunk fn takes two parameters instead of
+/// eight — and so no `clippy::too_many_arguments` suppression is needed.
+/// `embed_vision` carries the one compile-time difference (the RLX image
+/// embedder when compiled in, OCR-text-as-vision when not), keeping the chunk
+/// body free of `cfg` branches.
+struct BackfillArgs<'a, F>
+where
+    F: FnMut(&[u8], &str) -> Option<(Vec<f32>, String, String)>,
+{
+    ctx: &'a dyn crate::context::ScreenshotContext,
+    skill_dir: &'a Path,
+    store: &'a ScreenshotStore,
+    image_size: u32,
+    ocr_engine: Option<&'a rlx_ocr::OcrEngine>,
+    hnsw: &'a mut LabeledIndex<Cosine, i64>,
+    ocr_hnsw: &'a mut LabeledIndex<Cosine, i64>,
+    embed_vision: F,
+}
+
+/// How many rows one backfill chunk processes before yielding to live jobs.
+const BACKFILL_CHUNK_ROWS: usize = 25;
+/// How long the embed loop waits for a job before doing backfill work.
+const BACKFILL_TICK: Duration = Duration::from_millis(500);
+/// How long to wait before re-checking for new backfill debt once a pass ends
+/// (or while screenshots are gated off). Keeps `ctx.config()` — which reads
+/// settings from disk — off the hot path.
+const BACKFILL_RESCAN: Duration = Duration::from_secs(60);
+
+/// Progress across a chunked backfill pass.
+///
+/// A pass walks rows newest-first via an `id` cursor, so it can stop between
+/// chunks and resume — and so an interrupted pass has covered the rows a user
+/// is most likely to search for, rather than an arbitrary hash-order subset.
+struct BackfillProgress {
+    /// `Some(next_before_id)` while a pass is running; `None` when idle.
+    cursor: Option<i64>,
+    total: usize,
+    done: usize,
+    embedded: usize,
+    skipped: usize,
+    started: Option<Instant>,
+    /// Earliest time to look for work again while idle.
+    next_scan: Instant,
+}
+
+impl BackfillProgress {
+    fn new() -> Self {
+        Self {
+            cursor: None,
+            total: 0,
+            done: 0,
+            embedded: 0,
+            skipped: 0,
+            started: None,
+            next_scan: Instant::now(),
+        }
+    }
+
+    /// Begin a pass if anything is owed. Returns whether one is now running.
+    fn begin(&mut self, store: &ScreenshotStore) -> bool {
+        let total = store.count_needing_backfill();
+        if total == 0 {
+            self.next_scan = Instant::now() + BACKFILL_RESCAN;
+            return false;
+        }
+        eprintln!("[screenshot-embed] backfill: {total} screenshots need OCR/embedding");
+        self.cursor = Some(i64::MAX);
+        self.total = total;
+        self.done = 0;
+        self.embedded = 0;
+        self.skipped = 0;
+        self.started = Some(Instant::now());
+        true
+    }
+
+    /// End the pass, log the tally, and schedule the next look.
+    fn finish(&mut self, ctx: &dyn crate::context::ScreenshotContext) {
+        let elapsed = self.started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+        eprintln!(
+            "[screenshot-embed] backfill done: {} embedded, {} skipped, {:.1}s",
+            self.embedded, self.skipped, elapsed
+        );
+        ctx.emit_event(
+            "screenshot-reembed-progress",
+            serde_json::json!({
+                "done": self.done,
+                "total": self.total,
+                "elapsed_secs": elapsed,
+                "eta_secs": 0.0,
+                "embedded": self.embedded,
+                "skipped": self.skipped,
+                "complete": true,
+            }),
+        );
+        self.cursor = None;
+        self.started = None;
+        self.next_scan = Instant::now() + BACKFILL_RESCAN;
+    }
+
+    /// Abandon an in-flight pass (screenshots were turned off mid-run).
+    fn suspend(&mut self) {
+        if self.cursor.is_some() {
+            eprintln!(
+                "[screenshot-embed] backfill paused ({}/{} done) — screenshots no longer active",
+                self.done, self.total
+            );
+        }
+        self.cursor = None;
+        self.started = None;
+        self.next_scan = Instant::now() + BACKFILL_RESCAN;
+    }
+
+    fn emit_progress(&self, ctx: &dyn crate::context::ScreenshotContext) {
+        let elapsed = self.started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+        let rate = if self.done > 0 {
+            elapsed / self.done as f64
+        } else {
+            0.25
+        };
+        let eta = self.total.saturating_sub(self.done) as f64 * rate;
+        ctx.emit_event(
+            "screenshot-reembed-progress",
+            serde_json::json!({
+                "done": self.done,
+                "total": self.total,
+                "elapsed_secs": elapsed,
+                "eta_secs": eta,
+                "embedded": self.embedded,
+                "skipped": self.skipped,
+                "complete": false,
+            }),
+        );
+    }
+}
+
+/// Process one bounded chunk of the backfill pass.
+///
+/// Returns `false` when the pass is exhausted. Bounded so the embed thread
+/// returns to live jobs promptly: the job channel is `bounded(4)` with
+/// `try_send`, so a long uninterruptible pass would make the capture thread
+/// *drop* new screenshots — manufacturing the very debt the backfill is
+/// paying down.
+fn run_backfill_chunk<F>(args: &mut BackfillArgs<'_, F>, progress: &mut BackfillProgress) -> bool
+where
+    F: FnMut(&[u8], &str) -> Option<(Vec<f32>, String, String)>,
+{
+    let Some(before_id) = progress.cursor else {
+        return false;
+    };
+    let rows = args.store.rows_needing_backfill(before_id, BACKFILL_CHUNK_ROWS);
+    if rows.is_empty() {
+        return false;
+    }
+
+    let screenshots_dir = args.skill_dir.join(SCREENSHOTS_DIR);
+    let mut inserts_since_save: usize = 0;
+    let mut ocr_inserts_since_save: usize = 0;
+
+    for row in &rows {
+        progress.cursor = Some(row.id);
+        progress.done += 1;
+
+        let webp_path = screenshots_dir.join(&row.filename);
+        let Ok(raw) = std::fs::read(&webp_path) else {
+            // Image pruned or unreadable — counted, not silently swallowed.
+            progress.skipped += 1;
+            continue;
+        };
+
+        // OCR only when it has never run; otherwise reuse the stored text.
+        let ocr_text = if row.needs_ocr {
+            match args.ocr_engine {
+                Some(engine) => run_ocr(engine, &raw).unwrap_or_default(),
+                None => String::new(),
+            }
+        } else {
+            row.ocr_text.clone()
+        };
+
+        let mut did_work = false;
+
+        // Vision HNSW: the image embedding (or OCR-text-as-vision fallback).
+        if row.needs_embed {
+            if let Some((emb, backend, model)) = (args.embed_vision)(&raw, &ocr_text) {
+                let id = args.hnsw.len() as u64;
+                args.hnsw.insert(emb.clone(), row.timestamp);
+                inserts_since_save += 1;
+                args.store
+                    .update_embedding(row.id, &emb, Some(id), &backend, &model, args.image_size);
+                did_work = true;
+            }
+        }
+
+        // OCR HNSW: the embedding of the OCR'd text.
+        if row.needs_ocr || row.needs_ocr_embed {
+            match if ocr_text.is_empty() {
+                None
+            } else {
+                args.ctx.embed_text(&ocr_text)
+            } {
+                Some(emb) => {
+                    let id = args.ocr_hnsw.len() as u64;
+                    args.ocr_hnsw.insert(emb.clone(), row.timestamp);
+                    ocr_inserts_since_save += 1;
+                    args.store.update_ocr(row.id, &ocr_text, Some(&emb), Some(id));
+                    did_work = true;
+                }
+                None => {
+                    // Persist the OCR text even when it cannot be embedded, so
+                    // the row is not re-OCR'd on the next pass.
+                    args.store.update_ocr(row.id, &ocr_text, None, None);
+                }
+            }
+        }
+
+        if did_work {
+            progress.embedded += 1;
+        } else {
+            progress.skipped += 1;
+        }
+    }
+
+    // Persist per chunk so progress survives a restart mid-pass.
+    if inserts_since_save > 0 {
+        save_hnsw(args.hnsw, args.skill_dir);
+    }
+    if ocr_inserts_since_save > 0 {
+        save_ocr_hnsw(args.ocr_hnsw, args.skill_dir);
+    }
+    progress.emit_progress(args.ctx);
+
+    // A short page means the cursor reached the end of the table.
+    rows.len() == BACKFILL_CHUNK_ROWS
+}
+
 /// Embedding thread — processes jobs from the capture thread.
 /// Runs vision embedding + OCR text embedding on GPU (when available)
 /// and backfills results into SQLite + HNSW.
@@ -872,138 +1151,70 @@ fn run_embed_thread(
     let mut inserts_since_save: usize = 0;
     let mut ocr_inserts_since_save: usize = 0;
 
-    // ── Startup backfill: process any screenshots that were saved but
-    // not yet embedded (e.g. app crashed mid-embed, or features were
-    // disabled when the screenshot was captured).
-    // Only runs when screenshots are enabled and not session-gated
-    // (or a session is active).
-    let should_backfill = {
-        let cfg = ctx.config();
-        cfg.enabled && (!cfg.session_only || ctx.is_session_active())
-    };
+    // ── Backfill, driven from idle time ──────────────────────────────────
+    //
+    // Runs in bounded chunks whenever no capture job is waiting, so history
+    // never competes with live screenshots: the job channel is `bounded(4)`
+    // with `try_send`, and a long uninterruptible pass made the capture thread
+    // *drop* new screenshots — creating the debt it was paying off.
+    //
+    // The gate is re-read every pass rather than decided once at startup.
+    // `session_only` defaults to true and this worker spawns at daemon boot,
+    // before any session exists, so a startup-only check was false on
+    // essentially every boot and the catch-up never ran.
+    let mut backfill = BackfillProgress::new();
 
-    if should_backfill {
-        let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
-
-        // Backfill: vision HNSW gets the rlx nomic-vision *image* embedding;
-        // OCR HNSW gets the nomic-text embedding of the OCR'd content. Both
-        // live in the same aligned 768-d space.
-        let ocr_rows = store.rows_without_ocr();
-        let embed_rows = store.rows_without_embedding();
-        // Rows that already have OCR text but no OCR embedding (e.g. after an
-        // embedding-scheme migration) — re-embed the existing text, no re-OCR.
-        let ocr_embed_rows = store.rows_without_ocr_embedding();
-        let needs_ocr: std::collections::HashSet<i64> = ocr_rows.iter().map(|r| r.id).collect();
-        let needs_embed: std::collections::HashSet<i64> = embed_rows.iter().map(|r| r.id).collect();
-        let needs_ocr_embed: std::collections::HashSet<i64> = ocr_embed_rows.iter().map(|r| r.id).collect();
-
-        // Merge into a deduplicated list with filenames
-        let mut all_rows: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
-        for r in ocr_rows.iter().chain(embed_rows.iter()).chain(ocr_embed_rows.iter()) {
-            all_rows.entry(r.id).or_insert_with(|| r.filename.clone());
-        }
-
-        // Don't gate the whole backfill on the OCR engine: vision and OCR-text
-        // re-embed rows don't need it (only fresh OCR does, which is handled
-        // per-row below). So a failed OCR-engine load can't block re-embedding.
-        if !all_rows.is_empty() {
-            eprintln!(
-                "[screenshot-embed] backfill: {} screenshots need OCR/embedding",
-                all_rows.len()
-            );
-            for (&row_id, filename) in &all_rows {
-                let webp_path = screenshots_dir.join(filename);
-                if !webp_path.exists() {
+    loop {
+        let job = match rx.recv_timeout(BACKFILL_TICK) {
+            Ok(job) => job,
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                // Idle. Cheap early-out first — `backfill_gate_open` reads
+                // settings from disk, so it must not run on every tick.
+                if backfill.cursor.is_none() && Instant::now() < backfill.next_scan {
                     continue;
                 }
-                let Ok(raw) = std::fs::read(&webp_path) else {
+                if !backfill_gate_open(&*ctx) {
+                    backfill.suspend();
                     continue;
-                };
-
-                // OCR if needed, otherwise fetch existing OCR text for embedding
-                let ocr_text = if needs_ocr.contains(&row_id) {
-                    if let Some(ref engine) = ocr_engine {
-                        run_ocr(engine, &raw).unwrap_or_default()
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    // Already has OCR — fetch existing text for the embedding
-                    store
-                        .get_embedding_and_ocr(row_id)
-                        .map(|e| e.ocr_text)
-                        .unwrap_or_default()
-                };
-
-                let ts = store.get_timestamp(row_id).unwrap_or(0);
-
-                // Vision HNSW: embed the actual image via rlx nomic-vision
-                // (falls back to OCR-text-as-vision when rlx isn't compiled in).
-                if needs_embed.contains(&row_id) {
-                    #[cfg(feature = "text-embeddings-rlx")]
-                    let (vision_emb, vision_backend, vision_model) = (
-                        ensure_image_embedder(&mut image_embedder, &image_device).and_then(|e| e.embed_bytes(&raw)),
-                        "rlx".to_string(),
-                        "nomic-ai/nomic-embed-vision-v1.5".to_string(),
-                    );
-                    #[cfg(not(feature = "text-embeddings-rlx"))]
-                    let (vision_emb, vision_backend, vision_model) = (
-                        if ocr_text.is_empty() {
-                            None
-                        } else {
-                            ctx.embed_text(&ocr_text)
-                        },
-                        initial_config.embed_backend.clone(),
-                        initial_config.model_id(),
-                    );
-                    if let Some(emb) = vision_emb {
-                        let id = hnsw.len() as u64;
-                        hnsw.insert(emb.clone(), ts);
-                        inserts_since_save += 1;
-                        store.update_embedding(
-                            row_id,
-                            &emb,
-                            Some(id),
-                            &vision_backend,
-                            &vision_model,
-                            initial_config.image_size,
-                        );
-                    }
+                }
+                if backfill.cursor.is_none() && !backfill.begin(&store) {
+                    continue;
                 }
 
-                // OCR HNSW: embed the OCR text (text search over screenshot
-                // content) — for freshly-OCR'd rows and re-embed-only rows.
-                if needs_ocr.contains(&row_id) || needs_ocr_embed.contains(&row_id) {
-                    let ocr_emb = if ocr_text.is_empty() {
+                #[cfg(feature = "text-embeddings-rlx")]
+                let embed_vision = |raw: &[u8], _ocr: &str| {
+                    ensure_image_embedder(&mut image_embedder, &image_device)
+                        .and_then(|e| e.embed_bytes(raw))
+                        .map(|v| (v, "rlx".to_string(), "nomic-ai/nomic-embed-vision-v1.5".to_string()))
+                };
+                // No RLX vision compiled in — fall back to OCR-text-as-vision.
+                #[cfg(not(feature = "text-embeddings-rlx"))]
+                let embed_vision = |_raw: &[u8], ocr: &str| {
+                    if ocr.is_empty() {
                         None
                     } else {
-                        ctx.embed_text(&ocr_text)
-                    };
-                    if let Some(emb) = ocr_emb {
-                        let id = ocr_hnsw.len() as u64;
-                        ocr_hnsw.insert(emb.clone(), ts);
-                        ocr_inserts_since_save += 1;
-                        store.update_ocr(row_id, &ocr_text, Some(&emb), Some(id));
-                    } else {
-                        store.update_ocr(row_id, &ocr_text, None, None);
+                        ctx.embed_text(ocr)
+                            .map(|v| (v, initial_config.embed_backend.clone(), initial_config.model_id()))
                     }
+                };
+                let mut args = BackfillArgs {
+                    ctx: &*ctx,
+                    skill_dir: &skill_dir,
+                    store: &store,
+                    image_size: initial_config.image_size,
+                    ocr_engine: ocr_engine.as_ref(),
+                    hnsw: &mut hnsw,
+                    ocr_hnsw: &mut ocr_hnsw,
+                    embed_vision,
+                };
+                if !run_backfill_chunk(&mut args, &mut backfill) {
+                    backfill.finish(&*ctx);
                 }
+                continue;
             }
-            if inserts_since_save > 0 {
-                save_hnsw(&hnsw, &skill_dir);
-                inserts_since_save = 0;
-            }
-            if ocr_inserts_since_save > 0 {
-                save_ocr_hnsw(&ocr_hnsw, &skill_dir);
-                ocr_inserts_since_save = 0;
-            }
-            eprintln!("[screenshot-embed] backfill: OCR + embeddings done");
-        }
-    } else if !should_backfill {
-        eprintln!("[screenshot-embed] skipping backfill (disabled or session-gated with no active session)");
-    }
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+        };
 
-    while let Ok(job) = rx.recv() {
         metrics.queue_depth.fetch_sub(1, Ordering::Relaxed);
 
         // Check the LIVE config — skip stale jobs.
@@ -1414,5 +1625,279 @@ pub fn rebuild_embeddings(
         embedded,
         skipped,
         elapsed_secs: start.elapsed().as_secs_f64(),
+    }
+}
+
+#[cfg(test)]
+mod rebuild_embeddings_tests {
+    use super::*;
+    use crate::context::{ActiveWindowInfo, ScreenshotContext};
+    use skill_data::screenshot_store::ScreenshotRow;
+
+    /// Context whose text embedder always succeeds, so the test exercises
+    /// `rebuild_embeddings` without needing a model or an OCR engine.
+    struct EmbedCtx;
+
+    impl ScreenshotContext for EmbedCtx {
+        fn config(&self) -> ScreenshotConfig {
+            ScreenshotConfig::default()
+        }
+        fn is_session_active(&self) -> bool {
+            false
+        }
+        fn active_window(&self) -> ActiveWindowInfo {
+            ActiveWindowInfo::default()
+        }
+        fn emit_event(&self, _event: &str, _payload: serde_json::Value) {}
+        fn embed_image_via_llm(&self, _png: &[u8]) -> Option<Vec<f32>> {
+            None
+        }
+        fn embed_text(&self, _text: &str) -> Option<Vec<f32>> {
+            Some(vec![0.25; 4])
+        }
+    }
+
+    fn row(ts: i64, filename: &str, ocr_text: &str) -> ScreenshotRow {
+        ScreenshotRow {
+            timestamp: ts,
+            unix_ts: ts as u64,
+            filename: filename.into(),
+            width: 100,
+            height: 100,
+            file_size: 10,
+            hnsw_id: None,
+            embedding: None,
+            embedding_dim: 0,
+            model_backend: "stale-backend".into(),
+            model_id: "stale-model".into(),
+            image_size: 100,
+            quality: 80,
+            app_name: String::new(),
+            window_title: String::new(),
+            ocr_text: ocr_text.into(),
+            ocr_embedding: None,
+            ocr_embedding_dim: 0,
+            ocr_hnsw_id: None,
+            source: "auto".into(),
+            chat_session_id: None,
+            caption: String::new(),
+        }
+    }
+
+    /// Rows whose backend/model is stale are re-embedded from their existing
+    /// OCR text, and the row's provenance is updated to the current model.
+    #[test]
+    fn stale_rows_are_reembedded_from_existing_ocr_text() {
+        let dir = std::env::temp_dir().join(format!("skill-reembed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let shots = dir.join(SCREENSHOTS_DIR);
+        std::fs::create_dir_all(&shots).expect("mkdir");
+        std::fs::write(shots.join("a.webp"), b"not-a-real-image").expect("write");
+
+        let store = ScreenshotStore::open(&dir).expect("store");
+        store.insert(&row(20260101000001, "a.webp", "hello world"));
+
+        let cfg = ScreenshotConfig::default();
+        let out = rebuild_embeddings(&store, &cfg, &dir, &EmbedCtx);
+
+        assert_eq!(out.embedded, 1, "the stale row must be re-embedded");
+        assert_eq!(out.skipped, 0);
+
+        let after = store.rows_needing_embed(&cfg.embed_backend, &cfg.model_id());
+        assert!(after.is_empty(), "the row must no longer count as stale");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A row whose image file is gone is counted as skipped, not embedded —
+    /// the tally is how the UI reports what happened.
+    #[test]
+    fn missing_image_file_is_counted_as_skipped() {
+        let dir = std::env::temp_dir().join(format!("skill-reembed-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(SCREENSHOTS_DIR)).expect("mkdir");
+
+        let store = ScreenshotStore::open(&dir).expect("store");
+        store.insert(&row(20260101000002, "gone.webp", "text but no file"));
+
+        let out = rebuild_embeddings(&store, &ScreenshotConfig::default(), &dir, &EmbedCtx);
+
+        assert_eq!(out.embedded, 0);
+        assert_eq!(out.skipped, 1, "a pruned image must be reported as skipped");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod backfill_progress_tests {
+    use super::*;
+
+    /// A pass must not start when nothing is owed, and must schedule a later
+    /// look rather than re-querying on every idle tick.
+    #[test]
+    fn begin_is_a_noop_when_nothing_is_owed() {
+        let dir = std::env::temp_dir().join(format!("skill-bf-empty-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let store = ScreenshotStore::open(&dir).expect("store");
+
+        let mut p = BackfillProgress::new();
+        let before = p.next_scan;
+        assert!(!p.begin(&store), "no debt means no pass");
+        assert!(p.cursor.is_none());
+        assert!(p.next_scan > before, "a cooldown must be scheduled");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Suspending an in-flight pass clears the cursor so the next idle tick
+    /// re-checks the gate instead of resuming blind.
+    #[test]
+    fn suspend_clears_an_in_flight_pass() {
+        let mut p = BackfillProgress::new();
+        p.cursor = Some(1234);
+        p.total = 10;
+        p.done = 3;
+        p.started = Some(Instant::now());
+
+        p.suspend();
+
+        assert!(p.cursor.is_none(), "suspend must stop the pass");
+        assert!(p.started.is_none());
+        assert!(p.next_scan > Instant::now(), "a cooldown must be scheduled");
+    }
+
+    /// The cursor starts unset, so an idle tick decides via `begin` rather
+    /// than paging from a stale position.
+    #[test]
+    fn new_progress_starts_idle() {
+        let p = BackfillProgress::new();
+        assert!(p.cursor.is_none());
+        assert_eq!(p.done, 0);
+        assert_eq!(p.embedded, 0);
+        assert_eq!(p.skipped, 0);
+    }
+}
+
+#[cfg(test)]
+mod backfill_gate_tests {
+    use super::*;
+    use crate::context::{ActiveWindowInfo, ScreenshotContext};
+
+    struct GateCtx {
+        enabled: bool,
+        session_only: bool,
+        session_active: bool,
+    }
+
+    impl ScreenshotContext for GateCtx {
+        fn config(&self) -> ScreenshotConfig {
+            ScreenshotConfig {
+                enabled: self.enabled,
+                session_only: self.session_only,
+                ..Default::default()
+            }
+        }
+        fn is_session_active(&self) -> bool {
+            self.session_active
+        }
+        fn active_window(&self) -> ActiveWindowInfo {
+            ActiveWindowInfo::default()
+        }
+        fn emit_event(&self, _event: &str, _payload: serde_json::Value) {}
+        fn embed_image_via_llm(&self, _png: &[u8]) -> Option<Vec<f32>> {
+            None
+        }
+    }
+
+    fn gate(enabled: bool, session_only: bool, session_active: bool) -> bool {
+        backfill_gate_open(&GateCtx {
+            enabled,
+            session_only,
+            session_active,
+        })
+    }
+
+    #[test]
+    fn closed_when_screenshots_disabled() {
+        assert!(!gate(false, false, true));
+        assert!(!gate(false, true, true));
+    }
+
+    /// The shape that made the startup-only check useless: session-gating on
+    /// (the default) with no session yet, which is exactly the state at daemon
+    /// boot. The gate is closed here, so the backfill must be deferred rather
+    /// than skipped for good.
+    #[test]
+    fn closed_when_session_gated_with_no_session() {
+        assert!(!gate(true, true, false));
+    }
+
+    #[test]
+    fn opens_once_a_session_starts() {
+        assert!(gate(true, true, true));
+    }
+
+    #[test]
+    fn open_when_not_session_gated() {
+        assert!(gate(true, false, false));
+    }
+}
+
+#[cfg(test)]
+mod hnsw_persist_tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("skill-hnsw-{tag}-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
+    /// `fast_hnsw` writes a zero-node index happily but refuses to read it back
+    /// ("file contains no payload section"), so an empty index must never reach
+    /// disk — otherwise every later boot fails to load it and rebuilds it empty
+    /// again, forever.
+    #[test]
+    fn empty_index_is_not_written() {
+        let dir = temp_dir("empty");
+        let path = dir.join("empty.hnsw");
+        let _ = std::fs::remove_file(&path);
+
+        persist_hnsw(&fresh_hnsw(), &path, "test");
+
+        assert!(!path.exists(), "an empty index must not be written to disk");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A previously-written empty file is cleared, so the next boot takes the
+    /// clean `!exists()` path instead of logging a load error.
+    #[test]
+    fn stale_empty_file_is_removed() {
+        let dir = temp_dir("stale");
+        let path = dir.join("stale.hnsw");
+        std::fs::write(&path, b"leftover").expect("seed stale file");
+
+        persist_hnsw(&fresh_hnsw(), &path, "test");
+
+        assert!(!path.exists(), "a stale file must be removed when the index is empty");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The non-empty path still round-trips: saved, then loadable.
+    #[test]
+    fn non_empty_index_round_trips() {
+        let dir = temp_dir("roundtrip");
+        let path = dir.join("full.hnsw");
+        let _ = std::fs::remove_file(&path);
+
+        let mut idx = fresh_hnsw();
+        idx.insert(vec![0.1, 0.2, 0.3, 0.4], 42i64);
+        persist_hnsw(&idx, &path, "test");
+
+        assert!(path.exists(), "a non-empty index must be written");
+        let loaded = LabeledIndex::<Cosine, i64>::load(&path, Cosine).expect("saved index must load back");
+        assert_eq!(loaded.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

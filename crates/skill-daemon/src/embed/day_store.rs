@@ -116,6 +116,14 @@ impl DayStore {
         )
         .ok()?;
 
+        // Give the table a canonical `unix_ms` alongside the legacy `timestamp`
+        // (which carries three historical formats). Additive and idempotent —
+        // `timestamp` is left as-is so older builds keep reading it.
+        let backfilled = skill_data::util::migrate_embeddings_unix_ms(&conn);
+        if backfilled > 0 {
+            info!(rows = backfilled, db = %db_path.display(), "backfilled canonical unix_ms timestamps");
+        }
+
         // Load or create the HNSW index.
         let (hnsw, hnsw_len, hnsw_rebuilt, hnsw_rebuilt_count) = if index_path.exists() {
             match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
@@ -210,9 +218,16 @@ impl DayStore {
         // Insert into SQLite.
         let _ = self.conn.execute(
             "INSERT INTO embeddings
-             (timestamp, device_id, device_name, hnsw_id, eeg_embedding, metrics_json)
-             VALUES (?1, NULL, ?2, ?3, ?4, ?5)",
-            rusqlite::params![timestamp_ms, device_name, hnsw_id as i64, blob, metrics_json],
+             (timestamp, unix_ms, device_id, device_name, hnsw_id, eeg_embedding, metrics_json)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                timestamp_ms,
+                skill_data::util::epoch_ts_to_unix_ms(timestamp_ms),
+                device_name,
+                hnsw_id as i64,
+                blob,
+                metrics_json
+            ],
         );
 
         hnsw_id
@@ -229,9 +244,15 @@ impl DayStore {
         let empty_blob: &[u8] = &[];
         let _ = self.conn.execute(
             "INSERT INTO embeddings
-             (timestamp, device_id, device_name, hnsw_id, eeg_embedding, metrics_json)
-             VALUES (?1, NULL, ?2, 0, ?3, ?4)",
-            rusqlite::params![timestamp_ms, device_name, empty_blob, metrics_json],
+             (timestamp, unix_ms, device_id, device_name, hnsw_id, eeg_embedding, metrics_json)
+             VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5)",
+            rusqlite::params![
+                timestamp_ms,
+                skill_data::util::epoch_ts_to_unix_ms(timestamp_ms),
+                device_name,
+                empty_blob,
+                metrics_json
+            ],
         );
     }
 

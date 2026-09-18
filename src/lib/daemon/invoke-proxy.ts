@@ -159,6 +159,8 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   set_embedding_overlap: [P, "/v1/settings/embedding-overlap"],
   get_exg_inference_device: [G, "/v1/settings/exg-inference-device"],
   set_exg_inference_device: [P, "/v1/settings/exg-inference-device"],
+  get_exg_auto_download_weights: [G, "/v1/settings/exg-auto-download-weights"],
+  set_exg_auto_download_weights: [P, "/v1/settings/exg-auto-download-weights"],
 
   // Screenshots
   get_screenshot_config: [G, "/v1/settings/screenshot/config"],

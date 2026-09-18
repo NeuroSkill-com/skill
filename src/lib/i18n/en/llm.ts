@@ -34,6 +34,9 @@ const llm: Record<string, string> = {
   "model.download": "Download weights",
   "model.retry": "Retry download",
   "model.cancelDownload": "Cancel",
+  "model.autoDownloadWeights": "Download weights automatically",
+  "model.autoDownloadWeightsDesc":
+    "Fetch the encoder's weights when a recording starts and they are missing. Off by default — the default ZUNA encoder is a 380M-parameter model.",
   "model.downloading": "Downloading…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "Download cancelled.",

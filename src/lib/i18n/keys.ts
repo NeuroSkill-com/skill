@@ -1852,6 +1852,8 @@ export type TranslationKey =
   | "model.backendReloadsEncoder"
   | "model.backendZuna"
   | "model.backendZunaDesc"
+  | "model.autoDownloadWeights"
+  | "model.autoDownloadWeightsDesc"
   | "model.buildQuality"
   | "model.buildQualityDesc"
   | "model.cancelAutoRetry"

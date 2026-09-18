@@ -22,6 +22,7 @@ use crate::routes::settings_llm_runtime::{
 use crate::state::AppState;
 
 const DEFAULT_TTS_TEXT: &str = "NeuroSkill voice check one two three.";
+#[cfg(feature = "llm")]
 const DEFAULT_LLM_PROMPT: &str = "Reply with exactly the single word PONG and nothing else.";
 const DEFAULT_EMBED_ANCHOR: &str = "The cat sat on the warm windowsill in the afternoon sun.";
 const DEFAULT_EMBED_SIMILAR: &str = "A kitten rested on the sunny window ledge.";
@@ -685,6 +686,7 @@ async fn validate_embed_text(State(state): State<AppState>, Json(req): Json<Vali
     }
 }
 
+#[cfg(feature = "text-embeddings-rlx")]
 fn synth_rgb_image(seed: usize) -> image::DynamicImage {
     let img = image::RgbImage::from_fn(256, 256, |x, y| {
         image::Rgb([

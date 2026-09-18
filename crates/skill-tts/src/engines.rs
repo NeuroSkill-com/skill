@@ -959,8 +959,46 @@ fn ensure_current(cur: &mut Option<Current>) -> Result<()> {
     }
 }
 
+/// Synthesize `text` and play it, then release the output device.
+///
+/// Split out of the worker loop so the command match stays a thin dispatch and
+/// the audio device's lifetime is the function body — it is opened per
+/// utterance and dropped on return.
+///
+/// That scoping matters: holding a `MixerDeviceSink` across utterances kept the
+/// OS output device, and its render thread, alive for the whole process, since
+/// this worker runs on a `OnceLock` thread that never exits.
+fn speak(current: &mut Option<Current>, text: &str, voice: String) {
+    if let Err(e) = ensure_current(current) {
+        tts_log!("tts", "engine load failed: {e}");
+        return;
+    }
+    let voice = if voice.trim().is_empty() {
+        crate::active_engine().2
+    } else {
+        voice
+    };
+
+    let stream = rodio::DeviceSinkBuilder::open_default_sink()
+        .map_err(|e| tts_log!("tts", "could not open audio: {e}"))
+        .ok();
+    let (Some(c), Some(s)) = (current.as_mut(), stream.as_ref()) else {
+        tts_log!("tts", "speak skipped: no audio device");
+        return;
+    };
+
+    // Contain a panic in the rlx synthesis path too (see ensure_current).
+    let synth = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.synth.synthesize(text, &voice)))
+        .unwrap_or_else(|_| Err(anyhow::anyhow!("TTS synthesize panicked")));
+    match synth {
+        // Blocks until the buffer and its tail silence have played, so the
+        // device drop below never clips audio.
+        Ok((pcm, sr)) => play_f32_audio(s, pcm, sr),
+        Err(e) => tts_log!("tts", "synthesis error: {e}"),
+    }
+}
+
 fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
-    let mut stream: Option<rodio::MixerDeviceSink> = None;
     let mut current: Option<Current> = None;
 
     for cmd in rx {
@@ -975,31 +1013,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
             }
 
             Cmd::Speak { text, voice, done } => {
-                if let Err(e) = ensure_current(&mut current) {
-                    tts_log!("tts", "engine load failed: {e}");
-                    done.send(()).ok();
-                    continue;
-                }
-                let voice = if voice.trim().is_empty() {
-                    crate::active_engine().2
-                } else {
-                    voice
-                };
-                stream = rodio::DeviceSinkBuilder::open_default_sink()
-                    .map_err(|e| tts_log!("tts", "could not open audio: {e}"))
-                    .ok();
-                if let (Some(c), Some(s)) = (current.as_mut(), stream.as_ref()) {
-                    // Contain a panic in the rlx synthesis path too (see ensure_current).
-                    let synth =
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.synth.synthesize(&text, &voice)))
-                            .unwrap_or_else(|_| Err(anyhow::anyhow!("TTS synthesize panicked")));
-                    match synth {
-                        Ok((pcm, sr)) => play_f32_audio(s, pcm, sr),
-                        Err(e) => tts_log!("tts", "synthesis error: {e}"),
-                    }
-                } else {
-                    tts_log!("tts", "speak skipped: no audio device");
-                }
+                speak(&mut current, &text, voice);
                 done.send(()).ok();
             }
 
@@ -1011,7 +1025,6 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
             }
 
             Cmd::Shutdown { done } => {
-                drop(stream.take());
                 drop(current.take());
                 READY.store(false, Ordering::Release);
                 tts_log!("tts", "engines shutdown complete");

@@ -16,6 +16,9 @@ pub(crate) struct ScreenshotAroundRequest {
     pub(crate) window_secs: i32,
 }
 
+// Fields are read only by the `text-embeddings-rlx` variant of
+// `image_search_inner`; the fallback ignores the request entirely.
+#[cfg_attr(not(feature = "text-embeddings-rlx"), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ScreenshotImageSearchRequest {
@@ -66,7 +69,26 @@ impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
         self.config.clone()
     }
     fn is_session_active(&self) -> bool {
-        false
+        // Live check against the running session, mirroring `util.rs`'s
+        // `handle_active`: `session_handle` is `Some` only while a device
+        // session is streaming (set in `session/connect.rs`, cleared on stop
+        // and on daemon shutdown).
+        //
+        // This returned a hardcoded `false` from the thin-client migration
+        // (ba3f07d4) until now, which silently disabled the whole screenshot
+        // pipeline: `session_only` defaults to true, so the capture loop's
+        // gate in `capture.rs` was permanently closed and the worker spun on
+        // a 1 s no-op forever — never capturing, never embedding, never
+        // backfilling. The pre-migration Tauri context checked
+        // `session_start_utc.is_some()`; `session_handle` is the daemon's
+        // equivalent live signal.
+        //
+        // `None` state is the detached context used by the manual rebuild
+        // route, which does its own gating — false is correct there.
+        self.state
+            .as_ref()
+            .and_then(|st| st.session_handle.lock().ok().map(|slot| slot.is_some()))
+            .unwrap_or(false)
     }
     fn active_window(&self) -> skill_screenshots::ActiveWindowInfo {
         skill_screenshots::ActiveWindowInfo::default()
@@ -79,6 +101,18 @@ impl skill_screenshots::ScreenshotContext for DaemonScreenshotContext {
             payload,
         });
     }
+    /// Always `None` — deliberately, not an unimplemented stub.
+    ///
+    /// The RLX LLM runner exposes no image-*embedding* entry point (it can
+    /// caption an image, which is a different thing), so there is nothing to
+    /// call here. Callers already treat `None` as "use the rlx vision
+    /// embedder instead" — see the `mmproj` / `llm-vlm` arms in
+    /// `skill_screenshots::capture`, which fall back to nomic-embed-vision so
+    /// those backends still produce vectors.
+    ///
+    /// Spelled out because the neighbouring `is_session_active` returned a
+    /// bare `false` for five months and was read as intentional; if this ever
+    /// becomes implementable, wire it here rather than assuming it is a stub.
     fn embed_image_via_llm(&self, _png_bytes: &[u8]) -> Option<Vec<f32>> {
         None
     }
@@ -452,6 +486,8 @@ mod tests {
         let _cfg = ctx.config();
     }
 
+    /// The detached context (manual rebuild route) has no `AppState` to ask,
+    /// and does its own gating — `false` is correct there.
     #[test]
     fn daemon_screenshot_context_session_not_active() {
         use skill_screenshots::ScreenshotContext;
@@ -463,5 +499,39 @@ mod tests {
             text_embedder: crate::text_embedder::SharedTextEmbedder::new_noop(),
         };
         assert!(!ctx.is_session_active());
+    }
+
+    /// The worker's context must track the *live* session. This returned a
+    /// hardcoded `false`, which held the capture loop's `session_only` gate
+    /// shut forever — screenshots were never captured on default settings.
+    #[test]
+    fn daemon_screenshot_context_tracks_live_session() {
+        use skill_screenshots::ScreenshotContext;
+        use tempfile::TempDir;
+
+        let td = TempDir::new().unwrap();
+        let state = crate::state::AppState::new_for_tests("token".to_string(), td.path().to_path_buf());
+        let (tx, _rx) = tokio::sync::broadcast::channel(1);
+        let ctx = DaemonScreenshotContext {
+            config: skill_settings::ScreenshotConfig::default(),
+            state: Some(state.clone()),
+            events_tx: tx,
+            text_embedder: crate::text_embedder::SharedTextEmbedder::new_noop(),
+        };
+
+        // No session yet.
+        assert!(!ctx.is_session_active(), "no session handle means no active session");
+
+        // A session starts — `session/connect.rs` parks its cancel sender here.
+        let (cancel_tx, _cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        *state.session_handle.lock().unwrap() = Some(skill_daemon_state::SessionHandle { cancel_tx });
+        assert!(
+            ctx.is_session_active(),
+            "a parked session handle means the session is live"
+        );
+
+        // Session stops — the slot is cleared on stop and on daemon shutdown.
+        *state.session_handle.lock().unwrap() = None;
+        assert!(!ctx.is_session_active(), "clearing the handle ends the session");
     }
 }

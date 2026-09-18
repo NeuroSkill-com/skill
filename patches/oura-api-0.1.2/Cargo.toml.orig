@@ -1,0 +1,23 @@
+[package]
+name = "oura-api"
+version = "0.1.2"
+edition = "2021"
+license = "MIT"
+description = "A client for the Oura V2 REST API"
+homepage = "https://github.com/cluebbehusen/rust-oura-api"
+repository = "https://github.com/cluebbehusen/rust-oura-api"
+documentation = "https://docs.rs/oura-api/latest/oura_api/"
+
+exclude = [".github", "tests"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+paste = "1.0.14"
+reqwest = { version = "0.11.20", features = ["json", "blocking"] }
+serde = { version = "1.0.188", features = ["derive"] }
+typed-builder = "0.16.0"
+
+[dev-dependencies]
+mockito = "1.1.0"
+serde_json = "1.0.105"

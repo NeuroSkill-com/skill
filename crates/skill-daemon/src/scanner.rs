@@ -424,10 +424,25 @@ pub(crate) fn detect_neurofield_devices() -> Vec<DiscoveredDeviceResponse> {
     out
 }
 
+/// Process-wide ANT Neuro SDK handle, built at most once.
+///
+/// `AntNeuroSdk::new` constructs a `NativeBackend`, which logs its SDK version
+/// at INFO unconditionally. The scanner probes on every other 5 s tick, so
+/// building a fresh SDK per probe emitted a `start log version …` line every
+/// 10 s for the life of the daemon — even on machines with no ANT Neuro
+/// hardware attached. `antneuro::Backend` is `Send + Sync`, so the handle is
+/// safe to build once and re-enumerate amplifiers from on every later tick.
+/// `None` means construction failed (no vendor library / no USB backend); we
+/// cache that too rather than retrying — and logging — forever.
+static ANTNEURO_SDK: std::sync::OnceLock<Option<antneuro::prelude::AntNeuroSdk>> = std::sync::OnceLock::new();
+
 pub(crate) fn detect_antneuro_devices() -> Vec<DiscoveredDeviceResponse> {
     use antneuro::prelude::*;
-    let config = AntNeuroConfig::default();
-    let Ok(sdk) = AntNeuroSdk::new(&config.library_path) else {
+    let sdk = ANTNEURO_SDK.get_or_init(|| {
+        let config = AntNeuroConfig::default();
+        AntNeuroSdk::new(&config.library_path).ok()
+    });
+    let Some(sdk) = sdk.as_ref() else {
         return Vec::new();
     };
     let amps = sdk.get_amplifiers_info().unwrap_or_default();

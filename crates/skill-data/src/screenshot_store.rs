@@ -180,6 +180,26 @@ pub struct EmbeddableRow {
     pub filename: String,
 }
 
+/// One row still owing OCR and/or embedding work, with the per-row flags the
+/// backfill needs.
+///
+/// Replaces issuing `rows_without_ocr` + `rows_without_embedding` +
+/// `rows_without_ocr_embedding` and merging them: a single predicate carries
+/// the flags, and `ocr_text` / `timestamp` come along so the caller does not
+/// re-query per row.
+#[derive(Debug, Clone)]
+pub struct BackfillRow {
+    pub id: i64,
+    pub filename: String,
+    /// `YYYYMMDDHHmmss` UTC — the label stored in the HNSW index.
+    pub timestamp: i64,
+    /// Existing OCR text, empty when OCR has not run yet.
+    pub ocr_text: String,
+    pub needs_ocr: bool,
+    pub needs_embed: bool,
+    pub needs_ocr_embed: bool,
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 pub struct ScreenshotStore {
@@ -569,6 +589,63 @@ impl ScreenshotStore {
             return vec![];
         };
         rows.filter_map(std::result::Result::ok).collect()
+    }
+
+    /// Predicate shared by [`Self::rows_needing_backfill`] and
+    /// [`Self::count_needing_backfill`] — keep the two in lockstep or progress
+    /// totals drift from the rows actually processed.
+    ///
+    /// The three disjuncts mirror the legacy `rows_without_ocr` /
+    /// `rows_without_embedding` / `rows_without_ocr_embedding` queries exactly.
+    const BACKFILL_PREDICATE: &'static str = "((ocr_text = '' OR ocr_text IS NULL) \
+         OR embedding IS NULL \
+         OR (ocr_text != '' AND ocr_embedding IS NULL))";
+
+    /// One page of rows owing backfill work, newest first.
+    ///
+    /// Paged on `id` so a pass can be done in bounded chunks and resumed:
+    /// pass `i64::MAX` to start, then the last returned `id` to continue.
+    /// Descending order means the most recent screenshots — the ones a user is
+    /// most likely to search for — are embedded first.
+    pub fn rows_needing_backfill(&self, before_id: i64, limit: usize) -> Vec<BackfillRow> {
+        let conn = self.conn.lock_or_recover();
+        let sql = format!(
+            "SELECT id, filename, timestamp, ocr_text,
+                    (ocr_text = '' OR ocr_text IS NULL) AS needs_ocr,
+                    (embedding IS NULL) AS needs_embed,
+                    (ocr_text != '' AND ocr_embedding IS NULL) AS needs_ocr_embed
+             FROM screenshots
+             WHERE id < ?1 AND {}
+             ORDER BY id DESC
+             LIMIT ?2",
+            Self::BACKFILL_PREDICATE
+        );
+        let Ok(mut stmt) = conn.prepare(&sql) else {
+            return vec![];
+        };
+        let Ok(rows) = stmt.query_map(params![before_id, limit as i64], |r| {
+            Ok(BackfillRow {
+                id: r.get(0)?,
+                filename: r.get(1)?,
+                timestamp: r.get(2)?,
+                ocr_text: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                needs_ocr: r.get(4)?,
+                needs_embed: r.get(5)?,
+                needs_ocr_embed: r.get(6)?,
+            })
+        }) else {
+            return vec![];
+        };
+        rows.filter_map(std::result::Result::ok).collect()
+    }
+
+    /// How many rows still owe backfill work — the `total` for progress events.
+    pub fn count_needing_backfill(&self) -> usize {
+        let conn = self.conn.lock_or_recover();
+        let sql = format!("SELECT COUNT(*) FROM screenshots WHERE {}", Self::BACKFILL_PREDICATE);
+        conn.query_row(&sql, [], |r| r.get::<_, i64>(0))
+            .map(|n| n.max(0) as usize)
+            .unwrap_or(0)
     }
 
     /// Check if an imported screenshot (user or clipboard) from a given original

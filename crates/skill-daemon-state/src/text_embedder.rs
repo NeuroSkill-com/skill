@@ -6,6 +6,8 @@
 //! model weights multiple times.
 
 use anyhow::{anyhow, Result};
+// Only the RLX encoder state carries a `config_path`.
+#[cfg(feature = "text-embeddings-rlx")]
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Once};
 
@@ -217,6 +219,8 @@ fn default_rlx_device() -> String {
     }
 }
 
+// `texts` is consumed only by the RLX match arm below.
+#[cfg_attr(not(feature = "text-embeddings-rlx"), allow(unused_variables))]
 fn embed_with_loaded(model: &mut LoadedTextEmbedder, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
     match model {
         #[cfg(feature = "text-embeddings-rlx")]

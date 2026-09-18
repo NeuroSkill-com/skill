@@ -17,11 +17,49 @@ pub fn spawn_all(state: AppState) {
     spawn_dnd_poll(state.clone());
     spawn_auto_scanner(state.clone());
     spawn_auto_connect(state.clone());
+    spawn_exg_weights_autofetch(state.clone());
     spawn_calibration_auto_start(state.clone());
     spawn_screenshot_worker(state.clone());
     spawn_weekly_digest(state.clone());
     spawn_fatigue_monitor(state.clone());
     spawn_daily_brain_report(state);
+}
+
+/// Fetch EXG encoder weights when the embed worker reports them missing.
+///
+/// The worker can detect the gap but not close it: it runs on a plain thread
+/// holding only the event bus, while the download machinery
+/// (`trigger_weights_download` → progress/completion events, cancellation)
+/// hangs off `AppState`. So the worker reports `ExgWeightsMissing` and this
+/// task acts on it — but only when the user opted in via
+/// `exg_auto_download_weights`, because the default backend is a
+/// 380M-parameter model and it should not arrive unasked.
+fn spawn_exg_weights_autofetch(state: AppState) {
+    tokio::spawn(async move {
+        let mut rx = state.events_tx.subscribe();
+        loop {
+            let ev = match rx.recv().await {
+                Ok(ev) => ev,
+                // A slow consumer only misses events; keep listening.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            };
+            if ev.r#type != "ExgWeightsMissing" {
+                continue;
+            }
+            if !load_user_settings(&state).exg_auto_download_weights {
+                info!(
+                    "[exg] encoder weights missing — auto-download is off; enable it in Settings or download manually"
+                );
+                continue;
+            }
+            info!("[exg] encoder weights missing — auto-download enabled, fetching");
+            // The route no-ops while a download is already in flight, so a
+            // burst of these events cannot stack concurrent downloads.
+            let _ =
+                crate::routes::settings_exg::trigger_weights_download_impl(axum::extract::State(state.clone())).await;
+        }
+    });
 }
 
 fn spawn_calibration_auto_start(state: AppState) {
@@ -124,6 +162,62 @@ fn spawn_auto_connect(state: AppState) {
         if let Ok(mut guard) = state.devices.lock() {
             for d in guard.iter_mut() {
                 d.is_preferred = d.id == preferred_id;
+            }
+        }
+
+        // ── Wait for the preferred device to become discoverable ───────────
+        //
+        // BLE targets only. A headband advertises on its own schedule, and
+        // 900 ms after boot the BLE listener has usually not seen a single
+        // advertisement yet. Connecting blind burns a full scan timeout per
+        // attempt and hands the reconnect loop a failure to retry: a Muse
+        // typically cost 7 failed attempts and ~70 s of ERROR lines — out of
+        // a 12-attempt budget — before it finally showed up. The unpaired
+        // branch above already waits for discovery; this gives the paired
+        // path the same treatment.
+        //
+        // Wired and manual targets (usb:, cgx:, antneuro:, wifi:) are NOT
+        // gated: they do not advertise, and some never appear in the scan
+        // list at all, so waiting on them would only delay a connect that
+        // would have succeeded immediately.
+        if preferred_id.starts_with("ble:") {
+            const DISCOVERY_WAIT: Duration = Duration::from_secs(60);
+            const DISCOVERY_POLL: Duration = Duration::from_millis(500);
+            let deadline = tokio::time::Instant::now() + DISCOVERY_WAIT;
+            let mut waited = false;
+            loop {
+                let seen = state
+                    .devices
+                    .lock()
+                    .ok()
+                    .map(|devs| devs.iter().any(|d| d.id == preferred_id))
+                    .unwrap_or(false);
+                if seen {
+                    if waited {
+                        info!("[auto-connect] {preferred_id} discovered — connecting");
+                    }
+                    break;
+                }
+                // The user may have started a session by hand while we waited.
+                let busy = state
+                    .status
+                    .lock()
+                    .ok()
+                    .map(|s| s.state == "connected" || s.state == "connecting")
+                    .unwrap_or(false);
+                if busy {
+                    info!("[auto-connect] session already active — skipping auto-connect");
+                    return;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    info!(
+                        "[auto-connect] {preferred_id} not discovered in {} s — attempting connect anyway",
+                        DISCOVERY_WAIT.as_secs()
+                    );
+                    break;
+                }
+                waited = true;
+                tokio::time::sleep(DISCOVERY_POLL).await;
             }
         }
 

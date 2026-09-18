@@ -13,6 +13,7 @@ import { Button } from "$lib/components/ui/button";
 import { CardContent } from "$lib/components/ui/card";
 import { SectionHeader } from "$lib/components/ui/section-header";
 import { SettingsCard } from "$lib/components/ui/settings-card";
+import { ToggleRow } from "$lib/components/ui/toggle-row";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import ExgModelPickerSection from "$lib/exg/ExgModelPickerSection.svelte";
@@ -200,6 +201,23 @@ async function cancelDownload() {
   await daemonInvoke("cancel_weights_download");
 }
 
+// Opt-in auto-fetch. The daemon reports `ExgWeightsMissing` whenever a session
+// starts without weights on disk; with this on, it runs the same download this
+// tab triggers by hand instead of recording the session metrics-only.
+async function toggleAutoDownload() {
+  if (autoDownloadSaving) return;
+  autoDownloadSaving = true;
+  const next = !autoDownloadWeights;
+  autoDownloadWeights = next;
+  try {
+    await daemonInvoke("set_exg_auto_download_weights", { value: next });
+  } catch {
+    autoDownloadWeights = !next;
+  } finally {
+    autoDownloadSaving = false;
+  }
+}
+
 async function restartApp() {
   restarting = true;
   try {
@@ -262,6 +280,8 @@ const encoderLoading = $derived(
 );
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
+let autoDownloadWeights = $state(false);
+let autoDownloadSaving = $state(false);
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 let unlistenReembed: (() => void) | undefined;
 let unlistenExgProgress: (() => void) | undefined;
@@ -270,6 +290,9 @@ let unlistenEmbedRecovery: (() => void) | undefined;
 onMount(async () => {
   modelConfig = await daemonInvoke<ExgModelConfig>("get_eeg_model_config");
   modelStatus = await daemonInvoke<EegModelStatus>("get_eeg_model_status");
+  autoDownloadWeights = await daemonInvoke<{ value: boolean }>("get_exg_auto_download_weights")
+    .then((r) => r.value)
+    .catch(() => false);
   statusTimer = setInterval(refreshStatus, 2000);
   loadReembedEstimate();
   daemonInvoke<typeof reembedConfig>("get_reembed_config")
@@ -369,6 +392,18 @@ onDestroy(() => {
   onStartDownload={startDownload}
   onCancelDownload={cancelDownload}
 />
+
+<!-- ── Automatic weight download ─────────────────────────────────────────────── -->
+<SettingsCard>
+  <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+    <ToggleRow
+      checked={autoDownloadWeights}
+      label={t("model.autoDownloadWeights")}
+      description={t("model.autoDownloadWeightsDesc")}
+      ontoggle={toggleAutoDownload}
+    />
+  </CardContent>
+</SettingsCard>
 
 <!-- Embedding speed (shown when data is available) -->
 {#if modelStatus.avg_embed_ms > 0}

@@ -358,7 +358,7 @@ fn next_sentence_end(s: &str, from: usize) -> Option<usize> {
 async fn voice_loop_turn(state: AppState, _text: String) {
     state.broadcast(
         "asr",
-        &json!({ "kind": "error", "message": "LLM not built into this daemon" }),
+        json!({ "kind": "error", "message": "LLM not built into this daemon" }),
     );
 }
 

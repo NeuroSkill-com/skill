@@ -27,6 +27,9 @@ const llm: Record<string, string> = {
   "model.download": "Завантажити ваги",
   "model.retry": "Повторити",
   "model.cancelDownload": "Скасувати",
+  "model.autoDownloadWeights": "Автоматично завантажувати ваги",
+  "model.autoDownloadWeightsDesc":
+    "Завантажує ваги кодувальника на початку запису, якщо їх немає. Типово вимкнено — типовий кодувальник ZUNA має 380 млн параметрів.",
   "model.downloading": "Завантаження…",
   "model.downloadStep": "{msg}",
   "model.downloadCancelled": "Завантаження скасовано.",

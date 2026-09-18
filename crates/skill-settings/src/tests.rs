@@ -387,3 +387,84 @@ fn idle_reembed_throttle_user_chosen_value_is_preserved() {
     let s = load_settings(skill_dir);
     assert_eq!(s.reembed.idle_reembed_throttle_ms, 50);
 }
+
+// ── Settings parse cache ──────────────────────────────────────────────────────
+
+/// A cache is only safe if a write invalidates it. The daemon and the Tauri
+/// shell are separate processes writing the same file, so staleness here would
+/// mean one process silently ignoring the other's settings changes.
+#[test]
+fn load_settings_sees_external_writes() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let skill_dir = dir.path();
+    let path = settings_path(skill_dir);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+    std::fs::write(&path, serde_json::json!({ "daily_goal_min": 11 }).to_string()).unwrap();
+    assert_eq!(load_settings(skill_dir).daily_goal_min, 11);
+
+    // Warm the cache, then rewrite the file behind its back.
+    let _ = load_settings(skill_dir);
+    std::fs::write(&path, serde_json::json!({ "daily_goal_min": 22 }).to_string()).unwrap();
+
+    assert_eq!(
+        load_settings(skill_dir).daily_goal_min,
+        22,
+        "a rewritten settings file must invalidate the cache"
+    );
+}
+
+/// Repeated loads with no intervening write must agree — the cache must not
+/// alter observable behaviour.
+#[test]
+fn load_settings_is_stable_across_repeat_calls() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let skill_dir = dir.path();
+    let path = settings_path(skill_dir);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, serde_json::json!({ "daily_goal_min": 42 }).to_string()).unwrap();
+
+    let a = load_settings(skill_dir);
+    let b = load_settings(skill_dir);
+    assert_eq!(a.daily_goal_min, b.daily_goal_min);
+    assert_eq!(a.exg_inference_device, b.exg_inference_device);
+}
+
+/// Two different skill dirs must not share a cache entry.
+#[test]
+fn load_settings_cache_is_keyed_per_directory() {
+    let d1 = tempfile::tempdir().expect("tempdir");
+    let d2 = tempfile::tempdir().expect("tempdir");
+    for (d, goal) in [(d1.path(), 7u32), (d2.path(), 9u32)] {
+        let p = settings_path(d);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, serde_json::json!({ "daily_goal_min": goal }).to_string()).unwrap();
+    }
+    assert_eq!(load_settings(d1.path()).daily_goal_min, 7);
+    assert_eq!(load_settings(d2.path()).daily_goal_min, 9);
+    // Re-read in the other order — a shared entry would surface here.
+    assert_eq!(load_settings(d2.path()).daily_goal_min, 9);
+    assert_eq!(load_settings(d1.path()).daily_goal_min, 7);
+}
+
+/// A missing file falls back to defaults and must not be cached as if present.
+#[test]
+fn load_settings_handles_missing_file_then_creation() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let skill_dir = dir.path();
+    let defaults = load_settings(skill_dir);
+
+    let path = settings_path(skill_dir);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        serde_json::json!({ "daily_goal_min": defaults.daily_goal_min + 5 }).to_string(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        load_settings(skill_dir).daily_goal_min,
+        defaults.daily_goal_min + 5,
+        "a file created after a defaults load must be picked up"
+    );
+}

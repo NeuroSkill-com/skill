@@ -8,10 +8,14 @@ use crate::{
         settings::{
             BoolValueRequest, FilenameRequest, HfFilesParams, HfSearchParams, LlmAddModelRequest, LlmFilenameRequest,
         },
-        settings_io::{modify_settings_blocking, patch_user_settings_sync},
+        settings_io::modify_settings_blocking,
     },
     state::AppState,
 };
+
+// Only the `llm`-gated handlers below persist settings this way.
+#[cfg(feature = "llm")]
+use crate::routes::settings_io::patch_user_settings_sync;
 
 #[cfg(feature = "llm")]
 #[derive(Clone)]
