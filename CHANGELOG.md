@@ -5911,6 +5911,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - fixed windows build
 
+## [0.0.131-rc.28] — 2026-09-22
+
+### Features
+
+- updated release windows action
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features

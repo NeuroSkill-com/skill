@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.131-rc.27"
+version = "0.0.131-rc.28"
 description = "A Tauri App"
 authors = ["NeuroSkill authors"]
 edition = "2021"
