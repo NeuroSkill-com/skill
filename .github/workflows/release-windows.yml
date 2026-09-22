@@ -380,6 +380,11 @@ jobs:
         env:
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
           LLVM_CONFIG:       ${{ env.LLVM_CONFIG }}
+          # Explicitly disable the auto lld-link detection in the Node helper.
+          # The repo has a Windows SDK mismatch when LLVM's lld-link is used,
+          # so the build must stay on the MSVC toolchain even if the helper
+          # auto-detects LLVM.
+          SKILL_NO_LLD: "1"
           # Dynamic CRT: native deps (DirectML, ONNX Runtime)
           # ship as pre-built /MD DLLs.  Using /MD everywhere avoids CRT
           # mismatch.  The NSIS installer bundles the VC++ Redist DLLs
