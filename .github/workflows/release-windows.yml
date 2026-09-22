@@ -332,16 +332,7 @@ jobs:
       # mmintrin.h, causing bindgen to fail.  Standalone LLVM 19 fixes this
       # and also provides lld-link for faster linking.
       #
-      # Cache the full install so subsequent runs skip the ~500 MB download.
-      - name: Cache LLVM 19
-        id: llvm-cache
-        uses: actions/cache@v5
-        with:
-          path: C:\LLVM
-          key: windows-llvm-19-v1
-
       - name: Install LLVM 19
-        if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: KyleMayes/install-llvm-action@v2.0.9
         with:
           version: "19"
@@ -350,17 +341,18 @@ jobs:
       - name: Export LLVM env vars
         shell: powershell
         run: |
-          $bin = "C:\LLVM\bin"
-          if (-not (Test-Path "$bin\libclang.dll")) {
-            # bin/ may be nested one level deeper
-            $dll = Get-ChildItem "C:\LLVM" -Recurse -Filter "libclang.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if (-not $dll) { Write-Error "libclang.dll not found under C:\LLVM"; exit 1 }
-            $bin = Split-Path $dll.FullName
+          $dll = Get-ChildItem "C:\LLVM" -Recurse -Filter "libclang.dll" `
+                   -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+          if (-not $dll) {
+            Write-Error "libclang.dll not found under C:\LLVM"
+            exit 1
           }
+          $bin = Split-Path $dll.FullName
 
           @(
             "LIBCLANG_PATH=$bin",
-            "LLVM_CONFIG=$bin\llvm-config.exe"
+            "LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe"
           ) | ForEach-Object {
             $_ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             Write-Host "[ok] $_"
@@ -383,6 +375,7 @@ jobs:
         shell: bash
         env:
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
+          LLVM_CONFIG:       ${{ env.LLVM_CONFIG }}
           # Dynamic CRT: native deps (DirectML, ONNX Runtime)
           # ship as pre-built /MD DLLs.  Using /MD everywhere avoids CRT
           # mismatch.  The NSIS installer bundles the VC++ Redist DLLs
