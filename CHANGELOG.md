@@ -5905,6 +5905,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - **muse-rs 0.1 → 0.2**: switches the Muse BLE backend from btleplug to webbluetooth. The `MuseClient` / `MuseClientConfig` / `MuseDevice` / `MuseHandle` / `MuseEvent` API is unchanged, so the adapter and connect paths needed no edits.
 - **webbluetooth 0.0.1** added as a direct dependency of `skill-daemon`, replacing its direct `btleplug` dependency. Its backends have no native dependencies — no `bluer`, no `dbus`, no `windows` crates — which drops a runtime `libdbus` requirement from the Linux packages.
 
+## [0.0.131-rc.27] — 2026-09-22
+
+### Features
+
+- fixed windows build
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features
