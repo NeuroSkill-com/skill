@@ -5917,6 +5917,12 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 
 - updated release windows action
 
+## [0.0.131-rc.29] — 2026-09-22
+
+### Features
+
+- MSVC vs LLD
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features
