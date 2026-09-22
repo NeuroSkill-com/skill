@@ -103,6 +103,23 @@ if [[ -f "$DAEMON_SRC" ]]; then
   <string>APPL</string>
   <key>CFBundleIconFile</key>
   <string>icon</string>
+  <!-- ── Bluetooth ─────────────────────────────────────────────────────────
+       The daemon is the process that actually opens CoreBluetooth (it owns
+       the BLE scanner and every device connection), so the usage string has
+       to be on ITS bundle, not just the outer app's.
+
+       When Tauri spawns the daemon as a child, TCC attributes the request to
+       the responsible parent and the outer app's key covers it.  Under
+       launchd (RunAtLoad, resources/com.neuroskill.skill-daemon.plist) the
+       daemon IS the responsible process, and a process with no usage string
+       is denied Bluetooth and never prompted — it just sees no adapter.
+
+       btleplug reported that as an empty scan, indistinguishable from "no
+       devices nearby".  webbluetooth reports it as `Availability::Unauthorized`
+       and the scanner logs it, so the key being absent is now visible rather
+       than silent — which is why it is being fixed here. -->
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Skill connects to your EEG headset over Bluetooth Low Energy to stream brainwave data.</string>
   <key>LSBackgroundOnly</key>
   <true/>
   <key>LSUIElement</key>

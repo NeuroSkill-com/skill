@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use skill_daemon_common::DeviceLogEntry;
+use skill_daemon_common::{ble_id, DeviceLogEntry};
 use skill_devices::session::DeviceAdapter;
 use tokio::sync::oneshot;
 use tracing::{error, info, warn};
@@ -30,7 +30,7 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
             let target_display_name = if target.contains(':') {
                 s.paired_devices
                     .iter()
-                    .find(|d| d.id == target)
+                    .find(|d| ble_id::same_device(&d.id, &target))
                     .map(|d| d.name.clone())
                     .or_else(|| Some(target.clone()))
             } else {
@@ -126,7 +126,11 @@ fn is_paired(state: &AppState, target: &str) -> bool {
         .status
         .lock()
         .ok()
-        .map(|s| s.paired_devices.iter().any(|d| d.id == target || d.name == target))
+        .map(|s| {
+            s.paired_devices
+                .iter()
+                .any(|d| ble_id::same_device(&d.id, target) || d.name == target)
+        })
         .unwrap_or(false)
 }
 
@@ -182,11 +186,12 @@ async fn connect_device(state: &AppState, target: &str) -> anyhow::Result<Box<dy
 /// they can use the fast event-driven `connect()` path (~250 ms) instead of
 /// the fixed-sleep `scan_all()` path (3-5 s).
 fn paired_name_for(state: &AppState, target: &str) -> Option<String> {
-    state
-        .status
-        .lock()
-        .ok()
-        .and_then(|s| s.paired_devices.iter().find(|d| d.id == target).map(|d| d.name.clone()))
+    state.status.lock().ok().and_then(|s| {
+        s.paired_devices
+            .iter()
+            .find(|d| ble_id::same_device(&d.id, target))
+            .map(|d| d.name.clone())
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -10,7 +10,7 @@ use axum::{
 use base64::Engine as _;
 use futures::{SinkExt, StreamExt};
 use skill_daemon_common::{
-    DiscoveredDeviceResponse, EventEnvelope, ForgetDeviceRequest, HealthResponse, LslDiscoveredStreamResponse,
+    ble_id, DiscoveredDeviceResponse, EventEnvelope, ForgetDeviceRequest, HealthResponse, LslDiscoveredStreamResponse,
     PairDeviceRequest, ScannerCortexConfigRequest, ScannerStateResponse, ScannerWifiConfigRequest,
     SessionControlRequest, SetPreferredDeviceRequest, StatusResponse, VersionResponse, WsClient, WsPortResponse,
     WsRequestLog, DAEMON_NAME, PROTOCOL_VERSION,
@@ -701,11 +701,14 @@ pub(crate) async fn devices(State(state): State<AppState>) -> Json<Vec<Discovere
 /// Also applies the persisted `preferred_id` so `is_preferred` is always correct.
 fn devices_with_paired(state: &AppState) -> Vec<DiscoveredDeviceResponse> {
     let mut out = state.devices.lock().map(|g| g.clone()).unwrap_or_default();
-    let ids: std::collections::HashSet<String> = out.iter().map(|d| d.id.clone()).collect();
+    // Canonical on both sides: a paired id persisted by a pre-webbluetooth
+    // build can differ from the scanner's only in case, and an id that misses
+    // here gets pushed as a second entry — the same headset listed twice.
+    let ids: std::collections::HashSet<String> = out.iter().map(|d| ble_id::canonical_target(&d.id)).collect();
 
     if let Ok(status) = state.status.lock() {
         for p in &status.paired_devices {
-            if !ids.contains(&p.id) {
+            if !ids.contains(&ble_id::canonical_target(&p.id)) {
                 out.push(DiscoveredDeviceResponse {
                     id: p.id.clone(),
                     name: p.name.clone(),
@@ -731,7 +734,7 @@ fn devices_with_paired(state: &AppState) -> Vec<DiscoveredDeviceResponse> {
         .unwrap_or_default();
     if !preferred_id.is_empty() {
         for d in &mut out {
-            d.is_preferred = d.id == preferred_id;
+            d.is_preferred = ble_id::same_device(&d.id, &preferred_id);
         }
     }
 
@@ -753,7 +756,12 @@ pub(crate) async fn set_preferred_device(
     Json(req): Json<SetPreferredDeviceRequest>,
 ) -> Json<Vec<DiscoveredDeviceResponse>> {
     // Persist preferred_id to settings (synchronous so the response reflects it).
-    let preferred_id = if req.id.is_empty() { None } else { Some(req.id.clone()) };
+    // Canonical on the way in, so settings.json converges on one spelling.
+    let preferred_id = if req.id.is_empty() {
+        None
+    } else {
+        Some(ble_id::canonical_target(&req.id))
+    };
     crate::routes::settings_io::patch_user_settings_sync(&state, move |s| {
         s.preferred_id = preferred_id;
     });
@@ -761,7 +769,7 @@ pub(crate) async fn set_preferred_device(
     // Also update in-memory devices for consistency.
     if let Ok(mut guard) = state.devices.lock() {
         for d in guard.iter_mut() {
-            d.is_preferred = !req.id.is_empty() && d.id == req.id;
+            d.is_preferred = !req.id.is_empty() && ble_id::same_device(&d.id, &req.id);
         }
     }
 
@@ -775,8 +783,10 @@ pub(crate) async fn pair_device(
 ) -> Json<Vec<DiscoveredDeviceResponse>> {
     let mut out = Vec::new();
     let mut paired_name: Option<String> = None;
+    // The id arrives from the UI, which may be holding a list this daemon
+    // produced before the webbluetooth migration changed its case.
     if let Ok(mut guard) = state.devices.lock() {
-        if let Some(d) = guard.iter_mut().find(|d| d.id == req.id) {
+        if let Some(d) = guard.iter_mut().find(|d| ble_id::same_device(&d.id, &req.id)) {
             d.is_paired = true;
             paired_name = Some(d.name.clone());
         }
@@ -786,9 +796,15 @@ pub(crate) async fn pair_device(
     let name = paired_name.unwrap_or_else(|| "Unknown".to_string());
 
     if let Ok(mut status) = state.status.lock() {
-        if !status.paired_devices.iter().any(|d| d.id == req.id) {
+        if !status
+            .paired_devices
+            .iter()
+            .any(|d| ble_id::same_device(&d.id, &req.id))
+        {
             status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
-                id: req.id.clone(),
+                // Persist canonically so the stored list converges on one
+                // spelling regardless of what the caller sent.
+                id: ble_id::canonical_target(&req.id),
                 name: name.clone(),
                 last_seen: now_unix_secs(),
             });
@@ -807,14 +823,15 @@ pub(crate) async fn forget_device(
 ) -> Json<Vec<DiscoveredDeviceResponse>> {
     let mut out = Vec::new();
     if let Ok(mut guard) = state.devices.lock() {
-        if let Some(d) = guard.iter_mut().find(|d| d.id == req.id) {
+        if let Some(d) = guard.iter_mut().find(|d| ble_id::same_device(&d.id, &req.id)) {
             d.is_paired = false;
         }
         out = guard.clone();
     }
 
     if let Ok(mut status) = state.status.lock() {
-        status.paired_devices.retain(|d| d.id != req.id);
+        // Case-insensitive, or "Forget" silently keeps the device paired.
+        status.paired_devices.retain(|d| !ble_id::same_device(&d.id, &req.id));
     }
 
     // Persist removal to settings.json.
@@ -856,11 +873,19 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
         .and_then(|d| d.iter().find(|x| x.is_preferred && x.is_paired).map(|x| x.id.clone()));
 
     // Availability snapshot from currently discovered paired devices.
+    // Keyed canonically — `paired_order` below comes off disk and is probed
+    // against this set, so a case difference would read as "not in range" and
+    // auto-reconnect would skip a headset that is sitting right there.
     let available: std::collections::HashSet<String> = state
         .devices
         .lock()
         .ok()
-        .map(|d| d.iter().filter(|x| x.is_paired).map(|x| x.id.clone()).collect())
+        .map(|d| {
+            d.iter()
+                .filter(|x| x.is_paired)
+                .map(|x| ble_id::canonical_target(&x.id))
+                .collect()
+        })
         .unwrap_or_default();
 
     // Peer activity-based preference:
@@ -917,9 +942,11 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
     }
 
     // If default local target is unavailable, fall back to next paired+available.
+    // `available` is canonically keyed, so every probe into it has to be too.
+    let is_available = |id: &str| available.contains(&ble_id::canonical_target(id));
     if let Some(current) = target.as_ref() {
-        if !current.starts_with("peer:") && !available.contains(current) {
-            if let Some(next) = paired_order.iter().find(|id| available.contains(*id)) {
+        if !current.starts_with("peer:") && !is_available(current) {
+            if let Some(next) = paired_order.iter().find(|id| is_available(id)) {
                 push_device_log(
                     &state,
                     "session",
@@ -928,7 +955,7 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
                 target = Some(next.clone());
             }
         }
-    } else if let Some(next) = paired_order.iter().find(|id| available.contains(*id)) {
+    } else if let Some(next) = paired_order.iter().find(|id| is_available(id)) {
         push_device_log(
             &state,
             "session",
@@ -984,15 +1011,15 @@ pub(crate) async fn control_retry_connect(State(state): State<AppState>) -> Json
             tracing::info!("[retry-connect] auto-pairing nearby device: {} ({})", dev.name, dev.id);
             // Pair it.
             if let Ok(mut guard) = state.devices.lock() {
-                if let Some(d) = guard.iter_mut().find(|d| d.id == dev.id) {
+                if let Some(d) = guard.iter_mut().find(|d| ble_id::same_device(&d.id, &dev.id)) {
                     d.is_paired = true;
                     d.is_preferred = true;
                 }
             }
             if let Ok(mut st) = state.status.lock() {
-                if !st.paired_devices.iter().any(|d| d.id == dev.id) {
+                if !st.paired_devices.iter().any(|d| ble_id::same_device(&d.id, &dev.id)) {
                     st.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
-                        id: dev.id.clone(),
+                        id: ble_id::canonical_target(&dev.id),
                         name: dev.name.clone(),
                         last_seen: now_unix_secs(),
                     });

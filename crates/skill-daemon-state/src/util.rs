@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::Rng;
-use skill_daemon_common::{DeviceLogEntry, StatusResponse, WsClient};
+use skill_daemon_common::{ble_id, DeviceLogEntry, StatusResponse, WsClient};
 use tracing::info;
 
 use crate::state::AppState;
@@ -250,11 +250,12 @@ pub fn resolve_target_fields(state: &AppState, target: Option<&str>) -> (Option<
     let Some(t) = target else { return (None, None) };
 
     if t.contains(':') {
-        let display = state
-            .status
-            .lock()
-            .ok()
-            .and_then(|s| s.paired_devices.iter().find(|d| d.id == t).map(|d| d.name.clone()));
+        let display = state.status.lock().ok().and_then(|s| {
+            s.paired_devices
+                .iter()
+                .find(|d| ble_id::same_device(&d.id, t))
+                .map(|d| d.name.clone())
+        });
         return (Some(t.to_string()), display.or_else(|| Some(t.to_string())));
     }
 
@@ -282,7 +283,11 @@ pub fn is_paired_target(state: &AppState, target: &str) -> bool {
         .status
         .lock()
         .ok()
-        .map(|s| s.paired_devices.iter().any(|d| d.id == target || d.name == target))
+        .map(|s| {
+            s.paired_devices
+                .iter()
+                .any(|d| ble_id::same_device(&d.id, target) || d.name == target)
+        })
         .unwrap_or(false)
 }
 

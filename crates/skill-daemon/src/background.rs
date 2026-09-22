@@ -125,15 +125,22 @@ fn spawn_auto_connect(state: AppState) {
 
                 // Pair the device.
                 if let Ok(mut guard) = state.devices.lock() {
-                    if let Some(d) = guard.iter_mut().find(|d| d.id == found.id) {
+                    if let Some(d) = guard
+                        .iter_mut()
+                        .find(|d| skill_daemon_common::ble_id::same_device(&d.id, &found.id))
+                    {
                         d.is_paired = true;
                         d.is_preferred = true;
                     }
                 }
                 if let Ok(mut status) = state.status.lock() {
-                    if !status.paired_devices.iter().any(|d| d.id == found.id) {
+                    if !status
+                        .paired_devices
+                        .iter()
+                        .any(|d| skill_daemon_common::ble_id::same_device(&d.id, &found.id))
+                    {
                         status.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
-                            id: found.id.clone(),
+                            id: skill_daemon_common::ble_id::canonical_target(&found.id),
                             name: found.name.clone(),
                             last_seen: skill_daemon_state::util::now_unix_secs(),
                         });
@@ -161,7 +168,7 @@ fn spawn_auto_connect(state: AppState) {
         // Set preferred in discovered devices list.
         if let Ok(mut guard) = state.devices.lock() {
             for d in guard.iter_mut() {
-                d.is_preferred = d.id == preferred_id;
+                d.is_preferred = skill_daemon_common::ble_id::same_device(&d.id, &preferred_id);
             }
         }
 
@@ -190,7 +197,10 @@ fn spawn_auto_connect(state: AppState) {
                     .devices
                     .lock()
                     .ok()
-                    .map(|devs| devs.iter().any(|d| d.id == preferred_id))
+                    .map(|devs| {
+                        devs.iter()
+                            .any(|d| skill_daemon_common::ble_id::same_device(&d.id, &preferred_id))
+                    })
                     .unwrap_or(false);
                 if seen {
                     if waited {

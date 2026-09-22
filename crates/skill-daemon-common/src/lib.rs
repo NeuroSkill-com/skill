@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub mod ble_id;
+
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const DAEMON_NAME: &str = "skill-daemon";
 

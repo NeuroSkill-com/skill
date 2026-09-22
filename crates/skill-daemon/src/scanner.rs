@@ -1,15 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use btleplug::{
-    api::{Central as _, CentralEvent, Manager as _, Peripheral as _, ScanFilter},
-    platform::Manager as BtManager,
-};
 use futures::StreamExt;
-use skill_daemon_common::{DiscoveredDeviceResponse, ScannerWifiConfigRequest};
+use skill_daemon_common::{ble_id, DiscoveredDeviceResponse, ScannerWifiConfigRequest};
 use tokio::sync::oneshot;
+use webbluetooth::{Bluetooth, LeScanOptions};
 
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::state::AppState;
 use crate::util::{now_unix_secs, push_device_log};
@@ -122,106 +119,128 @@ pub(crate) fn read_ble_cache(state: &AppState) -> Vec<DiscoveredDeviceResponse> 
 
 /// Persistent, event-driven BLE scanner.
 ///
-/// Creates the platform BLE manager **once** and subscribes to the adapter
-/// event stream.  Each `DeviceDiscovered` / `DeviceUpdated` event is used to
-/// update `state.ble_device_cache` with the peripheral's `local_name` and
-/// RSSI.  This is far more reliable than the previous approach of tearing
-/// down and re-creating the manager every 5 s with an 800 ms poll window,
-/// which frequently caused CoreBluetooth to return `None` for `local_name`
-/// (making the Muse look like an anonymous UUID and then being filtered out).
+/// Subscribes to `requestLEScan` on the process-wide [`Bluetooth::shared`]
+/// session and folds each advertisement into `state.ble_device_cache` (name,
+/// RSSI, last-seen).
+///
+/// The session is shared with every device crate that connects through
+/// webbluetooth, which is the point: one `CBCentralManager` / one BlueZ
+/// connection for the whole daemon, so a scan no longer has to be torn down
+/// and rebuilt for a connect to be able to succeed.  webbluetooth says so
+/// explicitly — "the radio scan is shared, so this coexists with a
+/// `request_device` in flight".
+///
+/// Two consequences worth knowing:
+///
+/// * `availability()` replaces the old retry-until-a-manager-appears loop.  It
+///   waits for the adapter's first state report (bounded, 5 s) and reports
+///   *why* the radio is unusable, so `Unauthorized` — the macOS TCC denial
+///   that used to present as "the scan finds nothing, silently" — now shows up
+///   in the log as itself.
+/// * The scan handle is a resource: dropping [`webbluetooth::LeScan`] stops
+///   the radio (once no other watcher wants it), which is how the pause below
+///   is implemented.  The session itself is never dropped — it is a process
+///   singleton, and dropping it would invalidate every device adopted from it.
 async fn run_ble_listener_task(state: AppState) {
+    let bluetooth = Bluetooth::shared();
+
     loop {
         // Stop when the outer scanner has been turned off.
         if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
             return;
         }
 
-        let Ok(manager) = BtManager::new().await else {
+        // Wait for the adapter, and say why when there isn't a usable one.
+        if let Err(why) = bluetooth.availability().await {
+            warn!(%why, "Bluetooth is not usable — retrying in 5 s");
             tokio::time::sleep(Duration::from_secs(5)).await;
             continue;
+        }
+
+        // `keep_repeated_devices` is off in the specification by default, which
+        // would report each device once and then go quiet — RSSI and last-seen
+        // would freeze at their first value and `read_ble_cache`'s 120 s
+        // staleness filter would eventually hide every device that is still
+        // sitting there advertising.
+        let options = LeScanOptions::accept_all_advertisements().keep_repeated_devices(true);
+
+        let mut scan = match bluetooth.request_le_scan(options).await {
+            Ok(scan) => scan,
+            Err(e) => {
+                warn!(error = %e, "could not start BLE scan — retrying in 5 s");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
         };
 
-        let Ok(adapters) = manager.adapters().await else {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            continue;
-        };
-
-        let Some(adapter) = adapters.into_iter().next() else {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            continue;
-        };
-
-        let Ok(mut events) = adapter.events().await else {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            continue;
-        };
-
-        // Start a continuous scan with no service-UUID filter so we see all
-        // advertising packets (including Muse, which uses proprietary UUIDs).
-        let _ = adapter.start_scan(ScanFilter::default()).await;
-
-        // Process events until the stream ends or the scanner is stopped.
+        // Fold advertisements until the stream ends or a flag tells us to stop.
         loop {
-            // When a BLE device is actively connecting, stop our scan so only
-            // one CBCentralManager.scanForPeripherals() is active at a time.
-            // On macOS, two concurrent scans suppress peripheral.connect()
-            // delegate callbacks, causing connections to hang.
+            // The six device crates still on btleplug (awear, hermes-ble, idun,
+            // mendi, mw75, openbci) open their own CBCentralManager to connect,
+            // and on macOS a second one cannot discover peripherals while
+            // another is scanning.  So the pause is still honoured for them —
+            // but where the btleplug scanner had to drop the whole manager, we
+            // only drop the scan, which stops the radio and leaves the shared
+            // session (and muse-rs's devices) intact.
+            //
+            // Whether stopping the radio is *enough* for a btleplug manager to
+            // make progress, or whether webbluetooth's manager merely existing
+            // is as obstructive as the old one, is the open question this port
+            // cannot answer without hardware — the old comment claimed the
+            // latter for two btleplug managers.  If a btleplug device regresses
+            // to hanging connects, this is the first place to look.
             if state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
-                let _ = adapter.stop_scan().await;
-                // Break out so `manager`, `adapter`, and `events` are
-                // dropped at the end of the outer scope.  On macOS a
-                // second CBCentralManager (created by device-crate
-                // connect() functions) cannot discover peripherals while
-                // the first one is still alive — even if scanning stopped.
                 break;
             }
 
             // Short timeout so ble_scan_paused and scanner_running are
             // checked frequently even when no advertisements are arriving.
-            let maybe_event = tokio::time::timeout(Duration::from_millis(300), events.next()).await;
+            let maybe_event = tokio::time::timeout(Duration::from_millis(300), scan.next()).await;
 
             if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
                 return;
             }
 
             match maybe_event {
-                // Adapter stream ended — break to outer loop to restart.
+                // Scan ended — break to the outer loop to restart it.
                 Ok(None) => break,
-                // Timeout — just re-check scanner_running and continue.
+                // Timeout — just re-check the flags and carry on.
                 Err(_) => continue,
-                Ok(Some(CentralEvent::DeviceDiscovered(id) | CentralEvent::DeviceUpdated(id))) => {
-                    if let Ok(peripheral) = adapter.peripheral(&id).await {
-                        let mut name: Option<String> = None;
-                        let mut rssi = 0i16;
-                        if let Ok(Some(props)) = peripheral.properties().await {
-                            name = props.local_name;
-                            if let Some(rv) = props.rssi {
-                                rssi = rv;
-                            }
+                Ok(Some(sighting)) => {
+                    // webbluetooth reports `NSUUID.UUIDString` on Apple, which
+                    // is uppercase where btleplug's `Uuid` Display was lower.
+                    // Canonicalising keeps the key byte-identical to what every
+                    // pre-migration `paired_devices.json` already holds.
+                    let key = ble_id::canonical_target(&format!("ble:{}", sighting.id));
+                    let name = sighting.name.clone();
+                    // Not every platform reports RSSI; 0 is the cache's
+                    // "unknown" and must not overwrite a real reading.
+                    let rssi = sighting.rssi().unwrap_or(0) as i16;
+
+                    if let Some(ref n) = name {
+                        debug!(ble_name = %n, rssi, "BLE advertisement");
+                    }
+                    if let Ok(mut cache) = state.ble_device_cache.lock() {
+                        let entry = cache.entry(key).or_insert((None, 0i16, 0u64));
+                        // Never overwrite a known name with None.
+                        if name.is_some() {
+                            entry.0 = name;
                         }
-                        if let Some(ref n) = name {
-                            debug!(ble_name = %n, rssi, "BLE advertisement");
+                        if rssi != 0 {
+                            entry.1 = rssi;
                         }
-                        let key = format!("ble:{}", id);
-                        if let Ok(mut cache) = state.ble_device_cache.lock() {
-                            let entry = cache.entry(key).or_insert((None, 0i16, 0u64));
-                            // Never overwrite a known name with None.
-                            if name.is_some() {
-                                entry.0 = name;
-                            }
-                            if rssi != 0 {
-                                entry.1 = rssi;
-                            }
-                            entry.2 = now_unix_secs();
-                        }
+                        entry.2 = now_unix_secs();
                     }
                 }
-                Ok(Some(_)) => {} // StateUpdate, ManufacturerData, etc. — ignored
             }
         }
 
-        // Stream ended (or paused for a BLE connect attempt).
-        // Wait for the pause flag to clear before recreating the manager.
+        // Stop the radio: this is the only handle, so dropping it is what
+        // `stop_scan()` used to be.  Explicit rather than end-of-scope so the
+        // radio is already off while we sit in the pause loop below.
+        scan.stop();
+
+        // Wait for the pause flag to clear before scanning again.
         while state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
             if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
                 return;
@@ -811,10 +830,19 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
                     // status list.  This ensures devices are correctly marked
                     // as paired even on the very first scan tick after a daemon
                     // restart (when `old` is empty and carries no is_paired state).
+                    // Canonically keyed: these come off disk, so an entry
+                    // written by a pre-webbluetooth build can differ from the
+                    // scanner's spelling by case alone — and then a paired
+                    // headset shows up in the list as unpaired.
                     let paired_ids: HashSet<String> = state
                         .status
                         .lock()
-                        .map(|s| s.paired_devices.iter().map(|p| p.id.clone()).collect())
+                        .map(|s| {
+                            s.paired_devices
+                                .iter()
+                                .map(|p| ble_id::canonical_target(&p.id))
+                                .collect()
+                        })
                         .unwrap_or_default();
 
                     let keep_other: Vec<DiscoveredDeviceResponse> = guard
@@ -846,7 +874,7 @@ pub(crate) async fn run_usb_scanner_task(state: AppState, mut stop_rx: oneshot::
                     for mut d in discovered {
                         // paired_ids (from settings) takes precedence so that
                         // devices remain marked as paired after a daemon restart.
-                        d.is_paired = paired_ids.contains(&d.id);
+                        d.is_paired = paired_ids.contains(&ble_id::canonical_target(&d.id));
                         if let Some(prev) = old.get(&d.id) {
                             if !d.is_paired {
                                 d.is_paired = prev.is_paired;
@@ -1007,6 +1035,36 @@ mod tests {
         assert_eq!(found.len(), 1, "only fresh known EEG BLE devices should remain");
         assert_eq!(found[0].id, "ble:muse");
         assert_eq!(found[0].transport, "ble");
+    }
+
+    /// The cache key the listener builds from a webbluetooth sighting must come
+    /// out byte-identical to what a pre-migration (btleplug) build wrote, or
+    /// every device in `paired_devices.json` stops matching after the upgrade.
+    ///
+    /// webbluetooth reports `NSUUID.UUIDString` on Apple — uppercase — where
+    /// btleplug's `PeripheralId(Uuid)` Displayed lowercase.
+    #[test]
+    fn listener_cache_key_matches_the_pre_migration_spelling() {
+        // What CoreBluetooth hands webbluetooth.
+        let sighting_id = "5A3C1E88-9B2D-4F60-A1C7-77E0D4B93F12";
+        // What the btleplug-era scanner wrote, and what is on disk today.
+        let legacy_key = "ble:5a3c1e88-9b2d-4f60-a1c7-77e0d4b93f12";
+
+        let key = ble_id::canonical_target(&format!("ble:{sighting_id}"));
+        assert_eq!(key, legacy_key);
+
+        // And it survives a round trip through the cache as a known device.
+        let td = TempDir::new().unwrap();
+        let state = AppState::new_for_tests("test".to_string(), td.path().to_path_buf());
+        state
+            .ble_device_cache
+            .lock()
+            .unwrap()
+            .insert(key.clone(), (Some("Muse-AB12".to_string()), -48, now_unix_secs()));
+
+        let found = read_ble_cache(&state);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].id, legacy_key);
     }
 
     #[test]

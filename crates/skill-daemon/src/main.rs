@@ -225,15 +225,35 @@ async fn daemon_main() -> anyhow::Result<()> {
         } else {
             skill_settings::load_settings(&skill_dir).paired
         };
-        if let Ok(mut status) = state.status.lock() {
-            status.paired_devices = paired
-                .into_iter()
-                .map(|p| skill_daemon_common::PairedDeviceResponse {
-                    id: p.id,
+        // Canonicalise BLE ids on the way in.  Pre-webbluetooth builds stored
+        // whatever spelling btleplug handed them — lowercase UUIDs on macOS,
+        // uppercase addresses on Linux/Windows — and webbluetooth reports
+        // uppercase everywhere.  Normalising here (and re-persisting below)
+        // converges the file in one restart, so the comparisons throughout the
+        // daemon are the belt and this is the braces.
+        let mut renamed = 0usize;
+        let migrated = paired
+            .into_iter()
+            .map(|p| {
+                let id = skill_daemon_common::ble_id::canonical_target(&p.id);
+                if id != p.id {
+                    renamed += 1;
+                }
+                skill_daemon_common::PairedDeviceResponse {
+                    id,
                     name: p.name,
                     last_seen: p.last_seen,
-                })
-                .collect();
+                }
+            })
+            .collect::<Vec<_>>();
+        if let Ok(mut status) = state.status.lock() {
+            status.paired_devices = migrated;
+        }
+        // Only rewrite when canonicalising actually changed an id, so a normal
+        // start does not touch the file.
+        if renamed > 0 {
+            info!(renamed, "migrating paired_devices.json to canonical BLE ids");
+            skill_daemon_state::util::persist_paired_devices(&state);
         }
     }
 

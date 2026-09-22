@@ -57,11 +57,30 @@ members = [
 # btleplug: improved macOS BLE scanning behaviour.
 # NOTE: upstream branch has a typo ("imrpoved" → "improved"); tracked for rename.
 #
+# Still required after the webbluetooth migration: six device crates are on
+# btleplug and pull it transitively.  Note this override covers FIVE of them —
+# awear, idun, mendi, mw75, openbci, all on 0.11 — while hermes-ble requires
+# ^0.12 and resolves unpatched from the registry, so two btleplug majors are
+# in the graph.  Drop this only once all six have moved; see
+# docs/webbluetooth-migration.md.
+#
 # [patch] sections MUST live in the workspace root — they are NOT inherited
 # from member Cargo.toml files.
 
 [patch.crates-io]
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
+# webbluetooth / muse-rs need NO patch: both are published, and muse-rs 0.2 and
+# skill-daemon declare the same registry `webbluetooth` version, so the resolver
+# unifies them onto one package.
+#
+# That unification is a correctness requirement, not a tidiness one:
+# `Bluetooth::shared()` memoises into a `OnceLock`, so two copies of the
+# webbluetooth crate in one graph = two CBCentralManagers = devices that will
+# not connect.  Re-check after any change to the BLE deps:
+#
+#   cargo tree -p skill-daemon -i webbluetooth   # must be exactly one node
+#
+# See docs/webbluetooth-migration.md.
 # Fix glib VariantStrIter unsoundness (GHSA-wrw7-89jp-8q8g) — &p → &mut p
 # All gtk-rs-core crates must come from the same source to keep -sys types aligned.
 glib            = { git = "https://github.com/eugenehp/gtk-rs-core.git", branch = "0.18-patched" }
@@ -110,6 +129,11 @@ rlx-wgpu         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main"
 rlx-rocm         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-onnx-import  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-nemo         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+# New rlx workspace crate (the `torch.save` ZIP+pickle reader `rlx-nemo` was
+# split onto).  It is published, so without an entry here it would resolve from
+# crates.io while every other rlx crate came from git — the dual-source split
+# this block exists to prevent.
+rlx-torch-ckpt   = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
