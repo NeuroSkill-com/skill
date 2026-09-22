@@ -5883,6 +5883,28 @@ The heatmap merges EEG data points with the closest timeline events to show whic
 - **Fork `oura-api` 0.1.2 to `reqwest` 0.12** (`patches/oura-api-0.1.2`, vendored; the only change from crates.io is the dependency version). Upstream's newest release pins `reqwest` 0.11, which pulled the entire hyper 0.14 stack including `h2` 0.3.x — the branch RUSTSEC-2026-0258 is unpatched on, fixed in `h2` >= 0.4.16 only. This removes the last advisory and drops a duplicate HTTP stack: the tree now resolves a single `hyper` (1.11) and a single `h2` (0.4.19), where it previously carried both 0.14/1.x and 0.3/0.4.
 - Remove dead `deny.toml` entries that made `cargo deny` fail or warn: the `RUSTSEC-2024-0415` gtk ignore (unreachable — `unmaintained = "workspace"` already scopes that lint to our own crates, and an ignore that never matches is a hard error), the `winreg@0.55.0` duplicate skip (deduplicated by dropping `reqwest` 0.11), and re-pin the `winnow` skip 1.0.3 → 1.0.4.
 
+## [0.0.131-rc.26] — 2026-09-22
+
+### Bugfixes
+
+- **Paired devices survive the BLE backend change**: webbluetooth reports Apple device ids as uppercase `NSUUID` strings where btleplug reported lowercase UUIDs, which would have made every entry in `paired_devices.json` stop matching after upgrade — the headset would reappear as unpaired and auto-reconnect would never fire. BLE ids are now canonicalised to one spelling (`skill_daemon_common::ble_id`) at every write, compared case-insensitively at every lookup, and migrated in place on first start.
+- **"Forget device" no longer silently fails**: the paired-list removal compared ids with exact string equality, so a case difference left the device paired.
+- **Duplicate scanner entries**: a paired device whose stored id differed in case from the scanner's was pushed into the device list a second time, listing the same headset twice.
+- **Daemon can request Bluetooth under launchd**: `skill-daemon.app`'s generated `Info.plist` was missing `NSBluetoothAlwaysUsageDescription`. Spawned by the Tauri app the outer bundle's key covered it, but started by launchd (`RunAtLoad`) the daemon is its own responsible process and was denied Bluetooth with no prompt — presenting as a scan that silently found nothing.
+
+### Refactor
+
+- **BLE scanner moved to webbluetooth**: the daemon's advertisement scanner now runs on the process-wide `Bluetooth::shared()` session instead of its own btleplug `CBCentralManager`, so it shares one radio session with muse-rs rather than competing with it. The session coexists with an in-flight connect by design, which removes the need to tear the scanner down and rebuild it around every BLE connect attempt.
+
+### Docs
+
+- **`docs/webbluetooth-migration.md`**: what moved to webbluetooth, what is still on btleplug, and what has to happen before the `[patch.crates-io] btleplug` override can be dropped.
+
+### Dependencies
+
+- **muse-rs 0.1 → 0.2**: switches the Muse BLE backend from btleplug to webbluetooth. The `MuseClient` / `MuseClientConfig` / `MuseDevice` / `MuseHandle` / `MuseEvent` API is unchanged, so the adapter and connect paths needed no edits.
+- **webbluetooth 0.0.1** added as a direct dependency of `skill-daemon`, replacing its direct `btleplug` dependency. Its backends have no native dependencies — no `bluer`, no `dbus`, no `windows` crates — which drops a runtime `libdbus` requirement from the Linux packages.
+
 ## [0.0.131-rc.3] — 2026-06-01
 
 ### Features
