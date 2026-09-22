@@ -358,15 +358,19 @@ jobs:
             Write-Host "[ok] $_"
           }
 
-          # Use lld-link for faster linking if available
-          $lldLink = Join-Path $bin "lld-link.exe"
-          if (Test-Path $lldLink) {
-            "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$lldLink" |
-              Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            Write-Host "[ok] CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$lldLink"
-          } else {
-            Write-Host "[info] lld-link not found; falling back to MSVC link.exe"
+          # Use the MSVC linker for this target. LLVM's standalone lld-link can
+          # be installed alongside the MSVC toolchain, but it doesn't resolve the
+          # Windows SDK import libraries like combase.lib on the GitHub runner,
+          # leading to failed final link steps with `could not open 'combase.lib'`.
+          $msvcLink = Get-Command link.exe -ErrorAction SilentlyContinue
+          if (-not $msvcLink) {
+            Write-Error "link.exe not found in PATH after msvc-dev-cmd setup"
+            exit 1
           }
+
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($msvcLink.Source)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($msvcLink.Source)"
 
       # ── Compile Rust (shared compile-product recipe) ─────────────────────────
       #
