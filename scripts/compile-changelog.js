@@ -9,6 +9,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseVersion } from "./version-utils.mjs";
 
 const UNRELEASED_DIR = "changes/unreleased";
 const RELEASES_DIR = "changes/releases";
@@ -48,14 +49,31 @@ function categoryRank(name) {
   return idx >= 0 ? idx : CATEGORY_ORDER.length;
 }
 
-/** Compare semver strings descending (newest first). */
+/**
+ * Compare version strings descending (newest first).
+ *
+ * Must handle the `-rc.N` suffix. The previous implementation did
+ * `a.split(".").map(Number)`, which turns "0.0.131-rc.29" into
+ * [0, 0, NaN, 29]; the `|| 0` guard then read that NaN as patch 0, so *every*
+ * RC compared as 0.0.0. Two consequences, both visible in the published file:
+ * all 59 RC sections sank below every stable release (0.0.131-rc.30 landed
+ * under 0.0.1), and because the comparator tied them all, V8's stable sort
+ * fell back to readdir order — giving rc.1, rc.10, rc.11 … rc.19, rc.2.
+ *
+ * `parseVersion` already handles the suffix; reuse it rather than re-parse.
+ * A final release outranks its own candidates, so a null rc sorts as Infinity:
+ * 0.0.131 > 0.0.131-rc.30 > 0.0.131-rc.29.
+ */
 function semverCompareDesc(a, b) {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) !== (pb[i] || 0)) return (pb[i] || 0) - (pa[i] || 0);
-  }
-  return 0;
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  const rc = (p) => (p.rc === null ? Number.POSITIVE_INFINITY : p.rc);
+  return (
+    pb.major - pa.major ||
+    pb.minor - pa.minor ||
+    pb.patch - pa.patch ||
+    rc(pb) - rc(pa)
+  );
 }
 
 /**
