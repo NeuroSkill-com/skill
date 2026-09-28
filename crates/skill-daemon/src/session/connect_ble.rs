@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! BLE device connection functions — Muse, MW75, Hermes, IDUN, Mendi,
+//! BLE device connection functions — Muse, MW75, IDUN, Mendi,
 //! Ganglion, BrainBit, g.tec Unicorn.
 
 use anyhow::Context as _;
@@ -95,22 +95,6 @@ pub(super) async fn connect_mw75(paired_name: Option<String>) -> anyhow::Result<
     #[cfg(feature = "mw75-rfcomm")]
     adapter.set_rfcomm(rfcomm);
     Ok(Box::new(adapter))
-}
-
-// ── Hermes V1 (BLE) ─────────────────────────────────────────────────────────
-
-pub(super) async fn connect_hermes(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
-    use skill_devices::hermes_ble::prelude::*;
-    use skill_devices::session::hermes::HermesAdapter;
-
-    let config = HermesClientConfig {
-        name_prefix: paired_name.unwrap_or_else(|| "Hermes".into()),
-        scan_timeout_secs: 5,
-    };
-    info!(name_prefix = %config.name_prefix, "connecting to Hermes");
-    let client = HermesClient::new(config);
-    let (rx, handle) = client.connect().await.context("Hermes connect")?;
-    Ok(Box::new(HermesAdapter::new(rx, handle)))
 }
 
 // ── IDUN Guardian (BLE) ──────────────────────────────────────────────────────

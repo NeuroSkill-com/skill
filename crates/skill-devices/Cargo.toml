@@ -22,16 +22,13 @@ bitflags    = { version = "2", features = ["serde"] }
 # Muse EEG – library only, no TUI feature.
 # 0.2 swapped the BLE backend from btleplug to webbluetooth; the
 # MuseClient / MuseDevice / MuseHandle / MuseEvent API is unchanged.
-muse-rs = { version = "0.2.0", default-features = false }
+muse-rs = { version = "0.2.1", default-features = false }
 
 # OpenBCI board drivers (Ganglion BLE, Cyton serial, …)
 openbci = { version = "0.0.1", features = ["ble"] }
 
 # Neurable MW75 Neuro EEG headphones (BLE activation + RFCOMM data streaming)
 mw75 = { version = "0.0.6", default-features = false }
-
-# Hermes V1 EEG headset (8-channel ADS1299, BLE)
-hermes-ble = { version = "0.0.1", default-features = false }
 
 # Emotiv EPOC / Insight / Flex (Cortex WebSocket API)
 emotiv = { version = "0.0.13", default-features = false }

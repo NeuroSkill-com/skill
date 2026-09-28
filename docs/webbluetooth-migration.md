@@ -113,10 +113,11 @@ genuinely case-sensitive — `usb:COM3` must not become `usb:com3`.
 
 ## Phase 2 — the remaining btleplug crates (outstanding)
 
-Six device crates still use btleplug and pull it in transitively, so
+Five device crates still use btleplug and pull it in transitively, so
 `[patch.crates-io] btleplug` has to stay. The daemon therefore runs **three**
-independent BLE stacks, not two, because the six do not even agree on a
-btleplug major:
+independent BLE stacks, because btleplug has no singleton: every
+`Manager::new().adapters()` allocates a fresh `CBCentralManager` (see below).
+The five remaining crates do at least agree on a btleplug major now:
 
 | crate | btleplug | notes |
 |---|---|---|
@@ -125,32 +126,116 @@ btleplug major:
 | `mendi` | 0.11.8 (patched) | |
 | `mw75` | 0.11.8 (patched) | BLE activation only — the data path is RFCOMM, which webbluetooth does not do |
 | `openbci` | 0.11.8 (patched) | Ganglion BLE |
-| `hermes-ble` | **0.12.0 (unpatched)** | requires `^0.12`, which the 0.11 patch cannot satisfy |
 
-Two notes that are easy to miss, both pre-existing rather than introduced by
-this migration:
+`hermes-ble` used to be a sixth row here, pinned to `^0.12.0`, which the 0.11
+patch could not satisfy — so it resolved straight from the registry and a
+second btleplug major sat in the graph. **It has been removed**: the
+`hermes-ble` dependency, `session/hermes.rs`, `connect_hermes`, the
+`ConnectRoute::Hermes` route and the Hermes BLE-name recognition are all gone.
+Every btleplug user is now inside one requirement range, and the
+`[patch.crates-io]` override covers all of them.
 
-- **`hermes-ble` does not get the patch.** The `[patch.crates-io] btleplug`
-  override replaces the 0.11 requirement only; hermes-ble's `^0.12` resolves
-  straight from the registry, so the "improved macOS BLE scanning" fix the
-  patch exists for covers five of the six crates, not all six.
-- Two btleplug majors in one graph are two separate copies of the code, so
-  they share no adapter state with each other any more than either shares with
-  webbluetooth. `cargo tree -p skill-daemon -i btleplug` reports this as an
-  ambiguous spec — that is the tell.
+That single range was the precondition for the shim, which has **landed**:
+`patches/btleplug-0.11.9` is btleplug's API reimplemented over webbluetooth,
+pulled in with one `[patch.crates-io] btleplug = { path = ... }` entry. All five
+crates compile against it unchanged, and every BLE operation in the process now
+funnels through one `Bluetooth::shared()` session.
 
-None of the six has a sibling checkout in this tree; all are crates.io-only.
+Replacing the five one at a time could never have promised that: it relies on
+each crate being correct and leaves a second manager live throughout. The shim
+makes a second one *unconstructible* — `Bluetooth::shared()` memoises into a
+`OnceLock`, and `Bluetooth::new()` / `with_chooser()`, the only two ways to
+build a separate session, appear nowhere in the shim and have no btleplug
+concept that maps to them. `platform::tests::every_adapter_is_the_same_session`
+asserts it: three `Manager`s, three `adapters()` calls, one `Arc`.
 
-When the last one lands, delete: the `btleplug` patch, `state.ble_scan_paused`,
-the `needs_ble_pause` block and its 400 ms sleep in `session/connect.rs`, and
-the pause handling in the scanner's inner loop.
+What the shim is, concretely:
+
+| module | provenance |
+|---|---|
+| `src/api/{mod,bdaddr,bleuuid}.rs` | verbatim upstream 0.11.8 — so the five crates see identical types |
+| `src/common/{adapter_manager,util}.rs` | verbatim upstream — peripheral registry, event/notification broadcast |
+
+"Verbatim" is content-identical, not byte-identical: upstream's crates.io tarball
+ships CRLF and this repo's `.gitattributes` normalises `*.rs` to LF, as it has
+for every other crate under `patches/`. Verify a re-sync with
+`diff --strip-trailing-cr`, not plain `diff`.
+| `src/lib.rs` | upstream's `Error`, plus a `webbluetooth::Error` mapping |
+| `src/platform.rs` | **ours** — upstream has one backend per OS, this has one for all of them |
+
+Two places the mapping is not 1:1, both handled in `platform.rs`:
+
+- **Notification fan-in.** btleplug hands out one merged stream per peripheral,
+  valid before any connection and across reconnects; webbluetooth subscribes per
+  characteristic. Each `subscribe()` therefore spawns a pump that tags values
+  with their characteristic UUID (`Notifications::tagged()`) and forwards them
+  into a per-peripheral broadcast channel created with the peripheral — which is
+  what makes `notifications()` work before `connect()`. One pump per
+  characteristic, so `unsubscribe()` stops only that one.
+- **Scan refcounting.** An `Adapter` is a handle onto a shared session, not
+  something owned, so `start_scan` is idempotent and the scan is owned by a pump
+  task; `stop_scan` from any holder aborts it, as upstream's adapter-wide
+  semantics require. Two concurrent `start_scan` calls race past the released
+  lock deliberately — whoever stores first wins, the loser aborts its own scan —
+  so the radio ends with exactly one.
+
+`Grant::unrestricted()` (webbluetooth's `unrestricted` feature) is required, not
+a convenience: btleplug has no permission model, so there is no point in the
+graph where a service allowlist could come from. The GATT blocklist still
+applies underneath it.
+
+Why this matters more than tidiness — btleplug's CoreBluetooth backend has no
+`OnceLock`, `OnceCell`, `lazy_static` or `static` of any kind:
+
+    Manager::new()  -> Ok(Self {})                      // no-op
+      .adapters()   -> Adapter::new()
+        run_corebluetooth_thread()  -> thread::spawn     // detached
+          CoreBluetoothInternal::new()
+            CBCentralManager::alloc()                    // a fresh one, every call
+            loop { cbi.wait_for_message().await }         // no exit condition
+
+Each call permanently leaks a thread, a tokio runtime, a dispatch queue, a
+delegate and a `CBCentralManager`. The calls are not one-time init either — in
+`mw75` they sit inside `scan_all()` and `connect()`, so it is one more manager
+per scan and per connect attempt.
+
+The API surface to shim is small: across the five crates it is 18 methods
+(`connect`, `disconnect`, `read`, `write`, `subscribe`, `notifications`,
+`start_scan`/`stop_scan`, `peripherals`, `characteristics`, `discover_services`,
+`adapters`, `properties`, `id`, `address`, `events`, `is_connected`,
+`unsubscribe`) and webbluetooth 0.0.3 has a counterpart for every one. Two
+things need deliberate design: notification **fan-in** (btleplug hands out one
+merged stream per peripheral; webbluetooth subscribes per characteristic) and
+scan **refcounting** (a shimmed `Adapter` is a handle onto a shared session, so
+dropping one must not tear down a scan another holder still wants).
+
+Only `mw75` has a sibling checkout in this tree; the other four are
+crates.io-only.
+
+### Still to delete — needs hardware to confirm
+
+The shim removes the *reason* for the BLE pause: it existed because a btleplug
+crate opened its own `CBCentralManager`, and on macOS a second one cannot
+discover peripherals while another is scanning. There is only one manager now,
+so `state.ble_scan_paused`, the `needs_ble_pause` block and its 400 ms sleep in
+`session/connect.rs`, and the pause handling in the scanner's inner loop should
+all be removable.
+
+They have deliberately **not** been removed yet: the pause is cheap and
+harmless, whereas removing it is a change to the connect path that cannot be
+verified without a headset on the bench. Do it as its own change, against real
+hardware, not as part of the shim.
+
+Once the pause is gone the `[patch.crates-io] btleplug` entry is the last thing
+left — and that only disappears when the five crates stop depending on btleplug
+by name, which is a separate migration from this one.
 
 ## Open questions for hardware validation
 
 Ranked. The first is the one that can regress a shipped device.
 
 1. **Does webbluetooth's live session block a btleplug connect?** The scanner
-   still honours `ble_scan_paused` for the six crates above, but where the old
+   still honours `ble_scan_paused` for the five crates above, but where the old
    listener dropped its whole manager, it now only drops the `LeScan` — which
    stops the radio and leaves the shared session alive. The old code's comment
    claimed a merely-existing second manager was obstructive. If a btleplug

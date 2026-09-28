@@ -153,7 +153,6 @@ async fn connect_device(state: &AppState, target: &str) -> anyhow::Result<Box<dy
     let needs_ble_pause = lower == "ganglion"
         || lower.contains("mw75")
         || lower.contains("neurable")
-        || lower.contains("hermes")
         || lower.contains("mendi")
         || lower.contains("idun")
         || lower.contains("guardian")
@@ -209,12 +208,19 @@ enum ConnectRoute {
     Neurofield,
     Gtec,
     Mw75,
-    Hermes,
     Idun,
     Awear,
     Mendi,
     IrohRemote,
     AntNeuro,
+    /// Recognised, but deliberately unsupported: the driver has been removed.
+    ///
+    /// This exists so a name we used to support fails loudly instead of
+    /// falling through to `select_connect_route`'s `ConnectRoute::Muse`
+    /// catch-all, which would hand a Hermes headset the Muse protocol.  A
+    /// user who paired one on an older build still has it in
+    /// `status.paired_devices`, so the name still reaches routing.
+    Removed(&'static str),
     Muse,
 }
 
@@ -259,7 +265,7 @@ fn is_gtec(s: &str) -> bool {
 fn is_mw75(s: &str) -> bool {
     s.contains("mw75") || s.contains("neurable")
 }
-fn is_hermes(s: &str) -> bool {
+fn is_removed_hermes(s: &str) -> bool {
     s.contains("hermes")
 }
 fn is_idun(s: &str) -> bool {
@@ -292,7 +298,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_neurofield, ConnectRoute::Neurofield),
     (is_gtec, ConnectRoute::Gtec),
     (is_mw75, ConnectRoute::Mw75),
-    (is_hermes, ConnectRoute::Hermes),
+    (is_removed_hermes, ConnectRoute::Removed("Hermes V1")),
     (is_idun, ConnectRoute::Idun),
     (is_awear, ConnectRoute::Awear),
     (is_mendi, ConnectRoute::Mendi),
@@ -339,12 +345,15 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Neurofield => connect_wired::connect_neurofield(target).await,
         ConnectRoute::Gtec => connect_ble::connect_gtec(target).await,
         ConnectRoute::Mw75 => connect_ble::connect_mw75(paired_name_for(state, target)).await,
-        ConnectRoute::Hermes => connect_ble::connect_hermes(paired_name_for(state, target)).await,
         ConnectRoute::Idun => connect_ble::connect_idun(state, paired_name_for(state, target)).await,
         ConnectRoute::Awear => connect_ble::connect_awear(paired_name_for(state, target)).await,
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
         ConnectRoute::AntNeuro => connect_wired::connect_antneuro(state, target).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
+        ConnectRoute::Removed(device) => anyhow::bail!(
+            "{device} is no longer supported: the hermes-ble driver was removed. \
+             Unpair the device to stop it being offered."
+        ),
         ConnectRoute::Muse => connect_ble::connect_muse(target, paired_name_for(state, target)).await,
     }
 }
@@ -402,9 +411,6 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     if lower.contains("mw75") || lower.contains("neurable") {
         return "mw75";
     }
-    if lower.contains("hermes") {
-        return "hermes";
-    }
     if lower.contains("idun") || lower.contains("guardian") {
         return "idun";
     }
@@ -450,7 +456,6 @@ mod tests {
         let cases = [
             ("muse", "muse"),
             ("MW75-ABCD", "mw75"),
-            ("Hermes-001", "hermes"),
             ("Idun-Guardian", "idun"),
             ("AWEAR-E04A8471", "awear"),
             ("Mendi-XY", "mendi"),
@@ -527,6 +532,24 @@ mod tests {
         assert_eq!(infer_kind_from_target("USB:COM4"), "openbci/cyton");
     }
 
+    /// A Hermes name must reach `ConnectRoute::Removed`, never the
+    /// `ConnectRoute::Muse` catch-all.  The hermes-ble driver is gone, but a
+    /// device paired on an older build still carries the name into routing,
+    /// and handing a Hermes headset the Muse protocol would be worse than a
+    /// clear failure.
+    #[test]
+    fn removed_hermes_does_not_fall_back_to_muse() {
+        for name in ["hermes", "Hermes-001", "hermes v1"] {
+            let route = select_connect_route(&name.to_lowercase());
+            assert_eq!(
+                route,
+                ConnectRoute::Removed("Hermes V1"),
+                "{name} should route to Removed, got {route:?}"
+            );
+            assert_ne!(route, ConnectRoute::Muse);
+        }
+    }
+
     #[test]
     fn select_connect_route_covers_aliases_and_prefixes() {
         let cases = [
@@ -545,7 +568,6 @@ mod tests {
             ("neurofield:USB1:5", ConnectRoute::Neurofield),
             ("gtec:UN-123", ConnectRoute::Gtec),
             ("MW75-ABCD", ConnectRoute::Mw75),
-            ("Hermes-001", ConnectRoute::Hermes),
             ("Idun-Guardian", ConnectRoute::Idun),
             ("AWEAR-E04A8471", ConnectRoute::Awear),
             ("Mendi-XY", ConnectRoute::Mendi),
@@ -576,7 +598,6 @@ mod tests {
             "neurofield:USB1:5",
             "gtec:UN-123",
             "MW75-ABCD",
-            "Hermes-001",
             "Idun-Guardian",
             "AWEAR-E04A8471",
             "Mendi-XY",

@@ -22,14 +22,12 @@
 //! * [`cognionics::CognionicsAdapter`] — CGX Quick-20/20r/32r/8r (8–30 ch @ 500 Hz)
 //! * [`muse::MuseAdapter`]   — Muse 2 / Muse S (4 ch @ 256 Hz, PPG, IMU)
 //! * [`mw75::Mw75Adapter`]   — Neurable MW75 Neuro (12 ch @ 500 Hz)
-//! * [`hermes::HermesAdapter`] — Hermes V1 (8 ch @ 250 Hz, IMU)
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
 
 pub mod antneuro;
 pub mod awear;
 pub mod cognionics;
 pub mod emotiv;
-pub mod hermes;
 pub mod idun;
 pub mod iroh_remote;
 pub mod mendi;

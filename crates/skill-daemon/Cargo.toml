@@ -1,6 +1,6 @@
 [package]
 name = "skill-daemon"
-version = "0.0.131-rc.29"
+version = "0.0.131-rc.30"
 edition = "2021"
 license = "GPL-3.0-only"
 
@@ -148,7 +148,7 @@ base64 = { workspace = true }
 # BLE advertisement scanning.  One process-wide `Bluetooth::shared()` session
 # is shared with the device crates that connect, so the scan no longer has to
 # be torn down for a connect to succeed (see scanner.rs).
-webbluetooth = { version = "0.0.1", features = ["uuid"] }
+webbluetooth = { version = "0.0.3", features = ["uuid"] }
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "6"
 rand = "0.10"

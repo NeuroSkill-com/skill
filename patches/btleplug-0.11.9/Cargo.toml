@@ -1,0 +1,89 @@
+[package]
+name    = "btleplug"
+version = "0.11.9"
+edition = "2021"
+# Upstream btleplug is BSD-3-Clause; the vendored `api/` and `common/` modules
+# are verbatim copies, so the licence carries over unchanged.
+#
+# "Verbatim" means content-identical, not byte-identical: upstream's crates.io
+# tarball ships CRLF, and this repo's .gitattributes normalises `*.rs` to LF
+# (as it has for every other crate under patches/).  Check provenance with
+# `diff --strip-trailing-cr`, not plain `diff`:
+#
+#   U=~/.cargo/registry/src/*/btleplug-0.11.8
+#   for f in src/api/*.rs src/common/*.rs; do diff --strip-trailing-cr "$U/$f" "$f"; done
+license     = "BSD-3-Clause"
+description = "btleplug's API, implemented over webbluetooth so one process has exactly one BLE session"
+repository  = "https://github.com/deviceplug/btleplug"
+publish     = false
+
+# ── What this is, and why it exists ──────────────────────────────────────────
+#
+# This is NOT a vendored copy of btleplug with a patch on top, the way
+# patches/gpu-allocator-0.28.0 is.  It is btleplug's *public API* reimplemented
+# on top of `webbluetooth`, pulled in through the workspace root's
+# `[patch.crates-io] btleplug = { path = "patches/btleplug-0.11.9" }`.
+#
+# The five device crates that still speak btleplug — awear, idun, mendi, mw75,
+# openbci — therefore keep compiling unchanged while every BLE operation in the
+# process funnels through one `webbluetooth::Bluetooth::shared()` session.
+#
+# The reason is not tidiness.  Upstream btleplug's CoreBluetooth backend has no
+# singleton of any kind, so every `Manager::new().adapters()` allocated a fresh
+# `CBCentralManager` on a detached thread that never exits:
+#
+#     Adapter::new() -> run_corebluetooth_thread() -> thread::spawn(...)
+#       CoreBluetoothInternal::new() -> CBCentralManager::alloc()
+#         loop { cbi.wait_for_message().await }      // no exit condition
+#
+# Those calls are not one-time init — in `mw75` they sit inside `scan_all()`
+# and `connect()` — so it was one more leaked manager per scan and per connect,
+# and on macOS a second manager cannot discover peripherals while another is
+# scanning.  `Bluetooth::shared()` memoises into a `OnceLock`, so here there is
+# no API through which a second session can be built at all.
+#
+# Version 0.11.9: must satisfy `^0.11.8` (awear, idun, mendi, mw75) and `^0.11`
+# (openbci) simultaneously, which is why hermes-ble's old `^0.12.0` pin had to
+# go first — one `[patch]` entry supplies one version.
+
+[lib]
+name = "btleplug"
+path = "src/lib.rs"
+
+[dependencies]
+# The BLE implementation.  This version MUST stay in lockstep with every other
+# `webbluetooth` requirement in the graph (skill-daemon, muse-rs).  Cargo treats
+# 0.0.x releases as mutually incompatible, so a mismatch here puts two copies of
+# webbluetooth in the tree — two `OnceLock`s, two sessions, two
+# CBCentralManagers — which is the exact bug this crate exists to prevent.
+#   cargo tree -p skill-daemon -i webbluetooth   # must be exactly one node
+#
+# `unrestricted` is required, not a convenience: btleplug has no permission
+# model at all — a caller scans and connects — so there is no point in the
+# graph at which a service allowlist could be supplied.  `Grant::unrestricted()`
+# lives behind that feature.  The GATT blocklist still applies underneath it.
+webbluetooth = { version = "0.0.3", features = ["uuid", "unrestricted"] }
+
+# Needed by the verbatim `api/` and `common/` modules.
+async-trait   = "0.1"
+bitflags      = "2"
+dashmap       = "6"
+futures       = "0.3"
+log           = "0.4"
+thiserror     = "2"
+tokio         = { version = "1", features = ["sync", "rt"] }
+tokio-stream  = { version = "0.1", features = ["sync"] }
+uuid          = "1"
+serde_cr      = { version = "1", features = ["derive"], optional = true, default-features = false, package = "serde" }
+serde_bytes   = { version = "0.11", optional = true }
+
+[features]
+# The vendored `api/` modules carry upstream's serde impls behind this feature.
+# No consumer in this workspace uses it; declared with upstream's dependencies
+# so the `cfg(feature = "serde")` blocks are known cfgs and still compile if
+# anyone turns it on.
+serde = ["dep:serde_cr", "dep:serde_bytes"]
+
+# Deliberately no [dev-dependencies]: crates under patches/ are not workspace
+# members, and cargo refuses to test a non-member that needs them.  The tests
+# build a runtime from the `rt` feature above instead of using #[tokio::test].

@@ -27,7 +27,6 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 | Device | Manufacturer | Channels | Sample Rate | Transport | Crate | Notes |
 |--------|-------------|----------|-------------|-----------|-------|-------|
 | **Neurable MW75 Neuro** | Neurable / Master & Dynamic | 12 | 500 Hz | BLE | `mw75` | Over-ear headphones with EEG |
-| **Hermes V1** | RE-AK Nucleus | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE | `hermes-ble` | IMU |
 | **Emotiv EPOC X** | Emotiv | 14 | 256 Hz | Cortex WS | `emotiv` | via Emotiv Launcher |
 | **Emotiv Insight** | Emotiv | 5 | 128 Hz | Cortex WS | `emotiv` | via Emotiv Launcher |
 | **Emotiv EPOC Flex** | Emotiv | 32 | 256 Hz | Cortex WS | `emotiv` | Research-grade |
@@ -73,7 +72,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 
 | Transport | Devices | Protocol |
 |-----------|---------|----------|
-| **BLE** | Muse, MW75, Hermes, Ganglion, IDUN, Mendi, BrainBit, g.tec | Bluetooth Low Energy (btleplug / vendor SDK) |
+| **BLE** | Muse, MW75, Ganglion, IDUN, Mendi, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth / btleplug / vendor SDK) |
 | **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster, NeuroSky | FTDI/CDC serial at 57600–115200 baud |
 | **WiFi** | Cyton WiFi, Cyton+Daisy WiFi, Ganglion WiFi | TCP via OpenBCI WiFi Shield |
 | **UDP** | Galea | Direct UDP streaming |
@@ -128,7 +127,7 @@ Device → DeviceAdapter → Session Runner → CSV/Parquet + BandAnalyzer DSP
 
 | Prefix | Example | Device |
 |--------|---------|--------|
-| `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse, MW75, Hermes, IDUN, Mendi (via btleplug) |
+| `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse (webbluetooth); MW75, IDUN, Mendi (btleplug) |
 | `usb:` | `usb:COM3`, `usb:/dev/ttyUSB0` | OpenBCI Cyton/Daisy, BrainMaster serial |
 | `cgx:` | `cgx:/dev/ttyUSB1` | Cognionics CGX |
 | `wifi:` | `wifi:192.168.1.100` | OpenBCI WiFi Shield |

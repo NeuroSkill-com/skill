@@ -25,8 +25,6 @@ pub(crate) fn is_known_eeg_ble_name(name: &str) -> bool {
         // Neurable MW75
         || n.contains("mw75")
         || n.contains("neurable")
-        // Hermes
-        || n.starts_with("hermes")
         // Emotiv EPOC/Insight/Flex/MN8
         || n.starts_with("emotiv")
         || n.starts_with("epoc")
@@ -175,7 +173,7 @@ async fn run_ble_listener_task(state: AppState) {
 
         // Fold advertisements until the stream ends or a flag tells us to stop.
         loop {
-            // The six device crates still on btleplug (awear, hermes-ble, idun,
+            // The five device crates still on btleplug (awear, idun,
             // mendi, mw75, openbci) open their own CBCentralManager to connect,
             // and on macOS a second one cannot discover peripherals while
             // another is scanning.  So the pause is still honoured for them —
@@ -966,7 +964,6 @@ mod tests {
         // Other EEG families
         assert!(is_known_eeg_ble_name("Ganglion-1234"));
         assert!(is_known_eeg_ble_name("MW75-Neuro"));
-        assert!(is_known_eeg_ble_name("Hermes-001"));
         assert!(is_known_eeg_ble_name("Mendi-XY"));
         assert!(is_known_eeg_ble_name("IGE-Guardian"));
         assert!(is_known_eeg_ble_name("BrainBit-EEG"));
