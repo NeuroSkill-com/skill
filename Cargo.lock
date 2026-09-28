@@ -13018,7 +13018,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skill"
-version = "0.0.131-rc.29"
+version = "0.0.131-rc.30"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -13147,7 +13147,7 @@ dependencies = [
 
 [[package]]
 name = "skill-daemon"
-version = "0.0.131-rc.29"
+version = "0.0.131-rc.30"
 dependencies = [
  "antneuro",
  "anyhow",
@@ -13702,7 +13702,7 @@ dependencies = [
 
 [[package]]
 name = "skill-tty"
-version = "0.0.131-rc.29"
+version = "0.0.131-rc.30"
 dependencies = [
  "anyhow",
  "chrono",
