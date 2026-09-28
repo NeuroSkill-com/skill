@@ -8,6 +8,13 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.131-rc.31] — 2026-09-28
+
+### Features
+
+- fix the session drop issue
+- improve cli
+
 ## [0.0.131-rc.30] — 2026-09-28
 
 ### Refactor
