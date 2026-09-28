@@ -30,6 +30,52 @@ pub(crate) async fn run_adapter_session(
     let mut pipeline: Option<Pipeline> = None;
     let mut sample_count: u64 = 0;
 
+    // Abnormal-exit guard.
+    //
+    // `spawn_device_session` drops the session task's `JoinHandle`, so a panic
+    // in here unwinds silently: none of the `break` arms below run, the device
+    // is never cleared, and `/v1/status` keeps reporting `connected` with a
+    // frozen sample_count forever — with no log line, because nothing is left
+    // alive to write one. That is github.com/NeuroSkill-com/skill#89: a Muse 2
+    // powered off mid-stream stayed "connected" for 1 h 40 min.
+    //
+    // Every intentional exit calls `finish()`, so this only fires when the loop
+    // is left by unwinding. In particular it must NOT fire on cancellation:
+    // cancel means "switch sessions", and the caller starts a new one
+    // immediately, so clearing there would race the new "connecting" state.
+    struct ExitGuard {
+        state: AppState,
+        completed: bool,
+    }
+    impl ExitGuard {
+        fn finish(&mut self) {
+            self.completed = true;
+        }
+    }
+    impl Drop for ExitGuard {
+        fn drop(&mut self) {
+            if self.completed {
+                return;
+            }
+            error!("session task ended abnormally (panic) — clearing device so reconnect can resume");
+            if let Ok(mut s) = self.state.status.lock() {
+                s.clear_device();
+            }
+            if let Ok(mut bands) = self.state.latest_bands.lock() {
+                *bands = None;
+            }
+            broadcast_event(
+                &self.state.events_tx,
+                "DeviceDisconnected",
+                &serde_json::json!({"reason": "session_panic"}),
+            );
+        }
+    }
+    let mut exit_guard = ExitGuard {
+        state: state.clone(),
+        completed: false,
+    };
+
     // Idle timeout: if no event arrives for this long after receiving at least
     // one EEG frame, treat it as a silent disconnect (e.g. BLE out of range
     // without a formal disconnect event).
@@ -66,6 +112,7 @@ pub(crate) async fn run_adapter_session(
             _ = &mut cancel_rx => {
                 info!("session cancelled");
                 adapter.disconnect().await;
+                exit_guard.finish();
                 break;
             }
             () = &mut idle_sleep, if sample_count > 0 => {
@@ -76,6 +123,7 @@ pub(crate) async fn run_adapter_session(
                 }
                 if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                 broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({"reason": "idle_timeout"}));
+                exit_guard.finish();
                 break;
             }
             () = &mut rollover_sleep, if rollover_secs > 0 && pipeline.is_some() => {
@@ -109,6 +157,7 @@ pub(crate) async fn run_adapter_session(
                     }
                     if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                     broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
+                    exit_guard.finish();
                     break;
                 };
 
@@ -362,6 +411,7 @@ pub(crate) async fn run_adapter_session(
                         }
                         if let Ok(mut bands) = state.latest_bands.lock() { *bands = None; }
                         broadcast_event(&state.events_tx, "DeviceDisconnected", &serde_json::json!({}));
+                        exit_guard.finish();
                         break;
                     }
                 }
@@ -551,6 +601,255 @@ mod tests {
             strict * 12
         } else {
             strict * 8
+        }
+    }
+
+    /// An adapter that delivers a real session and then goes *silent without
+    /// closing* — the shape of github.com/NeuroSkill-com/skill#89, where a Muse
+    /// 2 is powered off mid-stream. The vendor channel stays open, so
+    /// `next_event()` pends forever instead of returning `None`, and the
+    /// "event stream ended" branch is never reached. Only `IDLE_TIMEOUT` can
+    /// end the session.
+    struct SilentAfterDataAdapter {
+        desc: DeviceDescriptor,
+        queue: VecDeque<DeviceEvent>,
+    }
+
+    #[async_trait]
+    impl DeviceAdapter for SilentAfterDataAdapter {
+        fn descriptor(&self) -> &DeviceDescriptor {
+            &self.desc
+        }
+        async fn next_event(&mut self) -> Option<DeviceEvent> {
+            match self.queue.pop_front() {
+                Some(ev) => Some(ev),
+                // Not `None`: the radio link is gone but nothing closed the
+                // channel, which is exactly what the report describes.
+                None => std::future::pending().await,
+            }
+        }
+        async fn disconnect(&mut self) {}
+    }
+
+    /// The 30 s idle timeout must fire when a connected device stops sending
+    /// without disconnecting, clear the device and broadcast the disconnect.
+    /// Reported symptom: status stayed `connected` with a frozen sample_count
+    /// for 1 h 40 min and no log line at all.
+    #[tokio::test(start_paused = true)]
+    async fn silent_stream_hits_idle_timeout_and_clears_device() {
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let mut queue = VecDeque::new();
+        queue.push_back(DeviceEvent::Connected(DeviceInfo {
+            name: "TestHeadset".to_string(),
+            id: "mock:muse".to_string(),
+            ..Default::default()
+        }));
+        // Enough frames that `sample_count > 0`, which gates the idle arm.
+        for i in 0..8 {
+            queue.push_back(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+
+        let adapter = SilentAfterDataAdapter {
+            desc: eeg_desc("muse", 4, 256.0),
+            queue,
+        };
+
+        let (_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        // Paused clock: if the idle arm is reachable this returns as soon as
+        // the runtime auto-advances past 30 s; if it is not, this hangs and the
+        // test times out rather than passing silently.
+        tokio::time::timeout(
+            Duration::from_secs(120),
+            run_adapter_session(state.clone(), cancel_rx, Box::new(adapter)),
+        )
+        .await
+        .expect("idle timeout never fired — session ran forever on a silent stream");
+
+        // The symptom the issue reports is the status, not the log line.
+        let cleared = state
+            .status
+            .lock()
+            .map(|s| s.device_name.is_none() && s.state != "connected")
+            .unwrap_or(false);
+        assert!(cleared, "device still reported as connected after idle timeout");
+
+        let mut saw_disconnect = false;
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "DeviceDisconnected" {
+                saw_disconnect = true;
+            }
+        }
+        assert!(saw_disconnect, "no DeviceDisconnected broadcast after idle timeout");
+    }
+
+    /// Panics mid-session, the way a real bug in the notification path would.
+    struct PanicAfterDataAdapter {
+        desc: DeviceDescriptor,
+        queue: VecDeque<DeviceEvent>,
+    }
+
+    #[async_trait]
+    impl DeviceAdapter for PanicAfterDataAdapter {
+        fn descriptor(&self) -> &DeviceDescriptor {
+            &self.desc
+        }
+        async fn next_event(&mut self) -> Option<DeviceEvent> {
+            match self.queue.pop_front() {
+                Some(ev) => Some(ev),
+                None => panic!("simulated panic in the session task"),
+            }
+        }
+        async fn disconnect(&mut self) {}
+    }
+
+    fn panicking_session(state: &AppState) -> PanicAfterDataAdapter {
+        let _ = state;
+        let mut queue = VecDeque::new();
+        queue.push_back(DeviceEvent::Connected(DeviceInfo {
+            name: "TestHeadset".to_string(),
+            id: "mock:muse".to_string(),
+            ..Default::default()
+        }));
+        for i in 0..8 {
+            queue.push_back(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: i as f64 / 256.0,
+            }));
+        }
+        PanicAfterDataAdapter {
+            desc: eeg_desc("muse", 4, 256.0),
+            queue,
+        }
+    }
+
+    /// A panic in the session task must still clear the device.
+    ///
+    /// github.com/NeuroSkill-com/skill#89: the task panicked, its `JoinHandle`
+    /// was dropped by `spawn_device_session`, and `/v1/status` reported
+    /// `connected` with a frozen sample_count for 1 h 40 min — with no log line,
+    /// because nothing was alive to write one. The `ExitGuard` runs while
+    /// unwinding, so the device is released and auto-reconnect can resume.
+    #[tokio::test]
+    async fn panicking_session_clears_device() {
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let (_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let st = state.clone();
+        let adapter = panicking_session(&state);
+        let joined = tokio::spawn(async move {
+            run_adapter_session(st, cancel_rx, Box::new(adapter)).await;
+        })
+        .await;
+
+        assert!(
+            joined.as_ref().err().map(|e| e.is_panic()).unwrap_or(false),
+            "the adapter was supposed to panic; got {joined:?}"
+        );
+
+        let cleared = state
+            .status
+            .lock()
+            .map(|s| s.device_name.is_none() && s.state != "connected")
+            .unwrap_or(false);
+        assert!(cleared, "device still reported connected after the task panicked");
+
+        let mut reason = None;
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "DeviceDisconnected" {
+                reason = ev.payload.get("reason").and_then(|v| v.as_str()).map(String::from);
+            }
+        }
+        assert_eq!(
+            reason.as_deref(),
+            Some("session_panic"),
+            "no DeviceDisconnected(session_panic) broadcast"
+        );
+    }
+
+    /// The same panic must not cost the recording: `Pipeline`'s `Drop` finalises
+    /// the chunk, so the CSV is flushed and closed and its `.json` sidecar is
+    /// written even though `pipe.finalize()` was never reached.
+    #[tokio::test]
+    async fn panicking_session_still_finalizes_the_recording() {
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+
+        let (_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let st = state.clone();
+        let adapter = panicking_session(&state);
+        let _ = tokio::spawn(async move {
+            run_adapter_session(st, cancel_rx, Box::new(adapter)).await;
+        })
+        .await;
+
+        let mut csvs: Vec<_> = walk_csvs(dir.path());
+        csvs.sort();
+        let csv = csvs.first().expect("session CSV was never created");
+        let sidecar = csv.with_extension("json");
+        assert!(
+            sidecar.exists(),
+            "no .json sidecar at {} — the recording was not finalised on panic",
+            sidecar.display()
+        );
+        let meta: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&sidecar).unwrap()).unwrap();
+        assert_eq!(
+            meta.get("total_samples").and_then(|v| v.as_u64()),
+            Some(8),
+            "sidecar should record the 8 frames written before the panic"
+        );
+    }
+
+    fn walk_csvs(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.extension().is_some_and(|x| x == "csv") {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+
+    /// Cancellation is "switch sessions", not "device is gone" — the caller
+    /// starts a new session immediately, so the guard must stay quiet or it
+    /// would race the new `connecting` state with a spurious disconnect.
+    #[tokio::test]
+    async fn cancelled_session_does_not_broadcast_a_panic_disconnect() {
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let (tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let adapter = SilentAfterDataAdapter {
+            desc: eeg_desc("muse", 4, 256.0),
+            queue: VecDeque::new(),
+        };
+        let st = state.clone();
+        let task = tokio::spawn(async move {
+            run_adapter_session(st, cancel_rx, Box::new(adapter)).await;
+        });
+        let _ = tx.send(());
+        task.await.unwrap();
+
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "DeviceDisconnected" {
+                let reason = ev.payload.get("reason").and_then(|v| v.as_str());
+                assert_ne!(reason, Some("session_panic"), "cancel fired the abnormal-exit guard");
+            }
         }
     }
 

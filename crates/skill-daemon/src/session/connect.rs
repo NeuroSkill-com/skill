@@ -20,7 +20,12 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
     let state2 = state.clone();
 
-    tokio::task::spawn(async move {
+    // The session body runs in its own task so the supervisor below can observe
+    // it. Dropping this JoinHandle on the floor is what made
+    // github.com/NeuroSkill-com/skill#89 invisible: the task panicked, nobody
+    // ever awaited the `JoinError`, and the only evidence was a `/v1/status`
+    // that said `connected` forever with no log line anywhere.
+    let session_task = tokio::task::spawn(async move {
         if let Ok(mut s) = state2.status.lock() {
             let target_id = if target.contains(':') {
                 Some(target.clone())
@@ -108,6 +113,31 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
         }
         if let Ok(mut slot) = state2.session_handle.lock() {
             *slot = None;
+        }
+    });
+
+    // Supervisor: report how the session task actually ended.
+    //
+    // State correctness on a panic is handled inside `run_adapter_session` by
+    // its `ExitGuard`, which runs while unwinding. This exists purely so the
+    // panic is *visible* — otherwise the only symptom is a device that silently
+    // stops working until the daemon is killed.
+    let supervisor_state = state.clone();
+    tokio::task::spawn(async move {
+        match session_task.await {
+            Ok(()) => {}
+            Err(e) if e.is_panic() => {
+                error!(panic = ?e, "session task panicked");
+                push_device_log_static(&supervisor_state, "session", &format!("session task panicked: {e}"));
+                // The guard has already cleared the device, but the handle slot
+                // is set at the end of the task body, which the panic skipped.
+                if let Ok(mut slot) = supervisor_state.session_handle.lock() {
+                    *slot = None;
+                }
+            }
+            Err(e) => {
+                warn!(%e, "session task cancelled");
+            }
         }
     });
 

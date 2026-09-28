@@ -26,12 +26,61 @@ use super::day_store::DayStore;
 
 /// Handle to the background embed worker.  Dropping it signals the worker
 /// to shut down (the sender half of the channel is dropped).
+/// How long a session end waits for the embed worker to finish encoding
+/// whatever is still queued.
+///
+/// Bounded on purpose: this is waited on from `Pipeline`'s drop, which can run
+/// on a tokio worker thread, and encoding an epoch is slow (ZUNA and friends).
+/// Better to leave a straggler detached than to wedge a runtime thread.
+const EMBED_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 pub(crate) struct EmbedWorkerHandle {
-    pub tx: mpsc::SyncSender<EpochMsg>,
-    _thread: std::thread::JoinHandle<()>,
+    /// `Option` only so `Drop` can close the channel before waiting; it is
+    /// `Some` for the whole normal lifetime. Use [`Self::sender`].
+    tx: Option<mpsc::SyncSender<EpochMsg>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    /// Disconnects when the worker has drained the queue and returned.
+    done: mpsc::Receiver<()>,
+}
+
+/// Drain the queue before the session is torn down.
+///
+/// The worker consumes with `rx.iter()`, so closing the channel makes it finish
+/// the backlog and exit — but the thread used to be detached, so nothing waited
+/// for that. A session ending (including abnormally) could therefore discard up
+/// to a full 128-epoch queue of embeddings that had already been captured:
+/// the samples were in the CSV, the embeddings simply never got written.
+impl Drop for EmbedWorkerHandle {
+    fn drop(&mut self) {
+        // Last sender: the accumulator's clone is dropped before this, because
+        // `Pipeline` declares `epoch_accumulator` above `_embed_worker` and
+        // fields drop in declaration order.
+        self.tx.take();
+
+        match self.done.recv_timeout(EMBED_DRAIN_TIMEOUT) {
+            // The worker dropped its side: it drained and exited.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                if let Some(t) = self.thread.take() {
+                    let _ = t.join();
+                }
+            }
+            _ => {
+                warn!(
+                    timeout_s = EMBED_DRAIN_TIMEOUT.as_secs(),
+                    "embed worker still draining at session end — leaving it detached"
+                );
+            }
+        }
+    }
 }
 
 impl EmbedWorkerHandle {
+    /// A sender for queuing epochs. Cloneable; the worker stops once every
+    /// clone is gone.
+    pub fn sender(&self) -> mpsc::SyncSender<EpochMsg> {
+        self.tx.as_ref().expect("embed sender is taken only in Drop").clone()
+    }
+
     /// Spawn the embed worker thread.
     pub fn spawn(
         skill_dir: PathBuf,
@@ -43,14 +92,22 @@ impl EmbedWorkerHandle {
         // Keep a larger pre-encoder buffer so epochs are not dropped while
         // heavy models (e.g. ZUNA) are still loading.
         let (tx, rx) = mpsc::sync_channel::<EpochMsg>(128);
+        // Closed by the worker on the way out, which is how `Drop` learns the
+        // backlog is finished without an unbounded `join()`.
+        let (done_tx, done) = mpsc::channel::<()>();
         let thread = std::thread::Builder::new()
             .name("eeg-embed".into())
             .spawn(move || {
+                let _done = done_tx;
                 embed_worker_main(rx, skill_dir, config, events_tx, hooks, text_embedder);
             })
             .expect("failed to spawn embed worker thread");
 
-        Self { tx, _thread: thread }
+        Self {
+            tx: Some(tx),
+            thread: Some(thread),
+            done,
+        }
     }
 }
 

@@ -83,6 +83,27 @@ pub(crate) struct Pipeline {
     /// Device kind tag (e.g. "muse", "awear", "openbci", "emotiv").
     pub(crate) device_kind: String,
     pub(crate) ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer,
+    /// Whether the current chunk has been flushed, closed and given a sidecar.
+    ///
+    /// Exists so `Drop` can finalise a chunk the session never got to finalise
+    /// itself — a panic in the session task used to skip `finalize()` entirely,
+    /// leaving the CSV unflushed and no `.meta` written. `roll()` clears it
+    /// again for the new chunk. See github.com/NeuroSkill-com/skill#89.
+    finalized: bool,
+}
+
+/// Finalise on drop, so a session that ends abnormally still leaves a readable
+/// recording.
+///
+/// The session task's `JoinHandle` is dropped by `spawn_device_session`, so a
+/// panic inside it used to unwind silently past `pipe.finalize()` — the CSV was
+/// never flushed or closed and no `.meta` sidecar was written, losing the tail
+/// of the recording. Finalising here means the data survives whatever killed
+/// the session. `finalize()` is idempotent, so the normal path is unaffected.
+impl Drop for Pipeline {
+    fn drop(&mut self) {
+        self.finalize();
+    }
 }
 
 impl Pipeline {
@@ -150,12 +171,8 @@ impl Pipeline {
         } else {
             let worker =
                 EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks, text_embedder);
-            let mut acc = EpochAccumulator::new(
-                worker.tx.clone(),
-                eeg_channels,
-                sample_rate as f32,
-                channel_names.clone(),
-            );
+            let mut acc =
+                EpochAccumulator::new(worker.sender(), eeg_channels, sample_rate as f32, channel_names.clone());
             acc.set_device_name(device_name.clone());
             (Some(worker), Some(acc))
         };
@@ -190,6 +207,7 @@ impl Pipeline {
             device_kind: String::new(),
             // 5-second window covers one full HRV epoch at 64 Hz PPG.
             ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer::new(5.0),
+            finalized: false,
         })
     }
 
@@ -306,6 +324,12 @@ impl Pipeline {
     }
 
     pub(crate) fn finalize(&mut self) {
+        // Idempotent: `Drop` calls this too, and a rolled-then-ended session
+        // would otherwise write its sidecar twice.
+        if self.finalized {
+            return;
+        }
+        self.finalized = true;
         self.writer.flush();
         self.writer.close();
         write_session_meta(
@@ -340,6 +364,8 @@ impl Pipeline {
         // 1. Finalise the current chunk (writer flush+close, sidecar JSON).
         let just_closed = self.csv_path.clone();
         self.finalize();
+        // The new chunk below is unfinalised again.
+        self.finalized = false;
         // Pre-warm the metrics cache for the just-closed chunk in a
         // background thread. With hourly rollover, an overnight 8h
         // recording produces ~480 chunks; without pre-warming, the first
