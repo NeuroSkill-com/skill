@@ -5,6 +5,8 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
+# For `paths`: resolving the platform config directory.
+dirs = "6"
 serde = { workspace = true }
 serde_json = { workspace = true }
 

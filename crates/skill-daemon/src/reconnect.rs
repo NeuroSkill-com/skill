@@ -8,7 +8,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::state::AppState;
 pub use skill_daemon_state::reconnect_state::{ReconnectState, MAX_RETRY_ATTEMPTS};
@@ -27,6 +27,16 @@ pub fn retry_delay_secs(attempt: u32) -> u32 {
         2 => 3,
         _ => 5,
     }
+}
+
+/// A connect is always owned by a session task, so device state "connecting"
+/// with no live `session_handle` means the attempt that set it is gone.
+///
+/// See the call site for why this matters: `eval_reconnect_tick` waits while the
+/// state is "connecting", so a stale value stops reconnecting altogether without
+/// ever reaching the give-up branch.
+pub fn is_stale_connecting(device_state: &str, has_session: bool) -> bool {
+    device_state == "connecting" && !has_session
 }
 
 /// Outcome of one reconnect-tick evaluation.
@@ -93,6 +103,14 @@ pub fn eval_reconnect_tick(pending: bool, state: &str, countdown: u32, attempt: 
 pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState>>) {
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        // Consecutive ticks seen in "connecting" with no live session. See the
+        // stale-state check below.
+        let mut connecting_without_session: u32 = 0;
+        /// A connect takes ~250 ms on the fast path and a few seconds on a
+        /// scan, so 15 s of "connecting" with no session task is not slowness.
+        const STALE_CONNECTING_TICKS: u32 = 15;
+
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             state.record_task_heartbeat("reconnect", 0);
@@ -100,6 +118,48 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
             // Skip reconnect attempts in test mode.
             if state.test_mode.load(std::sync::atomic::Ordering::Relaxed) {
                 continue;
+            }
+
+            // ── Unwedge a stale "connecting" ────────────────────────────────
+            //
+            // `eval_reconnect_tick` deliberately waits while the device state is
+            // "connecting" — a connect is already in flight, so retrying would
+            // race it. That makes the whole state machine dependent on something
+            // else moving the state off "connecting", and one path does not:
+            // `spawn_device_session`'s failure arm only resets the state when
+            // `still_current` holds (the status target still matches the target
+            // it was asked for). When a later attempt has rewritten the target,
+            // an older failing attempt leaves "connecting" behind and nothing
+            // ever clears it. The reconnect loop then waits forever: no further
+            // attempts, and never the "giving up" branch either, so the log goes
+            // silent with the device stuck mid-reconnect.
+            //
+            // github.com/NeuroSkill-com/skill#89 bug 2 reported exactly this and
+            // read it as "gives up after 4 attempts". The budget is 12 and was
+            // never reached; the loop had stopped asking.
+            //
+            // A connect is always owned by a session task, so "connecting" with
+            // no `session_handle` for this long means the attempt is gone.
+            {
+                let device_state_now = state.status.lock().map(|s| s.state.clone()).unwrap_or_default();
+                let has_session = state.session_handle.lock().map(|h| h.is_some()).unwrap_or(false);
+
+                if is_stale_connecting(&device_state_now, has_session) {
+                    connecting_without_session += 1;
+                    if connecting_without_session >= STALE_CONNECTING_TICKS {
+                        warn!(
+                            ticks = connecting_without_session,
+                            "[reconnect] state stuck in 'connecting' with no session task — \
+                             treating as disconnected so reconnect can resume"
+                        );
+                        if let Ok(mut s) = state.status.lock() {
+                            s.state = "disconnected".to_string();
+                        }
+                        connecting_without_session = 0;
+                    }
+                } else {
+                    connecting_without_session = 0;
+                }
             }
 
             let (device_state, action) = {
@@ -176,6 +236,47 @@ pub fn spawn_reconnect_loop(state: AppState, reconnect: Arc<Mutex<ReconnectState
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// github.com/NeuroSkill-com/skill#89 bug 2: a failing connect could leave
+    /// the device state at "connecting" forever, and `eval_reconnect_tick` waits
+    /// in that state — so reconnecting stopped without ever reaching the
+    /// give-up branch. It read as "gave up after 4 attempts" when the budget is
+    /// 12 and was never spent.
+    #[test]
+    fn stale_connecting_is_detected_only_without_a_session() {
+        // The wedged case: nothing owns the connect any more.
+        assert!(is_stale_connecting("connecting", false));
+
+        // A connect genuinely in flight must NOT be disturbed — retrying under
+        // it is the race the "connecting" wait exists to avoid.
+        assert!(!is_stale_connecting("connecting", true));
+
+        // No other state is affected, with or without a session.
+        for st in ["disconnected", "connected", "scanning", "bt_off", ""] {
+            assert!(!is_stale_connecting(st, false), "{st} misread as stale");
+            assert!(!is_stale_connecting(st, true), "{st} misread as stale");
+        }
+    }
+
+    /// The wait-on-"connecting" behaviour the watchdog compensates for: proof
+    /// that a stuck value really does stop retries rather than slow them.
+    #[test]
+    fn tick_never_retries_while_state_is_connecting() {
+        for attempt in 0..MAX_RETRY_ATTEMPTS + 2 {
+            let action = eval_reconnect_tick(true, "connecting", 0, attempt);
+            assert!(
+                !action.trigger_retry,
+                "attempt {attempt} triggered a retry while connecting"
+            );
+        }
+        // Whereas "disconnected" does make progress, so the wait is specific to
+        // "connecting" rather than the tick being inert in general.
+        let progressing = eval_reconnect_tick(true, "disconnected", 0, 0);
+        assert!(
+            progressing.trigger_retry || progressing.countdown > 0,
+            "disconnected should either retry or arm a countdown, got {progressing:?}"
+        );
+    }
 
     #[test]
     fn backoff_schedule_1_2_3_5() {

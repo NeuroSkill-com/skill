@@ -141,16 +141,14 @@ async fn daemon_main() -> anyhow::Result<()> {
     }
 
     // Write PID file for process management.
-    // SKILL_DAEMON_CONFIG_ROOT overrides the location for tests / sandboxes
-    // (mirror of the same hook in src-tauri/src/daemon_upgrade.rs).
-    let pid_dir = if let Ok(p) = std::env::var("SKILL_DAEMON_CONFIG_ROOT") {
-        std::path::PathBuf::from(p)
-    } else {
-        dirs::config_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("skill")
-            .join("daemon")
-    };
+    //
+    // Resolved through skill-daemon-common so the pidfile, the upgrade state and
+    // the auth token all agree on one directory — this was the fourth hand-rolled
+    // copy of that logic, and the copies had already diverged (only the app
+    // honoured SKILL_DAEMON_CONFIG_ROOT for the token). `.` is kept as the
+    // fallback this call site used.
+    let pid_dir = skill_daemon_common::paths::config_root()
+        .unwrap_or_else(|| std::path::PathBuf::from(".").join("skill").join("daemon"));
     let pid_path = pid_dir.join("daemon.pid");
     if let Some(parent) = pid_path.parent() {
         let _ = std::fs::create_dir_all(parent);

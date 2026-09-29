@@ -1083,11 +1083,6 @@ pub(crate) async fn control_cancel_retry(State(state): State<AppState>) -> Json<
             let _ = handle.cancel_tx.send(());
         }
     }
-    // Clear the BLE scan pause so the background listener resumes immediately.
-    // Without this, cancelling a mid-connection attempt would leave the
-    // listener parked and BLE discovery would stop until the next connect.
-    state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
-
     let mut out = default_status("disconnected");
 
     if let Ok(mut status) = state.status.lock() {
@@ -1275,11 +1270,6 @@ pub fn start_scanner_inner(state: &AppState) -> ScannerStateResponse {
     if let Ok(mut running) = state.scanner_running.lock() {
         *running = true;
     }
-    // Clear any stale pause flag left over from a connection attempt that was
-    // interrupted while the scanner was stopped.  Without this, the freshly
-    // spawned BLE listener task would stall waiting for the flag to clear.
-    state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
-
     push_device_log(state, "scanner", "scanner started");
 
     let state2 = state.clone();

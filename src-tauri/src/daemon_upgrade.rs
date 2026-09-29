@@ -60,16 +60,17 @@ impl Default for UpgradeState {
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
 fn config_root() -> PathBuf {
-    // Test/sandbox escape hatch — keeps the upgrade state and pidfile path
-    // overridable without touching HOME/XDG_CONFIG_HOME (which would affect
-    // unrelated libs). The daemon binary itself reads the same variable.
-    if let Ok(p) = std::env::var("SKILL_DAEMON_CONFIG_ROOT") {
-        return PathBuf::from(p);
-    }
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("skill")
-        .join("daemon")
+    // One definition, in skill-daemon-common: the upgrade state, the pidfile and
+    // the auth token all have to land in the same directory the daemon uses, and
+    // this was the third hand-rolled copy of that resolution. The daemon really
+    // does honour the same `SKILL_DAEMON_CONFIG_ROOT` now — until recently only
+    // the app side did, which is how the two ended up on different auth tokens.
+    //
+    // The fallback is kept byte-for-byte: callers here return a plain `PathBuf`,
+    // an unresolvable config dir must not panic an upgrade check, and the old
+    // code landed on `/tmp/skill/daemon` rather than bare `/tmp`.
+    skill_daemon_common::paths::config_root()
+        .unwrap_or_else(|| PathBuf::from("/tmp").join("skill").join("daemon"))
 }
 
 pub fn state_path() -> PathBuf {

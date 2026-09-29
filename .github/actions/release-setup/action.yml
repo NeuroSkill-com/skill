@@ -41,6 +41,15 @@ inputs:
     description: cache-apt-pkgs-action version key (bump to bust apt cache).
     required: false
     default: tauri-release-linux-v7
+  linux-vulkan-packages:
+    description: >-
+      Vulkan apt packages to install. Defaults to LunarG's `vulkan-sdk`, which
+      is only published for amd64 — an arm64 runner must pass
+      "libvulkan-dev libvulkan1" instead (Ubuntu's own loader + headers, which
+      is the same fallback scripts/install-vulkan-sdk.sh already uses when the
+      LunarG repo has nothing installable).
+    required: false
+    default: vulkan-sdk
   build-frontend:
     description: When "true", run npm run build + verify:tauri:frontend after npm ci.
     required: false
@@ -50,8 +59,11 @@ runs:
   using: composite
   steps:
     # ── Linux: Vulkan repo + apt (before Rust) ────────────────────────────────
+    # Only add LunarG's apt repo when we actually intend to install from it.
+    # LunarG publishes amd64 only, so on an arm64 runner the repo contributes
+    # nothing and just makes `apt-get update` complain about a missing index.
     - name: Setup Vulkan SDK repository
-      if: inputs.linux-deps == 'true'
+      if: inputs.linux-deps == 'true' && inputs.linux-vulkan-packages == 'vulkan-sdk'
       uses: ./.github/actions/setup-vulkan-linux
 
     - name: Cache + install system dependencies (Linux)
@@ -73,11 +85,16 @@ runs:
           cmake
           binutils
           rpm
+          # dpkg-shlibdeps, used by package-linux-system-bundles.sh to derive the
+          # .deb Depends from the shipped ELFs. Present via build-essential on the
+          # hosted runners, named explicitly so a slimmer image cannot silently
+          # fall back to the incomplete hand-written dependency list.
+          dpkg-dev
           mold
           clang
           protobuf-compiler
           libopenblas-dev
-          vulkan-sdk
+          ${{ inputs.linux-vulkan-packages }}
         version: ${{ inputs.linux-apt-version }}
 
     - name: Setup Rust bootstrap (Linux)

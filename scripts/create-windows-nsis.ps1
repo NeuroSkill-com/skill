@@ -191,11 +191,11 @@ try {
         Write-Host "  [ok] icon.ico"
     }
 
-    # ── ONNX Runtime — not bundled on Windows ────────────────────────────────
-    # KittenTTS (the only `ort` consumer) is gated off for Windows in
-    # src-tauri/Cargo.toml + crates/skill-tts/Cargo.toml, so there is no
-    # onnxruntime.dll to ship. If a Windows TTS backend that needs ORT is
-    # reintroduced, restore the bundling block.
+    # ── ONNX Runtime — no longer used on any platform ─────────────────────────
+    # KittenTTS was the only `ort` consumer and now runs natively on RLX, so
+    # `ort` / `ort-sys` are absent from Cargo.lock entirely and there is no
+    # onnxruntime.dll to ship on any target. The Linux .so bundling was removed
+    # for the same reason.
 
     # ── Bundle OpenBLAS DLL ──────────────────────────────────────────────────
     # rlx-cpu's `blas` default feature links against openblas; turbovec on

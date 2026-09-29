@@ -23,6 +23,7 @@
     "test:tiny-text": "bash scripts/test-all.sh tiny-text",
     "test:clippy": "bash scripts/test-all.sh clippy",
     "test:deny": "bash scripts/test-all.sh deny",
+    "verify:rpm": "bash scripts/verify-rpm-docker.sh",
     "test:vitest": "bash scripts/test-all.sh vitest",
     "test:types": "bash scripts/test-all.sh types",
     "test:rust": "bash scripts/test-fast.sh",

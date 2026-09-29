@@ -54,3 +54,10 @@ src-tauri/resources/tts/*
 # Override the global **/*.safetensors ignore above.
 !crates/skill-screenshots/assets/ocr-detection.safetensors
 !crates/skill-screenshots/assets/ocr-recognition.safetensors
+
+# Scratch output from scripts/verify-rpm-docker.sh: downloaded release rpms and
+# synthetic test packages, both large and both reproducible on demand.
+dist/rpm-verify/
+
+# Python bytecode from scripts/lib helpers.
+__pycache__/

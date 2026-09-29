@@ -148,8 +148,9 @@ pub fn load_or_create_token() -> anyhow::Result<String> {
 }
 
 pub fn token_path() -> anyhow::Result<PathBuf> {
-    let base = dirs::config_dir().ok_or_else(|| anyhow::anyhow!("unable to resolve config directory"))?;
-    Ok(base.join("skill").join("daemon").join("auth.token"))
+    // One definition, in skill-daemon-common, because the Tauri app must resolve
+    // the identical path — see that module's docs.
+    skill_daemon_common::paths::token_path().ok_or_else(|| anyhow::anyhow!("unable to resolve config directory"))
 }
 
 // ── Client / request tracking ──────────────────────────────────────────────

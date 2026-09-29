@@ -2,8 +2,6 @@
 //! Per-device connection logic — transport-specific setup (BLE, serial,
 //! Cortex WS, PCAN) → `Box<dyn DeviceAdapter>` for the generic runner.
 
-use std::time::Duration;
-
 use skill_daemon_common::{ble_id, DeviceLogEntry};
 use skill_devices::session::DeviceAdapter;
 use tokio::sync::oneshot;
@@ -174,40 +172,20 @@ async fn connect_device(state: &AppState, target: &str) -> anyhow::Result<Box<dy
         anyhow::bail!("Target device is not paired. Pair it first in Settings → Devices.");
     }
 
-    // Devices that use their own BLE scanner (btleplug CBCentralManager) need
-    // the background BLE listener scan to be stopped first.  On macOS, two
-    // concurrent CBCentralManager.scanForPeripherals() calls suppress the
-    // centralManager(_:didConnect:) delegate callback, so peripheral.connect()
-    // hangs forever.  We pause here once for every BLE-scanning connect path
-    // rather than duplicating the logic in each individual function.
-    let needs_ble_pause = lower == "ganglion"
-        || lower.contains("mw75")
-        || lower.contains("neurable")
-        || lower.contains("mendi")
-        || lower.contains("idun")
-        || lower.contains("guardian")
-        || lower.contains("awear")
-        || lower.starts_with("luca")
-        || lower.starts_with("ige")
-        || lower.starts_with("ble:")
-        // catch generic Muse targets (device name used as target)
-        || lower.starts_with("muse");
-
-    if needs_ble_pause {
-        state.ble_scan_paused.store(true, std::sync::atomic::Ordering::Relaxed);
-        // Allow up to 400 ms for the listener task to detect the flag and
-        // call stop_scan().  The event loop now has a 300 ms timeout so the
-        // listener notices the flag within 300 ms; stop_scan() is near-instant.
-        tokio::time::sleep(Duration::from_millis(400)).await;
-    }
-
-    let result = connect_device_inner(state, target, &lower).await;
-
-    if needs_ble_pause {
-        state.ble_scan_paused.store(false, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    result
+    // No BLE scan pause here any more.
+    //
+    // This used to set `ble_scan_paused` and sleep 400 ms before every
+    // BLE-scanning connect. The reason was real: each btleplug crate opened its
+    // own `CBCentralManager`, and on macOS two concurrent
+    // `scanForPeripherals()` calls suppress the `didConnect:` delegate callback,
+    // so `peripheral.connect()` hung forever.
+    //
+    // `patches/btleplug-0.11.9` removed the cause — every BLE consumer now goes
+    // through one `webbluetooth::Bluetooth::shared()` session, so a second
+    // manager cannot exist. One manager scanning while it connects is ordinary
+    // CoreBluetooth usage. The pause cost 400 ms on every connect and the
+    // scanner a 300 ms poll, for a hazard that is now unconstructible.
+    connect_device_inner(state, target, &lower).await
 }
 
 /// Look up the human-readable name for a paired device ID from the daemon's

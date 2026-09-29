@@ -55,16 +55,6 @@ jobs:
           cache-key: linux-release-x86_64-unknown-linux-gnu-v1
           build-frontend: "true"
 
-      # ── ONNX Runtime binary cache ──────────────────────────────────────────
-      # ort-sys downloads ~200 MB static libs from cdn.pyke.io during build.
-      # Cache them so the download only happens once (avoids CDN flakiness).
-      - name: Cache ONNX Runtime binaries (ort-sys)
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ort.pyke.io
-          key: linux-ort-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-ort-
-
       # ── Pre-flight: verify every required secret is set ──────────────────────
       # Linux builds don't need platform code-signing credentials (there is no
       # Linux equivalent of Apple notarization or Windows Authenticode), but the

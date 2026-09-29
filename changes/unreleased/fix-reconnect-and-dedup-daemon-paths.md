@@ -1,0 +1,191 @@
+### Bugfixes
+
+- **Reconnect could stop silently mid-retry.** `eval_reconnect_tick` waits while
+  the device state is `"connecting"` — correct, since a connect is already in
+  flight — but nothing guaranteed that state ever moved on.
+  `spawn_device_session`'s failure arm only resets it when `still_current` holds,
+  so a failing attempt whose target had since been rewritten left `"connecting"`
+  behind permanently. The reconnect loop then waited forever: no further
+  attempts, and never the give-up branch either, so the log simply went quiet
+  with the device stuck. Reported as "gives up after 4 attempts"; the budget is
+  12 and was never reached — the loop had stopped asking. The reconnect task now
+  detects `"connecting"` with no live session task for 15 s and treats it as
+  disconnected so retrying resumes. See github.com/NeuroSkill-com/skill#89.
+
+- **The daemon and the app could authenticate against different tokens.** Path
+  resolution for the daemon's config directory existed in four hand-rolled
+  copies, and they had diverged: only the app honoured
+  `SKILL_DAEMON_CONFIG_ROOT`, so with that variable set the app read a tmpdir
+  `auth.token` while the daemon read the real one under `$HOME` — every request
+  answering 401 with no way for the UI to drive the daemon. It also meant e2e
+  runs that pin daemon paths into a tmpdir silently authenticated against the
+  user's real token.
+
+### Refactor
+
+- **One definition of the daemon's paths.** New `skill_daemon_common::paths`
+  (`config_root`, `token_path`) replaces the four copies in
+  `skill-daemon-state::util`, `src-tauri/daemon_cmds`,
+  `src-tauri/daemon_upgrade` and `skill-daemon/main`. Each call site keeps its
+  own error type and fallback, so behaviour is unchanged where it was already
+  correct. Bearer auth compares a secret both processes read from disk, so the
+  two resolving different paths cannot degrade gracefully — this is the kind of
+  duplication that fails closed.
+
+- **Removed the BLE scan pause.** `ble_scan_paused`, the `needs_ble_pause`
+  predicate, its 400 ms sleep on every BLE connect and the scanner's 300 ms poll
+  are gone, along with the `AppState` field. The hazard was real but is now
+  unconstructible: each btleplug crate used to open its own `CBCentralManager`,
+  and on macOS two concurrent `scanForPeripherals()` calls suppress the
+  `didConnect:` callback so `connect()` hangs forever. Every BLE consumer now
+  goes through one `webbluetooth::Bluetooth::shared()` session, and one manager
+  scanning while it connects is ordinary CoreBluetooth usage.
+
+### Build
+
+- **Changelog is readable again.** `CHANGELOG.md` keeps the 20 newest releases
+  in full and links the rest to their files under `changes/releases/`, taking it
+  from 6,065 lines / 595 KB to 496 lines / 31 KB. Every release remains
+  reachable — verified none missing and none duplicated.
+
+- **The changelog's git-log fallback no longer mislabels everything.** When no
+  fragment is written, `bump` derives entries from commit subjects; it filed all
+  of them under `### Features` regardless of content, which is how "fixed glib
+  with a patch" shipped as a feature. Entries are now bucketed by
+  conventional-commit prefix, unlabelled commits go to `Refactor` rather than
+  being guessed as features, and the fallback prints a visible warning that raw
+  commit subjects are about to become user-facing release notes.
+
+- **Dropped the Windows lld-link workaround.** `SKILL_NO_LLD` and the forced
+  `link.exe` were added on the theory that lld-link could not resolve Windows SDK
+  import libraries like `combase.lib`. `combase.lib` does not exist in the SDK at
+  all, so both linkers were correctly reporting a missing file; the real fault was
+  upstream and is fixed. `SKILL_NO_LLD` was also inert here — only
+  `tauri-build.js` reads it, and the release path uses `compile-product.mjs`.
+
+- **The Linux `.deb` declared one dependency and needed fifteen.** `dpkg-deb
+  --build` is a raw packer: unlike `rpmbuild`, which reads each ELF and emits a
+  soname requirement per NEEDED entry, it ships exactly what the control file
+  says. The control file said `Depends: libopenblas0` and nothing else, so the
+  package installed cleanly on a machine missing the entire GTK/WebKit stack and
+  the app then failed to start — a worse failure than refusing to install.
+
+  Measured against the rc.31 binaries with `dpkg-shlibdeps`, the real set is:
+  `libasound2t64`, `libc6`, `libcairo2`, `libdbus-1-3`, `libgcc-s1`,
+  `libgdk-pixbuf-2.0-0`, `libglib2.0-0t64`, `libgtk-3-0t64`,
+  `libjavascriptcoregtk-4.1-0`, `libopenblas0`, `libsoup-3.0-0`, `libssl3t64`,
+  `libstdc++6`, `libudev1`, `libwebkit2gtk-4.1-0` — each with a minimum version.
+  `Depends` is now derived from the three shipped binaries at package time rather
+  than hand-maintained, and `dpkg-dev` is named explicitly in the release apt
+  list so a slimmer image cannot quietly lose the tool.
+
+  If `dpkg-shlibdeps` is missing or yields nothing the script still falls back to
+  the old single-dependency value, but now says so loudly on stderr. A silent
+  fallback is how this shipped under-declared in the first place: it built, it
+  installed, and only the user saw the failure.
+
+- **Removed dead ONNX Runtime plumbing.** `ort` / `ort-sys` are absent from
+  `Cargo.lock` entirely — KittenTTS was the only consumer and now runs natively
+  on RLX — but the build tooling still carried six pieces of machinery for it:
+  the `.so` bundling blocks in `package-linux-system-bundles.sh` and
+  `package-linux-dist.sh`, an `actions/cache` step in `release-linux.yml`
+  keyed on a path nothing writes, the unreferenced
+  `setup-onnxruntime-{linux,windows}` composite actions, and
+  `scripts/install-onnxruntime-linux.sh` which only that dead action called. All
+  gone, plus the stale `ort-sys` entries in the standalone
+  `crates/skill-tts/e2e` lockfile, and two comments that still described ORT as
+  live on non-Windows targets.
+
+  This also retires a latent silent-exit bug rather than papering over it. The
+  lookup was `ORT_SO="$(find .../release/build ... | head -1)"` under
+  `set -euo pipefail`; `find` exits non-zero when that directory does not exist,
+  so the command substitution killed the whole script with **no output at all**
+  and the graceful "not found" warning below it was unreachable. The release
+  always has a `build/` directory so it never showed there, but any packaging run
+  without one died mute. Deleting the block removes the hazard outright.
+
+- **RPM packaging hardened.** The `-` → `~` rewrite of RC versions is no longer
+  written in a form whose meaning depends on the bash version (bare `~` is
+  tilde-expanded to `$HOME` on bash 5; `\~` leaves a literal backslash on bash
+  3.2), and an allowlist guard now refuses to build rather than let `rpmbuild`
+  silently rewrite an invalid `Version`. The manual `Requires: openblas` is
+  dropped: rpmbuild already auto-generates `libopenblas.so.0()(64bit)` from the
+  shipped ELF, and the literal package name does not exist on every distro this
+  rpm targets.
+
+- **Groundwork for an aarch64 Linux package.** `Release — Linux` builds x86_64
+  only, so no ARM Linux `.deb`/`.rpm` ships even though
+  `package-linux-system-bundles.sh` already knows the aarch64 arch mapping. The
+  `release-setup` action's apt list is now arch-aware — LunarG publishes
+  `vulkan-sdk` for amd64 only, so a caller can substitute Ubuntu's
+  `libvulkan-dev libvulkan1` (the same fallback
+  `scripts/install-vulkan-sdk.sh` already uses) and the LunarG repo step is
+  skipped when it would contribute nothing. Existing callers pass nothing and
+  behave identically.
+
+  A `workflow_dispatch`-only `Trial — Linux arm64 packages` workflow builds the
+  daemon for `aarch64-unknown-linux-gnu`, runs the packaging script and asserts
+  the resulting rpm: `ARCH=aarch64`, no `-` or backslash in `Version`, a `~`
+  whenever `VERSION` is an RC, and an auto-generated `libopenblas.so.0`
+  requirement. It is deliberately not on the tag-driven release path — an
+  unproven job there can fail a release, and a second full Linux build doubles
+  the cost of every tag — and it uploads to the workflow run rather than to a
+  Release, so a trial cannot publish anything.
+
+- **RPM verification harness.** `npm run verify:rpm` (or
+  `scripts/verify-rpm-docker.sh`) installs a NeuroSkill `.rpm` on a real Fedora
+  in Docker and checks it, for `x86_64` and `aarch64`. We build the rpm on Ubuntu
+  but ship it to Fedora/RHEL/openSUSE, so the failures that matter are
+  distro-side — whether `dnf` can satisfy the dependencies rpmbuild generated,
+  and whether the binary's NEEDED libraries exist under those package names.
+  Building it on Ubuntu says nothing about either.
+
+  It takes the package from `--rpm`, else a local release build, else the newest
+  published GitHub release; for an architecture with no real rpm yet (aarch64,
+  since `Release — Linux` is x86_64-only) `--synthetic` builds one from the same
+  spec the release script emits, with a genuinely OpenBLAS-linked binary so the
+  dependency and linkage checks still mean something. Checks: name/arch/licence,
+  `Version` legal and tilde-ordered below its release (via `rpm.vercmp`),
+  auto-generated `libopenblas.so.0` present and no unsatisfiable bare
+  `Requires: openblas`, `dnf install` resolves, declared paths exist, `rpm -V`
+  clean, ELF arch matches the package, `ldd` fully resolves, and removal cleans
+  up. Image: `Dockerfile.rpm-verify`; the checks live in
+  `scripts/lib/verify-rpm.sh`, mounted at run time so editing one needs no
+  rebuild.
+
+  The metadata half needs no container: `scripts/lib/rpm_meta.py` parses the rpm
+  header directly (and lists the payload via bsdtar, which macOS ships and which
+  understands the rpm container), so version/arch/dependency assertions run on a
+  dev box or when the Docker daemon is wedged. The driver probes Docker with a
+  *bounded* wait — `docker info` blocks forever against a stuck daemon, and macOS
+  has no coreutils `timeout` — then verifies metadata natively and reports the
+  install phase as skipped rather than hanging.
+
+  Results on a real Fedora 41, both architectures:
+
+  | package | result |
+  |---|---|
+  | shipped rc.31 `x86_64` (downloaded from the release) | 23 pass, **1 fail** — the bare `Requires: openblas` |
+  | `x86_64` via the real packaging script, post-fix | **24 pass, 0 fail** |
+  | `aarch64` via the real packaging script, post-fix | **24 pass, 0 fail** |
+
+  `--use-release-script` is the mode that makes the last two meaningful: it runs
+  `scripts/package-linux-system-bundles.sh` itself inside the container against a
+  stand-in binary, rather than reproducing the spec by hand, so what gets verified
+  is the artifact the release pipeline would actually emit. rpmbuild reports
+  `Requires: /usr/bin/bash libc.so.6()(64bit) libopenblas.so.0()(64bit)
+  rtld(GNU_HASH)` — the soname, no bare package name.
+
+  So the defect is demonstrated on the artifact users actually download, and a
+  package built from the fixed spec passes every check — including
+  `dnf install` resolving the full dependency set, `rpm -V` clean, all three
+  shipped ELFs (`skill`, `skill-daemon`, `skill-tty`) matching the declared
+  architecture with every dynamic library resolving, and a clean erase.
+  `rpm.vercmp` confirms `0.0.131~rc.31 < 0.0.131` on both.
+
+  Two flaws in the harness itself surfaced by running it, both fixed: the image
+  has to be built per `--platform` (building once for the host arch and running
+  with `--platform linux/amd64` makes docker try to pull a local-only tag), and
+  `/usr/bin/neuroskill` is a bash launcher rather than the binary — checking
+  *it* for an ELF architecture and running `ldd` against it passed for the wrong
+  reason. The checks now inspect the real executables under `/opt/neuroskill`.

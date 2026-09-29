@@ -13237,6 +13237,7 @@ dependencies = [
 name = "skill-daemon-common"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "serde",
  "serde_json",
 ]

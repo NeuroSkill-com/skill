@@ -173,26 +173,8 @@ async fn run_ble_listener_task(state: AppState) {
 
         // Fold advertisements until the stream ends or a flag tells us to stop.
         loop {
-            // The five device crates still on btleplug (awear, idun,
-            // mendi, mw75, openbci) open their own CBCentralManager to connect,
-            // and on macOS a second one cannot discover peripherals while
-            // another is scanning.  So the pause is still honoured for them —
-            // but where the btleplug scanner had to drop the whole manager, we
-            // only drop the scan, which stops the radio and leaves the shared
-            // session (and muse-rs's devices) intact.
-            //
-            // Whether stopping the radio is *enough* for a btleplug manager to
-            // make progress, or whether webbluetooth's manager merely existing
-            // is as obstructive as the old one, is the open question this port
-            // cannot answer without hardware — the old comment claimed the
-            // latter for two btleplug managers.  If a btleplug device regresses
-            // to hanging connects, this is the first place to look.
-            if state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-
-            // Short timeout so ble_scan_paused and scanner_running are
-            // checked frequently even when no advertisements are arriving.
+            // Short timeout so `scanner_running` is checked frequently even
+            // when no advertisements are arriving.
             let maybe_event = tokio::time::timeout(Duration::from_millis(300), scan.next()).await;
 
             if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
@@ -234,17 +216,9 @@ async fn run_ble_listener_task(state: AppState) {
         }
 
         // Stop the radio: this is the only handle, so dropping it is what
-        // `stop_scan()` used to be.  Explicit rather than end-of-scope so the
-        // radio is already off while we sit in the pause loop below.
+        // `stop_scan()` used to be.  Explicit rather than end-of-scope.
         scan.stop();
 
-        // Wait for the pause flag to clear before scanning again.
-        while state.ble_scan_paused.load(std::sync::atomic::Ordering::Relaxed) {
-            if !state.scanner_running.lock().map(|g| *g).unwrap_or(false) {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(200)).await;
-        }
         // Brief pause before restarting.
         tokio::time::sleep(Duration::from_secs(2)).await;
     }

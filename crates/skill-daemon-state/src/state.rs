@@ -74,8 +74,6 @@ pub struct AppState {
     /// Set to `true` while a BLE device is actively connecting.
     /// The BLE listener task stops scanning when this is set so that only one
     /// `CBCentralManager` is scanning at a time — having two concurrent scans
-    /// on macOS prevents `peripheral.connect()` callbacks from firing.
-    pub ble_scan_paused: Arc<std::sync::atomic::AtomicBool>,
     /// Rolling log of all daemon tracing output.
     /// Tuple is `(next_sequence_number, lines)` where each line is `"<seq>\t<text>"`.
     pub app_log: Arc<Mutex<(u64, VecDeque<String>)>>,
@@ -261,7 +259,6 @@ impl AppState {
             devices: Arc::new(Mutex::new(Vec::new())),
             scanner_running: Arc::new(Mutex::new(false)),
             ble_device_cache: Arc::new(Mutex::new(HashMap::new())),
-            ble_scan_paused: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             app_log: Arc::new(Mutex::new((0, VecDeque::with_capacity(512)))),
             scanner_stop_tx: Arc::new(Mutex::new(None)),
             scanner_wifi_config: Arc::new(Mutex::new(ScannerWifiConfigRequest {

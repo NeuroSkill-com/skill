@@ -1686,15 +1686,12 @@ fn load_daemon_token() -> Result<String, String> {
 }
 
 fn token_path() -> Result<PathBuf, String> {
-    // Honor the same SKILL_DAEMON_CONFIG_ROOT escape hatch as
-    // daemon_upgrade::config_root, so e2e tests can pin every daemon-related
-    // path under one tmpdir without touching $HOME / $XDG_CONFIG_HOME.
-    if let Ok(root) = std::env::var("SKILL_DAEMON_CONFIG_ROOT") {
-        return Ok(PathBuf::from(root).join("auth.token"));
-    }
-    let base =
-        dirs::config_dir().ok_or_else(|| "unable to resolve config directory".to_string())?;
-    Ok(base.join("skill").join("daemon").join("auth.token"))
+    // One definition, in skill-daemon-common. This used to be a second copy that
+    // had already drifted from the daemon's: only this side honoured
+    // SKILL_DAEMON_CONFIG_ROOT, so with it set the app and the daemon read
+    // different auth.token files and every request answered 401.
+    skill_daemon_common::paths::token_path()
+        .ok_or_else(|| "unable to resolve config directory".to_string())
 }
 
 // ── EXG model daemon proxies ──────────────────────────────────────────────────

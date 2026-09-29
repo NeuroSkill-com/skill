@@ -109,11 +109,13 @@ jobs:
           windows-protoc: "true"
           build-frontend: "true"
 
-      # ── ONNX Runtime — not needed on Windows ──────────────────────────────
-      # KittenTTS (the only `ort` consumer) is gated to non-Windows targets in
-      # src-tauri / skill-tts Cargo.toml, so Windows builds don't link or ship
-      # onnxruntime.dll. Add the install/cache steps back here if a Windows
-      # TTS backend that needs ONNX Runtime is reintroduced.
+      # ── ONNX Runtime — no longer used on any platform ─────────────────────
+      # KittenTTS was the only `ort` consumer and now runs natively on RLX, so
+      # `ort` / `ort-sys` are absent from Cargo.lock entirely. The install and
+      # cache steps, and the setup-onnxruntime-{linux,windows} composite actions,
+      # have been deleted along with the .so/.dll bundling in the Linux packaging
+      # scripts. Reintroducing an ORT-backed backend means adding all of that
+      # back, not just a cache step.
 
       # ── NSIS installer tooling ───────────────────────────────────────────────
       # Product Windows builds ship CUDA + wgpu (runtime falls back without NVIDIA).
@@ -358,19 +360,19 @@ jobs:
             Write-Host "[ok] $_"
           }
 
-          # Use the MSVC linker for this target. LLVM's standalone lld-link can
-          # be installed alongside the MSVC toolchain, but it doesn't resolve the
-          # Windows SDK import libraries like combase.lib on the GitHub runner,
-          # leading to failed final link steps with `could not open 'combase.lib'`.
-          $msvcLink = Get-Command link.exe -ErrorAction SilentlyContinue
-          if (-not $msvcLink) {
-            Write-Error "link.exe not found in PATH after msvc-dev-cmd setup"
-            exit 1
-          }
-
-          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($msvcLink.Source)" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[ok] CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($msvcLink.Source)"
+          # NOTE: this step used to pin the linker to MSVC link.exe and set
+          # SKILL_NO_LLD below, on the theory that lld-link could not resolve
+          # Windows SDK import libraries like combase.lib. That diagnosis was
+          # wrong. `combase.lib` does not exist in the Windows SDK at all — the
+          # WinRT exports live in combase.dll but are imported from
+          # runtimeobject.lib — so BOTH linkers correctly reported a missing
+          # file. The real fault was `#[link(name = "combase")]` in
+          # webbluetooth-windows 0.0.1, fixed upstream in 0.0.2.
+          #
+          # lld-link links the fixed graph fine (verified by cross-linking the
+          # whole BLE subgraph against a real Windows SDK), and it is materially
+          # faster on a job that is link-bound. Do not re-pin the linker without
+          # reading the actual linker error first.
 
       # ── Compile Rust (shared compile-product recipe) ─────────────────────────
       #
@@ -380,11 +382,6 @@ jobs:
         env:
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
           LLVM_CONFIG:       ${{ env.LLVM_CONFIG }}
-          # Explicitly disable the auto lld-link detection in the Node helper.
-          # The repo has a Windows SDK mismatch when LLVM's lld-link is used,
-          # so the build must stay on the MSVC toolchain even if the helper
-          # auto-detects LLVM.
-          SKILL_NO_LLD: "1"
           # Dynamic CRT: native deps (DirectML, ONNX Runtime)
           # ship as pre-built /MD DLLs.  Using /MD everywhere avoids CRT
           # mismatch.  The NSIS installer bundles the VC++ Redist DLLs

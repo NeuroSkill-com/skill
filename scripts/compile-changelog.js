@@ -77,8 +77,20 @@ function semverCompareDesc(a, b) {
 }
 
 /**
- * Read all archived releases from changes/releases/*.md,
- * sorted newest-first.
+ * How many releases are written into CHANGELOG.md in full.
+ *
+ * Everything older is linked to its file under changes/releases/ instead. With
+ * every release inlined the file reached 6,000+ lines / ~590 KB across 159
+ * sections, which GitHub truncates and nobody scrolls. Each release keeps its
+ * own archived file regardless, so nothing is lost — only the single-page view
+ * is bounded.
+ */
+const INLINE_RELEASES = 20;
+
+/**
+ * Read all archived releases from changes/releases/*.md, sorted newest-first.
+ *
+ * @returns {{ version: string, body: string }[]}
  */
 function loadArchivedReleases() {
   if (!existsSync(RELEASES_DIR)) return [];
@@ -87,15 +99,32 @@ function loadArchivedReleases() {
     .filter((f) => f.endsWith(".md"))
     .map((f) => f.replace(/\.md$/, ""))
     .sort(semverCompareDesc)
-    .map((v) => readFileSync(join(RELEASES_DIR, `${v}.md`), "utf8").trimEnd());
+    .map((version) => ({
+      version,
+      body: readFileSync(join(RELEASES_DIR, `${version}.md`), "utf8").trimEnd(),
+    }));
 }
 
 /**
- * Rebuild CHANGELOG.md from header + all archived releases.
+ * Rebuild CHANGELOG.md: header, the newest `INLINE_RELEASES` in full, then an
+ * index linking every older release to its archived file.
  */
 export function rebuildChangelog() {
   const releases = loadArchivedReleases();
-  const content = `${HEADER}\n${releases.join("\n\n")}\n`;
+  const inline = releases.slice(0, INLINE_RELEASES);
+  const archived = releases.slice(INLINE_RELEASES);
+
+  let content = `${HEADER}\n${inline.map((r) => r.body).join("\n\n")}\n`;
+
+  if (archived.length > 0) {
+    const links = archived.map((r) => `- [${r.version}](changes/releases/${r.version}.md)`).join("\n");
+    content +=
+      `\n## Earlier releases\n\n` +
+      `The ${archived.length} releases before this point are kept in full under ` +
+      `[\`changes/releases/\`](changes/releases/), one file each.\n\n` +
+      `${links}\n`;
+  }
+
   writeFileSync(CHANGELOG_PATH, content, "utf8");
   return releases.length;
 }

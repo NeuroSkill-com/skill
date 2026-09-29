@@ -67,7 +67,36 @@ if ! command -v rpmbuild >/dev/null 2>&1; then
 fi
 
 version="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
-rpm_version="${version//-/\~}"
+
+# RPM forbids '-' in Version (it separates Version from Release), so an RC like
+# 0.0.131-rc.30 must be rewritten. The replacement has to be a TILDE: rpm sorts
+# '~' *below* the bare version, which is exactly what marks a pre-release, so
+#   0.0.131~rc.30  <  0.0.131
+# Any other separator sorts the other way (0.0.131.rc.30 > 0.0.131), which would
+# make an RC look newer than the release it precedes.
+#
+# The tilde is passed via a variable on purpose. `${version//-/~}` is wrong:
+# bash applies tilde expansion to the replacement string, so on Linux that
+# yields `0.0.131/rootrc.30`. `${version//-/\~}` is right on bash 5 but leaves a
+# literal backslash on bash 3.2 (macOS). Substituting an already-expanded
+# variable is unambiguous on both.
+rpm_tilde='~'
+rpm_version="${version//-/$rpm_tilde}"
+
+# Fail loudly rather than let rpmbuild silently rewrite an invalid Version.
+# Allowlist the shape rather than blocklisting known slips, so a future quoting
+# mistake cannot get through: rpm permits alphanumerics plus '.' '~' '^' '_' '+'
+# in a Version, and notably NOT '-'. This also catches `/`, which is what a
+# tilde-expanded replacement produces.
+case "$rpm_version" in
+  '' | *[!0-9A-Za-z.~^_+]*)
+    echo "Refusing to build: computed RPM version '$rpm_version' is not a valid rpm Version." >&2
+    echo "Allowed: alphanumerics and . ~ ^ _ + — never '-', '/' or a backslash." >&2
+    echo "rpmbuild would rewrite it and could invert upgrade ordering (see comment above)." >&2
+    exit 1
+    ;;
+esac
+
 binary_path="$ROOT_DIR/src-tauri/target/$target/release/skill"
 resources_dir="$ROOT_DIR/src-tauri/resources"
 
@@ -141,28 +170,6 @@ else
   exit 1
 fi
 
-# ── Bundle ONNX Runtime shared library ───────────────────────────────────────
-# ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.
-# The binary links against it dynamically (DT_NEEDED: libonnxruntime.so.1).
-# Without bundling it the binary will fail to start on users' machines.
-# The library goes next to the skill binary in /opt/neuroskill/; patchelf
-# adds $ORIGIN to the rpath so the dynamic linker finds it at runtime.
-ORT_SO="$(find "$ROOT_DIR/src-tauri/target/$target/release/build" \
-  -name "libonnxruntime.so.*" ! -name "*.sig" 2>/dev/null | head -1)"
-if [[ -n "$ORT_SO" ]]; then
-  ORT_SONAME="$(basename "$ORT_SO")"
-  cp "$ORT_SO" "$stage_root/opt/neuroskill/$ORT_SONAME"
-  SONAME_SHORT="$(echo "$ORT_SONAME" | grep -oE 'libonnxruntime\.so\.[0-9]+')"
-  if [[ -n "$SONAME_SHORT" && "$SONAME_SHORT" != "$ORT_SONAME" ]]; then
-    ln -sf "$ORT_SONAME" "$stage_root/opt/neuroskill/$SONAME_SHORT"
-  fi
-  patchelf --add-rpath '$ORIGIN' "$stage_root/opt/neuroskill/skill"
-  echo "✓ Bundled ONNX Runtime: $ORT_SONAME"
-else
-  echo "⚠ ONNX Runtime shared library not found in build output — binary may fail to start" >&2
-fi
-
-cp -R "$resources_dir/neutts-samples" "$stage_root/opt/neuroskill/resources/"
 cp "$ROOT_DIR/LICENSE" "$stage_root/opt/neuroskill/LICENSE"
 cp "$ROOT_DIR/docs/LINUX.md" "$stage_root/opt/neuroskill/LINUX.md"
 cp "$ROOT_DIR/src-tauri/icons/128x128.png" "$stage_root/usr/share/pixmaps/neuroskill.png"
@@ -198,19 +205,77 @@ mkdir -p "$deb_build_root/DEBIAN"
 cp -a "$stage_root/." "$deb_build_root/"
 
 installed_size="$(du -sk "$deb_build_root/opt/neuroskill" | awk '{print $1}')"
-# Runtime dependency: the CPU backend (rlx-cpu) is built against OpenBLAS
-# (CI/release install libopenblas-dev), so the shipped binary dynamically
-# links libopenblas.so.0 and needs it present at runtime. libopenblas0 is a
-# metapackage that resolves to the DYNAMIC_ARCH build (auto-tuned per CPU,
-# incl. aarch64/Raspberry Pi). Without it the daemon fails to load on a
-# machine that has no BLAS installed.
+
+# ── Derive Depends from the binaries, do not hand-list them ──────────────────
+#
+# `dpkg-deb --build` is a raw packer: unlike `rpmbuild`, which reads each ELF and
+# emits a soname requirement per NEEDED entry, it declares exactly what this
+# control file says and nothing more.
+#
+# This used to say `Depends: libopenblas0` and stop there. That single line was
+# correct but drastically incomplete: the shipped binary also needs the whole
+# GTK/WebKit stack (webkit2gtk-4.1, gtk-3, javascriptcoregtk-4.1, soup-3, cairo,
+# gdk-pixbuf, glib), plus asound, dbus, udev, ssl and the C/C++ runtimes — 13
+# packages in total against the rc.31 build. `apt install` therefore succeeded on
+# a machine missing any of them and the app then failed to start, which is a far
+# worse failure than refusing to install.
+#
+# `dpkg-shlibdeps` is the tool for this: it resolves each NEEDED soname to the
+# package that provides it, with a minimum version, using the local dpkg
+# database. It needs a `debian/control` relative to its working directory, hence
+# the throwaway shim.
+compute_deb_depends() {
+  # Keep the old hand-written value as the floor. If the tooling is missing we
+  # ship what we shipped before rather than a package with no Depends at all.
+  local fallback="libopenblas0"
+
+  command -v dpkg-shlibdeps >/dev/null 2>&1 || {
+    echo "WARNING: dpkg-shlibdeps not found (install dpkg-dev)." >&2
+    echo "         Falling back to '$fallback' alone, which UNDER-DECLARES the" >&2
+    echo "         package: apt will install it and the app will fail to start." >&2
+    echo "$fallback"
+    return 0
+  }
+
+  local shim
+  shim="$(mktemp -d)"
+  mkdir -p "$shim/debian"
+  printf 'Source: neuroskill\n\nPackage: neuroskill\nArchitecture: %s\nDescription: placeholder\n placeholder\n' \
+    "$deb_arch" > "$shim/debian/control"
+
+  local out=""
+  out="$(
+    cd "$shim" && dpkg-shlibdeps -O --ignore-missing-info \
+      "$deb_build_root/opt/neuroskill/skill" \
+      "$deb_build_root/opt/neuroskill/skill-daemon" \
+      "$deb_build_root/opt/neuroskill/skill-tty" 2>/dev/null \
+      | sed -n 's/^shlibs:Depends=//p' || true
+  )"
+  rm -rf "$shim"
+
+  if [[ -n "$out" ]]; then
+    echo "$out"
+  else
+    # Loud on purpose. A silent fallback to the single hand-written dependency is
+    # precisely how the .deb shipped for so long missing the entire GTK/WebKit
+    # stack: it built, it installed, and only the user saw the failure.
+    echo "WARNING: dpkg-shlibdeps produced no dependencies." >&2
+    echo "         Are the -dev packages for the linked libraries installed?" >&2
+    echo "         Falling back to '$fallback' alone, which UNDER-DECLARES the package." >&2
+    echo "$fallback"
+  fi
+}
+
+deb_depends="$(compute_deb_depends)"
+echo "→ deb Depends: $deb_depends"
+
 cat > "$deb_build_root/DEBIAN/control" <<EOF
 Package: neuroskill
 Version: $version
 Section: utils
 Priority: optional
 Architecture: $deb_arch
-Depends: libopenblas0
+Depends: $deb_depends
 Maintainer: NeuroSkill <support@neuroskill.com>
 Installed-Size: $installed_size
 Description: Neurofeedback and local AI assistant
@@ -231,7 +296,15 @@ Release:        1
 Summary:        Neurofeedback and local AI assistant
 License:        GPL-3.0-only
 BuildArch:      $rpm_arch
-Requires:       openblas
+# No manual `Requires: openblas` here.
+#
+# rpmbuild's automatic dependency generator already reads the shipped ELF and
+# emits `libopenblas.so.0()(64bit)` -- verified against the released rpm, which
+# carried both that and the redundant manual line. The soname is the portable
+# form: the package providing it is named differently on each distro this rpm
+# targets (openblas-serial / -threads / -openmp on Fedora and RHEL, libopenblas0
+# on openSUSE), so pinning the literal name `openblas` adds nothing on Fedora and
+# makes the package refuse to install where no such package exists.
 Source0:        neuroskill-root.tar.gz
 
 %description

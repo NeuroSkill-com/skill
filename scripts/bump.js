@@ -688,9 +688,30 @@ function generateFragmentFromGitLog(currentVersion) {
     commits = "";
   }
 
-  // Parse commit messages and create bullet points
+  // Map a conventional-commit prefix onto a real changelog category.
+  //
+  // Everything used to be filed under `### Features` regardless of what the
+  // commit said, which is how "fixed glib with a patch" and "updTed settings
+  // and engine" ended up in the Features list of a shipped release. A wrong
+  // category is worse than a vague one: it tells the reader something false.
+  const PREFIX_CATEGORY = {
+    feat: "Features",
+    perf: "Performance",
+    fix: "Bugfixes",
+    revert: "Bugfixes",
+    refactor: "Refactor",
+    build: "Build",
+    ci: "Build",
+    chore: "Build",
+    docs: "Docs",
+    test: "Build",
+    style: "Refactor",
+  };
+
+  // Parse commit messages and bucket them by category.
   const commitMessages = commits.split("\n\n").filter(Boolean);
-  const bullets = [];
+  /** @type {Map<string, string[]>} */
+  const byCategory = new Map();
   const seen = new Set();
 
   for (const commit of commitMessages) {
@@ -699,27 +720,35 @@ function generateFragmentFromGitLog(currentVersion) {
 
     const subject = lines[0];
 
-    // Skip version-only commits
-    if (/^\d+\.\d+\.\d+$/.test(subject)) continue;
+    // Skip version-only commits (the bump commits themselves).
+    if (/^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(subject)) continue;
 
-    // Skip if we've already seen this subject
     if (seen.has(subject)) continue;
     seen.add(subject);
 
-    // Use the full commit message if it's a conventional commit
-    // Otherwise just use the subject line
-    if (/^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert|WIP):/.test(subject)) {
-      bullets.push(`- ${commit.replace(/\n/g, " ").replace(/\s+/g, " ").trim()}`);
-    } else {
-      bullets.push(`- ${subject}`);
-    }
+    const m = /^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert|WIP)(\(.+?\))?!?:/.exec(subject);
+    // No recognisable prefix means nobody labelled it, and guessing "Feature"
+    // is exactly the mistake this replaces. `Refactor` is the honest bucket for
+    // an unlabelled internal change.
+    const category = m ? (PREFIX_CATEGORY[m[1]] ?? "Refactor") : "Refactor";
+    const text = m ? commit.replace(/\n/g, " ").replace(/\s+/g, " ").trim() : subject;
+
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category).push(`- ${text}`);
   }
 
-  if (bullets.length === 0) {
-    bullets.push("- Minor updates and improvements");
+  const bulletCount = [...byCategory.values()].reduce((n, b) => n + b.length, 0);
+  if (bulletCount === 0) {
+    byCategory.set("Build", ["- Minor updates and improvements"]);
   }
 
-  const fragment = `### Features\n\n${bullets.join("\n")}\n`;
+  // No preamble/marker here on purpose: `parseFragment` splits on /^### /m and
+  // treats anything before the first heading as a category name, so a leading
+  // comment makes the fragment fail validation. Provenance is carried by the
+  // `auto-git-log.md` filename and the warning printed above instead.
+  const fragment = [...byCategory.entries()]
+    .map(([cat, bullets]) => `### ${cat}\n\n${bullets.join("\n")}\n`)
+    .join("\n");
 
   // Write the auto-generated fragment
   if (!existsSync(UNRELEASED_DIR)) {
@@ -766,7 +795,12 @@ async function main() {
 
   const validated = validateUnreleasedFragments();
   if (validated.files.length === 0) {
-    console.log("[bump] No changelog fragments found \u2014 generating from git commit history\u2026");
+    console.warn("");
+    console.warn("  ⚠  No changelog fragment was written for this release.");
+    console.warn("     Falling back to raw commit subjects, which become user-visible");
+    console.warn("     release notes verbatim — typos, WIP markers and all.");
+    console.warn("     Prefer: npm run changes:new -- <slug> --category <Category>");
+    console.warn("");
     generateFragmentFromGitLog(currentVersion);
   } else {
     console.log(

@@ -1,0 +1,159 @@
+name: Trial — Linux arm64 packages
+
+# Proves out an aarch64 Linux .deb/.rpm before the release pipeline depends on
+# one. Today `Release — Linux` builds x86_64 only, so there is no ARM Linux
+# package at all, even though scripts/package-linux-system-bundles.sh already
+# knows the aarch64 arch mapping.
+#
+# Deliberately `workflow_dispatch` only. It is NOT wired into the tag-driven
+# release:
+#   * an unproven job on the release path can fail a release, and
+#   * a second full Linux build doubles the cost of every tag.
+# Run it by hand, confirm the artifacts, and only then consider promoting it
+# into release-linux.yml.
+#
+# Scope is the daemon + system packages, not the signed/published app: enough to
+# answer "does an aarch64 rpm build and is it well-formed", which is the open
+# question. Artifacts are uploaded to the workflow run, never to a Release, so a
+# trial cannot publish anything.
+#
+# Known arm64 deltas from the x86_64 job, both handled below:
+#   * LunarG publishes `vulkan-sdk` for amd64 only -> Ubuntu's libvulkan-dev.
+#   * CUDA: the `linux` umbrella pulls rlx-cuda -> cudarc, which defaults to
+#     `fallback-dynamic-loading` and dlopens libcuda at run time, so it builds
+#     with no CUDA toolkit present and simply finds no device at run time
+#     (the documented CUDA -> wgpu -> CPU fallback order).
+
+on:
+  workflow_dispatch:
+    inputs:
+      features:
+        description: >-
+          skill-daemon feature umbrella. `linux` mirrors the x86_64 release.
+          Use `product` to isolate a failure from the GPU backends.
+        required: false
+        default: linux
+        type: choice
+        options:
+          - linux
+          - product
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  trial-arm64:
+    name: Trial — aarch64-unknown-linux-gnu packages
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /usr/local/share/powershell /usr/local/share/chromium /usr/share/swift \
+                      /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af 2>/dev/null || true
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Confirm the runner really is arm64
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="$(dpkg --print-architecture)"
+          echo "dpkg arch : $arch"
+          echo "uname -m  : $(uname -m)"
+          if [[ "$arch" != "arm64" ]]; then
+            echo "::error::Expected an arm64 runner, got '$arch'. This trial proves nothing on amd64."
+            exit 1
+          fi
+
+      - name: Release setup (Linux deps + Rust + Node)
+        uses: ./.github/actions/release-setup
+        with:
+          target: aarch64-unknown-linux-gnu
+          linux-deps: "true"
+          # LunarG is amd64-only; use Ubuntu's loader + headers instead.
+          linux-vulkan-packages: "libvulkan-dev libvulkan1"
+          cache-key: linux-trial-aarch64-unknown-linux-gnu-v1
+          build-frontend: "false"
+
+      - name: Compile skill-daemon (aarch64)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build -p skill-daemon \
+            --features "${{ inputs.features }}" \
+            --release --locked --target aarch64-unknown-linux-gnu
+
+      # package-linux-system-bundles.sh stages `src-tauri/target/<triple>/release/skill`.
+      # This trial does not build the Tauri app (that needs the frontend and a
+      # signed bundle), so stand in the daemon binary to exercise the packaging
+      # and metadata path, which is what is actually under test here.
+      - name: Stage a binary for packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="src-tauri/target/aarch64-unknown-linux-gnu/release"
+          if [[ ! -f "$dir/skill" ]]; then
+            cp "$dir/skill-daemon" "$dir/skill"
+            echo "note: packaged the daemon binary as a stand-in for the app"
+          fi
+
+      - name: Build deb + rpm (aarch64)
+        shell: bash
+        run: bash scripts/package-linux-system-bundles.sh --target aarch64-unknown-linux-gnu --skip-build
+
+      # The point of the trial: is the rpm well-formed, correctly versioned, and
+      # does rpm's own dependency generator produce the OpenBLAS soname?
+      - name: Inspect the rpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="src-tauri/target/aarch64-unknown-linux-gnu/release/bundle"
+          rpm_file="$(find "$bundle/rpm" -name '*.rpm' | head -1)"
+          deb_file="$(find "$bundle/deb" -name '*.deb' | head -1)"
+          if [[ -z "$rpm_file" || -z "$deb_file" ]]; then
+            echo "::error::expected both a .deb and a .rpm under $bundle"
+            find "$bundle" -maxdepth 2 || true
+            exit 1
+          fi
+
+          echo "rpm : $rpm_file"
+          echo "deb : $deb_file"
+          rpm -qp --queryformat 'NAME=%{NAME}\nVERSION=%{VERSION}\nRELEASE=%{RELEASE}\nARCH=%{ARCH}\n' "$rpm_file"
+
+          arch="$(rpm -qp --queryformat '%{ARCH}' "$rpm_file")"
+          [[ "$arch" == "aarch64" ]] || { echo "::error::rpm ARCH is '$arch', expected aarch64"; exit 1; }
+
+          # An RC must carry a tilde so it sorts BELOW the release it precedes.
+          ver="$(rpm -qp --queryformat '%{VERSION}' "$rpm_file")"
+          case "$ver" in
+            *-*) echo "::error::rpm VERSION '$ver' contains '-', which rpm forbids"; exit 1 ;;
+            *'\'*) echo "::error::rpm VERSION '$ver' contains a backslash"; exit 1 ;;
+          esac
+          if [[ "$(cat VERSION)" == *-rc.* && "$ver" != *'~'* ]]; then
+            echo "::error::VERSION is an RC but rpm VERSION '$ver' has no '~' — upgrade ordering would invert"
+            exit 1
+          fi
+
+          echo "--- requires ---"
+          rpm -qp --requires "$rpm_file"
+          rpm -qp --requires "$rpm_file" | grep -q 'libopenblas\.so\.0' \
+            || echo "::warning::no libopenblas soname requirement was auto-generated"
+
+      - name: Upload trial packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-arm64-trial-packages
+          path: |
+            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          retention-days: 14
