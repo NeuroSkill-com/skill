@@ -66,6 +66,16 @@ runs:
       if: inputs.linux-deps == 'true' && inputs.linux-vulkan-packages == 'vulkan-sdk'
       uses: ./.github/actions/setup-vulkan-linux
 
+    # NOTE: `packages:` below is a YAML folded scalar — every line in it is
+    # literal text handed to apt, so a `#` does NOT start a comment there. Put
+    # explanations here instead; a comment inside the block becomes a package
+    # name and the step fails with `Unable to locate package #`.
+    #
+    # `rpm`      — rpmbuild, for the .rpm in package-linux-system-bundles.sh.
+    # `dpkg-dev` — dpkg-shlibdeps, which derives the .deb Depends from the
+    #              shipped ELFs. Present via build-essential on the hosted
+    #              runners; named explicitly so a slimmer image cannot silently
+    #              fall back to the incomplete hand-written dependency list.
     - name: Cache + install system dependencies (Linux)
       if: inputs.linux-deps == 'true'
       uses: awalsh128/cache-apt-pkgs-action@v1
@@ -85,10 +95,6 @@ runs:
           cmake
           binutils
           rpm
-          # dpkg-shlibdeps, used by package-linux-system-bundles.sh to derive the
-          # .deb Depends from the shipped ELFs. Present via build-essential on the
-          # hosted runners, named explicitly so a slimmer image cannot silently
-          # fall back to the incomplete hand-written dependency list.
           dpkg-dev
           mold
           clang
