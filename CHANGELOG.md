@@ -8,6 +8,27 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.131-rc.33] — 2026-09-29
+
+### Build
+
+- **Fix the Linux release failing at the dependency step.** `release-setup`'s
+  `packages:` is a YAML *folded scalar*: every line inside it is literal text
+  handed to apt, so a leading `#` does not start a comment. A comment added there
+  in rc.32 turned each word of the prose into a package name, and the whole
+  Linux release died 3 minutes in with `Unable to locate package #`,
+  `dpkg-shlibdeps`, `used`, `by`, `derive`, and the rest.
+
+  The explanation now lives above the step, where YAML does treat it as a
+  comment, and the block holds package names only — with a note there saying
+  exactly this, so the next person does not repeat it. Verified by rendering the
+  list straight out of the YAML and resolving every name against real Ubuntu on
+  both amd64 and arm64: all 19 resolve, with `vulkan-sdk` correctly coming from
+  the LunarG repo rather than the base archive.
+
+  `dpkg-dev` (the reason for the comment) stays in the list: it provides
+  `dpkg-shlibdeps`, which derives the `.deb` Depends from the shipped ELFs.
+
 ## [0.0.131-rc.32] — 2026-09-29
 
 ### Bugfixes
@@ -531,17 +552,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - updated CI
 
-## [0.0.131-rc.13] — 2026-07-24
-
-### Features
-
-- fixed CI
-- simplified CI
-
 ## Earlier releases
 
-The 141 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 142 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.13](changes/releases/0.0.131-rc.13.md)
 - [0.0.131-rc.12](changes/releases/0.0.131-rc.12.md)
 - [0.0.131-rc.11](changes/releases/0.0.131-rc.11.md)
 - [0.0.131-rc.10](changes/releases/0.0.131-rc.10.md)
