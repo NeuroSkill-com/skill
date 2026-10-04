@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.131-rc.34] — 2026-10-04
+
+### Build
+
+- Minor updates and improvements
+
 ## [0.0.131-rc.33] — 2026-09-29
 
 ### Build
@@ -546,16 +552,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - rlx core models
 
-## [0.0.131-rc.14] — 2026-07-24
-
-### Features
-
-- updated CI
-
 ## Earlier releases
 
-The 142 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 143 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.14](changes/releases/0.0.131-rc.14.md)
 - [0.0.131-rc.13](changes/releases/0.0.131-rc.13.md)
 - [0.0.131-rc.12](changes/releases/0.0.131-rc.12.md)
 - [0.0.131-rc.11](changes/releases/0.0.131-rc.11.md)
