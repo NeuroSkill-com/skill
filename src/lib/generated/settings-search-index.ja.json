@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "リング BLE キー",
+    "desc": "Bluetooth でリングに接続するために必要です。上のクラウドトークンとは別のものです。この 16 バイトのキーは、Oura アプリがリングとローカルでペアリングするときに作成されます。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "フォントサイズ",
     "desc": "UIテキストサイズを調整します。アプリ内のすべてのテキストに影響します。"

@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "Ring-BLE-Schlüssel",
+    "desc": "Erforderlich, um den Ring über Bluetooth zu verbinden — unabhängig vom Cloud-Token oben. Die Oura-App erzeugt diesen 16-Byte-Schlüssel beim lokalen Kopplen mit dem Ring."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Schriftgröße",
     "desc": "Passen Sie die Textgröße der Benutzeroberfläche an. Beeinflusst allen Text in der App."

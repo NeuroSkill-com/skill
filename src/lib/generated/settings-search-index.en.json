@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "Ring BLE key",
+    "desc": "Required to connect to the ring over Bluetooth, separate from the cloud token above. The Oura app creates this 16-byte key when it pairs with the ring locally."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Font Size",
     "desc": "Adjust the UI text size. Affects all text in the app."

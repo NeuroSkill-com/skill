@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "מפתח BLE של הטבעת",
+    "desc": "נדרש כדי להתחבר לטבעת דרך Bluetooth, בנפרד מטוקן הענן שלמעלה. אפליקציית Oura יוצרת מפתח זה בגודל 16 בתים בעת צימוד מקומי עם הטבעת."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "גודל גופן",
     "desc": "התאם את גודל הטקסט של ממשק המשתמש. משפיע על כל הטקסט באפליקציה."

@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "指环 BLE 密钥",
+    "desc": "通过蓝牙连接指环时需要，与上方的云端令牌无关。Oura 应用在本地与指环配对时会生成这个 16 字节的密钥。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "字体大小",
     "desc": "调整界面文字大小。影响应用中的所有文本。"

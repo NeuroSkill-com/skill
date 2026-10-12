@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "Clave BLE del anillo",
+    "desc": "Necesaria para conectar el anillo por Bluetooth, independiente del token de la nube anterior. La app de Oura crea esta clave de 16 bytes al emparejarse localmente con el anillo."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Tamaño de fuente",
     "desc": "Ajuste el tamaño del texto de la interfaz de usuario. Afecta a todo el texto de la aplicación."

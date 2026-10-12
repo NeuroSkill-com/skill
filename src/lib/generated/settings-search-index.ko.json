@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "링 BLE 키",
+    "desc": "블루투스로 링에 연결하는 데 필요하며, 위의 클라우드 토큰과는 별개입니다. 이 16바이트 키는 Oura 앱이 링과 로컬로 페어링할 때 생성됩니다."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "글꼴 크기",
     "desc": "UI 텍스트 크기를 조정합니다. 앱의 모든 텍스트에 영향을 줍니다."

@@ -667,6 +667,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.deviceApi.ouraRingKey",
+    "label": "Clé BLE de la bague",
+    "desc": "Nécessaire pour connecter la bague en Bluetooth, indépendante du jeton cloud ci-dessus. L\\u2019application Oura crée cette clé de 16 octets lors de l\\u2019appairage local avec la bague."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Taille de police",
     "desc": "Ajustez la taille du texte de l'interface utilisateur. Affecte tout le texte de l'application."
