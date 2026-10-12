@@ -30,7 +30,7 @@ interface LlmConfigView {
 interface Props {
   config: LlmConfigView;
   configSaving: boolean;
-  wsPort: number;
+  apiPort: number;
   activeMaxCtx: number;
   hasAnyMmproj: boolean;
   hasDownloadedMmproj: boolean;
@@ -56,7 +56,7 @@ interface Props {
 let {
   config,
   configSaving,
-  wsPort,
+  apiPort,
   activeMaxCtx,
   hasAnyMmproj,
   hasDownloadedMmproj,
@@ -113,7 +113,7 @@ const ctxOptions = $derived.by(() =>
 );
 
 const curlSnippet = $derived(
-  `curl http://localhost:${wsPort}/v1/chat/completions \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'`,
+  `curl http://localhost:${apiPort}/v1/chat/completions \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'`,
 );
 </script>
 

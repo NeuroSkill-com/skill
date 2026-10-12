@@ -125,6 +125,15 @@ const settings: Record<string, string> = {
     "AWEAR EEGデバイスの電源を入れて、コンピューターのBluetoothが有効であることを確認してください。",
   "settings.supportedDevices.instruction.awear2":
     "BLEデバイスをスキャンしてAWEARに接続してください。認証はHMAC-SHA256経由で自動的に処理されます。",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Vital Neuro ヘッドホン",
+  "settings.supportedDevices.instruction.vital1":
+    "ヘッドホンの電源を入れ、このコンピューターの近くに置いてください。EEG は Bluetooth LE で送信され、音声は通常の Bluetooth ペアリングのままです。",
+  "settings.supportedDevices.instruction.vital2":
+    "デバイス一覧でスキャンしてペアリングし、接続してください。アドバタイズされるサービスで識別するため、名前を変更していても見つかります。",
+  "settings.supportedDevices.instruction.vital3":
+    "250 Hz の EEG 3 チャンネルに加えて、加速度センサーとバッテリー残量を取得します。",
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
@@ -201,6 +210,16 @@ const settings: Record<string, string> = {
     "Oura Ring V2 Cloud APIから睡眠、活動、レディネス、心拍数、SpO2データを同期するための個人アクセストークン。",
   "settings.deviceApi.ouraDashboard": "Oura Developer Portalからトークンを取得",
   "settings.deviceApi.ouraAccessToken": "アクセストークン",
+  "settings.deviceApi.ouraRingKey": "リング BLE キー",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "Bluetooth でリングに接続するために必要です。上のクラウドトークンとは別のものです。この 16 バイトのキーは、Oura アプリがリングとローカルでペアリングするときに作成されます。",
+  "settings.deviceApi.ouraRingSyncBtn": "リングから同期",
+  "settings.deviceApi.ouraRingSyncing": "リングを読み取り中\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "リング本体に保存された履歴を Bluetooth 経由で読み取ります（心拍数、HRV、皮膚温、SpO2、睡眠ステージ）。前回の同期が終わった位置から再開します。先に稼働中のセッションからリングを切断してください。",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "リングはイベントを送信しましたが、時刻の基準を含むものがなかったため、日付を特定できず何も保存されませんでした。リングの近くで Oura アプリを一度開いて時刻を設定し、もう一度同期してください。",
+  "settings.deviceApi.ouraRingMoreRemaining": "未取得分の一部を読み取りました。続けるにはもう一度同期してください。",
   "settings.deviceApi.ouraSyncBtn": "今すぐ同期",
   "settings.deviceApi.ouraSyncing": "同期中…",
   "settings.deviceApi.ouraSynced": "同期完了！",

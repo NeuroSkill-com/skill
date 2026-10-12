@@ -23,6 +23,8 @@
 //! * [`muse::MuseAdapter`]   — Muse 2 / Muse S (4 ch @ 256 Hz, PPG, IMU)
 //! * [`mw75::Mw75Adapter`]   — Neurable MW75 Neuro (12 ch @ 500 Hz)
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
+//! * [`oura::OuraAdapter`] — Oura Ring 3/4/5 (vitals + motion, no EEG)
+//! * [`vital::VitalAdapter`] — Vital Neuro headphones (3 ch @ 250 Hz, IMU)
 
 pub mod antneuro;
 pub mod awear;
@@ -34,6 +36,8 @@ pub mod mendi;
 pub mod muse;
 pub mod mw75;
 pub mod openbci;
+pub mod oura;
+pub mod vital;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
@@ -64,6 +68,9 @@ bitflags! {
         const META    = 0b0001_0000;
         /// Functional near-infrared spectroscopy optical channels.
         const FNIRS   = 0b0010_0000;
+        /// Derived vitals (heart rate, SpO2, skin temperature) reported by the
+        /// device itself rather than computed here from a raw waveform.
+        const VITALS  = 0b0100_0000;
     }
 }
 
@@ -180,6 +187,30 @@ pub enum DeviceEvent {
     Meta(serde_json::Value),
     /// One fNIRS optical frame (multi-channel raw photodetector counts).
     Fnirs(FnirsFrame),
+    /// Device-reported vitals (heart rate, SpO2, skin temperature).
+    Vitals(VitalsFrame),
+}
+
+/// Vitals a device derives on its own, rather than a raw waveform this app
+/// computes them from.
+///
+/// A wearable like the Oura ring does its own beat detection and reports a
+/// heart rate with the inter-beat interval behind it; there is no PPG waveform
+/// on the wire to feed [`PpgFrame`] and the PPG DSP path.  Every field is
+/// optional because a single reading rarely carries all of them — a live beat
+/// has `hr_bpm` and `ibi_ms`, while a cached SpO2 poll has only `spo2_pct`.
+#[derive(Debug, Clone, Default)]
+pub struct VitalsFrame {
+    /// Timestamp in seconds since Unix epoch.
+    pub timestamp_s: f64,
+    /// Instantaneous heart rate in beats per minute.
+    pub hr_bpm: Option<f64>,
+    /// The inter-beat interval this heart rate came from, in milliseconds.
+    pub ibi_ms: Option<f64>,
+    /// Blood-oxygen saturation in percent.
+    pub spo2_pct: Option<f64>,
+    /// Skin temperature in degrees Celsius.
+    pub temperature_c: Option<f64>,
 }
 
 /// A single fNIRS (functional near-infrared spectroscopy) optical frame.

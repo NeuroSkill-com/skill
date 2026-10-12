@@ -93,6 +93,7 @@ interface DeviceApiConfig {
   emotiv_client_secret: string;
   idun_api_token: string;
   oura_access_token: string;
+  oura_ring_key: string;
   neurosity_email: string;
   neurosity_password: string;
   neurosity_device_id: string;
@@ -118,6 +119,7 @@ let deviceApi = $state<DeviceApiConfig>({
   emotiv_client_secret: "",
   idun_api_token: "",
   oura_access_token: "",
+  oura_ring_key: "",
   neurosity_email: "",
   neurosity_password: "",
   neurosity_device_id: "",
@@ -137,6 +139,11 @@ let ouraApiChanged = $state(false);
 let ouraApiSaved = $state(false);
 let ouraApiError = $state("");
 let ouraTokenVisible = $state(false);
+let ouraRingKeyVisible = $state(false);
+let ouraRingSyncing = $state(false);
+let ouraRingSynced = $state(false);
+let ouraRingSyncError = $state("");
+let ouraRingSyncNote = $state("");
 let ouraApiExpanded = $state(false);
 let ouraSyncing = $state(false);
 let ouraSynced = $state(false);
@@ -371,6 +378,53 @@ async function ouraSync() {
   }
 }
 
+async function ouraRingSync() {
+  ouraRingSyncError = "";
+  ouraRingSyncNote = "";
+  ouraRingSyncing = true;
+  try {
+    const port = await getWsPort();
+    const resp = await fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "oura_ring_sync" }),
+      // The ring is a slow BLE link and a first sync can hold months of
+      // events, so this is generous compared with the cloud sync.
+      signal: AbortSignal.timeout(900000),
+    });
+    if (!resp.ok) {
+      ouraRingSyncError = `Server returned ${resp.status} ${resp.statusText}`;
+      return;
+    }
+    const r = await resp.json().catch(() => null);
+    if (!r) {
+      ouraRingSyncError = "Invalid response from server";
+      return;
+    }
+    if (!r.ok) {
+      ouraRingSyncError = r.error ?? "Sync failed";
+      return;
+    }
+    ouraRingSynced = true;
+    const d = r.result ?? r;
+    // A sync that read events but could date none of them looks like a
+    // success and stores nothing, so say what happened rather than flashing
+    // a tick. See docs/DEVICES.md on ring clock anchors.
+    if (d.events > 0 && d.anchors === 0) {
+      ouraRingSyncNote = t("settings.deviceApi.ouraRingNoAnchors");
+    } else if (d.truncated) {
+      ouraRingSyncNote = t("settings.deviceApi.ouraRingMoreRemaining");
+    }
+    setTimeout(() => {
+      ouraRingSynced = false;
+    }, 3000);
+  } catch (e: unknown) {
+    ouraRingSyncError = e instanceof Error ? e.message : String(e);
+  } finally {
+    ouraRingSyncing = false;
+  }
+}
+
 const isBle = $derived(openbci.board === "ganglion");
 const isSerial = $derived(openbci.board === "cyton" || openbci.board === "cyton_daisy");
 const isWifi = $derived(["ganglion_wifi", "cyton_wifi", "cyton_daisy_wifi"].includes(openbci.board));
@@ -578,6 +632,9 @@ function deviceImage(name: string, hw?: string | null): string | null {
   }
   if (n.includes("awear") || n.includes("luca")) {
     return "/devices/awear-eeg.png";
+  }
+  if (n.includes("vital")) {
+    return "/devices/vital-headphones.webp";
   }
   if (n.includes("idun") || n.includes("guardian") || n.startsWith("ige")) {
     return "/devices/idun-guardian.png";
@@ -1522,6 +1579,56 @@ onDestroy(() => {
                 {ouraTokenVisible ? t("settings.deviceApi.hide") : t("settings.deviceApi.show")}
               </Button>
             </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="oura-ring-key" class="text-ui-base font-medium text-foreground/80">{t("settings.deviceApi.ouraRingKey")}</label>
+            <div class="flex items-center gap-2">
+              <input
+                id="oura-ring-key"
+                type={ouraRingKeyVisible ? "text" : "password"}
+                bind:value={deviceApi.oura_ring_key}
+                oninput={() => { ouraApiChanged = true; }}
+                placeholder="32 hex characters"
+                spellcheck="false"
+                autocomplete="off"
+                class="flex-1 min-w-0 font-mono text-ui-md px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+              <Button size="sm" variant="outline"
+                class="text-ui-base h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+                onclick={() => ouraRingKeyVisible = !ouraRingKeyVisible}>
+                {ouraRingKeyVisible ? t("settings.deviceApi.hide") : t("settings.deviceApi.show")}
+              </Button>
+            </div>
+            <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
+              {t("settings.deviceApi.ouraRingKeyDesc")}
+            </p>
+            <div class="flex items-center gap-2 pt-0.5">
+              <Button size="sm"
+                variant={ouraRingSynced ? "secondary" : "outline"}
+                class="text-ui-base h-7 px-3
+                  {ouraRingSynced ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+                  ouraRingSyncing ? 'border-yellow-500/30 text-yellow-600 dark:text-yellow-400' :
+                  'border-border dark:border-white/10 text-muted-foreground'}"
+                onclick={ouraRingSync}
+                disabled={ouraRingSyncing || !deviceApi.oura_ring_key}>
+                {#if ouraRingSyncing}
+                  {t("settings.deviceApi.ouraRingSyncing")}
+                {:else if ouraRingSynced}
+                  {t("settings.deviceApi.ouraSynced")}
+                {:else}
+                  {t("settings.deviceApi.ouraRingSyncBtn")}
+                {/if}
+              </Button>
+            </div>
+            <p class="text-ui-sm text-muted-foreground/60 leading-relaxed">
+              {t("settings.deviceApi.ouraRingSyncDesc")}
+            </p>
+            {#if ouraRingSyncNote}
+              <p class="text-ui-sm text-yellow-600 dark:text-yellow-400">{ouraRingSyncNote}</p>
+            {/if}
+            {#if ouraRingSyncError}
+              <p class="text-ui-sm text-destructive">{ouraRingSyncError}</p>
+            {/if}
           </div>
 
           <div class="flex items-center justify-between gap-2">

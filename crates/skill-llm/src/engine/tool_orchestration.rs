@@ -324,7 +324,17 @@ where
 
     // Inject discovered Agent Skills into the system prompt so the LLM knows
     // which specialised instruction files it can load via read_file.
-    // Filter out skills the user has explicitly disabled.
+    //
+    // Only when `read_file` is actually on the table. The block's own text is
+    // "Use the read_file tool to load a skill's file when the task matches its
+    // description", so without that tool it is an instruction the model cannot
+    // follow — and it is not cheap: 33 discovered skills came to ~3900 prompt
+    // tokens, so a one-line question with tools OFF arrived as 3970 tokens,
+    // measured through the daemon. That is paid three times over — a prefill
+    // graph sized for a 4k prompt (which stayed resident at ~23 GB), ~10s of
+    // prefill before the first byte reaches the client, and small models
+    // answering the system prompt instead of the user.
+    let can_read_skill_files = tools_from_req.iter().any(|t| t.function.name == "read_file");
     let disabled = &allowed_tools.disabled_skills;
     let filtered_skills: Vec<&skill_skills::Skill> = state
         .skills
@@ -332,7 +342,11 @@ where
         .filter(|s| !disabled.iter().any(|d| d == &s.name))
         .collect();
     let filtered_refs: Vec<skill_skills::Skill> = filtered_skills.into_iter().cloned().collect();
-    let skills_block = skill_skills::format_skills_for_prompt(&filtered_refs);
+    let skills_block = if can_read_skill_files {
+        skill_skills::format_skills_for_prompt(&filtered_refs)
+    } else {
+        String::new()
+    };
     if !skills_block.is_empty() {
         let has_system = messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system");
         if has_system {

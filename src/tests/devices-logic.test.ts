@@ -67,6 +67,10 @@ describe("deviceImage", () => {
   it("detects Mendi", () => {
     expect(deviceImage("Mendi")).toContain("mendi-headband");
   });
+  it("detects Vital Neuro", () => {
+    expect(deviceImage("Vital Neuro")).toContain("vital-headphones");
+    expect(deviceImage("VitalNeuro-1234")).toContain("vital-headphones");
+  });
   it("returns null for unknown", () => {
     expect(deviceImage("Unknown Device XYZ")).toBeNull();
   });

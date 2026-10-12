@@ -222,6 +222,134 @@ pub(super) async fn cmd_oura_sync(state: &AppState, msg: &Value) -> Result<Value
     Ok(result)
 }
 
+// ── Oura ring (direct BLE) ───────────────────────────────────────────────────
+
+/// Where the ring's history read position is kept between syncs.
+///
+/// A tiny file rather than a settings field: it is machine state, not a user
+/// preference, and it must survive a settings reset without being something a
+/// user can meaningfully edit.
+fn oura_cursor_path(skill_dir: &std::path::Path) -> std::path::PathBuf {
+    skill_dir.join("oura_ring_sync.json")
+}
+
+fn read_oura_cursor(skill_dir: &std::path::Path) -> u32 {
+    std::fs::read_to_string(oura_cursor_path(skill_dir))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v.get("cursor").and_then(Value::as_u64))
+        .and_then(|c| u32::try_from(c).ok())
+        .unwrap_or(0)
+}
+
+/// Persist the next read position.
+///
+/// Best-effort: losing it costs a longer next sync, not data, because the
+/// health store upserts by `(source_id, timestamp)` and re-importing the same
+/// events is idempotent.
+fn write_oura_cursor(skill_dir: &std::path::Path, cursor: u32, stats: &skill_oura::RingSyncStats) {
+    let body = json!({
+        "cursor": cursor,
+        "last_sync_unix": chrono::Utc::now().timestamp(),
+        "last_events": stats.events,
+        "last_undated": stats.undated,
+    });
+    if let Err(e) = std::fs::write(oura_cursor_path(skill_dir), body.to_string()) {
+        tracing::warn!(error = %e, "could not persist the Oura ring sync cursor");
+    }
+}
+
+pub(super) async fn cmd_oura_ring_status(state: &AppState) -> Result<Value, String> {
+    let skill_dir = skill_dir(state);
+    let has_key = !skill_settings::keychain::get_oura_ring_key().trim().is_empty();
+    Ok(json!({
+        "has_key": has_key,
+        "cursor": read_oura_cursor(&skill_dir),
+        "session_active": oura_session_active(state),
+    }))
+}
+
+/// Whether a live Oura session currently holds the ring's single BLE link.
+fn oura_session_active(state: &AppState) -> bool {
+    state
+        .status
+        .lock()
+        .map(|s| s.device_kind == skill_data::device::DeviceKind::Oura.as_str() && s.state == "connected")
+        .unwrap_or(false)
+}
+
+/// Drain the ring's stored history into the health database — no Oura account.
+///
+/// The cloud counterpart is `oura_sync`, which fetches the 0-100 scores the ring
+/// never emits. This one recovers what the ring itself recorded: heart rate,
+/// HRV, skin temperature, SpO2, sleep stages and MET levels.
+pub(super) async fn cmd_oura_ring_sync(state: &AppState, msg: &Value) -> Result<Value, String> {
+    use skill_devices::session::oura::{parse_auth_key, sync, OuraConfig};
+
+    // The ring accepts one connection. Draining while a session streams from it
+    // would put two clients on one link, and the protocol matches a response by
+    // tag order, so they would take each other's answers.
+    if oura_session_active(state) {
+        return Err("The Oura ring is in a live session. Disconnect it first, then sync.".into());
+    }
+
+    let hex_key = skill_settings::keychain::get_oura_ring_key();
+    if hex_key.trim().is_empty() {
+        return Err("Oura ring key not configured. Set it in Settings → Devices → Device API.".into());
+    }
+    let auth_key = parse_auth_key(&hex_key).map_err(|e| e.to_string())?;
+
+    let skill_dir = skill_dir(state);
+    // `reset: true` re-reads everything the ring still holds, for a user whose
+    // cursor has run ahead of what actually landed in the database.
+    let cursor = if msg.get("reset").and_then(Value::as_bool).unwrap_or(false) {
+        0
+    } else {
+        read_oura_cursor(&skill_dir)
+    };
+
+    let config = OuraConfig {
+        device_id: str_field(msg, "device_id"),
+        scan_timeout: sync::SYNC_SCAN_TIMEOUT,
+        auth_key: Some(auth_key),
+        ..Default::default()
+    };
+
+    let drained = sync::drain_history(&config, cursor, sync::DEFAULT_MAX_EVENTS)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (payload, stats) = skill_oura::events_to_payload(&drained.events);
+
+    let store_dir = skill_dir.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let Some(store) = skill_health::HealthStore::open(&store_dir) else {
+            return Err("health store not available".to_string());
+        };
+        Ok(store.sync(&payload))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    write_oura_cursor(&skill_dir, drained.next_cursor, &stats);
+
+    Ok(json!({
+        "synced": true,
+        "events": stats.events,
+        "decoded": stats.decoded,
+        // Surfaced rather than hidden: with no clock anchor in the batch nothing
+        // can be dated, and a sync that stored nothing needs to say why.
+        "undated": stats.undated,
+        "untrusted": stats.untrusted,
+        "anchors": stats.anchors,
+        "next_cursor": drained.next_cursor,
+        "truncated": drained.truncated,
+        "sleep_upserted": result.sleep_upserted,
+        "heart_rate_upserted": result.heart_rate_upserted,
+        "metrics_upserted": result.metrics_upserted,
+    }))
+}
+
 pub(super) async fn cmd_calendar_status() -> Result<Value, String> {
     let result = tokio::task::spawn_blocking(|| {
         let status = skill_calendar::auth_status();

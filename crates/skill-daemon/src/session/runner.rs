@@ -24,6 +24,10 @@ pub(crate) async fn run_adapter_session(
 ) {
     let mut current_desc = adapter.descriptor().clone();
     let mut sample_rate = current_desc.eeg_sample_rate;
+    // Captured on `Connected` so per-device events can name their source.
+    // Several devices can be streaming at once, and a payload carrying only a
+    // value is not attributable to any of them.
+    let mut device_id: Option<String> = None;
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let hooks = state.hooks.lock().map(|g| g.clone()).unwrap_or_default();
 
@@ -170,6 +174,7 @@ pub(crate) async fn run_adapter_session(
                         let device_kind = current_desc.kind.to_string();
 
                         info!(name = %info.name, kind = %device_kind, "device connected");
+                        device_id = Some(info.id.clone());
                         if let Ok(mut s) = state.status.lock() {
                             s.state = "connected".into();
                             s.device_name = Some(info.name.clone());
@@ -185,6 +190,7 @@ pub(crate) async fn run_adapter_session(
                             s.eeg_sample_rate_hz = current_desc.eeg_sample_rate;
                             s.has_ppg = current_desc.caps.contains(skill_devices::session::DeviceCaps::PPG);
                             s.has_imu = current_desc.caps.contains(skill_devices::session::DeviceCaps::IMU);
+                            s.has_vitals = current_desc.caps.contains(skill_devices::session::DeviceCaps::VITALS);
                             // Device identity
                             s.serial_number = info.serial_number.clone();
                             s.mac_address = info.mac_address.clone();
@@ -338,6 +344,48 @@ pub(crate) async fn run_adapter_session(
                         broadcast_event(&state.events_tx, "Battery", &serde_json::json!({
                             "level_pct": frame.level_pct,
                         }));
+                    }
+
+                    DeviceEvent::Vitals(frame) => {
+                        // Device-derived vitals, not a waveform: a wearable
+                        // like the Oura ring does its own beat detection, so
+                        // there is nothing for the PPG/DSP path to consume and
+                        // these values are forwarded as they arrive.  Fields
+                        // are skipped when absent — a live beat carries
+                        // hr/ibi, a cached SpO2 poll carries neither.
+                        let mut payload = serde_json::Map::new();
+                        payload.insert("timestamp".into(), frame.timestamp_s.into());
+                        // Which device this came from.  A ring is worn
+                        // alongside a headset, so an unattributed vitals event
+                        // cannot be placed by a UI showing both.
+                        payload.insert("device_kind".into(), current_desc.kind.into());
+                        if let Some(ref id) = device_id {
+                            payload.insert("device_id".into(), id.clone().into());
+                        }
+                        for (key, value) in [
+                            ("hr_bpm", frame.hr_bpm),
+                            ("ibi_ms", frame.ibi_ms),
+                            ("spo2_pct", frame.spo2_pct),
+                            ("temperature_c", frame.temperature_c),
+                        ] {
+                            if let Some(v) = value {
+                                payload.insert(key.into(), v.into());
+                            }
+                        }
+                        broadcast_event(&state.events_tx, "Vitals", &serde_json::Value::Object(payload));
+
+                        // Recorded to the `_vitals` sidecar so a session with a
+                        // ring in it is not a session with no file.
+                        if let Some(ref mut pipe) = pipeline {
+                            pipe.writer.push_vitals(
+                                &pipe.csv_path,
+                                frame.timestamp_s,
+                                frame.hr_bpm,
+                                frame.ibi_ms,
+                                frame.spo2_pct,
+                                frame.temperature_c,
+                            );
+                        }
                     }
 
                     DeviceEvent::Meta(val) => {

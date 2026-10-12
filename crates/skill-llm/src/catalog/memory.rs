@@ -9,6 +9,13 @@ use super::types::LlmModelEntry;
 /// Uses the same formula as `llmfit_core::models::LlmModel::estimate_memory_gb`:
 ///   model_weights + KV_cache + runtime_overhead
 ///
+/// **This is a floor, not a peak.** It does not model the prefill/decode graph
+/// arenas, which scale with context and in practice dominate everything here:
+/// Qwen3.5-0.8B-Q4_K_M at ctx 16384 estimates 1.07 GB and peaked at 30.4 GB
+/// resident, measured through the daemon. Treat the result as "weights plus KV",
+/// and do not size a context against it without a margin — see the candidate
+/// ladder in [`recommend_ctx_size`].
+///
 /// * `params_b` — parameter count in billions
 /// * `quant`    — quantization tag (e.g. `"Q4_K_M"`)
 /// * `ctx`      — context length in tokens
@@ -76,6 +83,15 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
 
     // Standard context sizes to try, largest first. Cap at 16K on the
     // auto path — larger values need an explicit user ctx_size.
+    //
+    // Context is NOT the memory lever it looks like. `estimate_memory_gb`
+    // omits the prefill/decode graph arenas, so its answer here (1.07 GB for a
+    // 0.8B at 16384) is ~28x under the 30.4 GB peak measured through the
+    // daemon — but lowering this ladder to 8192 was measured too and changed
+    // nothing (31.6 GB peak at 8192 vs 30.4 GB at 16384, same scenario). So the
+    // dominant allocation does not scale with the context we pick, and trimming
+    // it here would cost prompt length for no memory saved. Leave the ladder
+    // alone until the real allocation is profiled inside rlx.
     const CANDIDATES: &[u32] = &[16384, 8192, 4096];
 
     for &ctx in CANDIDATES {
@@ -88,7 +104,16 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
         }
     }
 
-    8192 // absolute minimum (tool-augmented prompts need >4K)
+    // Nothing fit. Return the smallest thing we were willing to consider rather
+    // than a comfortable-sounding constant: this used to return 8192 outright,
+    // so on a memory-tight machine the one job of this function — fit the
+    // budget — was undone by its own fallback.
+    CANDIDATES
+        .iter()
+        .copied()
+        .filter(|&c| entry.max_context_length == 0 || c <= entry.max_context_length)
+        .min()
+        .unwrap_or(2048)
 }
 
 #[cfg(test)]

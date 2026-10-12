@@ -154,7 +154,7 @@ impl Default for OpenBciConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScannerConfig {
-    /// Bluetooth Low Energy scanner (Muse, MW75, Hermes, Ganglion, IDUN, Mendi).
+    /// Bluetooth Low Energy scanner (Muse, MW75, Hermes, Ganglion, IDUN, Mendi, Vital).
     pub ble: bool,
     /// USB serial port scanner (OpenBCI Cyton / CytonDaisy dongle).
     pub usb_serial: bool,
@@ -195,6 +195,14 @@ pub struct DeviceApiConfig {
     /// Oura Ring V2 personal access token for cloud data sync.
     #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub oura_access_token: String,
+    /// The Oura ring's 16-byte BLE app-auth key, as 32 hex characters.
+    ///
+    /// Required to connect to the ring directly over Bluetooth — it is what the
+    /// ring challenges for on every connection, and without it the ring answers
+    /// device info and nothing else.  Unrelated to `oura_access_token`, which
+    /// reaches Oura's cloud API instead.
+    #[serde(default, skip_serializing_if = "skip_secret_in_release")]
+    pub oura_ring_key: String,
     /// Neurosity account email.
     #[serde(default, skip_serializing_if = "skip_secret_in_release")]
     pub neurosity_email: String,
@@ -228,6 +236,7 @@ impl Default for DeviceApiConfig {
             emotiv_client_secret: String::new(),
             idun_api_token: String::new(),
             oura_access_token: String::new(),
+            oura_ring_key: String::new(),
             neurosity_email: String::new(),
             neurosity_password: String::new(),
             neurosity_device_id: String::new(),
@@ -1491,6 +1500,7 @@ fn load_settings_from(path: &Path) -> UserSettings {
         emotiv_client_secret: s.device_api.emotiv_client_secret.clone(),
         idun_api_token: s.device_api.idun_api_token.clone(),
         oura_access_token: s.device_api.oura_access_token.clone(),
+        oura_ring_key: s.device_api.oura_ring_key.clone(),
         neurosity_email: s.device_api.neurosity_email.clone(),
         neurosity_password: s.device_api.neurosity_password.clone(),
         neurosity_device_id: s.device_api.neurosity_device_id.clone(),
@@ -1527,6 +1537,7 @@ pub fn save_secrets_from_settings(settings: &UserSettings) {
         emotiv_client_secret: settings.device_api.emotiv_client_secret.clone(),
         idun_api_token: settings.device_api.idun_api_token.clone(),
         oura_access_token: settings.device_api.oura_access_token.clone(),
+        oura_ring_key: settings.device_api.oura_ring_key.clone(),
         neurosity_email: settings.device_api.neurosity_email.clone(),
         neurosity_password: settings.device_api.neurosity_password.clone(),
         neurosity_device_id: settings.device_api.neurosity_device_id.clone(),

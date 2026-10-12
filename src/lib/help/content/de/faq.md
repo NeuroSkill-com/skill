@@ -142,6 +142,9 @@ Die Echtzeit-Analyse-Pipeline (Filter, Bandleistungen, EEG-Embeddings, Signalqua
 ## Unterstützt {app} das AWEAR-Stirnband?
 Ja. AWEAR ist ein Einkanal-BLE-EEG-Gerät mit einer Abtastrate von 256 Hz. Die Verbindung funktioniert wie bei anderen BLE-Geräten — schalten Sie das Stirnband ein, erteilen Sie bei Aufforderung die Bluetooth-Berechtigung, und {app} erkennt und verbindet sich automatisch. Der einzelne EEG-Kanal treibt die Echtzeit-Analyse-Pipeline an.
 
+## Unterstützt {app} die Vital-Neuro-Kopfhörer?
+Ja. Vital Neuro ist ein Dual-Mode-Kopfhörer: Ton über normales Bluetooth und drei EEG-Kanäle mit 250 Hz über Bluetooth LE. Koppeln Sie die Kopfhörer für den Ton wie gewohnt im Betriebssystem — beide Verbindungen bestehen nebeneinander. Schalten Sie sie in {app} ein, suchen Sie und verbinden Sie sich; erkannt werden sie am angekündigten Dienst statt am Namen, ein umbenanntes Paar wird also weiterhin gefunden. Beschleunigungssensor und Akkustand werden zusammen mit dem EEG übertragen.
+
 ## Die OpenBCI-Verbindung bricht häufig ab — wie stabilisiere ich sie?
 Ganglion BLE: Board innerhalb von 2 m halten; BLE-Adapter in einen USB-2.0-Port stecken (USB 3.0 stört 2,4 GHz). Cyton USB: Kurzes, hochwertiges USB-Kabel direkt am Computer anschließen, nicht über Hub. WiFi-Shield: WLAN-Kanal des Shields nicht mit dem Router überlappen lassen; Board nah am Computer positionieren. Allgemein: Keine wireless-intensiven Programme (Videokonferenzen, Datei-Sync) während der Aufnahme.
 

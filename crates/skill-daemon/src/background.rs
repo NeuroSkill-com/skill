@@ -105,7 +105,7 @@ fn spawn_auto_connect(state: AppState) {
                         let eligible = devs.iter().filter(|d| crate::scanner::is_auto_pair_eligible(d));
                         eligible
                             .clone()
-                            .find(|d| crate::scanner::is_known_eeg_ble_name(&d.name))
+                            .find(|d| crate::scanner::is_known_eeg_device(&state, d))
                             .or_else(|| eligible.clone().next())
                             .cloned()
                     });

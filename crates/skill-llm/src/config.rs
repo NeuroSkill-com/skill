@@ -252,6 +252,29 @@ pub struct LlmConfig {
     #[serde(default = "default_rlx_max_seq")]
     pub rlx_max_seq: usize,
 
+    /// Width of the Qwen3.5 prefill graph, in tokens. `None` = use `max_seq`.
+    ///
+    /// Qwen3.5 compiles ONE static prefill graph and runs every prompt through
+    /// it, so this is the width each request actually pays — independent of how
+    /// long the prompt is. Left at `max_seq` (the default), a 25-token question
+    /// is prefilled as if it were 8192 tokens. Measured on
+    /// Qwen3.5-0.8B-Q4_K_M, same model, same 25-token prompt:
+    ///
+    /// | prefill width | time to first token | decode     |
+    /// |---------------|---------------------|------------|
+    /// | 8192          | 10.17 s             |  5.6 tok/s |
+    /// | 2048          |  1.17 s             | 34.6 tok/s |
+    ///
+    /// Setting this decouples prefill width from decode context, so a long
+    /// `ctx_size` no longer costs 8.7x the latency on short prompts. The
+    /// trade-off is a hard limit, not a slow path: a prompt longer than this
+    /// fails with `prompt length N exceeds compiled prefill_seq`. Tool-augmented
+    /// prompts measured 1399-5384 tokens here, so raise it (or leave it unset)
+    /// if tools are on. The qwen3 family is unaffected — it already prefills at
+    /// the prompt's real length.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rlx_prefill_seq: Option<u32>,
+
     /// Optional RLX soft cap for F32 dequantized weight memory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rlx_max_memory_gb: Option<f32>,
@@ -341,6 +364,9 @@ impl Default for LlmConfig {
             mtp_capable: false,
             rlx_device: default_rlx_device(),
             rlx_max_seq: default_rlx_max_seq(),
+            // None = keep the prefill graph as wide as the decode context, the
+            // behaviour before this knob existed.
+            rlx_prefill_seq: None,
             rlx_max_memory_gb: None,
             discovery: ModelDiscoveryConfig::default(),
         }

@@ -30,6 +30,13 @@ const dashboard: Record<string, string> = {
   "dashboard.lateralityIndex": "לטרליות",
   "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "מדדי PPG",
+  "dashboard.vitals": "מדדים חיוניים",
+  "dashboard.vitalsWaiting":
+    "ממתין למדידה מהמכשיר. טבעת שעונדים מודדת לפי לוח הזמנים שלה, ולכן זה עשוי לקחת כמה דקות.",
+  "dashboard.vitalsStale":
+    "אין מדידה בדקות האחרונות — המכשיר מודד לפי לוח הזמנים שלו.",
+  "dashboard.ibi": "מרווח",
+  "dashboard.skinTemperature": "טמפ' עור",
   "dashboard.hr": "דופק",
   "dashboard.rmssd": "RMSSD",
   "dashboard.sdnn": "SDNN",

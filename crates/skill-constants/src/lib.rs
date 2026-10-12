@@ -160,6 +160,9 @@ pub mod prelude {
         SQLITE_FILE,
         UMAP_CONFIG_FILE,
         VALIDATION_FILE,
+        VITAL_CHANNEL_NAMES,
+        VITAL_EEG_CHANNELS,
+        VITAL_SAMPLE_RATE,
         WS_BROADCAST_CAPACITY,
         WS_DEFAULT_PORT,
         // WebSocket
@@ -329,6 +332,18 @@ pub const AWEAR_SAMPLE_RATE: f64 = 256.0;
 
 /// AWEAR channel label.
 pub const AWEAR_CHANNEL_NAMES: [&str; AWEAR_EEG_CHANNELS] = ["EEG"];
+
+/// Vital Neuro EEG channel count (3 channels on a TI ADS1299 front end).
+pub const VITAL_EEG_CHANNELS: usize = 3;
+
+/// Vital Neuro hardware sample rate (Hz).
+pub const VITAL_SAMPLE_RATE: f64 = 250.0;
+
+/// Vital Neuro channel labels.
+///
+/// The device reports no electrode montage, so these are the positional
+/// names the `vital` crate uses (`protocol::EEG_CHANNEL_NAMES`).
+pub const VITAL_CHANNEL_NAMES: [&str; VITAL_EEG_CHANNELS] = ["ch1", "ch2", "ch3"];
 
 // ── Signal filter (overlap-save, GPU fft_batch) ───────────────────────────────
 
@@ -1080,6 +1095,7 @@ mod tests {
         assert_eq!(EMOTIV_INSIGHT_CHANNEL_NAMES.len(), EMOTIV_INSIGHT_EEG_CHANNELS);
         assert_eq!(IDUN_CHANNEL_NAMES.len(), IDUN_EEG_CHANNELS);
         assert_eq!(AWEAR_CHANNEL_NAMES.len(), AWEAR_EEG_CHANNELS);
+        assert_eq!(VITAL_CHANNEL_NAMES.len(), VITAL_EEG_CHANNELS);
         assert!(CGX_MAX_EEG_CHANNELS >= 30); // Quick-32r has 30 EEG channels
     }
 

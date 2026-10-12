@@ -145,6 +145,15 @@ const settings: Record<string, string> = {
     "Encienda su dispositivo AWEAR EEG y asegúrese de que el Bluetooth esté activado en su ordenador.",
   "settings.supportedDevices.instruction.awear2":
     "Busque dispositivos BLE y conéctese a AWEAR. La autenticación se gestiona automáticamente mediante HMAC-SHA256.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Auriculares Vital Neuro",
+  "settings.supportedDevices.instruction.vital1":
+    "Encienda los auriculares y manténgalos cerca de este ordenador. El EEG se transmite por Bluetooth LE; el audio sigue usando el emparejamiento Bluetooth habitual.",
+  "settings.supportedDevices.instruction.vital2":
+    "Búsquelos y emparéjelos en la lista de dispositivos y luego conéctese. Se identifican por el servicio que anuncian, así que también se encuentran si les cambia el nombre.",
+  "settings.supportedDevices.instruction.vital3":
+    "Tres canales de EEG a 250 Hz, además del acelerómetro y el nivel de batería.",
 
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
@@ -223,6 +232,16 @@ const settings: Record<string, string> = {
     "Token de acceso personal para sincronizar datos de sueño, actividad, preparación, frecuencia cardíaca y SpO2 desde la API Cloud Oura Ring V2.",
   "settings.deviceApi.ouraDashboard": "Obtener token desde el portal de desarrolladores de Oura",
   "settings.deviceApi.ouraAccessToken": "Token de acceso",
+  "settings.deviceApi.ouraRingKey": "Clave BLE del anillo",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "Necesaria para conectar el anillo por Bluetooth, independiente del token de la nube anterior. La app de Oura crea esta clave de 16 bytes al emparejarse localmente con el anillo.",
+  "settings.deviceApi.ouraRingSyncBtn": "Sincronizar del anillo",
+  "settings.deviceApi.ouraRingSyncing": "Leyendo el anillo\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "Lee el historial almacenado en el propio anillo por Bluetooth: frecuencia card\u00edaca, HRV, temperatura de la piel, SpO2, fases del sue\u00f1o. Contin\u00faa donde termin\u00f3 la \u00faltima sincronizaci\u00f3n. Desconecta antes el anillo de cualquier sesi\u00f3n activa.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "El anillo envi\u00f3 eventos, pero ninguno inclu\u00eda una referencia de reloj, por lo que no se pudo fechar ni guardar nada. Abre la app de Oura junto al anillo una vez para ajustar su reloj y vuelve a sincronizar.",
+  "settings.deviceApi.ouraRingMoreRemaining": "Se ley\u00f3 parte del historial pendiente. Sincroniza de nuevo para continuar.",
   "settings.deviceApi.ouraSyncBtn": "Sincronizar ahora",
   "settings.deviceApi.ouraSyncing": "Sincronizando…",
   "settings.deviceApi.ouraSynced": "¡Sincronizado!",

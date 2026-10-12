@@ -62,6 +62,7 @@ import {
   FaaGauge,
   HeadPoseCard,
   PpgMetrics,
+  VitalsCard,
 } from "$lib/dashboard";
 import { t } from "$lib/i18n/index.svelte";
 import {
@@ -354,6 +355,15 @@ let pnn50Score = $state(0); // pNN50 (%)
 let lfHfScore = $state(0); // LF/HF ratio
 let respRateScore = $state(0); // Respiratory Rate (bpm)
 let spo2Score = $state(0); // SpO2 estimate (%)
+// ── Device-reported vitals ───────────────────────────────────────────────
+// Deliberately NOT merged into hrScore/spo2Score above: those are computed
+// here from a PPG waveform, these are what the device itself reported, and a
+// session can have both a headset and a ring in it.
+let vitalsHr = $state(0);
+let vitalsIbi = $state(0);
+let vitalsSpo2 = $state(0);
+let vitalsTemp = $state(0);
+let vitalsAt = $state(0);
 let perfIdxScore = $state(0); // Perfusion Index (%)
 let stressIdxScore = $state(0); // Stress Index
 // Artifact / event detection
@@ -745,11 +755,17 @@ const isHermes = $derived(status.device_kind === "hermes");
 const isEmotiv = $derived(status.device_kind === "emotiv");
 const isIdun = $derived(status.device_kind === "idun");
 const isMendi = $derived(status.device_kind === "mendi");
+const isVital = $derived(status.device_kind === "vital");
 const hasPpg = $derived(status.has_ppg);
 const hasImuCap = $derived(status.has_imu);
+const isOura = $derived(status.device_kind === "oura");
+// Device-reported vitals, as opposed to the PPG waveform `hasPpg` gates. A
+// ring has an optical sensor but does its own beat detection, so there is no
+// waveform to chart — only values.
+const hasVitals = $derived(status.has_vitals === true || isOura);
 const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
-const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi);
+const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi || isVital || isOura);
 const hasSecondary = $derived(secondarySessions.length > 0);
 
 /** Short transport/source label for the connected device. */
@@ -770,6 +786,7 @@ const sourceLabel = $derived.by(() => {
     case "hermes":
     case "idun":
     case "mendi":
+    case "vital":
       return "BLE";
     default:
       return null;
@@ -921,6 +938,7 @@ const deviceImage = $derived(
     if (isEmotiv) return "/devices/emotiv-epoc-x.webp";
     if (isIdun) return "/devices/idun-guardian.png";
     if (isMendi) return "/devices/mendi-headband.png";
+    if (isVital) return "/devices/vital-headphones.webp";
     return null;
   })(),
 );
@@ -936,6 +954,7 @@ const deviceImageAlt = $derived(
     if (isEmotiv) return "Emotiv";
     if (isIdun) return "IDUN Guardian";
     if (isMendi) return "Mendi";
+    if (isVital) return "Vital Neuro";
     return status.device_name ?? "";
   })(),
 );
@@ -988,7 +1007,7 @@ function setLiveView(v: LiveView) {
 const availableLiveViews = $derived.by((): LiveView[] => {
   const views: LiveView[] = [];
   if (hasEeg) views.push("waveform");
-  if (hasPpg || hasImuCap || hasFnirs) views.push("physiology");
+  if (hasPpg || hasImuCap || hasFnirs || hasVitals) views.push("physiology");
   if (hasEeg) views.push("state");
   if (views.length === 0) views.push("waveform");
   return views;
@@ -1289,7 +1308,7 @@ onMount(async () => {
   }
 
   // EEG/PPG/IMU streaming via daemon WebSocket
-  const { subscribeEeg, subscribePpg, subscribeImu } = await import("$lib/daemon/eeg-stream");
+  const { subscribeEeg, subscribePpg, subscribeImu, subscribeVitals } = await import("$lib/daemon/eeg-stream");
   // Accumulate latest EEG values in a non-reactive buffer, then flush
   // into status.eeg at ~4 Hz to avoid N×256 Hz reactive updates.
   // Buffer grows dynamically for any channel count.
@@ -1328,6 +1347,17 @@ onMount(async () => {
   );
   unlisteners.push(subscribePpg((pkt) => ppgChartEl?.pushSamples(pkt.channel, pkt.samples)));
   unlisteners.push(subscribeImu((pkt) => imuChartEl?.pushPacket(pkt)));
+  unlisteners.push(
+    subscribeVitals((pkt) => {
+      // Each field is set only when present: a beat carries no SpO2, and
+      // zeroing the others would make the card flicker between readings.
+      if (pkt.hr_bpm != null) vitalsHr = pkt.hr_bpm;
+      if (pkt.ibi_ms != null) vitalsIbi = pkt.ibi_ms;
+      if (pkt.spo2_pct != null) vitalsSpo2 = pkt.spo2_pct;
+      if (pkt.temperature_c != null) vitalsTemp = pkt.temperature_c;
+      vitalsAt = pkt.timestamp;
+    }),
+  );
 
   // ── Virtual EEG cross-window relay ─────────────────────────────────────
   // VirtualEegTab lives in the settings window; its injectDaemonEvent calls
@@ -1662,6 +1692,7 @@ function phoneBannerImage(
   if (n.includes("muse") || n.includes("athena")) return "/devices/muse-s-athena.jpg";
   if (n.includes("idun")) return "/devices/idun-guardian.png";
   if (n.includes("mw75") || n.includes("neurable")) return "/devices/muse-mw75.jpg";
+  if (n.includes("vital")) return "/devices/vital-headphones.webp";
   return null;
 }
 
@@ -2185,7 +2216,7 @@ useWindowTitle("window.title.main");
               </div>
             {:else}
               <p class="text-ui-md text-muted-foreground text-center leading-relaxed">
-                {isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : isMendi ? t("dashboard.connectingTo", { name: "Mendi" }) : t("dashboard.lookingForMuse")}
+                {isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : isMendi ? t("dashboard.connectingTo", { name: "Mendi" }) : isVital ? t("dashboard.connectingTo", { name: "Vital Neuro" }) : t("dashboard.lookingForMuse")}
               </p>
             {/if}
             <Button size="sm" variant="outline" onclick={cancelRetry}>{t("common.cancel")}</Button>
@@ -2442,6 +2473,12 @@ useWindowTitle("window.title.main");
         <!-- Head Pose (IMU-equipped devices only) -->
         {#if hasImuCap}
         <HeadPoseCard pitch={headPitch} roll={headRoll} stillness={stillnessScore} {nodCount} {shakeCount} />
+        {/if}
+
+        <!-- Device-reported vitals (ring and similar wearables) -->
+        {#if hasVitals}
+          <VitalsCard hr={vitalsHr} ibi={vitalsIbi} spo2={vitalsSpo2}
+            temperature={vitalsTemp} updatedAt={vitalsAt} />
         {/if}
 
         <!-- PPG Metrics -->

@@ -59,6 +59,13 @@ const dashboard: Record<string, string> = {
   "dashboard.lateralityIndex": "偏侧性",
   "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "PPG 指标",
+  "dashboard.vitals": "生命体征",
+  "dashboard.vitalsWaiting":
+    "正在等待设备上报读数。佩戴中的指环按自己的节奏测量，可能需要几分钟。",
+  "dashboard.vitalsStale":
+    "最近几分钟没有读数——设备按自己的节奏测量。",
+  "dashboard.ibi": "间隔",
+  "dashboard.skinTemperature": "皮肤温度",
   "dashboard.hr": "心率",
   "dashboard.rmssd": "RMSSD",
   "dashboard.sdnn": "SDNN",

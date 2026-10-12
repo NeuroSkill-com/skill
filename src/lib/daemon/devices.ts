@@ -34,6 +34,8 @@ export interface DeviceApiConfig {
   emotiv_client_secret: string;
   idun_api_token: string;
   oura_access_token: string;
+  /** The ring's 16-byte BLE app-auth key, as 32 hex characters. */
+  oura_ring_key: string;
   neurosity_email: string;
   neurosity_password: string;
   neurosity_device_id: string;

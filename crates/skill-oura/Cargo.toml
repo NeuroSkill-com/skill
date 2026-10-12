@@ -7,6 +7,10 @@ description = "Oura Ring V2 API integration — fetch sleep, activity, heart rat
 
 [dependencies]
 oura-api = "0.1.2"
+# Ring-event decoders for the direct-BLE path (pure, no I/O).  Unpublished, so
+# git-pinned to the same rev as skill-devices' `oura-link`; the two must move
+# together because this crate interprets what that one fetches.
+oura-protocol = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5fe0cf9a646afa790bda3731be767507" }
 skill-health = { path = "../skill-health" }
 anyhow     = { workspace = true }
 serde      = { workspace = true, features = ["derive"] }

@@ -153,7 +153,12 @@ let config = $state<LlmConfig>({
 });
 
 let configSaving = $state(false);
-let wsPort = $state(8375);
+// Port the OpenAI-compatible endpoints are actually reachable on. This is the
+// port the daemon BOUND (`/v1/ws-port` → `daemon_addr()`), not the `ws_port`
+// setting: that one is an advertised host/port pair for API clients and does
+// not control binding, so reading it here told people to curl 8375 while the
+// daemon was serving 18444.
+let apiPort = $state(0);
 let serverStatus = $state<"stopped" | "loading" | "running">("stopped");
 let serverBusy = $state(false);
 let startError = $state("");
@@ -195,8 +200,8 @@ async function loadConfig() {
     config = { ...config, ...raw, n_batch: raw.n_batch ?? null, n_ubatch: raw.n_ubatch ?? null };
   } catch (e) {}
   try {
-    const [, port] = await daemonInvoke<[string, number]>("get_ws_config");
-    wsPort = port;
+    const { port } = await daemonInvoke<{ port: number }>("get_ws_port");
+    apiPort = port;
   } catch (e) {}
 }
 
@@ -388,7 +393,7 @@ onDestroy(() => {
   activeFamilyName={activeEntry?.family_name ?? null}
   activeQuant={activeEntry?.quant ?? null}
   activeSizeGb={activeEntry?.size_gb ?? null}
-  wsPort={wsPort}
+  {apiPort}
   startError={startError}
   onToggleEnabled={async () => { config = { ...config, enabled: !config.enabled }; await saveConfig(); }}
   onToggleAutostart={async () => { config = { ...config, autostart: !config.autostart }; await saveConfig(); }}
@@ -459,7 +464,7 @@ onDestroy(() => {
 <LlmInferenceSection
   config={config}
   {configSaving}
-  {wsPort}
+  {apiPort}
   activeMaxCtx={activeEntry?.max_context_length || 0}
   hasAnyMmproj={catalog.entries.some((e) => e.is_mmproj || e.filename.toLowerCase().includes("mmproj"))}
   hasDownloadedMmproj={catalog.entries.some((e) => (e.is_mmproj || e.filename.toLowerCase().includes("mmproj")) && e.state === "downloaded")}

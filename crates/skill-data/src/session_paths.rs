@@ -36,3 +36,8 @@ pub fn imu_parquet_path(csv_path: &Path) -> PathBuf {
 pub fn fnirs_parquet_path(csv_path: &Path) -> PathBuf {
     to_parquet_ext(&crate::session_csv::fnirs_csv_path(csv_path))
 }
+
+/// Parquet vitals path from EEG CSV path.
+pub fn vitals_parquet_path(csv_path: &Path) -> PathBuf {
+    to_parquet_ext(&crate::session_csv::vitals_csv_path(csv_path))
+}

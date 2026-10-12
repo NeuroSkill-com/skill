@@ -133,6 +133,15 @@ const settings: Record<string, string> = {
     "Power on your AWEAR EEG device and ensure Bluetooth is enabled on your computer.",
   "settings.supportedDevices.instruction.awear2":
     "Scan for BLE devices and connect to AWEAR. Authentication is handled automatically via HMAC-SHA256.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Vital Neuro Headphones",
+  "settings.supportedDevices.instruction.vital1":
+    "Power on the headphones and keep them near this computer. EEG streams over Bluetooth LE; audio stays on the regular Bluetooth pairing.",
+  "settings.supportedDevices.instruction.vital2":
+    "Scan and pair them in the Devices list, then connect. They are matched on the service they advertise, so a renamed pair is still found.",
+  "settings.supportedDevices.instruction.vital3":
+    "Three EEG channels stream at 250 Hz, along with the accelerometer and battery level.",
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
@@ -216,6 +225,16 @@ const settings: Record<string, string> = {
     "Personal access token for syncing sleep, activity, readiness, heart rate, and SpO2 data from the Oura Ring V2 Cloud API.",
   "settings.deviceApi.ouraDashboard": "Get token from Oura Developer Portal",
   "settings.deviceApi.ouraAccessToken": "Access Token",
+  "settings.deviceApi.ouraRingKey": "Ring BLE key",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "Required to connect to the ring over Bluetooth, separate from the cloud token above. The Oura app creates this 16-byte key when it pairs with the ring locally.",
+  "settings.deviceApi.ouraRingSyncBtn": "Sync from ring",
+  "settings.deviceApi.ouraRingSyncing": "Reading ring\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "Read the history stored on the ring itself over Bluetooth \u2014 heart rate, HRV, skin temperature, SpO2, sleep stages. Picks up where the last sync stopped. Disconnect the ring from any live session first.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "The ring sent events but none carried a clock reference, so none could be dated and nothing was stored. Open the Oura app near the ring once to set its clock, then sync again.",
+  "settings.deviceApi.ouraRingMoreRemaining": "Part of the backlog was read. Sync again to continue.",
   "settings.deviceApi.ouraSyncBtn": "Sync Now",
   "settings.deviceApi.ouraSyncing": "Syncing…",
   "settings.deviceApi.ouraSynced": "Synced!",

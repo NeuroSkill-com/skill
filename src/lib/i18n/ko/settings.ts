@@ -115,6 +115,14 @@ const settings: Record<string, string> = {
     "AWEAR EEG 기기의 전원을 켜고 컴퓨터에서 Bluetooth가 활성화되어 있는지 확인하세요.",
   "settings.supportedDevices.instruction.awear2":
     "BLE 기기를 스캔하고 AWEAR에 연결하세요. 인증은 HMAC-SHA256을 통해 자동으로 처리됩니다.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Vital Neuro 헤드폰",
+  "settings.supportedDevices.instruction.vital1":
+    "헤드폰의 전원을 켜고 이 컴퓨터 가까이에 두세요. EEG는 Bluetooth LE로 전송되며 오디오는 기존 Bluetooth 페어링을 그대로 사용합니다.",
+  "settings.supportedDevices.instruction.vital2":
+    "기기 목록에서 검색해 페어링한 뒤 연결하세요. 광고하는 서비스로 식별하므로 이름을 변경해도 찾을 수 있습니다.",
+  "settings.supportedDevices.instruction.vital3": "250Hz EEG 3채널과 함께 가속도계와 배터리 잔량을 수신합니다.",
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
   "settings.supportedDevices.device.brainbitOriginal": "BrainBit",
   "settings.supportedDevices.device.brainbit2": "BrainBit 2",
@@ -191,6 +199,16 @@ const settings: Record<string, string> = {
     "Oura Ring V2 Cloud API에서 수면, 활동, 준비 상태, 심박수, SpO2 데이터를 동기화하기 위한 개인 액세스 토큰.",
   "settings.deviceApi.ouraDashboard": "Oura 개발자 포털에서 토큰 받기",
   "settings.deviceApi.ouraAccessToken": "액세스 토큰",
+  "settings.deviceApi.ouraRingKey": "링 BLE 키",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "블루투스로 링에 연결하는 데 필요하며, 위의 클라우드 토큰과는 별개입니다. 이 16바이트 키는 Oura 앱이 링과 로컬로 페어링할 때 생성됩니다.",
+  "settings.deviceApi.ouraRingSyncBtn": "링에서 동기화",
+  "settings.deviceApi.ouraRingSyncing": "링 읽는 중\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "링 자체에 저장된 기록을 블루투스로 읽어옵니다 — 심박수, HRV, 피부 온도, SpO2, 수면 단계. 지난 동기화가 끝난 지점부터 이어집니다. 먼저 실행 중인 세션에서 링을 연결 해제하세요.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "링이 이벤트를 보냈지만 시간 기준을 담은 것이 없어 날짜를 정할 수 없었고 아무것도 저장되지 않았습니다. 링 근처에서 Oura 앱을 한 번 열어 시계를 맞춘 뒤 다시 동기화하세요.",
+  "settings.deviceApi.ouraRingMoreRemaining": "대기 중인 기록의 일부를 읽었습니다. 계속하려면 다시 동기화하세요.",
   "settings.deviceApi.ouraSyncBtn": "지금 동기화",
   "settings.deviceApi.ouraSyncing": "동기화 중…",
   "settings.deviceApi.ouraSynced": "동기화됨!",

@@ -383,6 +383,7 @@ const llm: Record<string, string> = {
   "chat.analyzingImage": "Analyzing image…",
   "chat.phaseVision": "Reading image…",
   "chat.phasePrefill": "Preparing response…",
+  "chat.phaseTool": "Running tools…",
   "chat.firstToken": "first token",
   "chat.tok": "tok",
   "chat.ctxUsage": "Context window usage",

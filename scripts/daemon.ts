@@ -58,6 +58,14 @@ interface Opts {
   embed: boolean;
   virtual: boolean;
   cpu: boolean;
+  /// Cargo feature umbrella for the build. Defaults to this platform's, so a
+  /// plain `npm run daemon` can actually run the LLM: the crate's DEFAULT
+  /// features are `product` only, which omits `skill-llm/apple` and leaves
+  /// `Device::Metal` unavailable — the daemon then silently loads models on
+  /// CPU and every token is ~10x slower.
+  features: string;
+  /// Point the LLM at a GGUF on disk, skipping the catalog + download.
+  model?: string;
 }
 
 function parseArgs(): Opts {
@@ -73,6 +81,7 @@ function parseArgs(): Opts {
     embed: false,
     virtual: false,
     cpu: false,
+    features: defaultFeatures(),
   };
   const args = process.argv.slice(2);
   for (let i = 0; i < args.length; i++) {
@@ -117,6 +126,17 @@ function parseArgs(): Opts {
       case "--cpu":
         opts.cpu = true;
         break;
+      case "--features":
+        opts.features = args[++i];
+        break;
+      case "--model":
+      case "-m":
+        opts.model = args[++i];
+        if (!opts.model || !existsSync(opts.model)) {
+          err(`model file not found: ${opts.model}`);
+          process.exit(1);
+        }
+        break;
       case "--help":
       case "-h":
         opts.help = true;
@@ -132,6 +152,18 @@ function parseArgs(): Opts {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const ROOT = join(import.meta.dirname, "..");
+
+/** This platform's GPU feature umbrella (see skill-daemon's Cargo.toml). */
+function defaultFeatures(): string {
+  switch (platform()) {
+    case "darwin":
+      return "apple";
+    case "win32":
+      return "windows";
+    default:
+      return "linux";
+  }
+}
 
 function daemonBin(release: boolean): string {
   const profile = release ? "release" : "debug";
@@ -182,7 +214,20 @@ function killPids(pids: number[], label: string): void {
   }
 }
 
+/**
+ * Where the daemon writes its bearer token.
+ *
+ * Must agree with `skill_daemon_common::paths::token_path` — including the
+ * `SKILL_DAEMON_CONFIG_ROOT` override, which is how e2e runs pin every daemon
+ * path under one tmpdir. This file is a third copy of that logic, and it had
+ * already drifted: without the override below, setting the variable sent the
+ * daemon to the tmpdir while this script kept reading `$HOME`, so every API
+ * call here answered 401 and `--model` / `--cpu` / `--virtual` silently did
+ * nothing. That is the same drift `paths.rs` exists to prevent on the Rust side.
+ */
 function tokenPath(): string {
+  const root = process.env.SKILL_DAEMON_CONFIG_ROOT;
+  if (root) return join(root, "auth.token");
   if (platform() === "darwin")
     return join(homedir(), "Library", "Application Support", "skill", "daemon", "auth.token");
   if (platform() === "win32")
@@ -232,6 +277,10 @@ ${B}Usage:${R}
   npm run daemon -- --virtual        start virtual EEG device (LSL)
   npm run daemon -- --embed          enable EXG embeddings for virtual EEG
   npm run daemon -- --cpu            force LLM inference on CPU (default: GPU)
+  npm run daemon -- --model <path>   load this GGUF and start the LLM server
+  npm run daemon -- --features <f>   cargo features (default: this platform's
+                                     umbrella — apple/linux/windows; pass
+                                     "product" for a CPU-only build)
   npm run daemon -- --no-sign        skip macOS codesigning
 
 ${B}Examples:${R}
@@ -275,9 +324,10 @@ ${B}Examples:${R}
   if (opts.build) {
     const profile = opts.release ? "release" : "dev";
     const flags = opts.release ? "--release" : "";
-    log(`building ${D}(${profile})${R}...`);
+    log(`building ${D}(${profile}${opts.features ? `, features: ${opts.features}` : ""})${R}...`);
     try {
-      execSync(`cargo build ${flags} -p skill-daemon`.trim(), {
+      const feat = opts.features ? `--no-default-features --features ${opts.features}` : "";
+      execSync(`cargo build ${flags} -p skill-daemon ${feat}`.trim().replace(/\s+/g, " "), {
         cwd: ROOT,
         stdio: ["ignore", "pipe", "inherit"],
         encoding: "utf8",
@@ -485,6 +535,35 @@ ${B}Examples:${R}
       }
     } catch (e) {
       warn(`inference device override failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // ── Explicit model path (`--model`) ───────────────────────────────────────
+  //
+  // Skips the catalog entirely: writes `llm.model_path` and starts the server.
+  // Without this, pointing the daemon at a GGUF you already have on disk meant
+  // GET /v1/settings/llm-config, patching JSON by hand, POSTing it back, then
+  // POSTing /v1/llm/server/start — four calls and a bearer token to look up.
+
+  if (opts.model) {
+    try {
+      const cur = await api("/v1/settings/llm-config", "GET");
+      const cfg = cur.ok ? await cur.json() : {};
+      const next = { ...cfg, model_path: opts.model, enabled: true };
+      const setRes = await api("/v1/settings/llm-config", "POST", JSON.stringify(next));
+      if (!setRes.ok) {
+        warn(`failed to set model_path: HTTP ${setRes.status}`);
+      } else {
+        ok(`model: ${opts.model}`);
+        const startRes = await api("/v1/llm/server/start", "POST", "{}");
+        if (startRes.ok) {
+          log(`  ${D}LLM server starting; watch the log or poll /v1/llm/server/status${R}`);
+        } else {
+          warn(`LLM start returned HTTP ${startRes.status}`);
+        }
+      }
+    } catch (e) {
+      warn(`--model setup failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

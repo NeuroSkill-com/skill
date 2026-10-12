@@ -924,3 +924,364 @@ mod openbci_tests {
         assert!(adapter.next_event().await.is_none());
     }
 }
+
+// ── Vital Neuro adapter ───────────────────────────────────────────────────────
+
+mod vital_tests {
+    use super::*;
+    use crate::session::vital::VitalAdapter;
+    use tokio::sync::mpsc;
+    use vital::types::{
+        AccelerometerReading, BatteryReading, ChannelSamples, ImpedanceFrame, LeadOffStatus, VitalEvent,
+    };
+
+    /// Impedance frames carrying a known quadrature amplitude on channel 0.
+    ///
+    /// Excitation is at exactly a quarter of the sample rate, so four samples
+    /// are 90° apart and the demodulation is exact.  The large DC offset is
+    /// the realistic case — an electrode's offset dwarfs the response — and
+    /// must cancel out of the result entirely.
+    fn impedance_frames(amplitude: f64, offset: f64, count: usize) -> Vec<ImpedanceFrame> {
+        let mut sample = 0usize;
+        (0..count)
+            .map(|_| {
+                let mut codes = [0i32; 2];
+                for slot in codes.iter_mut() {
+                    let t = std::f64::consts::FRAC_PI_2 * sample as f64;
+                    *slot = (amplitude * t.cos() + offset).round() as i32;
+                    sample += 1;
+                }
+                ImpedanceFrame {
+                    timestamp: 1_700_000_000_000.0,
+                    lead_off: LeadOffStatus::from_header([0b010, 0]),
+                    channels: [Some(codes), None, None],
+                }
+            })
+            .collect()
+    }
+
+    /// Everything the adapter produces for `events`, with the stream closed
+    /// first so draining cannot block.
+    async fn drain(events: Vec<VitalEvent>) -> Vec<DeviceEvent> {
+        let (tx, rx) = mpsc::channel(512);
+        for ev in events {
+            tx.send(ev).await.unwrap();
+        }
+        drop(tx);
+        let mut adapter = VitalAdapter::new_for_test(rx);
+        let mut out = Vec::new();
+        while let Some(ev) = adapter.next_event().await {
+            out.push(ev);
+        }
+        out
+    }
+
+    /// The `Meta` payloads among `events` whose `type` is `want`.
+    fn metas_of_type(events: &[DeviceEvent], want: &str) -> Vec<serde_json::Value> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                DeviceEvent::Meta(v) if v["type"] == want => Some(v.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Frames per impedance estimate: 16 averaged cycles, 4 samples a cycle,
+    /// 2 samples a frame.
+    const FRAMES_PER_ESTIMATE: usize = 32;
+
+    /// A frame carrying all three channels, two samples each.
+    fn eeg_frame(timestamp: f64) -> vital::types::EegFrame {
+        vital::types::EegFrame {
+            timestamp,
+            lead_off: LeadOffStatus::default(),
+            channels: [
+                Some(ChannelSamples {
+                    uv: [1.0, 2.0],
+                    raw: [1, 2],
+                }),
+                Some(ChannelSamples {
+                    uv: [10.0, 20.0],
+                    raw: [10, 20],
+                }),
+                Some(ChannelSamples {
+                    uv: [100.0, 200.0],
+                    raw: [100, 200],
+                }),
+            ],
+        }
+    }
+
+    #[tokio::test]
+    async fn one_notification_becomes_two_aligned_frames() {
+        let (tx, rx) = mpsc::channel(16);
+        // Timestamps are milliseconds on the wire, seconds in DeviceEvent.
+        tx.send(VitalEvent::Eeg(eeg_frame(1_700_000_000_000.0))).await.unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => {
+                assert_eq!(frame.channels, vec![1.0, 10.0, 100.0]);
+                assert!((frame.timestamp_s - 1_700_000_000.0).abs() < 1e-9);
+            }
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => {
+                assert_eq!(frame.channels, vec![2.0, 20.0, 200.0]);
+                // Second sample is one 250 Hz period later.
+                assert!((frame.timestamp_s - 1_700_000_000.004).abs() < 1e-9);
+            }
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+
+        assert!(adapter.next_event().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn absent_channels_are_zero_filled_to_keep_frame_width() {
+        let (tx, rx) = mpsc::channel(16);
+        let mut frame = eeg_frame(1_700_000_000_000.0);
+        // What SensorMode::EegChannel1 looks like on the wire.
+        frame.channels[1] = None;
+        frame.channels[2] = None;
+        tx.send(VitalEvent::Eeg(frame)).await.unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => {
+                assert_eq!(frame.channels.len(), adapter.descriptor().eeg_channels);
+                assert_eq!(frame.channels, vec![1.0, 0.0, 0.0]);
+            }
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn eeg_frame_without_a_timestamp_falls_back_to_now() {
+        let (tx, rx) = mpsc::channel(16);
+        tx.send(VitalEvent::Eeg(eeg_frame(0.0))).await.unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => assert!(frame.timestamp_s > 1_704_067_200.0),
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn battery_reports_clamped_percent_and_millivolts() {
+        let (tx, rx) = mpsc::channel(16);
+        // 4190 mV: the device's own curve reports 104 %, past its clamp.
+        tx.send(VitalEvent::Battery(BatteryReading {
+            timestamp: 0.0,
+            raw: [0, 0, 0, 0x10, 0x5E, 104, 0],
+        }))
+        .await
+        .unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Battery(b) => {
+                assert!((b.level_pct - 100.0).abs() < f32::EPSILON);
+                assert!((b.voltage_mv.unwrap() - 4190.0).abs() < f32::EPSILON);
+                assert!(b.temperature_raw.is_none());
+            }
+            other => panic!("expected Battery, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn accelerometer_becomes_imu_in_g() {
+        let (tx, rx) = mpsc::channel(16);
+        // Data is left-justified: 1 g on x at 1 mg per 12-bit count.
+        tx.send(VitalEvent::Accelerometer(AccelerometerReading {
+            timestamp: 0.0,
+            raw: [1000 << 4, 0, 0],
+        }))
+        .await
+        .unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Imu(imu) => {
+                assert!((imu.accel[0] - 1.0).abs() < 1e-6);
+                assert!(imu.gyro.is_none());
+                assert!(imu.mag.is_none());
+            }
+            other => panic!("expected Imu, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn connected_carries_the_name_and_firmware() {
+        let (tx, rx) = mpsc::channel(16);
+        tx.send(VitalEvent::Connected("Vital Neuro".into())).await.unwrap();
+        tx.send(VitalEvent::Disconnected).await.unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        match adapter.next_event().await.unwrap() {
+            DeviceEvent::Connected(info) => {
+                assert_eq!(info.name, "Vital Neuro");
+                assert_eq!(info.id, "Vital Neuro");
+            }
+            other => panic!("expected Connected, got {other:?}"),
+        }
+        match adapter.next_event().await.unwrap() {
+            DeviceEvent::Disconnected => {}
+            other => panic!("expected Disconnected, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn mode_change_is_reported_as_metadata() {
+        let (tx, rx) = mpsc::channel(16);
+        tx.send(VitalEvent::ModeChanged(vital::protocol::SensorMode::Impedance))
+            .await
+            .unwrap();
+        // Progress events exist only during a firmware update; not forwarded.
+        tx.send(VitalEvent::FirmwareProgress(vital::types::FirmwareProgress {
+            chunks_accepted: 3,
+        }))
+        .await
+        .unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx);
+
+        match adapter.next_event().await.unwrap() {
+            DeviceEvent::Meta(val) => {
+                assert_eq!(val["type"], "mode");
+                assert_eq!(val["mode"], "impedance");
+            }
+            other => panic!("expected Meta, got {other:?}"),
+        }
+        assert!(adapter.next_event().await.is_none());
+    }
+
+    #[test]
+    fn descriptor_matches_the_hardware() {
+        let (_tx, rx) = mpsc::channel(1);
+        let adapter = VitalAdapter::new_for_test(rx);
+        let desc = adapter.descriptor();
+        assert_eq!(desc.kind, "vital");
+        assert_eq!(desc.eeg_channels, 3);
+        assert_eq!(desc.eeg_sample_rate, 250.0);
+        assert_eq!(desc.channel_names.len(), 3);
+        assert!(desc.caps.contains(DeviceCaps::EEG));
+        assert!(desc.caps.contains(DeviceCaps::IMU));
+        assert!(desc.caps.contains(DeviceCaps::BATTERY));
+        assert!(!desc.caps.contains(DeviceCaps::PPG));
+        assert!(!desc.caps.contains(DeviceCaps::FNIRS));
+    }
+
+    #[tokio::test]
+    async fn disconnect_without_a_handle_is_safe() {
+        let (_tx, rx) = mpsc::channel(1);
+        let mut adapter = VitalAdapter::new_for_test(rx);
+        adapter.disconnect().await;
+    }
+
+    /// The session key must be the transport id when the caller connected to a
+    /// specific device: the name is the only thing the vendor event carries,
+    /// and its owner can change it.
+    #[tokio::test]
+    async fn connected_reports_the_transport_id_when_known() {
+        let (tx, rx) = mpsc::channel(4);
+        tx.send(VitalEvent::Connected("Bob".into())).await.unwrap();
+        drop(tx);
+
+        let mut adapter = VitalAdapter::new_for_test(rx).with_device_id("ble:1234-ABCD");
+        match adapter.next_event().await.unwrap() {
+            DeviceEvent::Connected(info) => {
+                assert_eq!(info.name, "Bob");
+                assert_eq!(info.id, "ble:1234-ABCD");
+            }
+            other => panic!("expected Connected, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn impedance_frames_demodulate_into_one_estimate() {
+        const AMPLITUDE: f64 = 4_000.0;
+        let events = impedance_frames(AMPLITUDE, 120_000.0, FRAMES_PER_ESTIMATE)
+            .into_iter()
+            .map(VitalEvent::Impedance)
+            .collect();
+
+        let out = drain(events).await;
+        let metas = metas_of_type(&out, "impedance");
+        assert_eq!(metas.len(), 1, "one estimate per {FRAMES_PER_ESTIMATE} frames");
+
+        let m = &metas[0];
+        let expected = AMPLITUDE * vital::protocol::IMPEDANCE_OHMS_PER_CODE;
+        let got = m["ohms"][0].as_f64().expect("channel 0 ohms");
+        // Codes are rounded to integers on the way in, so allow a code of slack.
+        assert!(
+            (got - expected).abs() < vital::protocol::IMPEDANCE_OHMS_PER_CODE,
+            "ohms {got} != {expected} (DC offset must cancel exactly)"
+        );
+        assert!(m["ohms"][1].is_null(), "channels that are not streaming stay null");
+        assert_eq!(m["worst_channel"], 0);
+        assert_eq!(m["lead_off_positive"], 0b010);
+    }
+
+    /// The estimator averages whole cycles, so a window that straddles a mode
+    /// change would mix impedance with whatever the EEG characteristic carried
+    /// before it.  `vital` says to reset on a mode change; this pins that we do.
+    #[tokio::test]
+    async fn a_mode_change_discards_the_partial_window() {
+        let mut events: Vec<VitalEvent> = impedance_frames(4_000.0, 0.0, 20)
+            .into_iter()
+            .map(VitalEvent::Impedance)
+            .collect();
+        events.push(VitalEvent::ModeChanged(vital::protocol::SensorMode::Impedance));
+        // One frame short of a full window *since the reset*. Without the
+        // reset the 20 earlier frames would carry it over the line.
+        events.extend(
+            impedance_frames(4_000.0, 0.0, FRAMES_PER_ESTIMATE - 1)
+                .into_iter()
+                .map(VitalEvent::Impedance),
+        );
+
+        let out = drain(events).await;
+        assert_eq!(metas_of_type(&out, "mode").len(), 1);
+        assert!(
+            metas_of_type(&out, "impedance").is_empty(),
+            "samples from before the mode change must not count towards the estimate"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_full_window_after_a_mode_change_still_estimates() {
+        let mut events = vec![VitalEvent::ModeChanged(vital::protocol::SensorMode::Impedance)];
+        events.extend(
+            impedance_frames(4_000.0, 0.0, FRAMES_PER_ESTIMATE)
+                .into_iter()
+                .map(VitalEvent::Impedance),
+        );
+
+        let out = drain(events).await;
+        assert_eq!(metas_of_type(&out, "impedance").len(), 1);
+    }
+}

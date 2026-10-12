@@ -44,6 +44,23 @@ fn writer_props() -> WriterProperties {
     WriterProperties::builder().set_compression(Compression::SNAPPY).build()
 }
 
+/// One buffered vitals row: `(timestamp, hr_bpm, ibi_ms, spo2_pct, temperature_c)`.
+///
+/// Named because the tuple is otherwise five near-identical optionals whose
+/// meaning is carried only by position.
+type VitalsRow = (f64, Option<f64>, Option<f64>, Option<f64>, Option<f64>);
+
+/// Schema for `_vitals.parquet`.  Fixed, and every value column nullable.
+fn vitals_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("timestamp_s", DataType::Float64, false),
+        Field::new("hr_bpm", DataType::Float64, true),
+        Field::new("ibi_ms", DataType::Float64, true),
+        Field::new("spo2_pct", DataType::Float64, true),
+        Field::new("temperature_c", DataType::Float64, true),
+    ]))
+}
+
 // ── ParquetState ──────────────────────────────────────────────────────────────
 
 /// Multiplexed Parquet writer for a recording session.
@@ -90,6 +107,14 @@ pub struct ParquetState {
     fnirs_rows: usize,
     fnirs_path: PathBuf,
     fnirs_pending: Vec<Vec<f64>>, // [timestamp_s, ch0, ch1, ...]
+
+    // ── Vitals ───────────────────────────────────────────────────────────────
+    vitals_wtr: Option<ArrowWriter<std::fs::File>>,
+    vitals_rows: usize,
+    vitals_path: PathBuf,
+    /// Every column but the timestamp is nullable, because a wearable reports
+    /// one vital at a time.
+    vitals_pending: Vec<VitalsRow>,
 }
 
 impl ParquetState {
@@ -184,6 +209,10 @@ impl ParquetState {
             fnirs_rows: 0,
             fnirs_path: fnirs_parquet_path(csv_path),
             fnirs_pending: Vec::new(),
+            vitals_wtr: None,
+            vitals_rows: 0,
+            vitals_path: crate::session_paths::vitals_parquet_path(csv_path),
+            vitals_pending: Vec::new(),
         })
     }
 
@@ -588,6 +617,82 @@ impl ParquetState {
         }
     }
 
+    /// Write a device-reported vitals sample to `_vitals.parquet`.
+    ///
+    /// The schema is fixed (unlike fNIRS, whose channels are device-specific),
+    /// so it is built up front.  All value columns are nullable: a live heart
+    /// rate carries `hr_bpm`/`ibi_ms` and nothing else, a cached SpO2 poll
+    /// carries only `spo2_pct`, and writing 0 for the rest would be a lie.
+    pub fn push_vitals(
+        &mut self,
+        _eeg_csv_path: &Path,
+        timestamp_s: f64,
+        hr_bpm: Option<f64>,
+        ibi_ms: Option<f64>,
+        spo2_pct: Option<f64>,
+        temperature_c: Option<f64>,
+    ) {
+        if self.vitals_wtr.is_none() {
+            match std::fs::File::create(&self.vitals_path) {
+                Ok(f) => match ArrowWriter::try_new(f, vitals_schema(), Some(writer_props())) {
+                    Ok(w) => {
+                        self.vitals_wtr = Some(w);
+                    }
+                    Err(e) => {
+                        eprintln!("[parquet] vitals writer error: {e}");
+                        return;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("[parquet] vitals create error: {e}");
+                    return;
+                }
+            }
+        }
+        self.vitals_pending
+            .push((timestamp_s, hr_bpm, ibi_ms, spo2_pct, temperature_c));
+        self.vitals_rows += 1;
+        // A smaller batch than the high-rate streams: vitals arrive about once
+        // per heartbeat, so 256 rows would be minutes of unwritten data.
+        if self.vitals_rows >= 32 {
+            self.flush_vitals();
+        }
+    }
+
+    fn flush_vitals(&mut self) {
+        if self.vitals_pending.is_empty() {
+            return;
+        }
+        let Some(ref mut wtr) = self.vitals_wtr else {
+            return;
+        };
+        let n = self.vitals_pending.len();
+        let mut ts = Vec::with_capacity(n);
+        let mut hr = Vec::with_capacity(n);
+        let mut ibi = Vec::with_capacity(n);
+        let mut spo2 = Vec::with_capacity(n);
+        let mut temp = Vec::with_capacity(n);
+        for (t, h, i, s, c) in self.vitals_pending.drain(..) {
+            ts.push(t);
+            hr.push(h);
+            ibi.push(i);
+            spo2.push(s);
+            temp.push(c);
+        }
+        let columns: Vec<Arc<dyn arrow_array::Array>> = vec![
+            Arc::new(Float64Array::from(ts)),
+            Arc::new(Float64Array::from(hr)),
+            Arc::new(Float64Array::from(ibi)),
+            Arc::new(Float64Array::from(spo2)),
+            Arc::new(Float64Array::from(temp)),
+        ];
+        if let Ok(batch) = RecordBatch::try_new(vitals_schema(), columns) {
+            let _ = wtr.write(&batch);
+            let _ = wtr.flush();
+        }
+        self.vitals_rows = 0;
+    }
+
     fn flush_fnirs(&mut self) {
         if self.fnirs_pending.is_empty() {
             return;
@@ -634,6 +739,7 @@ impl ParquetState {
         self.flush_metrics();
         self.flush_imu();
         self.flush_fnirs();
+        self.flush_vitals();
         if let Some(w) = self.eeg_wtr.take() {
             let _ = w.close();
         }
@@ -647,6 +753,9 @@ impl ParquetState {
             let _ = w.close();
         }
         if let Some(w) = self.fnirs_wtr.take() {
+            let _ = w.close();
+        }
+        if let Some(w) = self.vitals_wtr.take() {
             let _ = w.close();
         }
     }
@@ -788,6 +897,60 @@ mod tests {
 
         let pq_path = eeg_parquet_path(&csv_path);
         assert!(pq_path.exists(), "Parquet EEG file should exist");
+    }
+
+    #[test]
+    fn vitals_parquet_path_derives_correctly() {
+        let p = crate::session_paths::vitals_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000_vitals.parquet"));
+    }
+
+    /// Sparse rows must survive a round trip: absent values stay null rather
+    /// than becoming zeros, and `close` has to write the footer or the file is
+    /// unreadable.
+    #[test]
+    fn parquet_vitals_round_trips_nulls() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut pq = ParquetState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+
+        pq.push_vitals(&csv_path, 1000.0, Some(52.0), Some(1153.0), None, None);
+        pq.push_vitals(&csv_path, 1001.0, None, None, Some(97.0), Some(33.4));
+        pq.close();
+
+        let path = crate::session_paths::vitals_parquet_path(&csv_path);
+        assert!(path.exists(), "vitals parquet should exist");
+
+        // `is_null`/`is_valid` live on the Array trait.
+        use arrow_array::Array as _;
+
+        let file = std::fs::File::open(&path).unwrap();
+        let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+        let batches: Vec<_> = reader.map(std::result::Result::unwrap).collect();
+        let rows: usize = batches.iter().map(arrow_array::RecordBatch::num_rows).sum();
+        assert_eq!(rows, 2);
+
+        let batch = &batches[0];
+        let hr = batch
+            .column_by_name("hr_bpm")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(hr.is_valid(0), "first row has a heart rate");
+        assert!(hr.is_null(1), "second row must stay null, not 0");
+
+        let spo2 = batch
+            .column_by_name("spo2_pct")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert!(spo2.is_null(0));
+        assert_eq!(spo2.value(1), 97.0);
     }
 
     #[test]

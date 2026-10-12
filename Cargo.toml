@@ -80,9 +80,9 @@ members = [
 # fresh CBCentralManager per `Manager::new().adapters()`.  Supersedes the
 # eugenehp fork, whose only purpose was the macOS scanning fix.
 btleplug        = { path = "patches/btleplug-0.11.9" }
-# webbluetooth / muse-rs need NO patch: both are published, and muse-rs 0.2.1
-# and skill-daemon declare the same registry `webbluetooth` version (0.0.3), so
-# the resolver unifies them onto one package.
+# webbluetooth / muse-rs / vital need NO patch: all are published, and muse-rs
+# 0.2.1, vital 0.0.1 and skill-daemon declare the same registry `webbluetooth`
+# version (0.0.3), so the resolver unifies them onto one package.
 #
 # That unification is a correctness requirement, not a tidiness one:
 # `Bluetooth::shared()` memoises into a `OnceLock`, so two copies of the
@@ -91,7 +91,7 @@ btleplug        = { path = "patches/btleplug-0.11.9" }
 #
 #   cargo tree -p skill-daemon -i webbluetooth   # must be exactly one node
 #
-# Bumping ONE of the two is never enough, and the failure is not subtle.  Cargo
+# Bumping ONE of the three is never enough, and the failure is not subtle.  Cargo
 # treats 0.0.x releases as mutually incompatible — `0.0.1` means `>=0.0.1,
 # <0.0.2` — so skill-daemon on 0.0.2 while muse-rs asked for 0.0.1 resolved to
 # both, which is how the Windows release broke for rc.26..rc.29: the older copy

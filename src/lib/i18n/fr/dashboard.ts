@@ -56,6 +56,13 @@ const dashboard: Record<string, string> = {
   "dashboard.lateralityIndex": "Latéralité",
   "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "Métriques PPG",
+  "dashboard.vitals": "Constantes",
+  "dashboard.vitalsWaiting":
+    "En attente d'une mesure de l'appareil. Une bague portée mesure selon son propre rythme, cela peut prendre quelques minutes.",
+  "dashboard.vitalsStale":
+    "Aucune mesure depuis quelques minutes — l'appareil mesure selon son propre rythme.",
+  "dashboard.ibi": "Intervalle",
+  "dashboard.skinTemperature": "Temp. peau",
   "dashboard.hr": "Fréq. cardiaque",
   "dashboard.rmssd": "RMSSD",
   "dashboard.sdnn": "SDNN",

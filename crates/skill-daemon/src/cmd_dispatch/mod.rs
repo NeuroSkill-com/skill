@@ -79,6 +79,8 @@ pub async fn dispatch(state: AppState, msg: Value) -> Value {
             "health_metric_types" => system_cmds::cmd_health_metric_types(&state).await,
             "oura_status" => system_cmds::cmd_oura_status(&state).await,
             "oura_sync" => system_cmds::cmd_oura_sync(&state, &msg).await,
+            "oura_ring_status" => system_cmds::cmd_oura_ring_status(&state).await,
+            "oura_ring_sync" => system_cmds::cmd_oura_ring_sync(&state, &msg).await,
             "calendar_status" => system_cmds::cmd_calendar_status().await,
             "calendar_request_permission" => system_cmds::cmd_calendar_permission().await,
             "calendar_events" => system_cmds::cmd_calendar_events(&msg).await,

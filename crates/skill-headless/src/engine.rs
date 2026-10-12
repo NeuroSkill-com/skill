@@ -197,9 +197,39 @@ impl Browser {
     }
 
     pub fn launch(config: BrowserConfig) -> Result<Self, HeadlessError> {
-        // On macOS inside a Tauri app, tao panics when a second event loop
-        // is created on a background thread.  The app must call
-        // `Browser::set_unavailable()` at startup to prevent this.
+        // macOS can never do this, so do not try.
+        //
+        // tao requires its `EventLoop` on the process MAIN thread — not merely
+        // "the first one in the process". `launch` always builds the loop on a
+        // freshly spawned thread (`skill-headless-evloop`), so on macOS it
+        // cannot succeed whether or not a host owns an event loop: the thread
+        // panics with "On macOS, `EventLoop` must be created on the main
+        // thread!", the proxy channel drops, and the caller is handed the
+        // unrelated `event loop did not start in time`.
+        //
+        // Observed on every `web_search` with `render: true` in the daemon —
+        // a panic in the log each time, then a silent fall back to plain HTTP.
+        // `HEADLESS_UNAVAILABLE` already covered the case, but only for a host
+        // that remembers `set_unavailable()`: the Tauri app does (setup.rs),
+        // the daemon never did. Structural beats opt-in for something that is a
+        // platform fact rather than a host policy.
+        //
+        // Hosts that CAN render — Tauri owns a webview on the main thread —
+        // register `set_external_renderer`; callers should prefer that, then
+        // plain HTTP.
+        //
+        // `cfg!` rather than `#[cfg]` so the rest of this function still
+        // type-checks on macOS and cannot rot.
+        if cfg!(target_os = "macos") {
+            return Err(HeadlessError::InitFailed(
+                "headless rendering is unavailable on macOS: tao requires its event loop on the \
+                 process main thread, which this crate never owns. Register an external renderer \
+                 via Browser::set_external_renderer, or fetch the page over HTTP."
+                    .into(),
+            ));
+        }
+        // A host that owns the main event loop (or otherwise knows this will
+        // not work) can rule the standalone browser out up front.
         if HEADLESS_UNAVAILABLE.load(Ordering::Relaxed) {
             return Err(HeadlessError::InitFailed(
                 "headless browser unavailable: main event loop is owned by the host application".into(),

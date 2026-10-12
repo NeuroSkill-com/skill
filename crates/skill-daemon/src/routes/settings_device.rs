@@ -126,6 +126,7 @@ pub(crate) async fn set_device_api_config(
         emotiv_client_secret: config.emotiv_client_secret.clone(),
         idun_api_token: config.idun_api_token.clone(),
         oura_access_token: config.oura_access_token.clone(),
+        oura_ring_key: config.oura_ring_key.clone(),
         neurosity_email: config.neurosity_email.clone(),
         neurosity_password: config.neurosity_password.clone(),
         neurosity_device_id: config.neurosity_device_id.clone(),

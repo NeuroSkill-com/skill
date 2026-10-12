@@ -125,7 +125,8 @@
     "format:check": "npx biome format src/ scripts/",
     "audit:a11y": "node scripts/audit-a11y.js",
     "audit:a11y:check": "node scripts/audit-a11y.js --check",
-    "check:tts-catalog": "node scripts/check-tts-catalog-parity.js"
+    "check:tts-catalog": "node scripts/check-tts-catalog-parity.js",
+    "test:llm:daemon-e2e": "python3 scripts/llm-daemon-e2e/run_one.py"
   },
   "license": "GPL-3.0-only",
   "dependencies": {

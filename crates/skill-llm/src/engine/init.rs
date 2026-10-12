@@ -159,7 +159,38 @@ pub fn init(
     // and the system's available GPU/unified memory.  When the user *has* set
     // a value, cap it at the model's trained maximum context length.
     let mut config = config.clone();
-    if let Some(entry) = catalog.active_model_entry() {
+    // The catalog entry describes the ACTIVE model; `model_path` above may be a
+    // different file entirely (`llm.model_path` set directly, a discovered
+    // external model, `scripts/daemon.ts --model`). Sizing the context from a
+    // mismatched entry is not a cosmetic error: loading Bonsai-8B-Q1_0 (8.19B)
+    // while the catalog still described Qwen3.5-0.8B-Q4_K_M budgeted a 16384
+    // context for a 0.8B model, so the 8B's KV cache ran ~10x over budget —
+    // 16.5 GB resident and 24.6 GB of swap on a machine with 25.6 GB of it,
+    // measured. Only trust the entry when it is actually the file we are about
+    // to load.
+    let entry_matches_model = catalog
+        .active_model_entry()
+        .map(|e| {
+            model_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|name| name == e.filename)
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+    if !entry_matches_model && catalog.active_model_entry().is_some() {
+        push_log(
+            &app,
+            &log_buf,
+            "warn",
+            &format!(
+                "loaded model {} is not the catalog's active entry ({}) — ignoring that entry's params/context metadata and using the conservative default context; budgeting memory for the wrong model is how an 8B model ends up with a 0.8B model's context",
+                model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+                catalog.active_model_entry().map(|e| e.filename.as_str()).unwrap_or("?"),
+            ),
+        );
+    }
+    if let Some(entry) = catalog.active_model_entry().filter(|_| entry_matches_model) {
         // Carry model metadata into the config so the actor can estimate
         // memory for dynamic context resizing at runtime.
         config.params_b = entry.params_b;
@@ -315,6 +346,23 @@ pub fn init(
             "info",
             &format!("discovered {n_skills} skill(s): {}", names.join(", ")),
         );
+        // Skills are advertised to the model as "load this file with read_file",
+        // so without that tool they cannot be used — and `read_file` is OFF by
+        // default. The block used to be injected anyway: ~3900 prompt tokens on
+        // every request in the default configuration, instructing the model to
+        // call a tool it had not been given. It is now suppressed, which is
+        // correct but invisible, so say it once here instead of leaving someone
+        // wondering why their skills are never picked up.
+        if !config.tools.read_file {
+            push_log(
+                &app,
+                &log_buf,
+                "warn",
+                &format!(
+                    "{n_skills} skill(s) found but NOT offered to the model: they are loaded via the read_file tool, which is disabled. Enable the read-file tool in LLM tool settings to use them."
+                ),
+            );
+        }
     }
 
     Some(Arc::new(LlmServerState {

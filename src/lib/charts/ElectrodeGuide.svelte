@@ -100,6 +100,8 @@ type ActiveTab =
   | "neurosky"
   | "neurosity"
   | "brainvision"
+  | "vital"
+  | "oura"
   | "10-20"
   | "10-10"
   | "10-5";
@@ -117,6 +119,8 @@ const TABS: { id: ActiveTab; label: string; count: () => string }[] = [
   { id: "neurosky", label: "NeuroSky", count: () => "1" },
   { id: "neurosity", label: "Neurosity", count: () => String(neurosityLabels.length) },
   { id: "brainvision", label: "BrainVision", count: () => String(brainvisionLabels.length) },
+  { id: "vital", label: "Vital Neuro", count: () => "3" },
+  { id: "oura", label: "Oura Ring", count: () => "0" },
   { id: "10-20", label: "10-20", count: () => "21" },
   { id: "10-10", label: "10-10", count: () => "64" },
   { id: "10-5", label: "10-5", count: () => "345" },
@@ -146,7 +150,11 @@ function defaultTab(d: string): ActiveTab {
                         ? "neurosity"
                         : d === "brainvision"
                           ? "brainvision"
-                          : "muse";
+                          : d === "vital"
+                            ? "vital"
+                            : d === "oura"
+                              ? "oura"
+                              : "muse";
 }
 let activeTab: ActiveTab = $state("muse" as ActiveTab);
 
@@ -234,6 +242,7 @@ const DEVICE_TABS: ActiveTab[] = [
   "neurosky",
   "neurosity",
   "brainvision",
+  "vital",
 ];
 let system: ElectrodeSystem = $derived(DEVICE_TABS.includes(activeTab) ? "10-10" : (activeTab as ElectrodeSystem));
 
@@ -266,11 +275,15 @@ const electrodes3D = $derived(
                       ? neurosityElectrodes
                       : activeTab === "brainvision"
                         ? brainvisionElectrodes
-                        : activeTab === "hermes"
-                          ? [] // Hermes positions depend on montage
-                          : activeTab === "ganglion"
-                            ? [] // Ganglion has configurable positions
-                            : getElectrodes(activeTab as ElectrodeSystem),
+                        : activeTab === "oura"
+                          ? [] // A ring has no electrodes; it reports vitals, not EEG
+                          : activeTab === "vital"
+                            ? [] // Vital Neuro reports no montage; its channels are ch1-3
+                            : activeTab === "hermes"
+                              ? [] // Hermes positions depend on montage
+                              : activeTab === "ganglion"
+                                ? [] // Ganglion has configurable positions
+                                : getElectrodes(activeTab as ElectrodeSystem),
 );
 
 let selectedElectrode: Electrode | null = $state(null);

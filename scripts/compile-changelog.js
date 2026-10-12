@@ -68,12 +68,7 @@ function semverCompareDesc(a, b) {
   const pa = parseVersion(a);
   const pb = parseVersion(b);
   const rc = (p) => (p.rc === null ? Number.POSITIVE_INFINITY : p.rc);
-  return (
-    pb.major - pa.major ||
-    pb.minor - pa.minor ||
-    pb.patch - pa.patch ||
-    rc(pb) - rc(pa)
-  );
+  return pb.major - pa.major || pb.minor - pa.minor || pb.patch - pa.patch || rc(pb) - rc(pa);
 }
 
 /**

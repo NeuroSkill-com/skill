@@ -110,6 +110,21 @@ impl SessionWriter {
         dispatch!(self, push_fnirs(eeg_csv_path, channels, channel_names, timestamp_s));
     }
 
+    pub fn push_vitals(
+        &mut self,
+        eeg_csv_path: &Path,
+        timestamp_s: f64,
+        hr_bpm: Option<f64>,
+        ibi_ms: Option<f64>,
+        spo2_pct: Option<f64>,
+        temperature_c: Option<f64>,
+    ) {
+        dispatch!(
+            self,
+            push_vitals(eeg_csv_path, timestamp_s, hr_bpm, ibi_ms, spo2_pct, temperature_c)
+        );
+    }
+
     pub fn push_imu(
         &mut self,
         eeg_csv_path: &Path,

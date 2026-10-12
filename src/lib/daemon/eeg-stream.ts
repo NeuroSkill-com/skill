@@ -28,6 +28,23 @@ export interface PpgPacket {
   timestamp: number;
 }
 
+/**
+ * Vitals a device derived itself, rather than a waveform this app computes
+ * them from. Every value is optional: a wearable reports one at a time — a
+ * live beat carries `hr_bpm`/`ibi_ms`, a cached SpO2 poll carries only
+ * `spo2_pct`. `device_kind`/`device_id` name the source, since several devices
+ * can be streaming at once.
+ */
+export interface VitalsPacket {
+  timestamp: number;
+  device_kind?: string;
+  device_id?: string;
+  hr_bpm?: number;
+  ibi_ms?: number;
+  spo2_pct?: number;
+  temperature_c?: number;
+}
+
 // ── Subscriptions ──────────────────────────────────────────────────────────
 
 /** Subscribe to EEG sample packets. Returns unsubscribe function.
@@ -53,6 +70,17 @@ export function subscribeEeg(callback: (pkt: EegPacket) => void): () => void {
 export function subscribePpg(callback: (pkt: PpgPacket) => void): () => void {
   return onDaemonEvent("PpgSample", (ev: DaemonEvent) => {
     callback(ev.payload as unknown as PpgPacket);
+  });
+}
+
+/** Subscribe to device-reported vitals. Returns unsubscribe function.
+ *
+ *  Unlike the per-sample streams this is not rate-gated by the daemon: vitals
+ *  arrive about once per heartbeat, so they are delivered by default and need
+ *  no explicit `subscribe` command. */
+export function subscribeVitals(callback: (pkt: VitalsPacket) => void): () => void {
+  return onDaemonEvent("Vitals", (ev: DaemonEvent) => {
+    callback(ev.payload as unknown as VitalsPacket);
   });
 }
 

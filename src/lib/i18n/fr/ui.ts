@@ -52,6 +52,10 @@ const ui: Record<string, string> = {
   "tip.echt":
     "Transformée de Hilbert à correction d'extrémité — rythmicité de la bande alpha (0–1). Élevé = oscillation alpha forte et phase stable. [Schreglmann 2021]",
   "tip.hr": "Fréquence cardiaque dérivée des intervalles inter-battements PPG.",
+  "tip.ibi":
+    "L'intervalle entre deux battements à partir duquel la fréquence cardiaque a été calculée, en millisecondes.",
+  "tip.skinTemperature":
+    "Température cutanée mesurée au capteur. Valeur absolue, et non l'écart par rapport à votre référence.",
   "tip.rmssd": "Racine carrée des différences successives. Métrique parasympathique clé de la VFC.",
   "tip.sdnn": "Écart type des intervalles battement par battement. Reflète la VFC globale.",
   "tip.pnn50": "Pourcentage d'intervalles successifs différant de > 50 ms. Plus élevé = tonus vagal plus fort.",

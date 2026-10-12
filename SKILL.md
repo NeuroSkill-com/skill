@@ -79,6 +79,7 @@ device-agnostic.
 | **OpenBCI Ganglion** | 4 | 200 Hz | BLE | Open-source research-grade board. |
 | **OpenBCI Cyton / Cyton+Daisy** | 8 / 16 | 250 Hz | Serial / WiFi | Full 10-20 montage capable. |
 | **Neurable MW75 Neuro** | 12 (FT7/T7/TP7/CP5/P7/C5, FT8/T8/TP8/CP6/P8/C6) | 500 Hz | BLE + RFCOMM | Noise-cancelling headphones with EEG. Behind `mw75-rfcomm` feature flag. |
+| **Vital Neuro** | 3 (ch1–ch3) | 250 Hz | BLE | Headphones with EEG; audio runs over a separate Bluetooth Classic link. Accelerometer + battery. Device reports no electrode montage. |
 | **RE-AK Nucleus Hermes** | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE GATT | ADS1299 + 9-DOF IMU. |
 | **Emotiv** (EPOC/Insight/Flex/MN8) | 14 / 5 / 32 | 128 Hz | Cortex WebSocket | IMU included. Connected via Emotiv Cortex API. |
 | **IDUN Guardian** | 1 (bipolar in-ear) | 250 Hz | BLE | Single-channel earbud EEG + 6-DOF IMU. |

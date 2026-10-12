@@ -78,6 +78,7 @@ export interface DeviceStatus {
   bootloader_version?: string | null;
   /** Device has a PPG (heart-rate) sensor. */
   has_ppg: boolean;
+  has_vitals?: boolean;
   /** Device has an IMU (accelerometer + gyroscope). */
   has_imu: boolean;
   /** Device has electrodes at central scalp sites (C3/C4/Cz). */

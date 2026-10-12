@@ -627,6 +627,7 @@ const llm: Record<string, string> = {
   // ── Auto-synced from en/ (2026-08-10) ──
   "chat.phaseVision": "Lecture de l'image…",
   "chat.phasePrefill": "Préparation de la réponse…",
+  "chat.phaseTool": "Exécution des outils…",
 };
 
 export default llm;

@@ -142,6 +142,9 @@ The real-time analysis pipeline (filters, band powers, EEG embeddings, signal qu
 ## Does {app} support the AWEAR headband?
 Yes. AWEAR is a single-channel BLE EEG device sampling at 256 Hz. Connection works the same as other BLE devices — power on the headband, grant Bluetooth permission if prompted, and {app} will discover and connect automatically. The single EEG channel drives the real-time analysis pipeline.
 
+## Does {app} support Vital Neuro headphones?
+Yes. Vital Neuro is a dual-mode headphone: audio over regular Bluetooth, and three EEG channels at 250 Hz over Bluetooth LE. Pair the headphones for audio in your operating system as usual — the two links coexist. In {app}, power them on, scan, and connect; they are recognised by the service they advertise rather than by name, so a pair you have renamed is still found. The accelerometer and battery level stream alongside the EEG.
+
 ## My OpenBCI connection drops repeatedly — how do I stabilise it?
 Ganglion BLE: Keep the board within 2 m; plug the host computer's BLE adapter into a USB 2.0 port (USB 3.0 emits 2.4 GHz noise that can jam BLE). Cyton USB: Use a short, high-quality USB cable and connect directly to the computer rather than through a hub. WiFi Shield: Ensure the shield's 2.4 GHz channel does not overlap with your router; move the board closer. All boards: avoid running other wireless-intensive apps (video calls, file sync) during recordings.
 

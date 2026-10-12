@@ -109,6 +109,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.device.awearEeg": "AWEAR EEG",
   "settings.supportedDevices.instruction.awear1": "打开您的 AWEAR EEG 设备，并确保电脑已开启蓝牙。",
   "settings.supportedDevices.instruction.awear2": "扫描 BLE 设备并连接到 AWEAR。身份验证通过 HMAC-SHA256 自动完成。",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Vital Neuro 耳机",
+  "settings.supportedDevices.instruction.vital1":
+    "打开耳机电源，并将其放在这台电脑附近。脑电数据通过低功耗蓝牙传输，音频仍使用常规蓝牙配对。",
+  "settings.supportedDevices.instruction.vital2":
+    "在设备列表中扫描并配对，然后连接。识别依据是设备广播的服务，因此重命名后也能找到。",
+  "settings.supportedDevices.instruction.vital3": "以 250 Hz 传输三个脑电通道，同时提供加速度计和电量信息。",
 
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
@@ -188,6 +196,16 @@ const settings: Record<string, string> = {
     "用于从 Oura Ring V2 Cloud API 同步睡眠、活动、准备度、心率和 SpO2 数据的个人访问令牌。",
   "settings.deviceApi.ouraDashboard": "从 Oura 开发者门户获取令牌",
   "settings.deviceApi.ouraAccessToken": "访问令牌",
+  "settings.deviceApi.ouraRingKey": "指环 BLE 密钥",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "通过蓝牙连接指环时需要，与上方的云端令牌无关。Oura 应用在本地与指环配对时会生成这个 16 字节的密钥。",
+  "settings.deviceApi.ouraRingSyncBtn": "从指环同步",
+  "settings.deviceApi.ouraRingSyncing": "正在读取指环\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "通过蓝牙读取指环本身存储的历史记录——心率、HRV、皮肤温度、血氧和睡眠阶段。从上次同步结束的位置继续。请先断开指环与任何进行中的会话。",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "指环发送了事件，但其中没有任何时间基准，因此无法确定日期，也未保存任何内容。请在指环附近打开一次 Oura 应用以校准其时钟，然后重新同步。",
+  "settings.deviceApi.ouraRingMoreRemaining": "已读取部分积压记录。请再次同步以继续。",
   "settings.deviceApi.ouraSyncBtn": "立即同步",
   "settings.deviceApi.ouraSyncing": "同步中…",
   "settings.deviceApi.ouraSynced": "已同步！",

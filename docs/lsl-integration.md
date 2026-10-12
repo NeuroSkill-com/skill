@@ -437,7 +437,7 @@ know what's streaming:
 
 | Badge | Source |
 |-------|--------|
-| **BLE** | Bluetooth Low Energy (Muse, MW75, Hermes, IDUN, Mendi, Ganglion) |
+| **BLE** | Bluetooth Low Energy (Muse, MW75, Vital Neuro, Hermes, IDUN, Mendi, Ganglion) |
 | **LSL** | Local LSL stream |
 | **LSL · iroh** | Remote LSL via rlsl-iroh |
 | **iroh** | Phone streaming via iroh |

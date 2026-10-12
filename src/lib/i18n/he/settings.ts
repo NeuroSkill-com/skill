@@ -484,6 +484,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.awear1": "הפעילו את מכשיר ה-AWEAR EEG וודאו שה-Bluetooth מופעל במחשב שלכם.",
   "settings.supportedDevices.instruction.awear2":
     "סרקו מכשירי BLE והתחברו ל-AWEAR. האימות מתבצע אוטומטית באמצעות HMAC-SHA256.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "אוזניות Vital Neuro",
+  "settings.supportedDevices.instruction.vital1":
+    "הפעילו את האוזניות והשאירו אותן קרוב למחשב. נתוני ה-EEG עוברים ב-Bluetooth LE; השמע ממשיך דרך ההתאמה הרגילה של Bluetooth.",
+  "settings.supportedDevices.instruction.vital2":
+    "סרקו והתאימו אותן ברשימת המכשירים ואז התחברו. הזיהוי נעשה לפי השירות שהן משדרות, ולכן גם אוזניות ששמן שונה יימצאו.",
+  "settings.supportedDevices.instruction.vital3": "שלושה ערוצי EEG בקצב 250 הרץ, יחד עם מד התאוצה ומצב הסוללה.",
 
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
@@ -556,6 +564,16 @@ const settings: Record<string, string> = {
     "טוקן גישה אישי לסנכרון נתוני שינה, פעילות, מוכנות, קצב לב ו-SpO2 מ-API הענן של Oura Ring V2.",
   "settings.deviceApi.ouraDashboard": "קבל טוקן מפורטל המפתחים של Oura",
   "settings.deviceApi.ouraAccessToken": "טוקן גישה",
+  "settings.deviceApi.ouraRingKey": "מפתח BLE של הטבעת",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "נדרש כדי להתחבר לטבעת דרך Bluetooth, בנפרד מטוקן הענן שלמעלה. אפליקציית Oura יוצרת מפתח זה בגודל 16 בתים בעת צימוד מקומי עם הטבעת.",
+  "settings.deviceApi.ouraRingSyncBtn": "סנכרון מהטבעת",
+  "settings.deviceApi.ouraRingSyncing": "קורא את הטבעת\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "קורא את ההיסטוריה המאוחסנת בטבעת עצמה דרך Bluetooth — דופק, HRV, טמפרטורת עור, SpO2, שלבי שינה. ממשיך מהנקודה שבה הסתיים הסנכרון הקודם. נתקו קודם את הטבעת מכל הפעלה פעילה.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "הטבעת שלחה אירועים אך אף אחד מהם לא כלל חותמת זמן, ולכן לא ניתן היה לתארך או לשמור דבר. פתחו את אפליקציית Oura ליד הטבעת פעם אחת כדי לכוון את שעונה, ואז סנכרנו שוב.",
+  "settings.deviceApi.ouraRingMoreRemaining": "חלק מהמצבור נקרא. סנכרנו שוב כדי להמשיך.",
   "settings.deviceApi.ouraSyncBtn": "סנכרן עכשיו",
   "settings.deviceApi.ouraSyncing": "מסנכרן…",
   "settings.deviceApi.ouraSynced": "סונכרן!",

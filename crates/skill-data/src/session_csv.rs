@@ -51,6 +51,12 @@ pub fn fnirs_csv_path(eeg_path: &Path) -> PathBuf {
     eeg_path.with_file_name(format!("{stem}_fnirs.csv"))
 }
 
+/// Sidecar path for device-reported vitals (`_vitals.csv`).
+pub fn vitals_csv_path(eeg_path: &Path) -> PathBuf {
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    eeg_path.with_file_name(format!("{stem}_vitals.csv"))
+}
+
 // ── Metrics CSV column header ─────────────────────────────────────────────────
 
 /// Column headers for the `_metrics.csv` file.
@@ -297,6 +303,8 @@ pub struct CsvState {
     imu_wtr: Option<csv::Writer<std::fs::File>>,
     fnirs_wtr: Option<csv::Writer<std::fs::File>>,
     fnirs_written: u64,
+    vitals_wtr: Option<csv::Writer<std::fs::File>>,
+    vitals_written: u64,
     /// IMU rows written.
     imu_written: u64,
 }
@@ -329,6 +337,8 @@ impl CsvState {
             imu_written: 0,
             fnirs_wtr: None,
             fnirs_written: 0,
+            vitals_wtr: None,
+            vitals_written: 0,
         })
     }
 
@@ -559,6 +569,60 @@ impl CsvState {
         }
     }
 
+    /// Write a device-reported vitals sample to `_vitals.csv`.
+    ///
+    /// The file is created lazily on the first call.  Unlike the EEG/PPG/fNIRS
+    /// sidecars this is a *sparse* table: a wearable reports a heart rate when
+    /// it detects a beat and an SpO2 when it has one to give, so every column
+    /// except the timestamp is optional and an absent value is written as an
+    /// empty field rather than a zero — a zero bpm would read as a measurement.
+    pub fn push_vitals(
+        &mut self,
+        eeg_csv_path: &Path,
+        timestamp_s: f64,
+        hr_bpm: Option<f64>,
+        ibi_ms: Option<f64>,
+        spo2_pct: Option<f64>,
+        temperature_c: Option<f64>,
+    ) {
+        if self.vitals_wtr.is_none() {
+            let path = vitals_csv_path(eeg_csv_path);
+            match csv::Writer::from_path(&path) {
+                Ok(mut w) => {
+                    let _ = w.write_record(["timestamp_s", "hr_bpm", "ibi_ms", "spo2_pct", "temperature_c"]);
+                    eprintln!("[csv] Vitals file opened: {}", path.display());
+                    self.vitals_wtr = Some(w);
+                }
+                Err(e) => {
+                    eprintln!("[csv] failed to create vitals file {}: {e}", path.display());
+                    return;
+                }
+            }
+        }
+        if let Some(ref mut wtr) = self.vitals_wtr {
+            let cell = |v: Option<f64>, decimals: usize| match v {
+                Some(v) => format!("{v:.decimals$}"),
+                None => String::new(),
+            };
+            let row = [
+                format!("{timestamp_s:.6}"),
+                cell(hr_bpm, 1),
+                cell(ibi_ms, 1),
+                cell(spo2_pct, 1),
+                cell(temperature_c, 2),
+            ];
+            let refs: Vec<&str> = row.iter().map(String::as_str).collect();
+            let _ = wtr.write_record(&refs);
+            self.vitals_written += 1;
+            // Flushed more eagerly than the high-rate streams: these arrive at
+            // about one per heartbeat, so a 64-row buffer would hold a minute
+            // of data hostage against a crash.
+            if self.vitals_written.is_multiple_of(8) {
+                let _ = wtr.flush();
+            }
+        }
+    }
+
     /// Write a `BandSnapshot` row to the `_metrics.csv` file (~4 Hz).
     /// The file is created lazily on the first call.
     pub fn push_metrics(&mut self, eeg_csv_path: &Path, snap: &BandSnapshot) {
@@ -691,6 +755,9 @@ impl CsvState {
         if let Some(ref mut w) = self.fnirs_wtr {
             let _ = w.flush();
         }
+        if let Some(ref mut w) = self.vitals_wtr {
+            let _ = w.flush();
+        }
     }
 }
 
@@ -754,6 +821,44 @@ mod round_trip_tests {
     fn fnirs_csv_path_derives_correctly() {
         let p = fnirs_csv_path(Path::new("/data/exg_1700000000.csv"));
         assert_eq!(p, PathBuf::from("/data/exg_1700000000_fnirs.csv"));
+    }
+
+    #[test]
+    fn vitals_csv_path_derives_correctly() {
+        let p = vitals_csv_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/exg_1700000000_vitals.csv"));
+    }
+
+    /// A sparse row is the normal case: a live beat has no SpO2 with it.  An
+    /// absent value must be an empty field, not a zero that reads as a reading.
+    #[test]
+    fn vitals_csv_writes_empty_cells_for_absent_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut st = CsvState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+
+        // A heart beat: hr + ibi, nothing else.
+        st.push_vitals(&csv_path, 1000.0, Some(52.0), Some(1153.0), None, None);
+        // A cached SpO2 poll: only spo2.
+        st.push_vitals(&csv_path, 1001.0, None, None, Some(97.0), None);
+        st.flush();
+
+        let text = std::fs::read_to_string(vitals_csv_path(&csv_path)).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "timestamp_s,hr_bpm,ibi_ms,spo2_pct,temperature_c");
+        assert_eq!(lines[1], "1000.000000,52.0,1153.0,,");
+        assert_eq!(lines[2], "1001.000000,,,97.0,");
+    }
+
+    /// The sidecar must not be created by a session that never reports vitals.
+    #[test]
+    fn vitals_csv_is_not_created_until_a_sample_arrives() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut st = CsvState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+        st.push_eeg(0, &[1.0], 1000.0, 256.0);
+        st.flush();
+        assert!(!vitals_csv_path(&csv_path).exists());
     }
 
     #[test]

@@ -133,6 +133,7 @@ describe("device classification", () => {
     expect(hasBattery("mw75")).toBe(true);
     expect(hasBattery("emotiv")).toBe(true);
     expect(hasBattery("idun")).toBe(true);
+    expect(hasBattery("vital")).toBe(true);
     expect(hasBattery("ganglion")).toBe(false);
     expect(hasBattery("hermes")).toBe(false);
   });

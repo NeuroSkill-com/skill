@@ -391,4 +391,8 @@ allow-git = [
     "https://github.com/eugenehp/gtk-rs-core.git",
     "https://github.com/MIT-RLX/rlx.git",
     "https://github.com/MIT-RLX/rlx-models.git",
+    # open_oura — the Oura ring BLE protocol and link layer (MIT).  Unpublished,
+    # so it is pinned by `rev` in skill-devices/Cargo.toml rather than tracking
+    # a branch.
+    "https://github.com/Th0rgal/open_oura",
 ]

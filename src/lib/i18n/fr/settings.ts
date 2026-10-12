@@ -515,6 +515,15 @@ const settings: Record<string, string> = {
     "Allumez votre appareil AWEAR EEG et assurez-vous que le Bluetooth est activé sur votre ordinateur.",
   "settings.supportedDevices.instruction.awear2":
     "Recherchez les appareils BLE et connectez-vous à AWEAR. L'authentification est gérée automatiquement via HMAC-SHA256.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Casque Vital Neuro",
+  "settings.supportedDevices.instruction.vital1":
+    "Allumez le casque et gardez-le à proximité de cet ordinateur. L'EEG passe par Bluetooth LE ; l'audio reste sur l'appairage Bluetooth habituel.",
+  "settings.supportedDevices.instruction.vital2":
+    "Recherchez-le et appairez-le dans la liste des appareils, puis connectez-vous. Il est reconnu au service qu'il annonce : un casque renommé est donc toujours trouvé.",
+  "settings.supportedDevices.instruction.vital3":
+    "Trois canaux EEG à 250 Hz, ainsi que l'accéléromètre et le niveau de batterie.",
 
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
@@ -594,6 +603,16 @@ const settings: Record<string, string> = {
     "Jeton d'accès personnel pour synchroniser les données de sommeil, activité, préparation, fréquence cardiaque et SpO2 depuis l'API Cloud Oura Ring V2.",
   "settings.deviceApi.ouraDashboard": "Obtenir le jeton depuis le portail développeur Oura",
   "settings.deviceApi.ouraAccessToken": "Jeton d'accès",
+  "settings.deviceApi.ouraRingKey": "Clé BLE de la bague",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "Nécessaire pour connecter la bague en Bluetooth, indépendante du jeton cloud ci-dessus. L\u2019application Oura crée cette clé de 16 octets lors de l\u2019appairage local avec la bague.",
+  "settings.deviceApi.ouraRingSyncBtn": "Synchroniser depuis la bague",
+  "settings.deviceApi.ouraRingSyncing": "Lecture de la bague\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "Lit l\u2019historique stock\u00e9 sur la bague elle-m\u00eame via Bluetooth : fr\u00e9quence cardiaque, VFC, temp\u00e9rature cutan\u00e9e, SpO2, phases de sommeil. Reprend l\u00e0 o\u00f9 la derni\u00e8re synchronisation s\u2019est arr\u00eat\u00e9e. D\u00e9connectez d\u2019abord la bague de toute session active.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "La bague a envoy\u00e9 des \u00e9v\u00e9nements, mais aucun ne portait de r\u00e9f\u00e9rence horaire : rien n\u2019a pu \u00eatre dat\u00e9 ni enregistr\u00e9. Ouvrez une fois l\u2019application Oura pr\u00e8s de la bague pour r\u00e9gler son horloge, puis synchronisez \u00e0 nouveau.",
+  "settings.deviceApi.ouraRingMoreRemaining": "Une partie de l\u2019historique a \u00e9t\u00e9 lue. Synchronisez \u00e0 nouveau pour continuer.",
   "settings.deviceApi.ouraSyncBtn": "Synchroniser",
   "settings.deviceApi.ouraSyncing": "Synchronisation…",
   "settings.deviceApi.ouraSynced": "Synchronisé !",

@@ -37,7 +37,9 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 
 <!-- AUTO-GENERATED:SUPPORTED_DEVICES:START -->
 <!-- Run: npm run sync:readme:supported -->
+- **ANT Neuro:** eego 8, eego 24, eego 64, eego mylab, eego sport, eego rt, eego hub
 - **AttentivU:** AttentivU Glasses *(iOS bridge only)*
+- **AWEAR:** AWEAR EEG
 - **BrainBit LLC:** BrainBit, BrainBit 2, BrainBit Flex 4/8
 - **BrainMaster Technologies:** Atlantis 4×4 (4-ch), Discovery (24-ch), Freedom (24-ch wireless)
 - **Cognionics / CGX:** Quick-20r, Quick-32r, Quick-8r, AIM-2
@@ -54,6 +56,7 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 - **Ōura:** Oura Ring (Gen 3 / Gen 4)
 - **Brain Products:** BrainVision RDA
 - **RE-AK:** Nucleus-Hermès
+- **Vital Neuro:** Vital Neuro Headphones
 
 Plus any compatible **LSL** source (e.g. BrainFlow, MATLAB, pylsl).
 <!-- AUTO-GENERATED:SUPPORTED_DEVICES:END -->
@@ -70,6 +73,7 @@ Canonical source: `src-tauri/exg_catalog.json`
 - **LUNA Huge** (`PulpBio/LUNA`)
 - **REVE Base** (`brain-bzh/reve-base`)
 - **REVE Large** (`brain-bzh/reve-large`)
+- **Brain-JEPA** (`eugenehp/BrainJEPA`)
 - **OpenTSLM** (`StanfordBDHG/OpenTSLM`)
 - **SensorLM** (`google/sensorlm`)
 - **SleepFM** (`zou-group/sleepfm-clinical`)
@@ -79,6 +83,13 @@ Canonical source: `src-tauri/exg_catalog.json`
 - **LaBraM** (`braindecode/labram-pretrained`)
 - **EEGPT** (`braindecode/eegpt-pretrained`)
 - **TRIBE v2** (`eugenehp/tribev2`)
+- **EEG-DINO Small** (`eugenehp/eegdino`)
+- **EEG-DINO Medium** (`eugenehp/eegdino`)
+- **EEG-DINO Large** (`eugenehp/eegdino`)
+- **LuMamba (Reconstruction)** (`PulpBio/LuMamba`)
+- **LuMamba (LeJEPA+Recon 128)** (`PulpBio/LuMamba`)
+- **LuMamba (LeJEPA+Recon 300)** (`PulpBio/LuMamba`)
+- **LuMamba (LeJEPA only)** (`PulpBio/LuMamba`)
 - **NeuroRVQ** (`eugenehp/NeuroRVQ`)
 - **CBraMod** (`braindecode/cbramod-pretrained`)
 - **ST-EEGFormer Small** (`eugenehp/ST-EEGFormer`)

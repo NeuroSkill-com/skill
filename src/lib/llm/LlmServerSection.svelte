@@ -19,7 +19,7 @@ interface Props {
   activeFamilyName: string | null;
   activeQuant: string | null;
   activeSizeGb: number | null;
-  wsPort: number;
+  apiPort: number;
   startError: string;
   onToggleEnabled: () => void | Promise<void>;
   onToggleAutostart: () => void | Promise<void>;
@@ -40,7 +40,7 @@ let {
   activeFamilyName,
   activeQuant,
   activeSizeGb,
-  wsPort,
+  apiPort,
   startError,
   onToggleEnabled,
   onToggleAutostart,
@@ -150,7 +150,7 @@ let {
           {/each}
         </div>
         <span class="text-ui-sm text-muted-foreground/60 mt-0.5">
-          http://localhost:{wsPort} · {t("llm.endpointHint")}
+          http://localhost:{apiPort || "…"} · {t("llm.endpointHint")}
         </span>
       </div>
     </CardContent>

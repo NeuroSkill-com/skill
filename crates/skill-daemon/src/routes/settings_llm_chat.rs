@@ -304,7 +304,13 @@ pub(crate) async fn llm_chat_completions_impl(
                 p.insert("temperature".into(), t.into());
             }
             if let Some(m) = req.max_tokens {
-                p.insert("n_predict".into(), m.into());
+                // The field on `GenParams` is `max_tokens`. Inserting
+                // `n_predict` (llama.cpp's spelling) wrote a key nothing
+                // deserializes, and since `GenParams` is `#[serde(default)]`
+                // with no `deny_unknown_fields` it was dropped in silence — so
+                // an OpenAI-shaped request's `max_tokens` had no effect at all
+                // and every such call ran to the 2048 default.
+                p.insert("max_tokens".into(), m.into());
             }
             if let Some(s) = req.stop {
                 p.insert("stop".into(), s);
@@ -357,12 +363,27 @@ pub(crate) async fn llm_chat_completions_impl(
                         }
                     },
                     |evt| {
-                        // Forward real generation-phase markers ("vision" /
-                        // "prefill") as an SSE chunk with a `phase` delta field so
-                        // the client can show accurate progress during the
-                        // pre-token lead-in. Backward-compatible: content-only
-                        // consumers ignore the extra field.
-                        if let skill_llm::ToolEvent::Phase { phase } = evt {
+                        // Forward generation-phase markers as an SSE chunk with a
+                        // `phase` delta field so the client can show accurate
+                        // progress during the pre-token lead-in.
+                        // Backward-compatible: content-only consumers ignore the
+                        // extra field.
+                        //
+                        // Tool execution belongs on this channel too. Only
+                        // `Phase` used to be forwarded, so a tool round-trip sent
+                        // the client NOTHING: measured on the default model with
+                        // tools on, 21.1s of a 21.6s request with not one byte
+                        // delivered, which is indistinguishable from a hung
+                        // request. `ExecutionEnd` hands it back to "prefill"
+                        // because that is what happens next — the tool result is
+                        // prefilled and the model generates again.
+                        let phase = match &evt {
+                            skill_llm::ToolEvent::Phase { phase } => Some(phase.to_string()),
+                            skill_llm::ToolEvent::ExecutionStart { .. } => Some("tool".to_string()),
+                            skill_llm::ToolEvent::ExecutionEnd { .. } => Some("prefill".to_string()),
+                            _ => None,
+                        };
+                        if let Some(phase) = phase {
                             let chunk = serde_json::json!({
                                 "id": &chat_id2,
                                 "object": "chat.completion.chunk",

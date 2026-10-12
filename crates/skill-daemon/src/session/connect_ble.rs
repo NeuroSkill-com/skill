@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! BLE device connection functions — Muse, MW75, IDUN, Mendi,
+//! BLE device connection functions — Muse, MW75, IDUN, Mendi, Vital, Oura,
 //! Ganglion, BrainBit, g.tec Unicorn.
 
 use anyhow::Context as _;
@@ -138,6 +138,76 @@ pub(super) async fn connect_awear(_paired_name: Option<String>) -> anyhow::Resul
     Ok(Box::new(AwearAdapter::new(rx, handle)))
 }
 
+// ── Vital Neuro (BLE) ────────────────────────────────────────────────────────
+
+pub(super) async fn connect_vital(state: &AppState, target: &str) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::session::vital::VitalAdapter;
+    use skill_devices::vital::{VitalClient, VitalClientConfig};
+
+    // Identified by id, never by name: the name lives in the unit's NVS and
+    // the owner can change it, so a paired name is only ever a snapshot. The
+    // client filters the scan on the service UUID, which is what makes an id
+    // enough to tell two headphones apart.
+    let target_id = skill_daemon_common::ble_id::canonical_target(target);
+    let target_ble_id = target_id.strip_prefix("ble:").map(str::to_owned);
+
+    let client = VitalClient::new(VitalClientConfig {
+        scan_timeout_secs: 5,
+        ..Default::default()
+    });
+
+    // `scan_all` always burns the whole scan window; `connect` returns on the
+    // first advertisement. The first match is only *the* match when there is
+    // one headset in range, which the scanner already knows — and a powered-on
+    // headset advertises continuously, so a second one the scanner has not
+    // seen inside the freshness window is not one `connect` could reach
+    // either.
+    let nearby = crate::scanner::fresh_ids_for_service_kind(state, skill_data::device::DeviceKind::Vital.as_str());
+    let first_match_is_safe = match (target_ble_id.as_deref(), nearby.as_slice()) {
+        // Nothing to aim at (a manual, non-`ble:` target): first match is the
+        // only thing we can do.
+        (None, _) => true,
+        (Some(_), [only]) => skill_daemon_common::ble_id::same_device(only, &target_id),
+        _ => false,
+    };
+
+    let (rx, handle) = if first_match_is_safe {
+        info!(target = %target_id, "connecting to Vital Neuro (first match)");
+        client.connect().await.context("Vital connect")?
+    } else {
+        let wanted = target_ble_id.clone().unwrap_or_default();
+        info!(id = %wanted, nearby = nearby.len(), "scanning for a specific Vital Neuro…");
+        let devices = client.scan_all().await.context("Vital scan")?;
+        let device = devices
+            .into_iter()
+            .find(|d| d.id.eq_ignore_ascii_case(&wanted))
+            .ok_or_else(|| anyhow::anyhow!("Vital Neuro {target} not found nearby"))?;
+        info!(name = %device.name, id = %device.id, "connecting to Vital Neuro");
+        client.connect_to(device).await.context("Vital connect")?
+    };
+
+    // Read before streaming starts: the device sends no firmware notification,
+    // and a GATT read competes with notification traffic once it does.
+    let firmware = match handle.firmware_version().await {
+        Ok(v) => {
+            info!(version = %v.version, built = %v.built, "Vital Neuro firmware");
+            Some(v.version)
+        }
+        Err(e) => {
+            info!(error = %e, "Vital firmware version unavailable");
+            None
+        }
+    };
+
+    // Subscribing armed the device's sampler; the mode write is what starts it.
+    handle.start().await.context("Vital start streaming")?;
+
+    // Report the paired id rather than the (changeable) name, so the session's
+    // device key matches the one the rest of the daemon uses.
+    let device_id = target_ble_id.is_some().then(|| target_id.clone());
+    Ok(Box::new(VitalAdapter::new(rx, handle, firmware, device_id)))
+}
+
 // ── Mendi fNIRS (BLE) ────────────────────────────────────────────────────────
 
 pub(super) async fn connect_mendi(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
@@ -153,6 +223,47 @@ pub(super) async fn connect_mendi(paired_name: Option<String>) -> anyhow::Result
     let client = MendiClient::new(config);
     let (rx, handle) = client.connect().await.context("Mendi connect")?;
     Ok(Box::new(MendiAdapter::new(rx, handle)))
+}
+
+// ── Oura Ring (BLE) ──────────────────────────────────────────────────────────
+
+/// Connect to an Oura ring over its vendor BLE protocol — no Oura account.
+///
+/// The ring challenges for a 16-byte app-auth key on every connection and
+/// answers almost nothing without it, so a missing or malformed key fails here
+/// with a message that says what to do rather than producing a session that
+/// streams nothing.  The key is a keychain secret (`oura_ring_key`), set in
+/// Settings → Device API.
+pub(super) async fn connect_oura(target: &str, paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::session::oura::{parse_auth_key, OuraAdapter, OuraConfig};
+
+    let hex_key = skill_settings::keychain::get_oura_ring_key();
+    let auth_key = if hex_key.trim().is_empty() {
+        None
+    } else {
+        // A bad key is a configuration mistake, not a connect failure: say so
+        // here instead of letting the ring reject it as "wrong ring".
+        Some(parse_auth_key(&hex_key).context("Oura ring key setting")?)
+    };
+
+    // `ble:<id>` is the canonical target once a ring has been seen by the
+    // scanner.  Addressing it by id is what makes a bonded, nameless ring
+    // connectable at all, and it also stops us picking a different ring in a
+    // household with two.
+    let device_id = target
+        .strip_prefix("ble:")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    let config = OuraConfig {
+        name_contains: paired_name.unwrap_or_else(|| "Oura".into()),
+        device_id,
+        scan_timeout: Duration::from_secs(8),
+        auth_key,
+        ..Default::default()
+    };
+    info!(name = %config.name_contains, id = ?config.device_id, "connecting to Oura ring");
+    Ok(Box::new(OuraAdapter::connect(config).await?))
 }
 
 // ── OpenBCI Ganglion (BLE) ───────────────────────────────────────────────────

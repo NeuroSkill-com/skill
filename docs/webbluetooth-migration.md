@@ -67,6 +67,12 @@ muse-rs and skill-daemon both declare the same registry `webbluetooth`
 version, which is what gets them unified onto one package — see the invariant
 above. No `deny.toml` `allow-git` entry is needed for either.
 
+`vital` (Vital Neuro headphones) later joined on the same terms: published,
+native webbluetooth, no patch. It makes **three** declarations of the
+`webbluetooth` version that have to move together, not two — the invariant
+check is still `cargo tree -p skill-daemon -i webbluetooth`, and it still has
+to print exactly one node.
+
 ## Phase 1 — the scanner and device ids (landed)
 
 - `skill-daemon/src/scanner.rs` — `run_ble_listener_task` folds

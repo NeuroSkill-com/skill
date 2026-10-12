@@ -506,6 +506,15 @@ const settings: Record<string, string> = {
     "Увімкніть пристрій AWEAR EEG та переконайтеся, що Bluetooth увімкнено на вашому комп'ютері.",
   "settings.supportedDevices.instruction.awear2":
     "Знайдіть BLE-пристрої та підключіться до AWEAR. Автентифікація виконується автоматично через HMAC-SHA256.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Навушники Vital Neuro",
+  "settings.supportedDevices.instruction.vital1":
+    "Увімкніть навушники та тримайте їх поруч із цим комп'ютером. ЕЕГ передається через Bluetooth LE; звук залишається на звичайному Bluetooth-з'єднанні.",
+  "settings.supportedDevices.instruction.vital2":
+    "Знайдіть і з'єднайте їх у списку пристроїв, а потім підключіться. Розпізнавання відбувається за оголошеною службою, тож перейменовані навушники також буде знайдено.",
+  "settings.supportedDevices.instruction.vital3":
+    "Три канали ЕЕГ на 250 Гц, а також акселерометр і рівень заряду батареї.",
 
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
@@ -584,6 +593,16 @@ const settings: Record<string, string> = {
     "Персональний токен доступу для синхронізації даних сну, активності, готовності, пульсу та SpO2 з хмарного API Oura Ring V2.",
   "settings.deviceApi.ouraDashboard": "Отримати токен з порталу розробників Oura",
   "settings.deviceApi.ouraAccessToken": "Токен доступу",
+  "settings.deviceApi.ouraRingKey": "Ключ BLE перстня",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "Потрібен для підключення до перстня через Bluetooth, окремо від хмарного токена вище. Застосунок Oura створює цей 16-байтовий ключ під час локального сполучення з перстнем.",
+  "settings.deviceApi.ouraRingSyncBtn": "Синхронізувати з перстня",
+  "settings.deviceApi.ouraRingSyncing": "Читання перстня\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "Читає історію, збережену в самому перстні, через Bluetooth — пульс, ВСР, температуру шкіри, SpO2, фази сну. Продовжує з місця, де спинилася попередня синхронізація. Спершу відключіть перстень від активного сеансу.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "Перстень надіслав події, але жодна не містила позначки часу, тож нічого не вдалося датувати й зберегти. Відкрийте застосунок Oura поблизу перстня, щоб налаштувати його годинник, і синхронізуйте знову.",
+  "settings.deviceApi.ouraRingMoreRemaining": "Прочитано частину накопиченого. Синхронізуйте знову, щоб продовжити.",
   "settings.deviceApi.ouraSyncBtn": "Синхронізувати зараз",
   "settings.deviceApi.ouraSyncing": "Синхронізація…",
   "settings.deviceApi.ouraSynced": "Синхронізовано!",

@@ -141,21 +141,27 @@ pub(super) fn run_actor(
                     images.len(),
                     params.max_tokens
                 );
-                if !images.is_empty() {
-                    if runner.supports_multimodal() {
-                        runner.generate_multimodal(&prompt, &images, params, token_tx);
+                let err_tx = token_tx.clone();
+                let outcome = guard_panic(|| {
+                    if !images.is_empty() {
+                        if runner.supports_multimodal() {
+                            runner.generate_multimodal(&prompt, &images, params, token_tx);
+                        } else {
+                            token_tx
+                                .send(InferToken::Error(
+                                    "RLX runtime: this model has no mmproj vision encoder \
+                                     attached — load an mmproj GGUF or use a text-only model"
+                                        .into(),
+                                ))
+                                .ok();
+                        }
                     } else {
-                        token_tx
-                            .send(InferToken::Error(
-                                "RLX runtime: this model has no mmproj vision encoder \
-                                 attached — load an mmproj GGUF or use a text-only model"
-                                    .into(),
-                            ))
-                            .ok();
+                        runner.generate(&prompt, params, token_tx);
                     }
-                    continue;
+                });
+                if let Err(panic) = outcome {
+                    report_panic(&app, &log_buf, log_file, &err_tx, "generate", &panic);
                 }
-                runner.generate(&prompt, params, token_tx);
             }
 
             InferRequest::Complete {
@@ -170,7 +176,10 @@ pub(super) fn run_actor(
                     "completion request — max_tokens={}",
                     params.max_tokens
                 );
-                runner.generate(&prompt, params, token_tx);
+                let err_tx = token_tx.clone();
+                if let Err(panic) = guard_panic(|| runner.generate(&prompt, params, token_tx)) {
+                    report_panic(&app, &log_buf, log_file, &err_tx, "completion", &panic);
+                }
             }
 
             InferRequest::Embed { result_tx, .. } => {
@@ -190,6 +199,57 @@ pub(super) fn run_actor(
     drop(runner);
     llm_info!(&app, &log_buf, log_file, "[rlx-only actor] exiting — runner dropped");
     app.emit_event("llm:status", json!({"status":"stopped"}));
+}
+
+/// Run one inference call with a panic boundary, returning the panic message
+/// instead of letting it unwind out of the actor thread.
+///
+/// Without this, a panic anywhere in a model kernel killed the actor thread
+/// outright: the request's `token_tx` dropped with no `Error` token (so the
+/// HTTP stream just ended), the `llm:status` "stopped" event never fired, and
+/// the loop's exit log never ran — the server looked alive while every later
+/// request hung on a channel nobody was reading. The reported symptom was a log
+/// that stopped dead after `chat request — …` with no error at all.
+///
+/// Same shape as the TTS engine's guard around `synthesize` (skill-tts
+/// `engines.rs`): third-party model code is allowed to panic, and the right
+/// answer is an error on the request, not a dead service.
+fn guard_panic<F: FnOnce()>(f: F) -> Result<(), String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|p| {
+        if let Some(s) = p.downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = p.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "non-string panic payload".to_string()
+        }
+    })
+}
+
+/// Surface a caught panic on the request that caused it, and in the log.
+///
+/// The actor stays up. A panic here is request-shaped (a prompt length, an
+/// image size, a `max_tokens` value) far more often than it is fatal to the
+/// loaded model, so taking the whole server down with it costs the user their
+/// loaded weights for what the next request may well survive. If it is in fact
+/// fatal, every subsequent request now says so out loud instead of hanging.
+fn report_panic(
+    app: &Arc<dyn LlmEventEmitter>,
+    log_buf: &LlmLogBuffer,
+    log_file: Option<&LlmLogFile>,
+    token_tx: &tokio::sync::mpsc::UnboundedSender<InferToken>,
+    what: &str,
+    panic: &str,
+) {
+    llm_error!(
+        app,
+        log_buf,
+        log_file,
+        "RLX {what} panicked: {panic} — request failed; actor still serving"
+    );
+    token_tx
+        .send(InferToken::Error(format!("RLX {what} panicked: {panic}")))
+        .ok();
 }
 
 /// MiniCPM5 GGUF metadata embeds a tool-agent Jinja template that calls

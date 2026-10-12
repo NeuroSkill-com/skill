@@ -59,6 +59,13 @@ const dashboard: Record<string, string> = {
   "dashboard.lateralityIndex": "左右差指標",
   "dashboard.echt": "ECHT",
   "dashboard.ppgMetrics": "PPG指標",
+  "dashboard.vitals": "バイタル",
+  "dashboard.vitalsWaiting":
+    "デバイスからの測定値を待っています。装着中のリングは独自のタイミングで測定するため、数分かかることがあります。",
+  "dashboard.vitalsStale":
+    "ここ数分間、測定値がありません — デバイスは独自のタイミングで測定します。",
+  "dashboard.ibi": "間隔",
+  "dashboard.skinTemperature": "皮膚温",
   "dashboard.hr": "心拍数",
   "dashboard.rmssd": "RMSSD",
   "dashboard.sdnn": "SDNN",

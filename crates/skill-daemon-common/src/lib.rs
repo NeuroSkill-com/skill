@@ -151,6 +151,14 @@ pub struct StatusResponse {
     /// Device has an IMU (accelerometer + gyroscope).
     #[serde(default)]
     pub has_imu: bool,
+    /// Device reports vitals it derived itself (heart rate, SpO2, skin
+    /// temperature) rather than a raw waveform this app computes them from.
+    ///
+    /// Distinct from `has_ppg`: a ring has an optical sensor but does its own
+    /// beat detection, so there is no PPG waveform to chart and the PPG card
+    /// would stay empty — the vitals card is what applies.
+    #[serde(default)]
+    pub has_vitals: bool,
     /// Device has electrodes at central scalp sites.
     #[serde(default)]
     pub has_central_electrodes: bool,
@@ -209,6 +217,7 @@ impl StatusResponse {
         self.hardware_version = None;
         self.has_ppg = false;
         self.has_imu = false;
+        self.has_vitals = false;
         self.has_central_electrodes = false;
         self.has_full_montage = false;
         self.sample_count = 0;

@@ -142,6 +142,9 @@ La canalización de análisis en tiempo real (filtros, potencias de banda, incru
 ## ¿{app} es compatible con la diadema AWEAR?
 Sí. AWEAR es un dispositivo EEG BLE de un solo canal que muestrea a 256 Hz. La conexión funciona igual que con otros dispositivos BLE: encienda la diadema, otorgue permiso de Bluetooth si se solicita, y {app} la descubrirá y conectará automáticamente. El canal EEG único alimenta la canalización de análisis en tiempo real.
 
+## ¿{app} es compatible con los auriculares Vital Neuro?
+Sí. Vital Neuro es un auricular de doble modo: audio por Bluetooth normal y tres canales de EEG a 250 Hz por Bluetooth LE. Empareje los auriculares para el audio en su sistema operativo como de costumbre: ambos enlaces conviven. En {app}, enciéndalos, busque y conéctese; se reconocen por el servicio que anuncian y no por el nombre, así que también se encuentran si les ha cambiado el nombre. El acelerómetro y el nivel de batería se transmiten junto al EEG.
+
 ## Mi conexión OpenBCI se cae repetidamente: ¿cómo la estabilizo?
 Ganglion BLE: mantén la placa a menos de 2 m; conecta el adaptador BLE del equipo host a un puerto USB 2.0 (USB 3.0 emite ruido de 2,4 GHz que puede degradar BLE). Cyton USB: usa un cable USB corto y de alta calidad, conectado directamente al ordenador en lugar de un hub. WiFi Shield: asegúrate de que el canal de 2,4 GHz del shield no se superponga con tu router; acerca la placa. En general, evita ejecutar otras aplicaciones con alto uso inalámbrico (videollamadas, sincronización de archivos) durante las grabaciones.
 

@@ -18,6 +18,10 @@ import type { TranslationKey } from "$lib/i18n/keys";
 export const GEN_PHASE = {
   vision: "vision",
   prefill: "prefill",
+  /** A built-in tool is executing (web_search, location, …). These can take
+   *  tens of seconds, and before they were reported the client simply went
+   *  quiet for the whole round-trip. */
+  tool: "tool",
 } as const;
 
 /** i18n key for the pre-token "processing" indicator: the real backend phase
@@ -29,6 +33,8 @@ export function processingLabelKey(phase: string | undefined, hasImage: boolean 
       return "chat.phaseVision";
     case GEN_PHASE.prefill:
       return "chat.phasePrefill";
+    case GEN_PHASE.tool:
+      return "chat.phaseTool";
     default:
       return hasImage ? "chat.analyzingImage" : "chat.processing";
   }

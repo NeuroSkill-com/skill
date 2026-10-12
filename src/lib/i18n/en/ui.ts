@@ -43,6 +43,10 @@ const ui: Record<string, string> = {
   "tip.echt":
     "Endpoint-Corrected Hilbert Transform — alpha-band rhythmicity (0–1). High = strong, phase-stable alpha oscillation. [Schreglmann 2021]",
   "tip.hr": "Heart rate derived from PPG inter-beat intervals.",
+  "tip.ibi":
+    "The inter-beat interval the heart rate was derived from, in milliseconds.",
+  "tip.skinTemperature":
+    "Skin temperature measured at the sensor. Absolute value, not the deviation from your baseline.",
   "tip.rmssd": "Root Mean Square of Successive Differences between heartbeats. Key parasympathetic HRV metric.",
   "tip.sdnn": "Standard deviation of beat-to-beat intervals. Reflects overall HRV.",
   "tip.pnn50": "Percentage of successive intervals differing by > 50 ms. Higher = greater vagal tone.",

@@ -615,6 +615,7 @@ const llm: Record<string, string> = {
   // ── Auto-synced from en/ (2026-08-10) ──
   "chat.phaseVision": "이미지 읽는 중…",
   "chat.phasePrefill": "응답 준비 중…",
+  "chat.phaseTool": "도구 실행 중…",
 };
 
 export default llm;

@@ -70,6 +70,10 @@ const KEY_EMOTIV_CLIENT_ID: &str = "emotiv_client_id";
 const KEY_EMOTIV_CLIENT_SECRET: &str = "emotiv_client_secret";
 const KEY_IDUN_API_TOKEN: &str = "idun_api_token";
 const KEY_OURA_ACCESS_TOKEN: &str = "oura_access_token";
+/// The ring's 16-byte BLE app-auth key, hex-encoded. Distinct from the cloud
+/// access token above: that one reaches Oura's V2 REST API, this one is what
+/// the ring itself challenges for on every connection.
+const KEY_OURA_RING_KEY: &str = "oura_ring_key";
 const KEY_NEUROSITY_EMAIL: &str = "neurosity_email";
 const KEY_NEUROSITY_PASSWORD: &str = "neurosity_password";
 const KEY_NEUROSITY_DEVICE_ID: &str = "neurosity_device_id";
@@ -133,6 +137,7 @@ pub struct Secrets {
     pub emotiv_client_secret: String,
     pub idun_api_token: String,
     pub oura_access_token: String,
+    pub oura_ring_key: String,
     pub neurosity_email: String,
     pub neurosity_password: String,
     pub neurosity_device_id: String,
@@ -172,6 +177,11 @@ pub fn get_oura_access_token() -> String {
     get_secret(KEY_OURA_ACCESS_TOKEN)
 }
 
+/// The Oura ring's hex-encoded BLE app-auth key (empty when not configured).
+pub fn get_oura_ring_key() -> String {
+    get_secret(KEY_OURA_RING_KEY)
+}
+
 pub fn get_neurosity_credentials() -> (String, String, String) {
     (
         get_secret(KEY_NEUROSITY_EMAIL),
@@ -199,6 +209,7 @@ pub fn save_device_api_secrets(secrets: &Secrets) {
         (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
         (KEY_IDUN_API_TOKEN, &secrets.idun_api_token),
         (KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token),
+        (KEY_OURA_RING_KEY, &secrets.oura_ring_key),
         (KEY_NEUROSITY_EMAIL, &secrets.neurosity_email),
         (KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password),
         (KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id),
@@ -222,6 +233,7 @@ pub fn load_secrets() -> Secrets {
         emotiv_client_secret: get_secret(KEY_EMOTIV_CLIENT_SECRET),
         idun_api_token: get_secret(KEY_IDUN_API_TOKEN),
         oura_access_token: get_secret(KEY_OURA_ACCESS_TOKEN),
+        oura_ring_key: get_secret(KEY_OURA_RING_KEY),
         neurosity_email: get_secret(KEY_NEUROSITY_EMAIL),
         neurosity_password: get_secret(KEY_NEUROSITY_PASSWORD),
         neurosity_device_id: get_secret(KEY_NEUROSITY_DEVICE_ID),
@@ -243,6 +255,7 @@ pub fn save_secrets(secrets: &Secrets) {
         (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
         (KEY_IDUN_API_TOKEN, &secrets.idun_api_token),
         (KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token),
+        (KEY_OURA_RING_KEY, &secrets.oura_ring_key),
         (KEY_NEUROSITY_EMAIL, &secrets.neurosity_email),
         (KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password),
         (KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id),
@@ -269,6 +282,7 @@ pub fn migrate_plaintext_secrets(secrets: &Secrets) -> bool {
         (KEY_EMOTIV_CLIENT_SECRET, &secrets.emotiv_client_secret),
         (KEY_IDUN_API_TOKEN, &secrets.idun_api_token),
         (KEY_OURA_ACCESS_TOKEN, &secrets.oura_access_token),
+        (KEY_OURA_RING_KEY, &secrets.oura_ring_key),
         (KEY_NEUROSITY_EMAIL, &secrets.neurosity_email),
         (KEY_NEUROSITY_PASSWORD, &secrets.neurosity_password),
         (KEY_NEUROSITY_DEVICE_ID, &secrets.neurosity_device_id),

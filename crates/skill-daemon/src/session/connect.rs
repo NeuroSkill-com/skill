@@ -51,8 +51,11 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
         // Visible in the device log and tracing output so connection
         // failures are easy to diagnose.
         let routed_kind = if target.starts_with("ble:") {
-            paired_name_for(&state2, &target)
-                .map(|name| infer_kind_from_target(&name))
+            // Same precedence the connect path uses, or the log says one thing
+            // while routing does another for a device whose name identifies
+            // nothing (a renamed Vital Neuro, say).
+            service_kind_for(&state2, &target)
+                .or_else(|| paired_name_for(&state2, &target).map(|name| infer_kind_from_target(&name)))
                 .unwrap_or("ble-unknown")
         } else {
             infer_kind_from_target(&target)
@@ -201,6 +204,31 @@ fn paired_name_for(state: &AppState, target: &str) -> Option<String> {
     })
 }
 
+/// The device-kind tag the scanner recognised from an advertised service
+/// UUID, if it saw one.
+///
+/// Populated by the BLE listener while scanning, so this is empty for a device
+/// that has not advertised since the daemon started — the paired name is still
+/// the fallback.
+fn service_kind_for(state: &AppState, target: &str) -> Option<&'static str> {
+    let kinds = state.ble_service_kinds.lock().ok()?;
+    kinds
+        .iter()
+        .find(|(id, _)| ble_id::same_device(id, target))
+        .map(|(_, kind)| *kind)
+}
+
+/// Route a BLE target by the device kind the scanner recognised from an
+/// advertised service UUID.
+fn service_kind_route(state: &AppState, target: &str) -> Option<ConnectRoute> {
+    let kind = service_kind_for(state, target)?;
+    // `matching_connect_routes`, not `select_connect_route`: the latter
+    // answers `Muse` for anything it does not recognise, which would turn a
+    // tag with no route of its own into a silent misroute instead of letting
+    // the paired name have its turn.
+    matching_connect_routes(kind).into_iter().next()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConnectRoute {
     OpenBci,
@@ -218,7 +246,9 @@ enum ConnectRoute {
     Mw75,
     Idun,
     Awear,
+    Vital,
     Mendi,
+    Oura,
     IrohRemote,
     AntNeuro,
     /// Recognised, but deliberately unsupported: the driver has been removed.
@@ -282,8 +312,21 @@ fn is_idun(s: &str) -> bool {
 fn is_awear(s: &str) -> bool {
     s.contains("awear") || s.starts_with("luca")
 }
+fn is_vital(s: &str) -> bool {
+    // The registry owns this pattern: the name is user-settable and the word
+    // is shared with unrelated medical wearables, so it needs more care than
+    // a `contains`.  See `DeviceKind::from_name`.
+    skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Vital
+}
 fn is_mendi(s: &str) -> bool {
     s.contains("mendi")
+}
+fn is_oura(s: &str) -> bool {
+    // Narrow for the same reason as the registry's `from_name`: "oura" is a
+    // substring of unrelated product names, and a mis-route hands the ring's
+    // protocol to something else.  A bonded ring advertises no name at all and
+    // arrives here as `ble:<id>`, routed by the service UUID the scanner saw.
+    skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Oura
 }
 fn is_iroh_remote(s: &str) -> bool {
     s.starts_with("peer:")
@@ -309,7 +352,9 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_removed_hermes, ConnectRoute::Removed("Hermes V1")),
     (is_idun, ConnectRoute::Idun),
     (is_awear, ConnectRoute::Awear),
+    (is_vital, ConnectRoute::Vital),
     (is_mendi, ConnectRoute::Mendi),
+    (is_oura, ConnectRoute::Oura),
     (is_antneuro, ConnectRoute::AntNeuro),
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
@@ -333,8 +378,11 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
     // information.  Look up the human-readable name from the paired
     // devices list and route on that instead.
     let route = if lower.starts_with("ble:") {
-        paired_name_for(state, target)
-            .map(|name| select_connect_route(&name.to_lowercase()))
+        // A UUID carries no device-kind information.  What the scanner saw the
+        // device advertise beats the display name, which the owner can change
+        // on some devices (Vital Neuro) and which is absent on others.
+        service_kind_route(state, target)
+            .or_else(|| paired_name_for(state, target).map(|name| select_connect_route(&name.to_lowercase())))
             .unwrap_or(ConnectRoute::Muse)
     } else {
         select_connect_route(lower)
@@ -355,7 +403,9 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Mw75 => connect_ble::connect_mw75(paired_name_for(state, target)).await,
         ConnectRoute::Idun => connect_ble::connect_idun(state, paired_name_for(state, target)).await,
         ConnectRoute::Awear => connect_ble::connect_awear(paired_name_for(state, target)).await,
+        ConnectRoute::Vital => connect_ble::connect_vital(state, target).await,
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
+        ConnectRoute::Oura => connect_ble::connect_oura(target, paired_name_for(state, target)).await,
         ConnectRoute::AntNeuro => connect_wired::connect_antneuro(state, target).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
         ConnectRoute::Removed(device) => anyhow::bail!(
@@ -425,6 +475,9 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     if lower.contains("awear") || lower.starts_with("luca") {
         return "awear";
     }
+    if lower.contains("vital") {
+        return "vital";
+    }
     if lower.contains("mendi") {
         return "mendi";
     }
@@ -466,6 +519,7 @@ mod tests {
             ("MW75-ABCD", "mw75"),
             ("Idun-Guardian", "idun"),
             ("AWEAR-E04A8471", "awear"),
+            ("Vital Neuro", "vital"),
             ("Mendi-XY", "mendi"),
             ("ganglion", "ganglion"),
             ("openbci", "openbci"),
@@ -578,7 +632,10 @@ mod tests {
             ("MW75-ABCD", ConnectRoute::Mw75),
             ("Idun-Guardian", ConnectRoute::Idun),
             ("AWEAR-E04A8471", ConnectRoute::Awear),
+            ("Vital Neuro", ConnectRoute::Vital),
             ("Mendi-XY", ConnectRoute::Mendi),
+            ("Oura", ConnectRoute::Oura),
+            ("Oura Ring Gen3", ConnectRoute::Oura),
             ("antneuro:0", ConnectRoute::AntNeuro),
             ("totally-unknown-device", ConnectRoute::Muse),
         ];
@@ -587,6 +644,32 @@ mod tests {
             let lower = target.to_ascii_lowercase();
             assert_eq!(select_connect_route(&lower), expected, "target={target}");
         }
+    }
+
+    /// The ring's needle must stay narrow.  "oura" appears inside unrelated
+    /// product names, and a mis-route hands them the ring's protocol — which
+    /// would also stop them reaching the driver they actually need.
+    #[test]
+    fn oura_route_does_not_swallow_unrelated_names() {
+        for name in ["ourabox", "colourable", "Our Audio", "aurora"] {
+            assert_ne!(
+                select_connect_route(&name.to_ascii_lowercase()),
+                ConnectRoute::Oura,
+                "name={name}"
+            );
+        }
+    }
+
+    /// A bonded ring advertises no name, so it only ever arrives as a bare
+    /// `ble:<id>` whose kind came from the service UUID the scanner saw.  That
+    /// is `service_kind_route`'s job, not the name matcher's — so the name
+    /// matcher must not claim an anonymous id for the ring.
+    #[test]
+    fn bare_ble_id_is_not_routed_to_oura_by_name() {
+        assert_ne!(
+            select_connect_route("ble:1e4f2a90-0000-0000-0000-000000000001"),
+            ConnectRoute::Oura
+        );
     }
 
     #[test]
@@ -608,6 +691,8 @@ mod tests {
             "MW75-ABCD",
             "Idun-Guardian",
             "AWEAR-E04A8471",
+            "Oura Ring 5",
+            "Vital Neuro",
             "Mendi-XY",
             "antneuro:0",
         ];
@@ -641,6 +726,53 @@ mod tests {
             let b = select_connect_route(&lower);
             assert_eq!(a, b, "non-deterministic route for input={s:?}");
         }
+    }
+
+    /// A Vital Neuro the owner has renamed carries no hint in its name, so
+    /// routing must use what the scanner saw it advertise.  Without this it
+    /// falls through to the `ConnectRoute::Muse` catch-all and the connect
+    /// fails with a Muse error.
+    #[test]
+    fn service_kind_routes_a_renamed_ble_device() {
+        let td = tempfile::tempdir().unwrap();
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
+        let target = "ble:1234-ABCD";
+
+        {
+            let mut paired = state.status.lock().unwrap();
+            paired.paired_devices.push(skill_daemon_common::PairedDeviceResponse {
+                id: target.to_string(),
+                name: "Bob".to_string(),
+                last_seen: 0,
+            });
+        }
+
+        // Nothing advertised yet → the name decides, and "Bob" says nothing.
+        assert_eq!(service_kind_route(&state, target), None);
+
+        state
+            .ble_service_kinds
+            .lock()
+            .unwrap()
+            .insert(target.to_string(), "vital");
+        assert_eq!(service_kind_route(&state, target), Some(ConnectRoute::Vital));
+    }
+
+    /// A service tag with no route of its own must step aside rather than
+    /// resolve to the `ConnectRoute::Muse` catch-all, which would hand the
+    /// device the Muse protocol and never let the paired name have its turn.
+    #[test]
+    fn service_kind_without_a_route_defers_to_the_name() {
+        let td = tempfile::tempdir().unwrap();
+        let state = AppState::new_for_tests("t".into(), td.path().to_path_buf());
+        let target = "ble:1234-ABCD";
+
+        state
+            .ble_service_kinds
+            .lock()
+            .unwrap()
+            .insert(target.to_string(), "a-device-with-no-driver");
+        assert_eq!(service_kind_route(&state, target), None);
     }
 
     #[test]

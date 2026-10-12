@@ -37,6 +37,16 @@ import {
 } from "$lib/daemon/settings";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
+// Single definition of onboarding's model-selection rules — this page used to
+// carry its own copy, which drifted from the tested one in $lib/settings.
+import {
+  isDiscoveredEntry,
+  llmCardTitle as llmCardTitleFor,
+  pickFamilyTarget,
+  pickLlmTarget,
+  type DownloadState,
+  type LlmModelEntry,
+} from "$lib/settings/onboarding-logic";
 import { openSettings } from "$lib/navigation";
 import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
@@ -56,21 +66,6 @@ interface CalibrationProfile {
   loop_count: number;
   auto_start: boolean;
   last_calibration_utc: number | null;
-}
-type DownloadState = "not_downloaded" | "downloading" | "downloaded" | "failed" | "cancelled";
-interface LlmModelEntry {
-  repo?: string;
-  filename: string;
-  quant: string;
-  size_gb: number;
-  family_id: string;
-  family_name: string;
-  is_mmproj: boolean;
-  recommended: boolean;
-  state: DownloadState;
-  progress: number;
-  tags?: string[];
-  local_path?: string | null;
 }
 interface LlmCatalogLite {
   entries: LlmModelEntry[];
@@ -258,6 +253,11 @@ let llmTarget = $state<LlmModelEntry | null>(null);
 let discoveredModels = $state<LlmModelEntry[]>([]);
 // Currently-active model filename from the catalog (tracks reuse adoption).
 let activeLlmModel = $state("");
+// Title of the LLM card. Derived from the model we are ACTUALLY going to fetch,
+// because a hard-coded title drifts: this card read "Qwen3.5 4B (Q4_K_M)" out of
+// the i18n bundle in every locale while `pickLlmTarget` downloaded Qwen3.5 0.8B,
+// and the quant badge and `hf download` line right beside it said 0.8B.
+let llmCardTitle = $derived(llmCardTitleFor(llmTarget, t("onboarding.models.qwenTitle")));
 // True while adopting a discovered model (disables reuse buttons).
 let llmActionBusy = $state(false);
 let zunaStatus = $state<EegModelStatusLite | null>(null);
@@ -564,51 +564,6 @@ function ttsSpeak(text: string): void {
 
 // ── Model download helpers ────────────────────────────────────────────────
 
-/** Pick the best family match by id or name regex, preferring Q4_K_M. */
-function pickFamilyTarget(entries: LlmModelEntry[], familyId: string, familyRe: RegExp): LlmModelEntry | null {
-  const family = entries.filter((e) => !e.is_mmproj && (e.family_id === familyId || familyRe.test(e.family_name)));
-  if (!family.length) return null;
-  const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
-  return (
-    byQuant("Q4_K_M") ??
-    byQuant("Q8_0") ??
-    byQuant("Q4_0") ??
-    family.find((e) => e.quant.toUpperCase().startsWith("Q4")) ??
-    family.find((e) => e.recommended) ??
-    family.find((e) => e.state === "downloaded") ??
-    family[0]
-  );
-}
-
-/**
- * Pick the default LLM to download during onboarding.
- *
- * Priority chain:
- *  1. Already-downloaded model (any family) — skip download.
- *  2. Qwen3.5 0.8B — default bootstrap family (fastest optimized decode; HNSW long-context).
- *  3. Qwen3 0.6B — fallback tiny family.
- *  4. Any recommended model, smallest first.
- */
-function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
-  // If a catalog model was already downloaded through the app, prefer it (skip
-  // download). Discovered (external-app) models are handled separately as an
-  // explicit reuse choice, so they don't silently satisfy the default card.
-  const downloaded = entries.find((e) => !e.is_mmproj && !isDiscoveredEntry(e) && e.state === "downloaded");
-  if (downloaded) return downloaded;
-
-  return (
-    pickFamilyTarget(entries, "qwen35-0.8b", /qwen3\.?5\s*0\.8b/i) ??
-    pickFamilyTarget(entries, "qwen3-0.6b", /qwen3\s*0\.6b/i) ??
-    entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
-    null
-  );
-}
-
-/** Whether an entry was discovered from another app's cache (tagged "discovered"). */
-function isDiscoveredEntry(e: LlmModelEntry): boolean {
-  return (e.tags ?? []).includes("discovered");
-}
-
 /** Source token of a discovered entry (the tag other than "discovered"). */
 function discoveredSourceToken(e: LlmModelEntry): string {
   return (e.tags ?? []).find((tag) => tag !== "discovered") ?? "local";
@@ -635,8 +590,8 @@ async function refreshModelDownloads() {
       daemonInvoke<EegModelStatusLite>("get_eeg_model_status"),
       daemonInvoke<boolean>("check_ocr_models_ready"),
     ]);
-    llmTarget = pickLlmTarget(catalog.entries);
     activeLlmModel = catalog.active_model ?? "";
+    llmTarget = pickLlmTarget(catalog.entries, activeLlmModel);
     zunaStatus = eeg;
     if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
     modelLoadError = "";
@@ -1567,7 +1522,7 @@ useWindowTitle("window.title.onboarding");
             <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-surface-2 px-3 py-2.5 text-left">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🤖</span>
-                <span class="text-ui-base font-semibold">{t("onboarding.models.qwenTitle")}</span>
+                <span class="text-ui-base font-semibold">{llmCardTitle}</span>
                 <span class="text-ui-xs text-emerald-600 dark:text-emerald-400 ml-auto">
                   {llmTarget ? llmTarget.quant : "Q4"}
                 </span>

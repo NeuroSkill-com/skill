@@ -37,6 +37,7 @@ fn clear_device_resets_all_fields() {
         hardware_version: Some("v2".into()),
         has_ppg: true,
         has_imu: true,
+        has_vitals: true,
         ppg_sample_count: 500,
         imu_sample_count: 250,
         csv_path: Some("/tmp/test.csv".into()),
@@ -60,6 +61,9 @@ fn clear_device_resets_all_fields() {
     assert!(s.hardware_version.is_none());
     assert!(!s.has_ppg);
     assert!(!s.has_imu);
+    // A capability left set after a disconnect makes the next device look like
+    // it reports vitals it does not have.
+    assert!(!s.has_vitals);
     assert_eq!(s.ppg_sample_count, 0);
     assert_eq!(s.imu_sample_count, 0);
     assert!(s.csv_path.is_none());

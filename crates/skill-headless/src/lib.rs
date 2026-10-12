@@ -73,6 +73,7 @@ mod intercept;
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod intercept_tests;
+mod launch_tests;
 mod response;
 mod session;
 

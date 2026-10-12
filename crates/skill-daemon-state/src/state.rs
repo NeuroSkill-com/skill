@@ -5,6 +5,15 @@
 /// Maps `"ble:<uuid>"` → `(local_name, rssi, last_seen_unix_secs)`.
 pub type BleDeviceCache = Arc<Mutex<HashMap<String, (Option<String>, i16, u64)>>>;
 
+/// Type alias for BLE devices identified by an advertised service UUID.
+/// Maps `"ble:<uuid>"` → device-kind tag (e.g. `"vital"`).
+///
+/// Name matching cannot identify every headset: Vital Neuro stores its name on
+/// the unit and lets the owner change it, so the advertised service is the only
+/// reliable discriminator.  The BLE listener records what it saw here, and both
+/// discovery and connect routing consult it before falling back to the name.
+pub type BleServiceKinds = Arc<Mutex<HashMap<String, &'static str>>>;
+
 use std::{
     collections::{HashMap, VecDeque},
     path::PathBuf,
@@ -71,6 +80,9 @@ pub struct AppState {
     /// Persistent BLE discovery cache: ble_id → (local_name, rssi, last_seen_secs).
     /// Updated by the event-driven BLE listener; read each scanner tick.
     pub ble_device_cache: BleDeviceCache,
+    /// Device kinds recognised from an advertised service UUID: ble_id → kind.
+    /// Populated alongside `ble_device_cache` by the BLE listener.
+    pub ble_service_kinds: BleServiceKinds,
     /// Set to `true` while a BLE device is actively connecting.
     /// The BLE listener task stops scanning when this is set so that only one
     /// `CBCentralManager` is scanning at a time — having two concurrent scans
@@ -259,6 +271,7 @@ impl AppState {
             devices: Arc::new(Mutex::new(Vec::new())),
             scanner_running: Arc::new(Mutex::new(false)),
             ble_device_cache: Arc::new(Mutex::new(HashMap::new())),
+            ble_service_kinds: Arc::new(Mutex::new(HashMap::new())),
             app_log: Arc::new(Mutex::new((0, VecDeque::with_capacity(512)))),
             scanner_stop_tx: Arc::new(Mutex::new(None)),
             scanner_wifi_config: Arc::new(Mutex::new(ScannerWifiConfigRequest {

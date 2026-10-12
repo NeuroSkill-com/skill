@@ -514,6 +514,15 @@ const settings: Record<string, string> = {
     "Schalten Sie Ihr AWEAR-EEG-Gerät ein und stellen Sie sicher, dass Bluetooth auf Ihrem Computer aktiviert ist.",
   "settings.supportedDevices.instruction.awear2":
     "Suchen Sie nach BLE-Geräten und verbinden Sie sich mit AWEAR. Die Authentifizierung erfolgt automatisch über HMAC-SHA256.",
+  // ── Vital Neuro ──
+  "settings.supportedDevices.company.vital": "Vital Neuro",
+  "settings.supportedDevices.device.vitalHeadphones": "Vital Neuro Kopfhörer",
+  "settings.supportedDevices.instruction.vital1":
+    "Schalten Sie die Kopfhörer ein und halten Sie sie in der Nähe dieses Computers. Die EEG-Daten laufen über Bluetooth LE; der Ton bleibt auf der normalen Bluetooth-Kopplung.",
+  "settings.supportedDevices.instruction.vital2":
+    "Suchen und koppeln Sie sie in der Geräteliste und verbinden Sie sich dann. Erkannt werden sie am angekündigten Dienst, ein umbenanntes Paar wird also weiterhin gefunden.",
+  "settings.supportedDevices.instruction.vital3":
+    "Drei EEG-Kanäle mit 250 Hz, dazu Beschleunigungssensor und Akkustand.",
 
   // ── BrainBit ──
   "settings.supportedDevices.company.brainbit": "BrainBit LLC",
@@ -592,6 +601,16 @@ const settings: Record<string, string> = {
     "Persönlicher Zugriffstoken zum Synchronisieren von Schlaf-, Aktivitäts-, Bereitschafts-, Herzfrequenz- und SpO2-Daten von der Oura Ring V2 Cloud API.",
   "settings.deviceApi.ouraDashboard": "Token vom Oura-Entwicklerportal erhalten",
   "settings.deviceApi.ouraAccessToken": "Zugriffstoken",
+  "settings.deviceApi.ouraRingKey": "Ring-BLE-Schlüssel",
+  "settings.deviceApi.ouraRingKeyDesc":
+    "Erforderlich, um den Ring über Bluetooth zu verbinden — unabhängig vom Cloud-Token oben. Die Oura-App erzeugt diesen 16-Byte-Schlüssel beim lokalen Kopplen mit dem Ring.",
+  "settings.deviceApi.ouraRingSyncBtn": "Vom Ring synchronisieren",
+  "settings.deviceApi.ouraRingSyncing": "Ring wird gelesen\u2026",
+  "settings.deviceApi.ouraRingSyncDesc":
+    "Liest den auf dem Ring gespeicherten Verlauf \u00fcber Bluetooth \u2014 Herzfrequenz, HRV, Hauttemperatur, SpO2, Schlafphasen. Setzt dort fort, wo die letzte Synchronisierung endete. Trennen Sie den Ring zuvor von einer laufenden Sitzung.",
+  "settings.deviceApi.ouraRingNoAnchors":
+    "Der Ring hat Ereignisse gesendet, aber keines enthielt eine Zeitreferenz \u2014 nichts konnte datiert und nichts gespeichert werden. \u00d6ffnen Sie die Oura-App einmal in der N\u00e4he des Rings, um dessen Uhr zu stellen, und synchronisieren Sie erneut.",
+  "settings.deviceApi.ouraRingMoreRemaining": "Ein Teil des R\u00fcckstands wurde gelesen. Erneut synchronisieren, um fortzufahren.",
   "settings.deviceApi.ouraSyncBtn": "Jetzt synchronisieren",
   "settings.deviceApi.ouraSyncing": "Synchronisiere…",
   "settings.deviceApi.ouraSynced": "Synchronisiert!",

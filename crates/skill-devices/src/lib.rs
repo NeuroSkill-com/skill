@@ -15,6 +15,9 @@ pub use mendi;
 pub use muse_rs;
 pub use mw75;
 pub use openbci;
+pub use oura_link;
+pub use oura_protocol;
+pub use vital;
 
 use skill_data::gpu_stats::GpuStats;
 use skill_data::ppg_analysis::PpgMetrics;

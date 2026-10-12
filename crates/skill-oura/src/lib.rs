@@ -52,6 +52,12 @@ const MIN_VALID_TS: i64 = 1_577_836_800;
 /// Wraps the [`OuraClient`] and provides a single [`fetch`](OuraSync::fetch)
 /// method that pulls all available data types for a date range and returns a
 /// unified [`HealthSyncPayload`].
+pub mod ring;
+pub mod ring_time;
+
+pub use ring::{events_to_payload, RingSyncStats};
+pub use ring_time::{RingClock, Undated};
+
 pub struct OuraSync<'a> {
     client: OuraClient<'a>,
 }

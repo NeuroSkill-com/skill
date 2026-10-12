@@ -55,6 +55,9 @@ pub enum DeviceKind {
     Idun,
     /// AWEAR EEG wearable — single-channel BLE EEG (1 ch @ 256 Hz).
     Awear,
+    /// Vital Neuro headphones — 3-channel BLE EEG (250 Hz) + accelerometer.
+    /// Audio runs over a separate Bluetooth Classic link, handled by the OS.
+    Vital,
     /// Mendi fNIRS headband — optical channels + IMU + battery telemetry (BLE).
     Mendi,
     /// Cognionics / CGX EEG headsets — Quick-20/20r/32r/8r, AIM-2, Patch, Dev Kit.
@@ -79,6 +82,13 @@ pub enum DeviceKind {
     Neurosity,
     /// Brain Products BrainVision RDA stream (TCP/IP).
     BrainVision,
+    /// Oura Ring Gen 3 / Ring 4 / Ring 5 — sleep and vitals wearable (BLE).
+    ///
+    /// Not an EEG device: it reports derived heart rate, SpO2, skin
+    /// temperature and motion, so metrics that need electrodes do not apply.
+    /// Read directly from the ring over its vendor BLE protocol — no Oura
+    /// account; the cloud V2 REST path is `skill-oura` instead.
+    Oura,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -202,8 +212,30 @@ impl DeviceKind {
         if n.starts_with("awear") || n.starts_with("luca") {
             return Self::Awear;
         }
+        // Deliberately narrow.  The name is stored on the unit and the owner
+        // can change it, so a factory name is all this can catch — and "vital"
+        // alone is a word other medical wearables use ("VitalPatch", "Vital
+        // Signs Monitor"), which must not be offered as EEG headsets.  A
+        // renamed unit is recognised from the `0x2D0D` service UUID it
+        // advertises instead; see the daemon's BLE scanner.
+        if n == "vital"
+            || n.starts_with("vital-")
+            || n.starts_with("vital_")
+            || n.contains("vitalneuro")
+            || n.contains("vital neuro")
+        {
+            return Self::Vital;
+        }
         if n.starts_with("mendi") {
             return Self::Mendi;
+        }
+        // The ring advertises "Oura", "Oura Ring Gen3", "Oura Ring 4"… but a
+        // ring that is already bonded routinely advertises no name at all, so
+        // the daemon's BLE scanner recognises it from the `98ed0001-…` vendor
+        // service UUID instead.  Keep this narrow: it must not swallow
+        // unrelated products whose name merely contains the word.
+        if n == "oura" || n.starts_with("oura ") || n.starts_with("oura-") || n.starts_with("oura_") {
+            return Self::Oura;
         }
         if n.contains("cognionics")
             || n.contains("cgx")
@@ -343,6 +375,19 @@ impl DeviceKind {
                 sample_rate_hz: 256.0,
                 electrode_names: sv(&["EEG"]),
             },
+            // The device reports no montage, so the channels keep the
+            // positional names the `vital` crate uses.  Electrodes sit in the
+            // ear cups and on the headband, nowhere near the central strip.
+            Self::Vital => DeviceCapabilities {
+                kind: Self::Vital,
+                channel_count: 3,
+                has_ppg: false,
+                has_imu: true, // LIS3DH accelerometer (no gyro)
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["ch1", "ch2", "ch3"]),
+            },
             // Static defaults for the Quick-20r (most common CGX model).
             // Actual channel count, electrode names, sample rate, and IMU
             // availability are determined at runtime from the USB descriptor
@@ -371,6 +416,20 @@ impl DeviceKind {
                 channel_count: 0, // fNIRS optical channels (not EEG electrodes)
                 has_ppg: false,
                 has_imu: true,
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 0.0,
+                electrode_names: Vec::new(),
+            },
+            Self::Oura => DeviceCapabilities {
+                kind: Self::Oura,
+                channel_count: 0, // a ring has no electrodes
+                // The ring does have a PPG sensor, but it does its own beat
+                // detection and reports a heart rate — there is no waveform on
+                // the wire for the PPG pipeline to consume, so claiming the
+                // capability here would light up a chart nothing fills.
+                has_ppg: false,
+                has_imu: true, // 3-axis accelerometer (ACM real-time)
                 has_central_electrodes: false,
                 has_full_montage: false,
                 sample_rate_hz: 0.0,
@@ -492,6 +551,7 @@ impl DeviceKind {
             Self::Emotiv => "emotiv",
             Self::Idun => "idun",
             Self::Awear => "awear",
+            Self::Vital => "vital",
             Self::Cognionics => "cognionics",
             Self::Mendi => "mendi",
             Self::AttentivU => "attentivu",
@@ -502,6 +562,7 @@ impl DeviceKind {
             Self::NeuroSky => "neurosky",
             Self::Neurosity => "neurosity",
             Self::BrainVision => "brainvision",
+            Self::Oura => "oura",
             Self::Unknown => "unknown",
         }
     }
@@ -523,6 +584,7 @@ impl DeviceKind {
             "emotiv" => Self::Emotiv,
             "idun" => Self::Idun,
             "awear" => Self::Awear,
+            "vital" => Self::Vital,
             "cognionics" => Self::Cognionics,
             "mendi" => Self::Mendi,
             "attentivu" => Self::AttentivU,
@@ -533,6 +595,7 @@ impl DeviceKind {
             "neurosky" => Self::NeuroSky,
             "neurosity" => Self::Neurosity,
             "brainvision" | "rda" => Self::BrainVision,
+            "oura" => Self::Oura,
             "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
@@ -996,6 +1059,24 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.reak2".into(),
             ],
         },
+        // ── V ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "vital".into(),
+            name_key: "settings.supportedDevices.company.vital".into(),
+            // No separate brand mark shipped; the product shot doubles as the
+            // logo, as it does for AttentivU.
+            logo: "/devices/vital-headphones.webp".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.vitalHeadphones".into(),
+                ios_only: false,
+                image: "/devices/vital-headphones.webp".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.vital1".into(),
+                "settings.supportedDevices.instruction.vital2".into(),
+                "settings.supportedDevices.instruction.vital3".into(),
+            ],
+        },
     ]
 }
 
@@ -1332,6 +1413,41 @@ mod tests {
     }
 
     #[test]
+    fn from_name_vital() {
+        assert_eq!(DeviceKind::from_name(Some("Vital")), DeviceKind::Vital);
+        assert_eq!(DeviceKind::from_name(Some("Vital Neuro")), DeviceKind::Vital);
+        assert_eq!(DeviceKind::from_name(Some("VitalNeuro-1234")), DeviceKind::Vital);
+        assert_eq!(DeviceKind::from_name(Some("Vital-04A8")), DeviceKind::Vital);
+    }
+
+    /// Other medical wearables use the word, and offering a cardiac patch as
+    /// an EEG headset would be worse than not finding a renamed headset: that
+    /// case is covered by the advertised service UUID.
+    #[test]
+    fn from_name_vital_does_not_claim_other_vital_devices() {
+        for name in ["VitalPatch", "Vital Signs Monitor", "VitalConnect", "vitality band"] {
+            assert_eq!(DeviceKind::from_name(Some(name)), DeviceKind::Unknown, "name={name}");
+        }
+    }
+
+    #[test]
+    fn from_kind_str_vital() {
+        assert_eq!(DeviceKind::from_kind_str("vital"), DeviceKind::Vital);
+        assert_eq!(DeviceKind::Vital.as_str(), "vital");
+    }
+
+    #[test]
+    fn capabilities_vital() {
+        let caps = DeviceKind::Vital.capabilities();
+        assert_eq!(caps.channel_count, 3);
+        assert_eq!(caps.electrode_names.len(), 3);
+        assert_eq!(caps.sample_rate_hz, 250.0);
+        assert!(caps.has_imu);
+        assert!(!caps.has_ppg);
+        assert!(!caps.has_central_electrodes);
+    }
+
+    #[test]
     fn capabilities_unknown_zero() {
         let caps = DeviceKind::Unknown.capabilities();
         assert_eq!(caps.channel_count, 0);
@@ -1351,6 +1467,7 @@ mod tests {
             DeviceKind::Emotiv,
             DeviceKind::Idun,
             DeviceKind::Awear,
+            DeviceKind::Vital,
             DeviceKind::Mendi,
             DeviceKind::Cognionics,
             DeviceKind::AttentivU,

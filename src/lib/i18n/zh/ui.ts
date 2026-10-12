@@ -38,6 +38,10 @@ const ui: Record<string, string> = {
   "tip.lateralityIndex": "所有频段的左右功率不对称性。正值 = 右侧主导。",
   "tip.echt": "端点校正希尔伯特变换 — α 频段节律性 (0–1)。高 = α 振荡强且相位稳定。[Schreglmann 2021]",
   "tip.hr": "由 PPG 搏动间期推导的心率。",
+  "tip.ibi":
+    "用于推算心率的心跳间隔（毫秒）。",
+  "tip.skinTemperature":
+    "传感器测得的皮肤温度。为绝对值，而非相对于你基线的偏差。",
   "tip.rmssd": "连续心搏差异的均方根。关键副交感 HRV 指标。",
   "tip.sdnn": "逐搏间期的标准差。反映整体 HRV。",
   "tip.pnn50": "连续间期差异 > 50 ms 的百分比。数值越高 = 迷走神经张力越大。",

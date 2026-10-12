@@ -58,6 +58,36 @@ rusb = { version = "0.9", features = ["vendored"] }
 # AWEAR EEG wearable (BLE, LUCA protocol)
 awear = { version = "0.2.0", default-features = false }
 
+# Vital Neuro EEG headphones (BLE: 3 ch @ 250 Hz, accelerometer, battery).
+#
+# Same `webbluetooth 0.0.3` requirement as muse-rs and skill-daemon, which is
+# what keeps `Bluetooth::shared()` a single session — see the lockstep note in
+# the workspace Cargo.toml.
+vital = { version = "0.0.1" }
+
+# Oura Ring 3/4/5 (BLE, reverse-engineered protocol via open_oura).
+#
+# Unpublished — git-pinned to a rev.
+#
+# `default-features = false` drops oura-link's own btleplug backend: the ring
+# talks to the radio through `session::oura::transport`, a `Transport` impl over
+# `webbluetooth` directly, so every BLE operation goes through the one
+# `Bluetooth::shared()` session with no btleplug in the path at all.  oura-link
+# makes `ble` optional for exactly this reason (upstream iOS uses CoreBluetooth).
+oura-link     = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5fe0cf9a646afa790bda3731be767507", default-features = false }
+oura-protocol = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5fe0cf9a646afa790bda3731be767507" }
+
+# Same `webbluetooth 0.0.3` lockstep requirement as muse-rs / vital / skill-daemon.
+webbluetooth = { version = "0.0.3", features = ["uuid"] }
+
+# Needed by the Oura ring adapter: `futures` for webbluetooth's notification and
+# scan streams, `hex` to parse the auth key, `anyhow`/`tracing` to report a
+# connect failure the same way the daemon's other connect paths do.
+futures = "0.3"
+hex     = "0.4"
+anyhow  = { workspace = true }
+tracing = "0.1"
+
 [features]
 default = []
 # Enable RFCOMM transport for MW75 (links IOBluetooth.framework on macOS,

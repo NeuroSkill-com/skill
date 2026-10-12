@@ -571,10 +571,27 @@ fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<d
         return None;
     }
     let (device, packed) = gpu_plan(path, config);
+    // Size the context the same way the qwen3-vl and qwen35 paths already do.
+    // Leaving it unset is NOT harmless: the builder defaults `max_seq` to 128
+    // and sizes its bucketed decode compile cache at `max_seq + 64`, so the
+    // power-of-two ladder only covered a past of 256 tokens. One token beyond
+    // that, `Qwen3Generator::step_cached` found no bucket and fell through to
+    // `decode_step_oneshot`, which rebuilds the graph from the F32 weight map —
+    // empty for a native-packed (K-quant GGUF) runner. Every chat longer than
+    // ~256 tokens of context therefore died with
+    // `weight not found: model.embed_tokens.weight`, which reads like a
+    // GGUF-vs-safetensors naming problem and is really a context cap.
+    let max_seq = config
+        .ctx_size
+        .map(|c| c as usize)
+        .unwrap_or(0)
+        .max(config.rlx_max_seq)
+        .clamp(32, 8192);
     let mut runner = match rlx_models::run::Qwen3Runner::builder()
         .weights(path)
         .device(device)
         .packed_weights(packed)
+        .max_seq(max_seq)
         .build()
     {
         Ok(runner) => runner,
@@ -589,17 +606,37 @@ fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<d
 
 /// Enable rlx-qwen3 long-context memory (disk-tiered HNSW KV context store +
 /// dual-encoder semantic recall) on a freshly built Qwen3 runner, before it is
-/// boxed into `dyn LmRunner`. Opt out with `SKILL_QWEN3_KV_STORE=0`. Best-effort:
-/// any failure logs and leaves a plain bounded-context runner.
+/// boxed into `dyn LmRunner`. Best-effort: any failure logs and leaves a plain
+/// bounded-context runner.
+///
+/// **Opt-IN** via `SKILL_QWEN3_KV_STORE=1`, because with the store on, multi-turn
+/// chat does not work: the store splices retrieved blocks into the seeded cache,
+/// so the cache is longer than the new prompt, and `Qwen3Generator::step_cached`
+/// asserts the opposite —
+/// `cache invariant violated: tokens.len() 38 <= past_seq 260`. The first turn of
+/// a session passes (nothing has been offloaded yet) and every turn after it
+/// fails, which is a worse failure than not having the feature.
+///
+/// Measured through the daemon over HTTP on Qwen3-0.6B-Q4_K_M, 8 warm-pass +
+/// turn pairs with growing history: store ON → 0/8 turns; store OFF → every turn
+/// generates and the context grows 29 → 1155 prompt tokens.
+///
+/// **Fixed upstream** — rlx-qwen3's `step_cached` now keeps the strict prefix
+/// check only for an unspliced cache (`kv_store.is_none()`), with a regression
+/// test (`rlx-qwen3/tests/kv_store_multi_turn.rs`: 3 consecutive `generate()`
+/// calls, which fail on the old code at turn 2). Flip the default below back to
+/// on in the same change that moves the `rlx-models` pin to a commit containing
+/// it — doing it before then reintroduces the 0/8 failure for anyone building
+/// against the current pin.
 fn maybe_enable_qwen3_kv_store(
     runner: &mut rlx_models::run::Qwen3Runner,
     weights: &Path,
     device: rlx::runtime::Device,
 ) {
-    let off = std::env::var("SKILL_QWEN3_KV_STORE")
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "off" | "false" | "no"))
+    let on = std::env::var("SKILL_QWEN3_KV_STORE")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"))
         .unwrap_or(false);
-    if off {
+    if !on {
         return;
     }
     let cfg = rlx_models::run::KvStoreConfig::new()
@@ -858,6 +895,23 @@ fn try_qwen35_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> 
             .packed_weights(packed)
             .max_seq(max_seq)
             .skip_warm(true);
+        // Qwen3.5 runs EVERY prompt through one static prefill graph compiled at
+        // `prefill_seq`, which defaults to `max_seq` — so a 25-token question
+        // pays an 8192-wide prefill. Measured on Qwen3.5-0.8B-Q4_K_M with that
+        // same 25-token prompt: 10.17s to first token and 5.6 tok/s at 8192,
+        // against 1.17s and 34.6 tok/s at 2048. `rlx_prefill_seq` decouples the
+        // two so a long decode context stops costing 8.7x the latency on short
+        // prompts; unset keeps the previous behaviour. Clamped to `max_seq`
+        // because widening the prefill past the decode context buys nothing,
+        // and the floor matters more: a prompt longer than `prefill_seq` fails
+        // outright with `prompt length N exceeds compiled prefill_seq`, so this
+        // must stay above the largest prompt the deployment actually sends
+        // (tool-augmented ones measured 1399-5384 tokens).
+        if let Some(pf) = config.rlx_prefill_seq {
+            let pf = (pf as usize).clamp(32, max_seq);
+            eprintln!("[rlx] qwen35 prefill_seq={pf} (decode max_seq={max_seq})");
+            b = b.prefill_seq(pf);
+        }
         if let Some(mp) = mm {
             b = b.mmproj(mp);
         }
@@ -983,6 +1037,38 @@ fn visible_for_stream(decoded: &str) -> (&str, bool) {
     }
 }
 
+/// The newly-revealed suffix of `visible` given what has already been sent.
+///
+/// Never slices at a stored byte offset. `visible` is re-derived from a full
+/// detokenization every step, and byte-level BPE **revises earlier bytes** when
+/// a codepoint spans tokens: one token decodes to a 3-byte `U+FFFD`, the next
+/// turns it into a 2-byte `é`. A cursor taken from the previous decode can
+/// therefore land mid-character in this one, and `&visible[cursor..]` panics —
+/// which unwound the inference actor with nothing in the log after
+/// `chat request — …`. (The daemon's own `<think>` splitter had the same bug;
+/// `split_think_delta` was made boundary-safe, this copy was missed.)
+///
+/// ASCII output never trips it, which is why it hides from English test
+/// prompts and shows up on the first reply containing an accent, CJK or an
+/// emoji.
+fn next_piece<'a>(emitted: &str, visible: &'a str) -> &'a str {
+    // Common case: `visible` extends what we sent, so `emitted.len()` is a real
+    // boundary in it.
+    if let Some(rest) = visible.strip_prefix(emitted) {
+        return rest;
+    }
+    // The prefix was revised. Resynchronise on the longest common prefix,
+    // counted in whole characters so the split is always on a boundary.
+    let mut n = 0usize;
+    for (a, b) in emitted.chars().zip(visible.chars()) {
+        if a != b {
+            break;
+        }
+        n += a.len_utf8();
+    }
+    &visible[n..]
+}
+
 /// Per-token sink shared by the text and multimodal decode loops. Owns the
 /// streaming state (accumulated ids/text, emit cursor) and applies the common
 /// chat post-processing on every token: stop on a chat-turn EOS id
@@ -998,7 +1084,9 @@ struct ChatStreamer {
     stop: Vec<String>,
     tx: UnboundedSender<InferToken>,
     all_ids: Vec<u32>,
-    emitted_len: usize,
+    /// Exactly the text already streamed — see [`next_piece`] for why this is
+    /// the string and not a byte cursor.
+    emitted: String,
     accumulated: String,
     completion_tokens: usize,
     /// Time the first token was produced — the prefill/decode boundary (TTFT).
@@ -1026,7 +1114,7 @@ impl ChatStreamer {
             stop,
             tx,
             all_ids: Vec::with_capacity(cap.min(4096)),
-            emitted_len: 0,
+            emitted: String::new(),
             accumulated: String::new(),
             completion_tokens: 0,
             first_at: None,
@@ -1048,13 +1136,12 @@ impl ChatStreamer {
             Err(_) => return true,
         };
         let (visible, stray_stop) = visible_for_stream(&decoded);
-        if visible.len() > self.emitted_len {
-            let piece = visible[self.emitted_len..].to_string();
-            self.emitted_len = visible.len();
-            if !piece.is_empty() {
-                self.accumulated.push_str(&piece);
-                self.tx.send(InferToken::Delta(piece)).ok();
-            }
+        let piece = next_piece(&self.emitted, visible).to_string();
+        self.emitted.clear();
+        self.emitted.push_str(visible);
+        if !piece.is_empty() {
+            self.accumulated.push_str(&piece);
+            self.tx.send(InferToken::Delta(piece)).ok();
         }
         if stray_stop {
             return false; // stray </think> after content = degenerate turn
@@ -1155,6 +1242,60 @@ fn finish_load(
     })
 }
 
+/// Turn an inference error into something a person can act on.
+///
+/// These strings go straight to the chat window, so an internal one is a dead
+/// end for the user. `weight not found: model.embed_tokens.weight` is the case
+/// in point: it names a tensor, and the obvious reading — a GGUF/safetensors
+/// naming mismatch — is wrong. The real cause was a decode-bucket ladder that
+/// only covered 256 tokens of context, and the misreading cost a bug report and
+/// a long hunt through tensor names before anyone looked at the context cap.
+///
+/// Keep the original text on the end: whoever reads the log still needs it.
+fn humanize_inference_error(e: &str) -> String {
+    let lower = e.to_ascii_lowercase();
+    let hint = if lower.contains("weight not found") || lower.contains("outside the decode buckets") {
+        Some(
+            "This conversation is longer than the context this model was loaded with.              Raise \"Context size\" in LLM settings and restart the server, or start a new chat.",
+        )
+    } else if lower.contains("cache invariant violated") {
+        Some(
+            "Long-context memory (the HNSW KV store) is not compatible with multi-turn chat              on this model family. It is off by default; unset SKILL_QWEN3_KV_STORE and restart              the server.",
+        )
+    } else if lower.contains("exceeds compiled max_seq") || lower.contains("prompt length") {
+        Some(
+            "The prompt is longer than the loaded context. Raise \"Context size\" in LLM              settings, shorten the prompt, or turn off tools (they add a large system prompt).",
+        )
+    } else if lower.contains("no mmproj") || lower.contains("vision encoder") {
+        Some("This model cannot read images. Load an mmproj file for it, or pick a vision model.")
+    } else if lower.contains("panicked") {
+        Some(
+            "The model backend crashed on this request. The request was dropped but the server              is still running — please report the panic line from the LLM log.",
+        )
+    } else {
+        None
+    };
+    match hint {
+        Some(h) => format!("{h}\n\n(details: {e})"),
+        None => e.to_string(),
+    }
+}
+
+/// Terminate a request that produced no tokens (the chat UI's `max_tokens == 0`
+/// prefill warm pass). The caller still needs a `Done`, or its stream never
+/// closes.
+fn send_empty_completion(token_tx: &UnboundedSender<InferToken>, prompt_tokens: usize) {
+    token_tx
+        .send(InferToken::Done {
+            finish_reason: "length".into(),
+            prompt_tokens,
+            completion_tokens: 0,
+            n_ctx: prompt_tokens,
+            metrics: GenMetrics::default(),
+        })
+        .ok();
+}
+
 impl RlxTextRunner {
     pub(super) fn family(&self) -> &'static str {
         self.family
@@ -1169,7 +1310,9 @@ impl RlxTextRunner {
             Ok(ids) => ids,
             Err(e) => {
                 token_tx
-                    .send(InferToken::Error(format!("RLX tokenization failed: {e}")))
+                    .send(InferToken::Error(humanize_inference_error(&format!(
+                        "RLX tokenization failed: {e}"
+                    ))))
                     .ok();
                 return;
             }
@@ -1184,6 +1327,37 @@ impl RlxTextRunner {
         }
 
         let max_tokens = params.max_tokens;
+        // `max_tokens == 0` is the chat UI's prefill warm pass — it fires one as
+        // the user types so the first real turn does not pay the prefill-graph
+        // compile (`routes/chat/+page.svelte`). It must NOT reach a runner's
+        // decode loop: "generate zero tokens" is a shape no family runner is
+        // exercised at, and handing it straight down is what killed the actor
+        // mid-request with nothing in the log after `chat request — …`. Run the
+        // prefill the warm pass is actually asking for, then report an empty
+        // completion so the caller's stream terminates normally.
+        //
+        // Warm via a ONE-token generate, not `predict_logits`. `predict_logits`
+        // is a different graph: on Qwen3.5 it builds the `predict_logits` HIR
+        // and compiles it separately, which measured 10.80 GB of Metal arena
+        // (1648 nodes, `act=8.76GB`) that generation then never touches —
+        // warming a graph nobody uses, and the single largest allocation in the
+        // process. One token walks exactly the prefill + decode path the next
+        // real turn will take, and the callback stops it immediately.
+        if max_tokens == 0 {
+            let warm = self
+                .runner
+                .generate(&prompt_ids, 1, &mut |_tok| false /* stop at once */);
+            if let Err(e) = warm {
+                token_tx
+                    .send(InferToken::Error(humanize_inference_error(&format!(
+                        "RLX prefill failed: {e}"
+                    ))))
+                    .ok();
+                return;
+            }
+            send_empty_completion(&token_tx, prompt_ids.len());
+            return;
+        }
         let mut streamer = ChatStreamer::new(
             self.weights_path.clone(),
             self.explicit_tokenizer.clone(),
@@ -1200,7 +1374,9 @@ impl RlxTextRunner {
 
         if let Err(e) = result {
             token_tx
-                .send(InferToken::Error(format!("RLX generation failed: {e}")))
+                .send(InferToken::Error(humanize_inference_error(&format!(
+                    "RLX generation failed: {e}"
+                ))))
                 .ok();
             return;
         }
@@ -1277,6 +1453,14 @@ impl RlxTextRunner {
         let rgb = img.into_raw();
 
         let max_tokens = params.max_tokens;
+        // Same zero-token warm-pass guard as the text path. There is nothing
+        // useful to pre-warm here (a text-only prefill would not see the image),
+        // so just answer with an empty completion rather than driving the vision
+        // encoder and a zero-length decode.
+        if max_tokens == 0 {
+            send_empty_completion(&token_tx, 0);
+            return;
+        }
         let mut streamer = ChatStreamer::new(
             self.weights_path.clone(),
             self.explicit_tokenizer.clone(),
@@ -1345,6 +1529,115 @@ impl RlxTextRunner {
                 metrics,
             })
             .ok();
+    }
+}
+
+#[cfg(all(test, feature = "llm-rlx"))]
+mod repetition_guard_tests {
+    use super::is_repetition_loop;
+
+    /// The real thing a 0.6B produced through the daemon when asked for the
+    /// capital of France — 303 tokens of it, `finish_reason: "length"`.
+    ///
+    /// The guard fires on this almost immediately, which was never the problem:
+    /// `Qwen3Runner`'s `LmRunner::generate` discarded the `false` the streamer
+    /// returned (`let _ = on_token(tok)`), so generation ran the full cap
+    /// regardless. Fixed upstream by forwarding to `generate_stoppable`; this
+    /// test holds up the other half of the chain, that the guard does its job.
+    #[test]
+    fn the_observed_degenerate_output_is_detected() {
+        let real = "The capital of France's capital of France's capital of France's capital of France's capital of France's capital of France's capital of France's capital of Franc";
+        assert!(is_repetition_loop(real), "should detect the repeated phrase");
+    }
+
+    /// It fires early — long before a 300-token cap.
+    #[test]
+    fn it_fires_after_about_two_repeats() {
+        let unit = "capital of France's ";
+        assert!(!is_repetition_loop(&format!("The {unit}")), "one repeat is not a loop");
+        assert!(
+            is_repetition_loop(&format!("The {unit}{unit}")),
+            "two adjacent repeats should trip it"
+        );
+    }
+
+    /// The other shape the 0.6B produced while streaming.
+    #[test]
+    fn digit_runs_are_detected() {
+        assert!(is_repetition_loop("1.\n111111111111111111111111111111111111"));
+    }
+
+    /// Normal prose that happens to reuse a phrase must not trip it.
+    #[test]
+    fn ordinary_repetition_in_prose_is_not_a_loop() {
+        assert!(!is_repetition_loop(
+            "Paris is the capital of France. It is also the largest city in France."
+        ));
+        assert!(!is_repetition_loop(
+            "The ocean is vast and deep, full of life and mystery."
+        ));
+    }
+
+    /// Blank-line runs carry no alphanumerics and must not count.
+    #[test]
+    fn whitespace_runs_are_not_a_loop() {
+        assert!(!is_repetition_loop(&" ".repeat(400)));
+        assert!(!is_repetition_loop(&"\n\n".repeat(200)));
+    }
+}
+
+#[cfg(all(test, feature = "llm-rlx"))]
+mod emit_cursor_tests {
+    use super::next_piece;
+
+    /// The regression: byte-level BPE revises earlier bytes mid-stream, so a
+    /// cursor from the previous decode lands inside a character.
+    ///
+    /// One token decodes to a lone replacement char (3 bytes), the next
+    /// resolves it to `é` (2 bytes) and adds another multi-byte char. The old
+    /// code did `&visible[emitted_len..]` with `emitted_len = 5` against
+    /// `"abéü"` — byte 5 is the middle of `ü`, which panics and took the whole
+    /// inference actor down with it, leaving nothing in the log after
+    /// `chat request — …`.
+    #[test]
+    fn a_revised_multibyte_prefix_does_not_panic() {
+        let emitted = "ab\u{FFFD}"; // 5 bytes: 'a', 'b', 3-byte U+FFFD
+        let visible = "abéü"; // 6 bytes: 'a', 'b', 2-byte é, 2-byte ü
+        assert_eq!(emitted.len(), 5);
+        assert!(
+            !visible.is_char_boundary(5),
+            "byte 5 must be mid-character for this to bite"
+        );
+        assert_eq!(next_piece(emitted, visible), "éü");
+    }
+
+    #[test]
+    fn the_common_case_is_a_plain_suffix() {
+        assert_eq!(next_piece("Hello", "Hello, world"), ", world");
+        assert_eq!(next_piece("", "Hello"), "Hello");
+        assert_eq!(next_piece("Hello", "Hello"), "");
+    }
+
+    /// Stable multi-byte text must still stream incrementally, not be re-sent.
+    #[test]
+    fn stable_multibyte_text_streams_incrementally() {
+        assert_eq!(next_piece("日本", "日本語"), "語");
+        assert_eq!(next_piece("héllo", "héllo wörld"), " wörld");
+    }
+
+    /// The stray-`</think>` guard can cut `visible` shorter than what was
+    /// already sent; that must yield nothing new rather than panic.
+    #[test]
+    fn a_shorter_visible_yields_nothing_new() {
+        assert_eq!(next_piece("Answer</thi", "Answer"), "");
+        assert_eq!(next_piece("日本語", "日本"), "");
+    }
+
+    /// Emoji are 4 bytes — same hazard at a different width.
+    #[test]
+    fn four_byte_codepoints_are_handled() {
+        assert_eq!(next_piece("hi \u{FFFD}", "hi 🎉"), "🎉");
+        assert_eq!(next_piece("hi 🎉", "hi 🎉🎊"), "🎊");
     }
 }
 
@@ -1580,6 +1873,139 @@ mod kv_store_runtime_tests {
         eprintln!("[test] output={text:?}");
         assert!(done, "generation did not finish (no Done token)");
         assert!(!text.trim().is_empty(), "generation produced no text");
+    }
+
+    /// A prompt past 256 tokens of context must still generate.
+    ///
+    /// `Qwen3Runner::builder()` defaults `max_seq` to 128 and sizes its bucketed
+    /// decode compile cache at `max_seq + 64`, so the power-of-two ladder only
+    /// reached a past of 256. `try_qwen3_runner_with_device` never set `max_seq`
+    /// (the qwen3-vl and qwen35 paths did), so one token past 256
+    /// `Qwen3Generator::step_cached` found no bucket, fell through to
+    /// `decode_step_oneshot`, and that path rebuilds the graph from the F32
+    /// weight map — which is empty for a native-packed K-quant GGUF. The result
+    /// was `weight not found: model.embed_tokens.weight` on every real chat,
+    /// while a toy 60-token prompt worked fine, so it read as a
+    /// GGUF-vs-safetensors naming bug rather than a context cap.
+    ///
+    /// 1100 tokens is well past the old 256 ceiling and well inside any sane
+    /// configured context, so this fails loudly if the cap regresses.
+    #[test]
+    #[ignore = "runtime: needs a Qwen3 GGUF (WARM_PASS_GGUF)"]
+    fn prompt_beyond_the_old_256_token_ceiling_still_generates() {
+        let gguf = std::env::var("WARM_PASS_GGUF").unwrap_or_else(|_| {
+            "/Users/Shared/rlx-models/weights/lm/qwen3-0.6b-gguf/Qwen3-0.6B-Q4_K_M.gguf".to_string()
+        });
+        let path = PathBuf::from(&gguf);
+        assert!(path.is_file(), "GGUF not found: {gguf}");
+        let cfg = LlmConfig {
+            rlx_device: std::env::var("WARM_PASS_DEVICE").unwrap_or_else(|_| "metal".into()),
+            ..LlmConfig::default()
+        };
+        let mut runner = super::RlxTextRunner::load_with_mmproj(&path, None, &cfg).expect("load GGUF");
+
+        let filler = (0..300).map(|i| format!("word{i}")).collect::<Vec<_>>().join(" ");
+        let prompt = format!("Context: {filler}\nQ: Say OK.\nA:");
+        let n_prompt = rlx_models::run::auto_tokenize(&path, &prompt, None)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        assert!(
+            n_prompt > 256,
+            "prompt must exceed the old ceiling, got {n_prompt} tokens"
+        );
+
+        let params = GenParams {
+            max_tokens: 2,
+            temperature: 0.0,
+            thinking_budget: Some(0),
+            ..GenParams::default()
+        };
+        let (tx, mut rx) = unbounded_channel::<InferToken>();
+        runner.generate(&prompt, params, tx);
+        let (_text, _n, done) = drain_tokens(&mut rx);
+        assert!(done, "a {n_prompt}-token prompt did not generate");
+    }
+
+    /// A `max_tokens == 0` warm pass must leave the runner usable.
+    ///
+    /// The chat page fires exactly this request as the user types, to compile the
+    /// prefill graph before the first real turn
+    /// (`routes/chat/+page.svelte`: `params: { max_tokens: 0, … }`). Handing that
+    /// 0 straight to a family runner's decode loop is an untested shape and both
+    /// shipped defaults broke on it, each in its own way: Qwen3.5-0.8B PANICKED,
+    /// which unwound the actor thread and left the log dead after
+    /// `chat request — …` with no error anywhere; Qwen3-0.6B returned
+    /// `weight not found: model.embed_tokens.weight` (the packed runner falling
+    /// into an F32-only decode path), so every prompt failed.
+    ///
+    /// So this asserts the two things the UI actually depends on: the warm pass
+    /// terminates with a `Done` rather than an `Error`, and a real turn right
+    /// after it still produces tokens.
+    ///
+    /// Defaults to the Qwen3-0.6B GGUF; point `WARM_PASS_GGUF` at any other
+    /// family to cover it too. Run:
+    ///   WARM_PASS_GGUF=/path/Qwen3.5-0.8B-Q4_K_M.gguf \
+    ///   cargo test -p skill-llm --features apple \
+    ///     zero_max_tokens_warm_pass_keeps_the_runner_alive -- --ignored --nocapture
+    #[test]
+    #[ignore = "runtime: needs a chat GGUF (WARM_PASS_GGUF)"]
+    fn zero_max_tokens_warm_pass_keeps_the_runner_alive() {
+        let gguf = std::env::var("WARM_PASS_GGUF").unwrap_or_else(|_| {
+            "/Users/Shared/rlx-models/weights/lm/qwen3-0.6b-gguf/Qwen3-0.6B-Q4_K_M.gguf".to_string()
+        });
+        let path = PathBuf::from(&gguf);
+        assert!(path.is_file(), "GGUF not found: {gguf}");
+
+        let cfg = LlmConfig {
+            rlx_device: std::env::var("WARM_PASS_DEVICE").unwrap_or_else(|_| "metal".into()),
+            ..LlmConfig::default()
+        };
+        let mut runner = super::RlxTextRunner::load_with_mmproj(&path, None, &cfg).expect("load GGUF");
+
+        let params = |max_tokens: usize| GenParams {
+            max_tokens,
+            temperature: 0.0,
+            thinking_budget: Some(0),
+            ..GenParams::default()
+        };
+        let prompt = "Q: What is the capital of France? Answer in one word.\nA:";
+
+        // The warm pass. `drain` panics on an InferToken::Error, so a runner that
+        // reports "weight not found" fails here with that text; a runner that
+        // panics internally is caught by the actor's guard in release and shows
+        // up as an Error token.
+        let (tx, mut rx) = unbounded_channel::<InferToken>();
+        runner.generate(prompt, params(0), tx);
+        let (text, n, done) = drain_tokens(&mut rx);
+        assert!(done, "warm pass never sent Done — the caller's stream would hang");
+        assert_eq!(n, 0, "a max_tokens=0 warm pass must not emit completion tokens");
+        assert!(text.is_empty(), "warm pass emitted text: {text:?}");
+
+        // The point of the test: the runner is still alive afterwards.
+        let (tx, mut rx) = unbounded_channel::<InferToken>();
+        runner.generate(prompt, params(8), tx);
+        let (text, n, done) = drain_tokens(&mut rx);
+        assert!(done, "real turn after the warm pass never finished");
+        assert!(n > 0 && !text.trim().is_empty(), "real turn produced nothing: {text:?}");
+        eprintln!("[warm-pass] follow-up turn produced {n} tokens: {text:?}");
+    }
+
+    /// Collect a generation's stream into `(text, completion_tokens, saw_done)`.
+    /// Panics on `InferToken::Error` so the error text lands in the failure.
+    fn drain_tokens(rx: &mut tokio::sync::mpsc::UnboundedReceiver<InferToken>) -> (String, usize, bool) {
+        let (mut text, mut n, mut done) = (String::new(), 0usize, false);
+        while let Ok(tok) = rx.try_recv() {
+            match tok {
+                InferToken::Delta(s) => text.push_str(&s),
+                InferToken::Status(_) => {}
+                InferToken::Done { completion_tokens, .. } => {
+                    n = completion_tokens;
+                    done = true;
+                }
+                InferToken::Error(e) => panic!("generation error: {e}"),
+            }
+        }
+        (text, n, done)
     }
 
     /// End-to-end runtime check of the DEFAULT Qwen3.5-0.8B path through the exact
