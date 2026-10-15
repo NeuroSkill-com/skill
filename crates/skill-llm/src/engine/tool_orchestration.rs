@@ -341,9 +341,36 @@ where
         .iter()
         .filter(|s| !disabled.iter().any(|d| d == &s.name))
         .collect();
-    let filtered_refs: Vec<skill_skills::Skill> = filtered_skills.into_iter().cloned().collect();
+    let mut filtered_refs: Vec<skill_skills::Skill> = filtered_skills.into_iter().cloned().collect();
+    // The same relevance cut the tools got above, for the same reason and
+    // under the same setting. Skills are the larger half of this prompt — the
+    // measurement in the comment above is ~3,900 tokens of skills against
+    // ~1,800 of tools — so capping tools while leaving skills unbounded
+    // trims the smaller cost and leaves the one that actually hurts.
+    // Only the `Smart*` presets cut the list; the rest deliberately show every
+    // skill and differ only in layout, so selecting under them would silently
+    // hide skills the user asked to see.
+    if allowed_tools.skill_prompt_mode.selects() && allowed_tools.intelligent_selection_enabled {
+        if let Some(prompt) = latest_user_prompt(&messages) {
+            let top_n = allowed_tools.intelligent_selection_top_n;
+            // Prefer meaning over word overlap when both the setting and an
+            // embedder are available. The hook returns `None` when the model
+            // is not loaded, so a cold or disabled embedder degrades to the
+            // lexical cut instead of failing the turn.
+            let ranked = if allowed_tools.semantic_skill_selection {
+                state
+                    .skill_ranker
+                    .get()
+                    .and_then(|rank| rank(&prompt, filtered_refs.clone(), top_n))
+            } else {
+                None
+            };
+            filtered_refs =
+                ranked.unwrap_or_else(|| skill_skills::rerank_skills_for_prompt(&prompt, filtered_refs, top_n));
+        }
+    }
     let skills_block = if can_read_skill_files {
-        skill_skills::format_skills_for_prompt(&filtered_refs)
+        skill_skills::format_skills_for_prompt_mode(&filtered_refs, allowed_tools.skill_prompt_mode)
     } else {
         String::new()
     };

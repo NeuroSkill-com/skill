@@ -88,6 +88,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun1": "기기 API를 열고 필요시 IDUN API 토큰을 추가하세요.",
   "settings.supportedDevices.instruction.idun2": "토큰을 저장한 후 기기 목록에서 헤드셋을 페어링/연결하세요.",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "WHOOP 4.0 / 5.0 / MG 스트랩",
+  "settings.supportedDevices.instruction.whoop1":
+    "스트랩을 착용하고 WHOOP 앱에서 연결되어 있지 않은지 확인하세요 — 스트랩은 한 번에 하나의 연결만 받습니다.",
+  "settings.supportedDevices.instruction.whoop2":
+    "기기를 열고 검색한 뒤 스트랩을 선택하세요. 이름이 없거나 변경된 스트랩도 광고하는 서비스로 찾을 수 있습니다.",
+  "settings.supportedDevices.instruction.whoop3":
+    "심박수와 그 근거가 되는 R-R 간격, 배터리가 세션으로 전달됩니다. WHOOP 계정은 필요하지 않습니다.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "cloud.ouraring.com/personal-access-tokens에서 개인 액세스 토큰을 받으세요.",

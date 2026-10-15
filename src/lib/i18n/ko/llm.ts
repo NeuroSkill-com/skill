@@ -229,6 +229,48 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "마지막 동기화",
   "llm.tools.skillsNeverSynced": "없음",
   "llm.tools.skillsSection": "에이전트 스킬",
+  "llm.tools.skillPromptSection": "프롬프트의 스킬",
+  "llm.tools.skillPromptSectionHint": "메시지마다 비용 발생",
+  "llm.tools.skillPromptIntro":
+    "read_file이 켜져 있으면 모델이 무엇을 불러올 수 있는지 알도록 모든 스킬이 시스템 프롬프트에 나열됩니다. 이 목록은 입력하기도 전에 매 메시지와 함께 전송되며, 그 크기는 느려진 첫 토큰, 메모리, 그리고 작은 모델이 질문 대신 프롬프트에 답하는 것으로 치러집니다.",
+  "llm.tools.skillModeTokens": "토큰",
+  "llm.tools.semanticSkills": "의미로 스킬 매칭",
+  "llm.tools.semanticSkillsDesc":
+    "공통 단어가 아니라 의미로 스킬 순위를 매겨, “자기 전에 진정하고 싶어”가 수면 프로토콜을 찾아냅니다. 임베딩 모델이 필요하며, 없으면 단어 매칭으로 되돌아갑니다.",
+  "llm.tools.skillMode.full": "전체",
+  "llm.tools.skillMode.full.pro":
+    "모든 스킬을 완전한 설명과 정확한 경로와 함께. 파일을 열지 않고 모델이 알 수 있는 최대치입니다.",
+  "llm.tools.skillMode.full.con":
+    "압도적으로 가장 큽니다. 3분의 1은 XML 태그와 반복되는 절대 경로로, 모델이 유추할 수 있는 것 이상을 주지 않습니다.",
+  "llm.tools.skillMode.compact": "간결 (권장)",
+  "llm.tools.skillMode.compact.pro":
+    "같은 스킬, 같은 설명으로 3분의 1 더 작게. XML 골격과 반복 경로만 제거하므로 잃는 것이 없습니다.",
+  "llm.tools.skillMode.compact.con": "여전히 모든 스킬을 나열하므로 스킬을 추가할수록 커집니다.",
+  "llm.tools.skillMode.grouped": "그룹화",
+  "llm.tools.skillMode.grouped.pro": "14개의 프로토콜 같은 계열을 한 줄로 묶어, 서로 주의를 빼앗는 일도 막습니다.",
+  "llm.tools.skillMode.grouped.con":
+    "계열 내부를 보려면 한 단계가 더 필요하며, 모호한 요청에서는 그 단계를 밟지 않을 수 있습니다.",
+  "llm.tools.skillMode.brief": "요약",
+  "llm.tools.skillMode.brief.pro": "모든 스킬을 목록에 남기되 각 설명을 첫 줄로 줄입니다.",
+  "llm.tools.skillMode.brief.con":
+    "잘려 나가는 부분은 대개 그 스킬이 필요한 상황 목록이어서, 선택의 정확도가 떨어집니다.",
+  "llm.tools.skillMode.names_only": "이름만",
+  "llm.tools.skillMode.names_only.pro":
+    "사실상 무료 — ‘전체’의 20분의 1. 프롬프트가 이미 컨텍스트 한계에 가까울 때 적합합니다.",
+  "llm.tools.skillMode.names_only.con":
+    "스킬이 무엇을 하는지 알려면 파일을 열어야 하는데, 작은 모델은 대개 그러지 않습니다. 사용 빈도가 줄어듭니다.",
+  "llm.tools.skillModeGroupSelects": "관련 스킬만",
+  "llm.tools.skillModeGroupAll": "모든 스킬, 형식만 다름",
+  "llm.tools.semanticSkillsInactive": "스킬을 선별하는 위 두 가지 프리셋에만 적용됩니다.",
+  "llm.tools.skillMode.smart": "스마트 (권장)",
+  "llm.tools.skillMode.smart.pro":
+    "각 메시지에 관련된 소수의 스킬만 보내므로, 스킬을 추가해도 프롬프트가 커지지 않습니다. ‘전체’의 약 5분의 1이며, 긴 프롬프트는 읽을 때와 생성하는 단어마다 두 번 비용이 들기 때문에 가장 큰 절감입니다.",
+  "llm.tools.skillMode.smart.con":
+    "매칭이 놓친 스킬은 그 메시지에서 보이지 않습니다. 의미 기반 매칭이면 올바른 스킬이 후보에 드는 비율이 열 중 아홉, 단어 매칭이면 셋에 가깝습니다.",
+  "llm.tools.skillMode.smart_grouped": "스마트, 그룹화",
+  "llm.tools.skillMode.smart_grouped.pro": "‘스마트’와 같되, 후보에 든 같은 계열 스킬을 한 줄로 묶습니다.",
+  "llm.tools.skillMode.smart_grouped.con":
+    "짧은 후보에 같은 계열이 여럿 드는 일은 드물어 ‘스마트’와 거의 같습니다. 내부를 보려면 한 단계가 더 필요합니다.",
   "llm.tools.skillsSectionDesc":
     "스킬은 LLM이 필요에 따라 로드할 수 있는 전문 지침을 제공합니다. 개별 스킬을 토글하여 채팅에서 사용 가능 여부를 제어하세요.",
   "llm.tools.skillsNone":

@@ -237,6 +237,50 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "Dernière synchronisation",
   "llm.tools.skillsNeverSynced": "jamais",
   "llm.tools.skillsSection": "Compétences de l'agent",
+  "llm.tools.skillPromptSection": "Skills dans le prompt",
+  "llm.tools.skillPromptSectionHint": "payé à chaque message",
+  "llm.tools.skillPromptIntro":
+    "Quand read_file est actif, tous les skills sont listés dans le prompt système pour que le modèle sache ce qu'il peut charger. Cette liste part avec chaque message, avant même que vous tapiez : sa taille se paie en premiers tokens plus lents, en mémoire, et en petits modèles qui répondent au prompt plutôt qu'à votre question.",
+  "llm.tools.skillModeTokens": "tokens",
+  "llm.tools.semanticSkills": "Associer les skills par le sens",
+  "llm.tools.semanticSkillsDesc":
+    "Classe les skills selon leur sens plutôt que selon les mots partagés : « aide-moi à décompresser avant de dormir » trouve ainsi un protocole de sommeil. Nécessite le modèle d'embeddings ; sinon retour à la correspondance par mots.",
+  "llm.tools.skillMode.full": "Complet",
+  "llm.tools.skillMode.full.pro":
+    "Chaque skill avec sa description entière et son chemin exact. Le maximum que le modèle puisse savoir sans ouvrir un fichier.",
+  "llm.tools.skillMode.full.con":
+    "De loin le plus volumineux. Un tiers est constitué de balises XML et de chemins absolus répétés qui n'apportent rien.",
+  "llm.tools.skillMode.compact": "Compact (recommandé)",
+  "llm.tools.skillMode.compact.pro":
+    "Mêmes skills, mêmes descriptions, un tiers de moins. Ne retire que l'habillage XML et les chemins répétés : rien n'est perdu.",
+  "llm.tools.skillMode.compact.con": "Liste toujours chaque skill, et grandit donc à mesure que vous en ajoutez.",
+  "llm.tools.skillMode.grouped": "Groupé",
+  "llm.tools.skillMode.grouped.pro":
+    "Réduit les familles — comme les 14 skills de protocoles — à une seule ligne, ce qui les empêche aussi de se concurrencer.",
+  "llm.tools.skillMode.grouped.con":
+    "Le modèle a besoin d'une étape de plus pour regarder dans une famille, et peut ne pas la franchir sur une demande vague.",
+  "llm.tools.skillMode.brief": "Bref",
+  "llm.tools.skillMode.brief.pro": "Garde tous les skills listés mais ramène chaque description à sa première ligne.",
+  "llm.tools.skillMode.brief.con":
+    "Ce qui est coupé, c'est souvent la liste des situations visées — le modèle choisit donc moins bien.",
+  "llm.tools.skillMode.names_only": "Noms seuls",
+  "llm.tools.skillMode.names_only.pro":
+    "Presque gratuit — un vingtième de « Complet ». Idéal si le prompt frôle déjà la limite de contexte.",
+  "llm.tools.skillMode.names_only.con":
+    "Le modèle doit ouvrir un fichier pour savoir ce que fait un skill, et un petit modèle s'en abstient souvent. Les skills serviront moins.",
+  "llm.tools.skillModeGroupSelects": "Seulement les skills pertinents",
+  "llm.tools.skillModeGroupAll": "Tous les skills, autrement formatés",
+  "llm.tools.semanticSkillsInactive": "Ne s'applique qu'aux deux préréglages ci-dessus qui sélectionnent des skills.",
+  "llm.tools.skillMode.smart": "Intelligent (recommandé)",
+  "llm.tools.skillMode.smart.pro":
+    "N'envoie que la poignée de skills pertinents pour chaque message : le prompt cesse de grandir à mesure que vous en ajoutez. Environ un cinquième de « Complet » — et comme un prompt long est payé deux fois, à la lecture puis à chaque mot généré, c'est la plus grosse économie possible.",
+  "llm.tools.skillMode.smart.con":
+    "Un skill que l'appariement rate est invisible pour ce message. Avec un appariement par le sens, le bon skill figure dans la présélection environ neuf fois sur dix ; par mots, plutôt trois.",
+  "llm.tools.skillMode.smart_grouped": "Intelligent, groupé",
+  "llm.tools.skillMode.smart_grouped.pro":
+    "Comme « Intelligent », et réduit en une ligne toute famille de skills apparentés retenue dans la présélection.",
+  "llm.tools.skillMode.smart_grouped.con":
+    "Diffère rarement d'« Intelligent », une présélection courte contenant peu souvent plusieurs membres d'une même famille. Le modèle a besoin d'une étape de plus pour y regarder.",
   "llm.tools.skillsSectionDesc":
     "Les skills fournissent des instructions spécialisées que le LLM peut charger à la demande. Activez ou désactivez les skills individuellement.",
   "llm.tools.skillsNone":

@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "意味でスキルを照合",
+    "desc": "共通の単語ではなく意味でスキルを並べ替えるので、「寝る前に落ち着きたい」で睡眠プロトコルが見つかります。埋め込みモデルが必要で、無い場合は単語一致に戻ります。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "Skill API",
     "desc": "LLMがNeuroSkill APIをクエリすることを許可します — デバイス状態、EEGセッション、ラベル、検索、フック、キャリブレーション、TTSなど。"

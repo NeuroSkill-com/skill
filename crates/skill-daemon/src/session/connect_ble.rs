@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! BLE device connection functions — Muse, MW75, IDUN, Mendi, Vital, Oura,
-//! Ganglion, BrainBit, g.tec Unicorn.
+//! WHOOP, Ganglion, BrainBit, g.tec Unicorn.
 
 use anyhow::Context as _;
 use std::time::Duration;
@@ -223,6 +223,37 @@ pub(super) async fn connect_mendi(paired_name: Option<String>) -> anyhow::Result
     let client = MendiClient::new(config);
     let (rx, handle) = client.connect().await.context("Mendi connect")?;
     Ok(Box::new(MendiAdapter::new(rx, handle)))
+}
+
+// ── WHOOP strap (BLE) ────────────────────────────────────────────────────────
+
+/// Connect to a WHOOP 4.0 / 5.0 / MG strap — no WHOOP account.
+///
+/// Unlike the ring there is no key to configure: the strap's read surface is
+/// open, and `poop` admits no destructive command whatever policy is set.
+pub(super) async fn connect_whoop(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::poop::prelude::*;
+    use skill_devices::session::whoop::{WhoopAdapter, WhoopConfig};
+
+    // A paired name is only ever a snapshot — the strap's name is user-settable
+    // — so it narrows the scan rather than identifying the device. With none,
+    // any strap advertising a WHOOP service matches.
+    let config = WhoopConfig {
+        name_prefix: paired_name,
+        ..Default::default()
+    };
+    info!(name_prefix = ?config.name_prefix, "connecting to WHOOP strap…");
+
+    let client = WhoopClient::new(config.to_client_config());
+    let (rx, handle) = client.connect().await.context("WHOOP connect")?;
+
+    // Best-effort identity: the firmware string only exists in the hello, and a
+    // strap that declines it is still perfectly usable for streaming.
+    if let Err(e) = handle.hello().await {
+        info!(error = %e, "WHOOP hello declined; continuing without firmware identity");
+    }
+
+    Ok(Box::new(WhoopAdapter::new(rx, handle)))
 }
 
 // ── Oura Ring (BLE) ──────────────────────────────────────────────────────────

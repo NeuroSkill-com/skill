@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "按语义匹配技能",
+    "desc": "按含义而非共同词语对技能排序，于是“帮我在睡前放松”能找到睡眠协议。需要文本嵌入模型；不可用时回退到词语匹配。"
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "Skill API",
     "desc": "允许 LLM 查询 NeuroSkill API — 设备状态、EEG 会话、标签、搜索、钩子、校准、TTS 等。"

@@ -57,6 +57,7 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 - **Brain Products:** BrainVision RDA
 - **RE-AK:** Nucleus-Hermès
 - **Vital Neuro:** Vital Neuro Headphones
+- **WHOOP:** WHOOP 4.0 / 5.0 / MG strap
 
 Plus any compatible **LSL** source (e.g. BrainFlow, MATLAB, pylsl).
 <!-- AUTO-GENERATED:SUPPORTED_DEVICES:END -->

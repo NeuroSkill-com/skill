@@ -24,6 +24,16 @@
 //! Both indices store `label_id: i64` as the HNSW payload so results can be
 //! joined back to `labels.sqlite` for full hydration.
 
+// Links Apple's Accelerate, which is the only BLAS provider left in the graph.
+//
+// It was added for turbovec 0.4, which needed a BLAS for its rotation GEMM.
+// turbovec 1.1 has no dependencies at all and does its own SIMD, so that
+// reason is gone — but `ndarray`'s `blas` feature is switched on by neurorvq-rs
+// and a handful of rlx-models crates, and `openblas-src` left the graph with
+// turbovec 0.4, so this is now what satisfies `cblas_*` at link time on macOS.
+// Dropping it therefore does NOT just shed a dependency: it produces undefined
+// cblas symbols when the daemon links — and `cargo check` cannot see that, only
+// a real build or `cargo test --no-run` can.
 #[cfg(all(target_os = "macos", feature = "turboquant-index"))]
 extern crate accelerate_src;
 
@@ -256,6 +266,10 @@ fn load_turbovec(path: &Path, label: &str) -> Option<TurboIndex> {
             Some(idx)
         }
         Err(e) => {
+            // Expected once per index after the turbovec 0.4 -> 1.1 bump: 0.4
+            // wrote format v2 and 1.1 reads only v7/v8, so the error names the
+            // version. Harmless — the caller falls back to HNSW for this run
+            // and `rebuild` overwrites the file with a v8 one.
             eprintln!("[label_idx] {label} TurboVec load failed ({e}), using HNSW fallback");
             None
         }
@@ -733,11 +747,14 @@ fn turbovec_search_hits(idx: &TurboIndex, query: &[f32], k: usize) -> Option<Vec
     if query.is_empty() || k == 0 {
         return Some(vec![]);
     }
-    if idx.dim_opt()? != query.len() {
+    // `dim()` is deprecated in turbovec 1.1 — it answers 0 for a lazy index,
+    // which is the wrong number to do arithmetic or print — and `dim_opt` was
+    // already being called on the line above, so reuse it.
+    let index_dim = idx.dim_opt()?;
+    if index_dim != query.len() {
         eprintln!(
-            "[label_idx] TurboVec search skipped: query dim {} != index dim {}",
+            "[label_idx] TurboVec search skipped: query dim {} != index dim {index_dim}",
             query.len(),
-            idx.dim()
         );
         return Some(vec![]);
     }
@@ -775,8 +792,20 @@ fn build_turbovec_from_embeddings(
         return (None, 0);
     }
 
-    let mut idx = TurboIndex::new(dim, TURBOVEC_BIT_WIDTH);
-    idx.add_with_ids(&flat, &ids);
+    // Fallible since turbovec 1.1: `new` rejects a bit width outside 2..=4 or
+    // a dim that is not a positive multiple of 8 (both already screened above,
+    // so this is belt-and-braces), and `add` rejects a dim mismatch.
+    let mut idx = match TurboIndex::new(dim, TURBOVEC_BIT_WIDTH) {
+        Ok(idx) => idx,
+        Err(e) => {
+            eprintln!("[label_idx] {tag} TurboVec disabled: {e}");
+            return (None, 0);
+        }
+    };
+    if let Err(e) = idx.add_with_ids(&flat, &ids) {
+        eprintln!("[label_idx] {tag} TurboVec disabled: add failed ({e})");
+        return (None, 0);
+    }
     idx.prepare();
     let len = ids.len();
     (Some(idx), len)
@@ -854,7 +883,13 @@ fn try_insert_turbovec(
 
     let mut guard = slot.lock_or_recover();
     if guard.is_none() {
-        *guard = Some(TurboIndex::new(emb.len(), TURBOVEC_BIT_WIDTH));
+        match TurboIndex::new(emb.len(), TURBOVEC_BIT_WIDTH) {
+            Ok(idx) => *guard = Some(idx),
+            Err(e) => {
+                eprintln!("[label_idx] {tag} TurboVec unavailable for label {label_id}: {e}");
+                return false;
+            }
+        }
     }
 
     let Some(idx) = guard.as_mut() else { return false };
@@ -868,12 +903,19 @@ fn try_insert_turbovec(
         }
     }
     let id = label_id as u64;
-    if idx.contains(id) {
+    let is_new = !idx.contains(id);
+    if !is_new {
         idx.remove(id);
-    } else {
+    }
+    if let Err(e) = idx.add_with_ids(emb, &[id]) {
+        eprintln!("[label_idx] {tag} TurboVec add failed for label {label_id}: {e}");
+        return false;
+    }
+    // Counted only once the add landed: incrementing before it (as this did)
+    // left the reported node count one ahead of the index on any failure.
+    if is_new {
         *len_slot += 1;
     }
-    idx.add_with_ids(emb, &[id]);
     idx.prepare();
     save_turbovec(idx, save_path, tag);
     true

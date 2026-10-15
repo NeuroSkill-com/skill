@@ -262,3 +262,76 @@ fn build_os_context(tools: &[Tool]) -> String {
 
     format!("\n\nSystem: {os} ({arch}), shell: {shell}, home: {home}")
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod prompt_budget_tests {
+    use super::*;
+    use crate::defs::builtin_llm_tools;
+
+    /// Roughly 4 characters per token for English prose with JSON — close
+    /// enough to reason about a prompt budget, and it never under-counts
+    /// badly enough to hide a regression.
+    fn approx_tokens(s: &str) -> usize {
+        s.len().div_ceil(4)
+    }
+
+    /// The tool block must come **first**, ahead of the caller's own system
+    /// prompt — and the skills block is appended last by the orchestrator.
+    ///
+    /// That ordering is not cosmetic. The tool block is identical on every
+    /// turn while the skills block is re-selected per message, so
+    /// stable-then-varying is the only layout a prompt-prefix KV cache can
+    /// reuse anything from. Measured on this machine, prefill runs at
+    /// ~2.1 ms/token, so the ~1,800-token tool block is ~3.8 s of every
+    /// turn's time-to-first-token sitting in a reusable prefix.
+    ///
+    /// Nothing caches it today; this test exists so the precondition is still
+    /// true when something does.
+    #[test]
+    fn the_stable_tool_block_precedes_the_callers_system_prompt() {
+        let tools = builtin_llm_tools();
+        let mut messages = vec![serde_json::json!({
+            "role": "system",
+            "content": "CALLER_SYSTEM_PROMPT_MARKER",
+        })];
+        inject_tools_into_system_prompt_with_options(&mut messages, &tools, 8192, &ToolPromptOptions::default());
+
+        let merged = messages[0]["content"].as_str().unwrap();
+        let caller_at = merged.find("CALLER_SYSTEM_PROMPT_MARKER").expect("caller prompt kept");
+        assert!(
+            caller_at > 0,
+            "the tool block must precede the caller's prompt, not follow it"
+        );
+        // And the tools really are in the prefix, not merely somewhere earlier.
+        assert!(
+            merged[..caller_at].contains("read_file"),
+            "tool definitions belong in the stable prefix"
+        );
+    }
+
+    #[test]
+    fn report_tool_prompt_size() {
+        let tools = builtin_llm_tools();
+        let opts = ToolPromptOptions::default();
+
+        let full = {
+            let mut b = build_full_tool_block(&tools, &opts);
+            b.push_str(&build_os_context(&tools));
+            b
+        };
+        let compact = {
+            let mut b = build_compact_tool_block(&tools, &opts);
+            b.push_str(&build_os_context(&tools));
+            b
+        };
+
+        eprintln!("tools:   {}", tools.len());
+        eprintln!("full:    {} chars ≈ {} tokens", full.len(), approx_tokens(&full));
+        eprintln!("compact: {} chars ≈ {} tokens", compact.len(), approx_tokens(&compact));
+        eprintln!(
+            "ratio:   compact is {:.0}% of full",
+            100.0 * compact.len() as f64 / full.len() as f64
+        );
+    }
+}

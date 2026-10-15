@@ -119,6 +119,22 @@ impl AwearAdapter {
                 }));
             }
 
+            // New in awear 0.3.0: what the device reported in its ready packet
+            // (board type, firmware and bootloader versions), sent between
+            // `Connected` and `Ready`.  `DeviceEvent::Connected` has already
+            // gone out by then carrying an empty `DeviceInfo`, and there is no
+            // event for amending it, so this goes to `Meta` — the same channel
+            // mendi's diagnostics use — rather than being dropped.
+            AwearEvent::DeviceInfo(info) => {
+                self.pending.push_back(DeviceEvent::Meta(serde_json::json!({
+                    "source": "awear_ready",
+                    "board": format!("{:?}", info.board),
+                    "firmware": info.firmware.map(|v| v.to_string()),
+                    "bootloader": info.bootloader.map(|v| v.to_string()),
+                    "part_size": info.part_size,
+                })));
+            }
+
             AwearEvent::Signal(_) | AwearEvent::Misc(_) | AwearEvent::Status(_) => {
                 // Diagnostic / informational — not forwarded.
             }

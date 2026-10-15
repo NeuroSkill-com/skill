@@ -59,6 +59,69 @@ fn emit_daemon_event(state: &AppState, event_type: &str, payload: serde_json::Va
     });
 }
 
+/// Give the LLM a semantic skill ranker backed by the daemon's text embedder.
+///
+/// Lives here because the embedder is daemon state and `skill-llm` cannot
+/// reach it — `skill-daemon-state` already depends on `skill-llm`, so the
+/// dependency only runs one way.
+///
+/// The skill vectors are embedded once and cached: there are ~30 of them and
+/// they only change when skills are reloaded, so re-embedding per turn would
+/// trade the prompt-size win straight back for latency. Only the user's
+/// prompt is embedded per turn.
+#[cfg(feature = "llm")]
+fn install_skill_ranker(srv: &std::sync::Arc<skill_llm::LlmServerState>, state: &AppState) {
+    use std::sync::Mutex;
+
+    let embedder = state.text_embedder.clone();
+    /// Embedded skill texts, keyed by the texts they were built from.
+    ///
+    /// Named because the tuple is otherwise two parallel vectors whose
+    /// relationship is only legible from the code that built them.
+    type SkillVectorCache = Mutex<Option<(Vec<String>, Vec<Vec<f32>>)>>;
+
+    // Keyed by the skill set it was built from, so a reload invalidates it
+    // rather than ranking against descriptions that no longer exist.
+    let cache: SkillVectorCache = Mutex::new(None);
+
+    srv.set_skill_ranker(std::sync::Arc::new(move |prompt, skills, top_n| {
+        if skills.len() <= top_n {
+            return Some(skills);
+        }
+        let texts: Vec<String> = skills.iter().map(skill_skills::skill_embedding_text).collect();
+
+        let mut guard = cache.lock().ok()?;
+        let fresh = guard.as_ref().is_some_and(|(keys, _)| keys == &texts);
+        if !fresh {
+            let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+            // `None` here means no embedder is loaded; the caller falls back
+            // to word overlap, which is the whole point of the Option.
+            // `embed_documents`, not `embed_batch`: nomic is an asymmetric
+            // retrieval model and wants the indexed side tagged
+            // `search_document:` against a `search_query:` prompt. Embedding
+            // both sides identically measurably costs recall.
+            let vecs = embedder.embed_documents(refs)?;
+            if vecs.len() != texts.len() {
+                return None;
+            }
+            *guard = Some((texts.clone(), vecs));
+        }
+        let (_, skill_vecs) = guard.as_ref()?;
+
+        let prompt_vec = embedder.embed_query(prompt)?;
+        Some(skill_skills::rank_skills_by_embedding(
+            prompt,
+            skills,
+            &prompt_vec,
+            skill_vecs,
+            top_n,
+        ))
+    }));
+}
+
+#[cfg(not(feature = "llm"))]
+fn install_skill_ranker(_srv: &std::sync::Arc<skill_llm::LlmServerState>, _state: &AppState) {}
+
 fn persist_llm_catalog(state: &AppState) {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     if let Ok(cat) = state.llm_catalog.lock() {
@@ -273,6 +336,7 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
         match tokio::task::spawn_blocking(move || skill_llm::init(&cfg, &cat, emitter, log_buf, &skill_dir)).await {
             Ok(Some(srv)) => {
                 let model_name = srv.model_name.clone();
+                install_skill_ranker(&srv, &state);
                 if let Ok(mut g) = cell.lock() {
                     *g = Some(srv);
                 }

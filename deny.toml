@@ -44,6 +44,12 @@ ignore = [
     # both lines together with rlx-tiny-tts in crates/skill-tts/Cargo.toml.
     #   protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2 (build-only, never shipped)
     { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    # NOTE: noyalib's RUSTSEC-2026-0333 (YAML budget DoS) needed an entry here
+    # until 2026-10-15, when llmfit-core 0.9 -> 1.1.17 replaced serde_yml with
+    # yaml_serde and took serde_yml and noyalib out of the graph with it. Do
+    # NOT re-add it speculatively: cargo-deny fails on an ignore that matches
+    # nothing (`advisory-not-detected`), so a listed-but-absent advisory breaks
+    # the check as surely as an unlisted-but-present one.
     #   remove_dir_all 0.5.3 — TOCTOU, fixed in >=0.8.0 (build-only, via tempdir 0.3.7)
     # { id = "RUSTSEC-2023-0018", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
 ]

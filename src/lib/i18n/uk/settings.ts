@@ -438,6 +438,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "Ремінець WHOOP 4.0 / 5.0 / MG",
+  "settings.supportedDevices.instruction.whoop1":
+    "Надіньте ремінець і переконайтеся, що він не підключений у застосунку WHOOP — ремінець приймає лише одне з'єднання водночас.",
+  "settings.supportedDevices.instruction.whoop2":
+    "Відкрийте Пристрої, виконайте пошук і виберіть ремінець. Ремінці без назви або з переназваною назвою теж знаходяться — за службою, яку вони оголошують.",
+  "settings.supportedDevices.instruction.whoop3":
+    "Пульс, інтервали R-R за ним і заряд батареї надходять у сеанс. Обліковий запис WHOOP не потрібен.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Отримайте персональний токен доступу з cloud.ouraring.com/personal-access-tokens.",

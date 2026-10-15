@@ -13,7 +13,7 @@
 
 use anyhow::{anyhow, Result};
 use rlx::gguf::{GgufFile, MetaValue};
-use rlx_models::run::{auto_detokenize, auto_runner_with_mmproj, auto_tokenize};
+use rlx_models::run::{auto_detokenize, auto_tokenize};
 use rlx_models::LmRunner;
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedSender;
@@ -21,12 +21,40 @@ use tokio::sync::mpsc::UnboundedSender;
 use super::protocol::{GenMetrics, GenParams, InferToken};
 use crate::config::LlmConfig;
 
+/// `general.architecture` from a GGUF header, **memoized per path**.
+///
+/// Every `looks_like_*` family predicate calls this, and `load_with_mmproj`
+/// asks several of them in turn, so a single load used to open and parse the
+/// same GGUF ten times. `GgufFile::from_path` reads the header AND the whole
+/// tensor index, which is ~0.3s for a 0.5 GB file — measured at 2.88s of a
+/// 6.55s model load (qwen3-vl probe 827ms, catalog 1.54s, qwen3 0.51s), spent
+/// entirely on proving the answer was "not mine".
+///
+/// Keyed on the path and held for the process: a checkpoint's architecture does
+/// not change under us, and the set of distinct model paths in one session is
+/// small. The cache makes routing cheap WITHOUT changing a single routing
+/// decision, which is why it is preferred here over short-circuiting the
+/// cascade on a single up-front sniff.
 fn peek_gguf_arch(path: &Path) -> Option<String> {
-    let raw = GgufFile::from_path(path).ok()?;
-    raw.metadata
-        .get("general.architecture")
-        .and_then(MetaValue::as_str)
-        .map(str::to_string)
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Option<String>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(map) = cache.lock() {
+        if let Some(hit) = map.get(path) {
+            return hit.clone();
+        }
+    }
+    let arch = GgufFile::from_path(path).ok().and_then(|raw| {
+        raw.metadata
+            .get("general.architecture")
+            .and_then(MetaValue::as_str)
+            .map(str::to_string)
+    });
+    if let Ok(mut map) = cache.lock() {
+        map.insert(path.to_path_buf(), arch.clone());
+    }
+    arch
 }
 
 fn filename_hint(path: &Path, needle: &str) -> bool {
@@ -516,6 +544,44 @@ fn looks_like_qwen35(path: &Path) -> bool {
 /// - Explicit accelerator tags try that device first; if unavailable they
 ///   fall back (notably **`cuda` → wgpu/`Gpu` → CPU**)
 /// - `"auto"` / unknown → best available: Metal → CUDA → MLX → wgpu → CPU
+/// The context, in tokens, every runner must be built for.
+///
+/// Families size their bucketed decode compile cache from this, and the rlx
+/// default is 128 — which gives a decode ladder covering ~256 tokens of past.
+/// One token past that the bucket lookup misses, and a native-packed (K-quant
+/// GGUF) runner has no F32 decode fallback, so the chat dies with
+/// `weight not found: model.embed_tokens.weight`. That reads like a tensor
+/// naming problem and is really the context cap, so it cost a bug report and a
+/// long hunt before anyone looked here.
+///
+/// Three call sites computed this separately and one of them (the plain
+/// `auto_runner` fallback) did not compute it at all.
+fn resolved_max_seq(config: &LlmConfig) -> usize {
+    config
+        .ctx_size
+        .map(|c| c as usize)
+        .unwrap_or(0)
+        .max(config.rlx_max_seq)
+        .clamp(32, 8192)
+}
+
+/// `AutoOptions` carrying what the USER configured — device, context, mmproj.
+///
+/// `auto_runner_with_mmproj` builds `AutoOptions::default()`, which is
+/// `Device::Cpu` and the 128-token default context. Reaching the registry
+/// through it therefore silently ignored the configured device and context, so
+/// every family that needed a GPU or a real context had to bypass the registry
+/// and drive its family builder directly — which is how the routing cascade in
+/// `load_with_mmproj` grew. Route through here instead and the registry is
+/// usable as the default path.
+fn auto_options(config: &LlmConfig, mmproj: Option<&Path>) -> rlx_models::run::AutoOptions {
+    let mut opts = rlx_models::run::AutoOptions::new(resolve_rlx_device(config)).max_seq(resolved_max_seq(config));
+    if let Some(mp) = mmproj {
+        opts = opts.mmproj(mp);
+    }
+    opts
+}
+
 fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
     use rlx::runtime::{device_ext::is_available, Device};
 
@@ -570,28 +636,23 @@ fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<d
     if !looks_like_qwen3(path) {
         return None;
     }
-    let (device, packed) = gpu_plan(path, config);
-    // Size the context the same way the qwen3-vl and qwen35 paths already do.
-    // Leaving it unset is NOT harmless: the builder defaults `max_seq` to 128
-    // and sizes its bucketed decode compile cache at `max_seq + 64`, so the
-    // power-of-two ladder only covered a past of 256 tokens. One token beyond
-    // that, `Qwen3Generator::step_cached` found no bucket and fell through to
-    // `decode_step_oneshot`, which rebuilds the graph from the F32 weight map —
-    // empty for a native-packed (K-quant GGUF) runner. Every chat longer than
-    // ~256 tokens of context therefore died with
-    // `weight not found: model.embed_tokens.weight`, which reads like a
-    // GGUF-vs-safetensors naming problem and is really a context cap.
-    let max_seq = config
-        .ctx_size
-        .map(|c| c as usize)
-        .unwrap_or(0)
-        .max(config.rlx_max_seq)
-        .clamp(32, 8192);
+    // Only the KV-store hook needs the CONCRETE `Qwen3Runner`; it is opt-in and
+    // off by default. Everything else this used to do by hand — device, context,
+    // packed-weight selection — the registry now does from `AutoOptions`, so the
+    // default path is `auto_runner` like every other family.
+    //
+    // `packed_weights` is deliberately NOT forwarded: it was a file-size
+    // heuristic (>= 256 MB), and K-quant detection now happens inside each
+    // runner's `build()`, so passing the guess could only override a correct
+    // answer with a worse one.
+    if !qwen3_kv_store_opt_in() {
+        return None;
+    }
+    let device = resolve_rlx_device(config);
     let mut runner = match rlx_models::run::Qwen3Runner::builder()
         .weights(path)
         .device(device)
-        .packed_weights(packed)
-        .max_seq(max_seq)
+        .max_seq(resolved_max_seq(config))
         .build()
     {
         Ok(runner) => runner,
@@ -628,15 +689,22 @@ fn try_qwen3_runner_with_device(path: &Path, config: &LlmConfig) -> Option<Box<d
 /// on in the same change that moves the `rlx-models` pin to a commit containing
 /// it — doing it before then reintroduces the 0/8 failure for anyone building
 /// against the current pin.
+///
+/// Read by BOTH this function and the loader: the loader only takes the
+/// concrete-`Qwen3Runner` path (instead of the registry) when the store is
+/// actually wanted, so the two must agree on what "wanted" means.
+fn qwen3_kv_store_opt_in() -> bool {
+    std::env::var("SKILL_QWEN3_KV_STORE")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"))
+        .unwrap_or(false)
+}
+
 fn maybe_enable_qwen3_kv_store(
     runner: &mut rlx_models::run::Qwen3Runner,
     weights: &Path,
     device: rlx::runtime::Device,
 ) {
-    let on = std::env::var("SKILL_QWEN3_KV_STORE")
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "on" | "true" | "yes"))
-        .unwrap_or(false);
-    if !on {
+    if !qwen3_kv_store_opt_in() {
         return;
     }
     let cfg = rlx_models::run::KvStoreConfig::new()
@@ -1162,6 +1230,11 @@ impl RlxTextRunner {
     /// Attach an optional mmproj vision encoder (e.g. for Qwen3.5-VL).
     /// When `mmproj` is `None` the runner is text-only.
     pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
+        // Routing is timed because it is not free: the cascade below asks
+        // several families "is this yours?", and they answer by reading the
+        // GGUF header. That was 2.88s of a 6.55s load before `peek_gguf_arch`
+        // was memoized — and it read as model-load time, not as routing.
+        let t_cascade = std::time::Instant::now();
         // mlx-community packed safetensors dirs — before GGUF-oriented paths.
         if let Some(result) = try_mlx_runner(model_path, config) {
             let runner = result?;
@@ -1211,12 +1284,21 @@ impl RlxTextRunner {
 
         // Qwen3.5 / 3.6: must not fall through to auto_runner's SpecRunner
         // (MTP GGUFs OOM on unified-memory Macs during graph warm).
+        // Before the probe, not after: `try_qwen35_runner` both decides AND
+        // builds, so timing it from the far side reported the whole model load
+        // as routing cost.
+        eprintln!("[rlx] route cascade {:.2?} (probing qwen35)", t_cascade.elapsed());
         if let Some(result) = try_qwen35_runner(model_path, mmproj, config) {
             let runner = result?;
             return finish_load(model_path, runner, mmproj, None);
         }
 
-        let runner = auto_runner_with_mmproj(model_path, mmproj).map_err(|e| anyhow!("RLX auto_runner: {e}"))?;
+        eprintln!(
+            "[rlx] route cascade {:.2?} (falling through to auto_runner)",
+            t_cascade.elapsed()
+        );
+        let runner = rlx_models::run::auto_runner_with(model_path, &auto_options(config, mmproj))
+            .map_err(|e| anyhow!("RLX auto_runner: {e}"))?;
         finish_load(model_path, runner, mmproj, None)
     }
 }

@@ -460,6 +460,45 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "סנכרון אחרון",
   "llm.tools.skillsNeverSynced": "אף פעם",
   "llm.tools.skillsSection": "יכולות הסוכן",
+  "llm.tools.skillPromptSection": "Skills בפרומפט",
+  "llm.tools.skillPromptSectionHint": "משולם בכל הודעה",
+  "llm.tools.skillPromptIntro":
+    "כש-read_file פעיל, כל ה-skills מופיעים בפרומפט המערכת כדי שהמודל ידע מה הוא יכול לטעון. הרשימה נשלחת בכל הודעה, עוד לפני שהקלדתם — והגודל שלה משולם בטוקנים ראשונים אטיים יותר, בזיכרון, ובמודלים קטנים שעונים לפרומפט במקום לשאלה שלכם.",
+  "llm.tools.skillModeTokens": "טוקנים",
+  "llm.tools.semanticSkills": "התאמת skills לפי משמעות",
+  "llm.tools.semanticSkillsDesc":
+    "מדרג skills לפי משמעות ולא לפי מילים משותפות, כך ש„עזור לי להירגע לפני השינה” ימצא פרוטוקול שינה. דורש את מודל ההטמעות; בלעדיו חוזר להתאמה לפי מילים.",
+  "llm.tools.skillMode.full": "מלא",
+  "llm.tools.skillMode.full.pro": "כל skill עם התיאור המלא והנתיב המדויק. המרב שהמודל יכול לדעת בלי לפתוח קובץ.",
+  "llm.tools.skillMode.full.con":
+    "הגדול ביותר בהפרש ניכר. שליש ממנו הוא תגיות XML ונתיבים מוחלטים חוזרים שאינם מוסיפים מידע.",
+  "llm.tools.skillMode.compact": "קומפקטי (מומלץ)",
+  "llm.tools.skillMode.compact.pro":
+    "אותם skills, אותם תיאורים, קטן בשליש. מוותר רק על מבנה ה-XML ועל הנתיבים החוזרים — שום דבר לא אובד.",
+  "llm.tools.skillMode.compact.con": "עדיין מונה כל skill, ולכן ממשיך לגדול ככל שתוסיפו.",
+  "llm.tools.skillMode.grouped": "מקובץ",
+  "llm.tools.skillMode.grouped.pro":
+    "מכווץ משפחות — כמו 14 סקילי הפרוטוקולים — לשורה אחת, וגם מונע מהם להתחרות זה בזה על תשומת הלב.",
+  "llm.tools.skillMode.grouped.con": "המודל זקוק לצעד נוסף כדי להציץ בתוך משפחה, ולא תמיד יעשה זאת בבקשה מעורפלת.",
+  "llm.tools.skillMode.brief": "תמציתי",
+  "llm.tools.skillMode.brief.pro": "שומר על כל ה-skills ברשימה אך מקצר כל תיאור לשורתו הראשונה.",
+  "llm.tools.skillMode.brief.con": "מה שנחתך הוא לרוב רשימת המצבים שה-skill מיועד להם, ולכן הבחירה נעשית פחות אמינה.",
+  "llm.tools.skillMode.names_only": "שמות בלבד",
+  "llm.tools.skillMode.names_only.pro": "כמעט חינם — עשרים אחוז אחד מ„מלא”. מתאים כשהפרומפט כבר קרוב לגבול ההקשר.",
+  "llm.tools.skillMode.names_only.con":
+    "המודל חייב לפתוח קובץ כדי לדעת מה skill עושה, ומודל קטן לרוב לא יטרח. צפו לשימוש מועט יותר.",
+  "llm.tools.skillModeGroupSelects": "רק ה-skills הרלוונטיים",
+  "llm.tools.skillModeGroupAll": "כל ה-skills, בפורמט אחר",
+  "llm.tools.semanticSkillsInactive": "חל רק על שתי ההגדרות שלמעלה שבוחרות skills.",
+  "llm.tools.skillMode.smart": "חכם (מומלץ)",
+  "llm.tools.skillMode.smart.pro":
+    "שולח רק את מעט ה-skills הרלוונטיים לכל הודעה, כך שהפרומפט מפסיק לגדול ככל שמוסיפים. בערך חמישית מ„מלא” — ומכיוון שפרומפט ארוך משולם פעמיים, בקריאה ושוב בכל מילה שנוצרת, זהו החיסכון הגדול ביותר האפשרי.",
+  "llm.tools.skillMode.smart.con":
+    "Skill שההתאמה מפספסת אינו נראה עבור אותה הודעה. בהתאמה לפי משמעות ה-skill הנכון נמצא ברשימה הקצרה בכתשעה מתוך עשרה מקרים; בהתאמה לפי מילים — קרוב יותר לשלושה.",
+  "llm.tools.skillMode.smart_grouped": "חכם, מקובץ",
+  "llm.tools.skillMode.smart_grouped.pro": "כמו „חכם”, ובנוסף מכווץ לשורה אחת כל משפחת skills קרובים שנכנסה לרשימה.",
+  "llm.tools.skillMode.smart_grouped.con":
+    "לרוב אינו שונה מ„חכם”, כי רשימה קצרה נדיר שתכלול כמה בני משפחה. המודל זקוק לצעד נוסף כדי להציץ פנימה.",
   "llm.tools.skillsSectionDesc": "Skills מספקים הנחיות מתמחות שה-LLM יכול לטעון לפי דרישה. הפעל או השבת skills בודדים.",
   "llm.tools.skillsNone": "לא נמצאו skills. סנכרן skills קהילתיים או הוסף קבצי SKILL.md ל-~/.skill/skills/.",
   "llm.tools.skillsLoading": "טוען skills...",

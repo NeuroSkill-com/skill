@@ -59,8 +59,7 @@ const dashboard: Record<string, string> = {
   "dashboard.vitals": "Життєві показники",
   "dashboard.vitalsWaiting":
     "Очікування показника від пристрою. Надітий перстень вимірює за власним графіком, тож це може зайняти кілька хвилин.",
-  "dashboard.vitalsStale":
-    "Останні кілька хвилин показників не було — пристрій вимірює за власним графіком.",
+  "dashboard.vitalsStale": "Останні кілька хвилин показників не було — пристрій вимірює за власним графіком.",
   "dashboard.ibi": "Інтервал",
   "dashboard.skinTemperature": "Темп. шкіри",
   "dashboard.hr": "Пульс",

@@ -103,6 +103,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun1": "Open Device API and add your IDUN API token if required.",
   "settings.supportedDevices.instruction.idun2": "Save token, then pair/connect the headset from the device list.",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "WHOOP 4.0 / 5.0 / MG strap",
+  "settings.supportedDevices.instruction.whoop1":
+    "Wear the strap and make sure it is not connected in the WHOOP phone app — a strap accepts one connection at a time.",
+  "settings.supportedDevices.instruction.whoop2":
+    "Open Devices, scan, and pick the strap. Nameless or renamed straps are still found, by the service they advertise.",
+  "settings.supportedDevices.instruction.whoop3":
+    "Heart rate, the R-R intervals behind it, and battery stream into the session. No WHOOP account is needed.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Get a Personal Access Token from cloud.ouraring.com/personal-access-tokens.",

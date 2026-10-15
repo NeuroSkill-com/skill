@@ -242,6 +242,7 @@ onMount(() => {
           <div class="flex items-center gap-2">
             <input
               type="text"
+              aria-label={t("llm.discovered.extraDirsLabel")}
               bind:value={newDir}
               placeholder={t("llm.discovered.addDirPlaceholder")}
               onkeydown={(e) => { if (e.key === "Enter") addDir(); }}

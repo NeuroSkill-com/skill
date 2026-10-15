@@ -84,6 +84,7 @@ export function deviceImage(name: string, hw?: string | null): string | null {
   if (n.includes("hermes")) return "/devices/hermes.jpg";
   if (n.includes("mendi")) return "/devices/mendi-headband.png";
   if (n.includes("oura")) return "/devices/oura-ring.svg";
+  if (n.includes("whoop")) return "/devices/whoop.jpg";
   if (n.includes("awear") || n.includes("luca")) return "/devices/awear-eeg.png";
   if (n.includes("vital")) return "/devices/vital-headphones.webp";
   if (n.includes("atu") || n.includes("attentivu")) return "/devices/attentivu-glasses.png";

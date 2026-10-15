@@ -107,6 +107,25 @@ pub struct LlmToolConfig {
     #[serde(default = "default_intelligent_selection_top_n")]
     pub intelligent_selection_top_n: usize,
 
+    /// How the available-skills block is rendered into the system prompt.
+    ///
+    /// Its own setting rather than a consequence of the tool knobs above: the
+    /// skills block is the larger half of the prompt (≈3,519 tokens of
+    /// bundled skills against ≈1,808 of tools), and how much of it to spend
+    /// is a judgement about the model in use, not about tools.
+    #[serde(default)]
+    pub skill_prompt_mode: skill_skills::SkillPromptMode,
+
+    /// Rank skills by embedding similarity rather than word overlap.
+    ///
+    /// Word overlap only fires when the user reuses a word from the
+    /// description, so it degrades to an arbitrary cut exactly when the
+    /// phrasing differs. Costs one prompt embedding per turn; the skill
+    /// vectors are cached. Falls back to word overlap when no embedder is
+    /// available.
+    #[serde(default = "default_true")]
+    pub semantic_skill_selection: bool,
+
     /// Prefer native OpenAI-style tool-calling JSON (`tool_calls`) when models
     /// support it, while still accepting fallback `[TOOL_CALL]...` markup.
     #[serde(default = "default_true")]
@@ -421,6 +440,8 @@ impl Default for LlmToolConfig {
             query_refusal_response: default_query_refusal_response(),
             intelligent_selection_enabled: true,
             intelligent_selection_top_n: default_intelligent_selection_top_n(),
+            skill_prompt_mode: skill_skills::SkillPromptMode::default(),
+            semantic_skill_selection: true,
             prefer_native_tool_calling: true,
             max_rounds: 15,
             max_calls_per_round: default_max_tool_calls_per_round(),

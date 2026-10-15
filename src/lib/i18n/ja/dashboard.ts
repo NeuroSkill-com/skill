@@ -62,8 +62,7 @@ const dashboard: Record<string, string> = {
   "dashboard.vitals": "バイタル",
   "dashboard.vitalsWaiting":
     "デバイスからの測定値を待っています。装着中のリングは独自のタイミングで測定するため、数分かかることがあります。",
-  "dashboard.vitalsStale":
-    "ここ数分間、測定値がありません — デバイスは独自のタイミングで測定します。",
+  "dashboard.vitalsStale": "ここ数分間、測定値がありません — デバイスは独自のタイミングで測定します。",
   "dashboard.ibi": "間隔",
   "dashboard.skinTemperature": "皮膚温",
   "dashboard.hr": "心拍数",

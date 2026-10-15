@@ -225,6 +225,44 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "上次同步",
   "llm.tools.skillsNeverSynced": "从未",
   "llm.tools.skillsSection": "智能体技能",
+  "llm.tools.skillPromptSection": "提示词中的技能",
+  "llm.tools.skillPromptSectionHint": "每条消息都要付出代价",
+  "llm.tools.skillPromptIntro":
+    "启用 read_file 后，所有技能都会列在系统提示词中，好让模型知道可以加载什么。这份清单在你输入之前就随每条消息发送——它的体积会以更慢的首个 token、更多内存，以及小模型回答提示词而非你的问题的方式付出代价。",
+  "llm.tools.skillModeTokens": "token",
+  "llm.tools.semanticSkills": "按语义匹配技能",
+  "llm.tools.semanticSkillsDesc":
+    "按含义而非共同词语对技能排序，于是“帮我在睡前放松”能找到睡眠协议。需要文本嵌入模型；不可用时回退到词语匹配。",
+  "llm.tools.skillMode.full": "完整",
+  "llm.tools.skillMode.full.pro": "每个技能都带完整描述和准确路径。这是模型不打开文件所能知道的全部。",
+  "llm.tools.skillMode.full.con":
+    "体积远超其他模式。其中三分之一是 XML 标签和重复的绝对路径，并未提供模型推断不出的信息。",
+  "llm.tools.skillMode.compact": "紧凑（推荐）",
+  "llm.tools.skillMode.compact.pro":
+    "同样的技能、同样的描述，体积少三分之一。只去掉 XML 框架和重复路径，没有任何损失。",
+  "llm.tools.skillMode.compact.con": "仍会列出每个技能，因此会随技能增加而继续变大。",
+  "llm.tools.skillMode.grouped": "分组",
+  "llm.tools.skillMode.grouped.pro": "把诸如 14 个协议技能这样的家族折叠成一行，同时也避免它们互相争夺注意力。",
+  "llm.tools.skillMode.grouped.con": "模型需要多走一步才能看到家族内部，面对含糊的请求可能不会去走。",
+  "llm.tools.skillMode.brief": "简要",
+  "llm.tools.skillMode.brief.pro": "保留所有技能，但把每条描述缩短到第一行。",
+  "llm.tools.skillMode.brief.con": "被截去的往往正是该技能适用场景的列举，模型的挑选因此变得不那么可靠。",
+  "llm.tools.skillMode.names_only": "仅名称",
+  "llm.tools.skillMode.names_only.pro": "几乎零成本——只有“完整”的二十分之一。当提示词已接近上下文上限时最合适。",
+  "llm.tools.skillMode.names_only.con":
+    "模型必须打开文件才能知道技能的作用，而小模型往往不会这么做。技能的使用会减少。",
+  "llm.tools.skillModeGroupSelects": "仅相关技能",
+  "llm.tools.skillModeGroupAll": "全部技能，仅格式不同",
+  "llm.tools.semanticSkillsInactive": "仅对上面两个会筛选技能的预设生效。",
+  "llm.tools.skillMode.smart": "智能（推荐）",
+  "llm.tools.skillMode.smart.pro":
+    "只发送与当前消息相关的少数几个技能，提示词不再随技能增加而变大。约为「完整」的五分之一——而且长提示词要付两次费用：读取时一次，生成每个词时再一次，因此这是最大的一笔节省。",
+  "llm.tools.skillMode.smart.con":
+    "匹配漏掉的技能，对这条消息来说就不存在。按语义匹配时正确技能进入候选的比例约为十之九，按词语匹配则接近十之三。",
+  "llm.tools.skillMode.smart_grouped": "智能并分组",
+  "llm.tools.skillMode.smart_grouped.pro": "与「智能」相同，并把进入候选的同一家族技能折叠成一行。",
+  "llm.tools.skillMode.smart_grouped.con":
+    "通常与「智能」无异，因为简短的候选名单很少同时包含同一家族的多个成员。模型需要多走一步才能看到内部。",
   "llm.tools.skillsSectionDesc": "技能提供 LLM 可按需加载的专业指令。切换各项技能以控制聊天中可用的技能。",
   "llm.tools.skillsNone": "未找到技能。同步社区技能或将 SKILL.md 文件添加到 ~/.skill/skills/。",
   "llm.tools.skillsLoading": "正在加载技能...",

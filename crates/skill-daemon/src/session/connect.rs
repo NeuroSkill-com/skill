@@ -249,6 +249,7 @@ enum ConnectRoute {
     Vital,
     Mendi,
     Oura,
+    Whoop,
     IrohRemote,
     AntNeuro,
     /// Recognised, but deliberately unsupported: the driver has been removed.
@@ -321,6 +322,13 @@ fn is_vital(s: &str) -> bool {
 fn is_mendi(s: &str) -> bool {
     s.contains("mendi")
 }
+fn is_whoop(s: &str) -> bool {
+    // Narrow, and owned by the registry for the same reason as Oura and Vital:
+    // the strap's name is user-settable, so a factory name is all a name test
+    // can catch. A renamed or nameless strap arrives as `ble:<id>` and is
+    // routed from the service UUID the scanner recorded.
+    skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Whoop
+}
 fn is_oura(s: &str) -> bool {
     // Narrow for the same reason as the registry's `from_name`: "oura" is a
     // substring of unrelated product names, and a mis-route hands the ring's
@@ -355,6 +363,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_vital, ConnectRoute::Vital),
     (is_mendi, ConnectRoute::Mendi),
     (is_oura, ConnectRoute::Oura),
+    (is_whoop, ConnectRoute::Whoop),
     (is_antneuro, ConnectRoute::AntNeuro),
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
@@ -406,6 +415,7 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Vital => connect_ble::connect_vital(state, target).await,
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
         ConnectRoute::Oura => connect_ble::connect_oura(target, paired_name_for(state, target)).await,
+        ConnectRoute::Whoop => connect_ble::connect_whoop(paired_name_for(state, target)).await,
         ConnectRoute::AntNeuro => connect_wired::connect_antneuro(state, target).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
         ConnectRoute::Removed(device) => anyhow::bail!(
@@ -636,6 +646,8 @@ mod tests {
             ("Mendi-XY", ConnectRoute::Mendi),
             ("Oura", ConnectRoute::Oura),
             ("Oura Ring Gen3", ConnectRoute::Oura),
+            ("WHOOP", ConnectRoute::Whoop),
+            ("whoop-4A2B", ConnectRoute::Whoop),
             ("antneuro:0", ConnectRoute::AntNeuro),
             ("totally-unknown-device", ConnectRoute::Muse),
         ];
@@ -672,6 +684,23 @@ mod tests {
         );
     }
 
+    /// "whoop" must not swallow unrelated names, and a bare `ble:` id carries
+    /// no kind — that comes from the service UUID the scanner saw.
+    #[test]
+    fn whoop_route_stays_narrow() {
+        for name in ["whooping cough monitor", "swhoop", "hooper"] {
+            assert_ne!(
+                select_connect_route(&name.to_ascii_lowercase()),
+                ConnectRoute::Whoop,
+                "name={name}"
+            );
+        }
+        assert_ne!(
+            select_connect_route("ble:2f8a1c04-0000-0000-0000-000000000002"),
+            ConnectRoute::Whoop
+        );
+    }
+
     #[test]
     fn connect_route_rules_do_not_overlap_for_known_targets() {
         let targets = [
@@ -692,6 +721,7 @@ mod tests {
             "Idun-Guardian",
             "AWEAR-E04A8471",
             "Oura Ring 5",
+            "WHOOP 5.0",
             "Vital Neuro",
             "Mendi-XY",
             "antneuro:0",

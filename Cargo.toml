@@ -54,35 +54,55 @@ members = [
     "crates/skill-daemon-routes",
 ]
 
-# btleplug: improved macOS BLE scanning behaviour.
-# NOTE: upstream branch has a typo ("imrpoved" → "improved"); tracked for rename.
+# btleplug is GONE from this graph, as of 2026-10-15.  There is no override and
+# no shim entry below, because no crate in the tree depends on it any more:
 #
-# Still required after the webbluetooth migration: five device crates are on
-# btleplug and pull it transitively — awear, idun, mendi, mw75, openbci, all on
-# 0.11, so this override now covers every btleplug user and only ONE major is
-# in the graph.  (hermes-ble was the lone ^0.12 holdout and has been removed.)
+#   cargo tree -p skill-daemon -i btleplug
+#   error: package ID specification `btleplug` did not match any packages
 #
-# That single range is what makes the next step possible: one
-# `[patch.crates-io] btleplug = <webbluetooth shim>` entry can now replace
-# btleplug for all five at once, which is the only way to guarantee a single
-# CBCentralManager — btleplug has no singleton and allocates a fresh one (plus a
-# leaked thread) on every `Manager::new().adapters()`.  Drop this override then;
-# see docs/webbluetooth-migration.md.
+# The last two holders migrated upstream on the same day — awear in 0.3.0 and
+# idun in 0.0.4, following mw75 0.0.8 and mendi 0.0.3 — and openbci was moved
+# across locally in `patches/openbci-0.0.2`.  `patches/btleplug-0.11.9`, the
+# shim that stood in for all of them, is therefore RETIRED: nothing compiles it,
+# and cargo says so out loud if the patch entry is left in place —
+# `warning: patch btleplug v0.11.9 ... was not used in the crate graph`.
+# The directory is kept for now as the record of what it did; it can be deleted.
+#
+# Keep it in mind if a new BLE crate is ever added that wants btleplug: without
+# the shim, btleplug comes from crates.io and brings back the bug it existed to
+# prevent — no session singleton, a fresh `CBCentralManager` plus a leaked
+# thread on every `Manager::new().adapters()`, and on macOS a second manager
+# cannot discover peripherals while another is scanning.  Either migrate that
+# crate to webbluetooth or restore the shim; do not let plain btleplug in.
 #
 # [patch] sections MUST live in the workspace root — they are NOT inherited
 # from member Cargo.toml files.
 
 [patch.crates-io]
-# btleplug replaced wholesale: patches/btleplug-0.11.9 is btleplug's API
-# reimplemented over webbluetooth, so awear/idun/mendi/mw75/openbci keep
-# compiling unchanged while every BLE operation in the process funnels through
-# one `Bluetooth::shared()` session.  Upstream had no singleton and leaked a
-# fresh CBCentralManager per `Manager::new().adapters()`.  Supersedes the
-# eugenehp fork, whose only purpose was the macOS scanning fix.
-btleplug        = { path = "patches/btleplug-0.11.9" }
-# webbluetooth / muse-rs / vital need NO patch: all are published, and muse-rs
-# 0.2.1, vital 0.0.1 and skill-daemon declare the same registry `webbluetooth`
-# version (0.0.3), so the resolver unifies them onto one package.
+# openbci replaced with a vendored copy whose Ganglion driver reaches
+# `webbluetooth` directly — the same migration muse-rs, mw75, mendi, awear and
+# idun made upstream.  Here it stays local: decided 2026-10-15 that openbci is
+# NOT being republished for now, so this entry is permanent rather than a
+# placeholder waiting on a release.  Everything outside the four changed files
+# is verbatim upstream 0.0.1 (21 of 25 .rs files), though the fork calls itself
+# 0.0.2; see that directory's Cargo.toml for the provenance diff and for why
+# that version and `skill-devices`' requirement have to move together.
+#
+# This entry is load-bearing, not tidying, and the 0.0.2 marking is what makes
+# that safe.  While the btleplug shim was in place, dropping this entry only
+# cost a layer — published openbci asked for btleplug and got the shim.  With
+# the shim retired it would have put REAL btleplug back in the graph, and a
+# second `CBCentralManager` with it, silently.  Now that `skill-devices` asks
+# for a version crates.io does not have, dropping the entry fails to resolve
+# instead.  Either way: not a line to "clean up".
+openbci         = { path = "patches/openbci-0.0.2" }
+# Every other BLE crate needs NO patch: all are published, and every one of
+# them plus skill-daemon, skill-devices and the vendored openbci declares the
+# same registry `webbluetooth` version (0.0.4), so the resolver unifies them
+# onto one package.  As of 2026-10-15 that is awear 0.3.0, idun 0.0.4,
+# mendi 0.0.3, muse-rs 0.2.2, mw75 0.0.8, poop 0.0.2, vital 0.0.2 — nine
+# dependents of one `webbluetooth` node, with no btleplug left between any of
+# them and the radio.
 #
 # That unification is a correctness requirement, not a tidiness one:
 # `Bluetooth::shared()` memoises into a `OnceLock`, so two copies of the
@@ -91,7 +111,7 @@ btleplug        = { path = "patches/btleplug-0.11.9" }
 #
 #   cargo tree -p skill-daemon -i webbluetooth   # must be exactly one node
 #
-# Bumping ONE of the three is never enough, and the failure is not subtle.  Cargo
+# Bumping ONE of them is never enough, and the failure is not subtle.  Cargo
 # treats 0.0.x releases as mutually incompatible — `0.0.1` means `>=0.0.1,
 # <0.0.2` — so skill-daemon on 0.0.2 while muse-rs asked for 0.0.1 resolved to
 # both, which is how the Windows release broke for rc.26..rc.29: the older copy

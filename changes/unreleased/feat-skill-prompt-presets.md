@@ -1,0 +1,30 @@
+### Features
+
+- **The skills prompt block is now a choice, with its cost shown.** Settings → Tools → *Skills in the prompt* offers five presets and states what each gives up, because the right answer depends on the model you run. Measured against the 30 bundled skills: **Full** 3,627 tokens · **Compact** 2,426 · **Grouped** 1,731 · **Brief** 1,475 · **Names only** 267. `cargo run -p skill-skills --example prompt_modes` reproduces the table against whatever skills you actually have.
+- **Compact is the new default, and it is lossless.** Measured on the real skill set, 35% of the old block was XML scaffolding (20.7%) and a repeated ~65-character absolute path per entry (14.0%) — neither of which tells the model anything it cannot derive from the skill's name and a base directory stated once. Same skills, same descriptions, a third smaller.
+- **Grouped collapses families.** 14 of the 30 bundled skills are `neuroskill-protocols-*`, one family competing with itself for the model's attention; it becomes a single line naming its members. A lone skill that merely looks like a family is left alone, since replacing it with a pointer would cost a round trip for nothing.
+- **Skills can be matched by meaning instead of shared words.** Word overlap only fires when the user happens to reuse a word from a description, so "help me wind down before bed" matched nothing in a skill described as "sleep hygiene protocol" and the cut became arbitrary exactly when it mattered. Ranking now runs through the text-embedding model when it is loaded. Skill vectors are embedded once and cached — only the prompt is embedded per turn — and a missing or cold embedder falls back to word overlap rather than failing the turn.
+
+### Features
+
+- **Two selecting presets, and they are now the default.** *Smart* sends only the handful of skills relevant to each message, and *Smart, grouped* additionally collapses any family that made the shortlist. They are the only presets whose size does not grow with however many skills are installed: measured over the query set, **Smart ≈709 tokens and Smart-grouped ≈544**, against 2,426 for Compact and 3,627 for Full. Settings now groups the list into "only the relevant skills" and "every skill, formatted differently", so the trade being made is visible in the picker rather than inferred from two separate controls.
+- **The meaning-vs-words toggle is scoped to where it applies.** It only governs the selecting presets, so it is now disabled with an explanation under the others instead of appearing to do something it cannot.
+
+### Refactor
+
+- **`skill-llm` stays embedder-agnostic.** The embedder is daemon state and `skill-daemon-state` already depends on `skill-llm`, so the ranker is injected as a hook (`LlmServerState::set_skill_ranker`) rather than inverting the dependency. The hook returns an `Option`, which is what makes "no embedding model loaded" a fallback rather than an error.
+
+### CLI
+
+- **Two evals for the skills prompt, because token count proves nothing about whether the right skill is still found.**
+  - `cargo run --release -p skill-daemon-state --features text-embeddings-rlx-metal --bin eval_skill_retrieval` scores the *selection* half against 30 labelled queries, split into an easy tier (the query reuses a word from the description) and a hard tier (a natural paraphrase that avoids it). On the hard tier, word overlap finds the right skill in **27%** of cases at top-8; embeddings find it in **87%**. On the easy tier both reach 100%, which is the point: the gap only opens where real phrasing lives.
+  - `python3 scripts/eval-skill-presets.py <gguf>` puts a model in the loop and asks it to pick a skill from each rendering. At Qwen3-0.6B the model hallucinates names that are not in the list (`neuroskill-protocols-mental`, `-eyes`), so it cannot discriminate between renderings — all configurations land between 0% and 33% with run-to-run swings of ±13 points on 15 queries. Reported as a harness and a caveat, not a ranking.
+
+### Bugfixes
+
+- **Skills came out in a different order on every daemon start.** `load_skills` returned `HashMap::into_values()`, whose order is unspecified and whose hasher Rust seeds per process. Three consequences, all real: the system prompt differed between restarts (which would defeat any prompt-prefix cache before it was built), ties in the relevance ranking resolved arbitrarily so a different set of skills survived the top-N cut, and no measurement or bug report over the list was reproducible. Now sorted by name, with a test. Found because a retrieval eval's supposedly deterministic lexical baseline scored 12, 14 and 12 out of 30 on three consecutive runs.
+- **Semantic skill ranking embedded both sides the same way.** `nomic-embed-text-v1.5` is an asymmetric retrieval model: the indexed side wants a `search_document:` prefix and the query a `search_query:` one, and the embedder already exposed `embed_documents` / `embed_query` for exactly this. Using plain `embed` for both cost real accuracy — on paraphrased queries, recall@1 went **20% → 40%** and recall@3 **53% → 80%** once the prefixes were used.
+
+### Performance
+
+- **Measured what the skills block costs in prefill *and* in decode.** A long system prompt is charged twice — once to prefill it, then again on every generated token, because each one attends over the whole context. On Qwen3-0.6B/Metal with a 96-token answer, decode throughput collapses from **42.9 tok/s with no system prompt to ~9 tok/s at 2,200 prompt tokens**, so `compact` costs +3.5 s of prefill and **+8.8 s of decode**. The decode penalty overtakes the prefill penalty at roughly 38 output tokens. Two consequences: shrinking the prompt is worth more than caching it (a prefix-KV cache would recover only the prefill half), and the preset choice is worth 1.5–16.5 s per turn rather than the token counts alone suggest. `scripts/bench-prefill-vs-prompt.py` reproduces the table; throughput is bucketed rather than smooth, so do not interpolate between rows.

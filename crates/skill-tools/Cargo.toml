@@ -10,6 +10,9 @@ default   = ["headless"]
 headless  = ["dep:skill-headless"]
 
 [dependencies]
+# Owns the skills-prompt vocabulary (`SkillPromptMode`). A leaf crate, so
+# this edge adds no cycle and almost no build time.
+skill-skills = { path = "../skill-skills" }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 skill-constants = { path = "../skill-constants" }

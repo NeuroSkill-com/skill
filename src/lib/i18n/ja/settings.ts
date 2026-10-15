@@ -95,6 +95,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun2":
     "トークンを保存してからデバイスリストからヘッドセットをペアリング/接続してください。",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "WHOOP 4.0 / 5.0 / MG ストラップ",
+  "settings.supportedDevices.instruction.whoop1":
+    "ストラップを装着し、WHOOP アプリで接続されていないことを確認してください。ストラップは同時に 1 つの接続しか受け付けません。",
+  "settings.supportedDevices.instruction.whoop2":
+    "デバイスを開いてスキャンし、ストラップを選びます。名前のないストラップや名前を変えたストラップも、広告しているサービスから見つかります。",
+  "settings.supportedDevices.instruction.whoop3":
+    "心拍数、その基になった R-R 間隔、バッテリー残量がセッションに流れ込みます。WHOOP アカウントは不要です。",
   "settings.supportedDevices.device.ouraRing": "Oura Ring（第3世代/第4世代）",
   "settings.supportedDevices.instruction.oura1":
     "cloud.ouraring.com/personal-access-tokensで個人アクセストークンを取得してください。",

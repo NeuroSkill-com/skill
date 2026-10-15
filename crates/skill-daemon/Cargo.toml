@@ -148,7 +148,7 @@ base64 = { workspace = true }
 # BLE advertisement scanning.  One process-wide `Bluetooth::shared()` session
 # is shared with the device crates that connect, so the scan no longer has to
 # be torn down for a connect to succeed (see scanner.rs).
-webbluetooth = { version = "0.0.3", features = ["uuid"] }
+webbluetooth = { version = "0.0.4", features = ["uuid"] }
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "6"
 rand = "0.10"
@@ -221,8 +221,8 @@ sysinfo              = "0.38"
 
 [dev-dependencies]
 tempfile             = "3"
-mendi                = { version = "0.0.2", features = ["simulate"] }
-mw75                 = { version = "0.0.6" }
+mendi                = { version = "0.0.3", features = ["simulate"] }
+mw75                 = { version = "0.0.8" }
 rlsl                 = { version = "0.0.4" }
 tokio-tungstenite    = "0.28"
 

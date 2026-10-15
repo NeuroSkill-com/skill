@@ -37,17 +37,17 @@ import {
 } from "$lib/daemon/settings";
 import { onDaemonEvent } from "$lib/daemon/ws";
 import { t } from "$lib/i18n/index.svelte";
+import { openSettings } from "$lib/navigation";
 // Single definition of onboarding's model-selection rules — this page used to
 // carry its own copy, which drifted from the tested one in $lib/settings.
 import {
+  type DownloadState,
   isDiscoveredEntry,
+  type LlmModelEntry,
   llmCardTitle as llmCardTitleFor,
   pickFamilyTarget,
   pickLlmTarget,
-  type DownloadState,
-  type LlmModelEntry,
 } from "$lib/settings/onboarding-logic";
-import { openSettings } from "$lib/navigation";
 import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
 import { useWindowTitle } from "$lib/stores/window-title.svelte";
 import type { DeviceStatus } from "$lib/types";

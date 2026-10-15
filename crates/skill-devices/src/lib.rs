@@ -17,6 +17,7 @@ pub use mw75;
 pub use openbci;
 pub use oura_link;
 pub use oura_protocol;
+pub use poop;
 pub use vital;
 
 use skill_data::gpu_stats::GpuStats;

@@ -53,8 +53,7 @@ const ui: Record<string, string> = {
   "tip.echt":
     "Transformada de Hilbert con corrección de extremos — ritmicidad de banda alfa (0–1). Alto = oscilación alfa intensa y estable en fase. [Schreglmann 2021]",
   "tip.hr": "Frecuencia cardíaca derivada de los intervalos entre latidos PPG.",
-  "tip.ibi":
-    "El intervalo entre latidos del que se obtuvo la frecuencia cardíaca, en milisegundos.",
+  "tip.ibi": "El intervalo entre latidos del que se obtuvo la frecuencia cardíaca, en milisegundos.",
   "tip.skinTemperature":
     "Temperatura de la piel medida en el sensor. Valor absoluto, no la desviación respecto a tu valor de referencia.",
   "tip.rmssd":

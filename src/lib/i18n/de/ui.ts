@@ -51,10 +51,8 @@ const ui: Record<string, string> = {
   "tip.echt":
     "Endpunkt-korrigierte Hilbert-Transformation — Alpha-Band-Rhythmizität (0–1). Hoch = starke, phasenstabile Alpha-Oszillation. [Schreglmann 2021]",
   "tip.hr": "Herzfrequenz aus PPG-Intervallen zwischen Herzschlägen.",
-  "tip.ibi":
-    "Das Intervall zwischen zwei Herzschlägen, aus dem die Herzfrequenz berechnet wurde, in Millisekunden.",
-  "tip.skinTemperature":
-    "Am Sensor gemessene Hauttemperatur. Absolutwert, nicht die Abweichung von Ihrem Normalwert.",
+  "tip.ibi": "Das Intervall zwischen zwei Herzschlägen, aus dem die Herzfrequenz berechnet wurde, in Millisekunden.",
+  "tip.skinTemperature": "Am Sensor gemessene Hauttemperatur. Absolutwert, nicht die Abweichung von Ihrem Normalwert.",
   "tip.rmssd": "Quadratischer Mittelwert aufeinanderfolgender Differenzen. Wichtige parasympathische HRV-Metrik.",
   "tip.sdnn": "Standardabweichung der Schlag-zu-Schlag-Intervalle. Spiegelt die gesamte HRV wider.",
   "tip.pnn50": "Prozent aufeinanderfolgender Intervalle mit > 50 ms Differenz. Höher = stärkerer Vagustonus.",

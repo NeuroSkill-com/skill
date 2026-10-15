@@ -1,0 +1,18 @@
+### Dependencies
+
+- **Every Bluetooth device now reaches the radio through one library.** The device crates moved to `webbluetooth` upstream — `awear` 0.2.0 → 0.3.0, `idun` 0.0.3 → 0.0.4, `mendi` 0.0.2 → 0.0.3, `mw75` 0.0.6 → 0.0.8, `muse-rs` 0.2.1 → 0.2.2, `vital` 0.0.1 → 0.0.2 — and `webbluetooth` itself went 0.0.3 → 0.0.4 along with its seven platform backends. `btleplug` and `dashmap` leave the build entirely; `cargo tree -i btleplug` now answers "did not match any packages".
+- **That unification is a correctness requirement, not tidiness.** `Bluetooth::shared()` memoises the session into a `OnceLock`, so two copies of the crate in one build mean two `CBCentralManager`s on macOS — and a second manager cannot discover peripherals while the first is scanning, which presents as devices that simply never connect. Cargo treats `0.0.x` releases as mutually incompatible, so all ten dependents (the eight device crates plus `skill-daemon` and `skill-devices`) have to name the same version; `cargo tree -p skill-daemon -i webbluetooth` must print exactly one node.
+
+### Server
+
+- **The OpenBCI Ganglion's BLE radio joins that session too.** Its driver was the last one still on btleplug, so it is vendored at `patches/openbci-0.0.2` with `board/ganglion.rs` ported to `webbluetooth` and everything else — the Cyton and Cyton+Daisy serial boards, the WiFi-shield boards, Galea, packet decoding, the electrode tables — left verbatim upstream. Web Bluetooth also needs the GATT *service* named before it will hand over a characteristic, which btleplug never required and which neither openbci's source nor its README recorded: it is the Simblee service `0xfe84`, taken from OpenBCI's own `OpenBCI_JavaScript_Utilities/src/constants.js`, whose table also lists the two characteristic UUIDs the driver already used. It is exposed as `GanglionConfig::services` rather than hard-coded, because this path has not yet been exercised against a physical Ganglion and a wrong service should cost a setting rather than a release.
+- **An AWEAR headband now records what it says it is.** `awear` 0.3.0 reports board type, firmware and bootloader versions in a packet sent between connect and ready; that lands in the session's metadata alongside the diagnostics Mendi already writes, instead of being discarded.
+
+### Build
+
+- **The btleplug compatibility shim is retired.** `patches/btleplug-0.11.9` reimplemented btleplug's API over `webbluetooth` so that crates which had not migrated still shared one session. Nothing depends on btleplug any more, so it compiles no longer and its `[patch.crates-io]` entry is removed — an unused patch makes cargo print `warning: patch ... was not used in the crate graph` on every build. The directory is kept as the record of what it did. Anything that adds a btleplug dependency in future has to migrate it or restore the shim, or the second-manager bug comes back with it.
+- **The vendored openbci is a permanent patch, not a staging area.** It is versioned 0.0.2 — a version crates.io does not have and is not going to get — so `skill-devices` requires `"0.0.2"` and nothing published can satisfy it. Dropping the patch entry therefore fails the build outright rather than silently resolving the registry's 0.0.1 and pulling btleplug back in.
+
+### Docs
+
+- **`docs/webbluetooth-migration.md` records the finished state**: which crate moved where, the three properties of the Web Bluetooth model that cost real bugs during the port (services must be granted up front, notifications are per-characteristic and per-stream, and GATT handles go stale across a disconnect), and how to run the vendored crate's own test suite, which cannot run from the workspace root.

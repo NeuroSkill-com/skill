@@ -160,6 +160,7 @@ function onModelSelect(value: string) {
         {#if customModel}
           <input
             type="text"
+            aria-label={t("chat.voice.modelLabel")}
             value={defaults.model}
             oninput={(e) => update({ model: (e.currentTarget as HTMLInputElement).value.trim() })}
             spellcheck="false"
@@ -178,6 +179,7 @@ function onModelSelect(value: string) {
         </div>
         <input
           type="text"
+          aria-label={t("chat.voice.languageLabel")}
           value={defaults.language}
           oninput={(e) => update({ language: (e.currentTarget as HTMLInputElement).value.trim() })}
           spellcheck="false"

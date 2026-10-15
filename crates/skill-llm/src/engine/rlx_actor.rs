@@ -64,6 +64,10 @@ pub(super) fn run_actor(
         model_path.display()
     );
 
+    // Timed so a slow start is attributable: the runner build is rlx's, anything
+    // between this and "ready" is ours. Without the split, "8s to load" sends you
+    // reading the wrong crate.
+    let t_load = std::time::Instant::now();
     let mut runner = match RlxTextRunner::load_with_mmproj(&model_path, mmproj_path.as_deref(), &config) {
         Ok(r) => r,
         Err(e) => {
@@ -75,6 +79,14 @@ pub(super) fn run_actor(
             return;
         }
     };
+
+    llm_info!(
+        &app,
+        &log_buf,
+        log_file,
+        "[rlx-only actor] runner built in {:.2?}",
+        t_load.elapsed()
+    );
 
     let supports_vision = runner.supports_multimodal();
     vision_flag.store(supports_vision, Ordering::Relaxed);

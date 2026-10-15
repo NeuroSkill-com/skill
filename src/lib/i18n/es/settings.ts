@@ -73,6 +73,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "Banda WHOOP 4.0 / 5.0 / MG",
+  "settings.supportedDevices.instruction.whoop1":
+    "Ponte la banda y asegúrate de que no esté conectada en la app de WHOOP: una banda acepta una conexión a la vez.",
+  "settings.supportedDevices.instruction.whoop2":
+    "Abre Dispositivos, busca y elige la banda. Las bandas sin nombre o renombradas también se encuentran, por el servicio que anuncian.",
+  "settings.supportedDevices.instruction.whoop3":
+    "La frecuencia cardíaca, los intervalos R-R que hay detrás y la batería se transmiten a la sesión. No hace falta cuenta de WHOOP.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Obtener un token de acceso personal desde cloud.ouraring.com/personal-access-tokens.",
@@ -241,7 +249,8 @@ const settings: Record<string, string> = {
     "Lee el historial almacenado en el propio anillo por Bluetooth: frecuencia card\u00edaca, HRV, temperatura de la piel, SpO2, fases del sue\u00f1o. Contin\u00faa donde termin\u00f3 la \u00faltima sincronizaci\u00f3n. Desconecta antes el anillo de cualquier sesi\u00f3n activa.",
   "settings.deviceApi.ouraRingNoAnchors":
     "El anillo envi\u00f3 eventos, pero ninguno inclu\u00eda una referencia de reloj, por lo que no se pudo fechar ni guardar nada. Abre la app de Oura junto al anillo una vez para ajustar su reloj y vuelve a sincronizar.",
-  "settings.deviceApi.ouraRingMoreRemaining": "Se ley\u00f3 parte del historial pendiente. Sincroniza de nuevo para continuar.",
+  "settings.deviceApi.ouraRingMoreRemaining":
+    "Se ley\u00f3 parte del historial pendiente. Sincroniza de nuevo para continuar.",
   "settings.deviceApi.ouraSyncBtn": "Sincronizar ahora",
   "settings.deviceApi.ouraSyncing": "Sincronizando…",
   "settings.deviceApi.ouraSynced": "¡Sincronizado!",

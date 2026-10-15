@@ -217,35 +217,160 @@ const TEST_CRATES = [
   "skill-screenshots",
 ];
 
-function checkForCompetingCargo() {
+/**
+ * Working directory of a pid, or "" if it cannot be read.
+ *
+ * macOS has no /proc, so this goes through lsof. `-Fn` is the machine-readable
+ * form: one field per line, the cwd arriving as `n/path/to/dir`.
+ */
+function processCwd(pid) {
   try {
-    const out = execSync(`ps -eo pid,command | grep -E '[c]argo (build|clippy|check|test|install|publish)' || true`, {
+    const out = execSync(`lsof -a -p ${pid} -d cwd -Fn 2>/dev/null || true`, { encoding: "utf8" });
+    const line = out.split("\n").find((l) => l.startsWith("n"));
+    return line ? line.slice(1).trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Shorten a cargo command line for display.
+ *
+ * `ps` gives the whole command, which for a cargo run launched by an agent or
+ * a shell one-liner can be thousands of characters of embedded heredoc — it
+ * buried the question this function is trying to ask. Keep the verb and the
+ * flags that identify *which* build it is, drop the rest.
+ */
+function shortenCargoCommand(command) {
+  const tokens = command.split(/\s+/);
+  const start = tokens.findIndex((t) => /(^|\/)cargo$/.test(t));
+  const rest = (start >= 0 ? tokens.slice(start + 1) : tokens).filter((t) => t !== "");
+  const head = ["cargo", ...rest.slice(0, 8)].join(" ");
+  if (head.length > 64) return `${head.slice(0, 63)}…`;
+  // `…` once, whichever way the line was cut short — truncated text and
+  // dropped trailing args both mean the same thing to a reader.
+  return rest.length > 8 ? `${head} …` : head;
+}
+
+/**
+ * Competing cargo processes, as a list of `{ pid, command, cwd, inScope }`.
+ *
+ * Only real cargo invocations: the shell wrapper that spawned one carries the
+ * same text and would otherwise be listed beside it (three lines for one
+ * build), and a `docker run` that happens to mention cargo builds inside a
+ * container, where this repo's config cannot reach it.
+ */
+function findCompetingCargo(overlayScope) {
+  let out = "";
+  try {
+    out = execSync(`ps -eo pid=,command= | grep -E '[c]argo (build|clippy|check|test|install|publish)' || true`, {
       encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
     }).trim();
-    if (!out) return;
-    const lines = out.split("\n").filter(Boolean);
-    if (lines.length === 0) return;
-    for (const l of lines) {
-      console.log(`    ${l}`);
-    }
-    const fd = openSync("/dev/tty", "r");
-    const buf = Buffer.alloc(1);
-    process.stdout.write("  Continue anyway? [y/N] ");
-    let answer = "";
-    while (true) {
-      const bytesRead = readSync(fd, buf, 0, 1);
-      if (bytesRead === 0) break;
-      const ch = buf.toString("utf8", 0, 1);
-      if (ch === "\n" || ch === "\r") break;
-      answer += ch;
-    }
-    closeSync(fd);
-    if (!/^y(es)?$/i.test(answer.trim())) {
-      throw new Error("Bump aborted: competing cargo processes running.");
-    }
-  } catch (err) {
-    if (err.message.includes("Bump aborted")) throw err;
-    // ignore ps/grep failures
+  } catch {
+    return [];
+  }
+  if (!out) return [];
+
+  const found = [];
+  const seen = new Set();
+  for (const line of out.split("\n")) {
+    const m = line.trim().match(/^(\d+)\s+(.*)$/);
+    if (!m) continue;
+    const [, pid, command] = m;
+    if (Number(pid) === process.pid) continue;
+    // the launching shell, not the build
+    if (/^\S*\/(zsh|bash|sh|fish)\b/.test(command) || /^(zsh|bash|sh|fish)\b/.test(command)) continue;
+    // builds inside a container do not read this machine's cargo config
+    if (/\bdocker\b/.test(command)) continue;
+    if (!/(^|\/)cargo\s/.test(command)) continue;
+
+    const cwd = processCwd(pid);
+    const short = shortenCargoCommand(command);
+    const key = `${short}@${cwd}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({ pid, command: short, cwd, inScope: Boolean(overlayScope && cwd.startsWith(overlayScope)) });
+  }
+  // the ones this bump can actually disturb go first
+  found.sort((a, b) => Number(b.inScope) - Number(a.inScope));
+  return found;
+}
+
+/**
+ * Warn about other cargo builds before the lockfile refresh touches shared
+ * state, and let the user back out.
+ *
+ * The refresh moves the sibling rlx overlay aside for one `cargo metadata`,
+ * and that file sits one directory above this repo — so it is read by *every*
+ * cargo invocation under that directory, including ones in sibling checkouts.
+ * A build that re-resolves inside the window resolves rlx* from git instead of
+ * the local paths. Hence the prompt, and hence the cwd column: which directory
+ * a build is in is the fact that decides whether it matters.
+ */
+function checkForCompetingCargo() {
+  const overlay = rlxOverlayPath();
+  const overlayScope = isManagedRlxOverlay(overlay) ? dirname(dirname(overlay)) : "";
+  const competing = findCompetingCargo(overlayScope);
+  if (competing.length === 0) return;
+
+  const affected = competing.filter((c) => c.inScope);
+  const pidWidth = Math.max(...competing.map((c) => c.pid.length));
+  const cmdWidth = Math.max(...competing.map((c) => c.command.length));
+
+  console.log("");
+  console.log(`[bump] ${competing.length} other cargo build${competing.length === 1 ? "" : "s"} running:`);
+  // Mark the in-scope ones only when the list is mixed: if every build shares
+  // the overlay, the paragraph below already says so and the repeated arrow is
+  // just noise.
+  const mixed = affected.length > 0 && affected.length < competing.length;
+  for (const c of competing) {
+    const mark = mixed && c.inScope ? "  <- shares the rlx overlay" : "";
+    console.log(
+      `    pid ${c.pid.padStart(pidWidth)}  ${c.command.padEnd(cmdWidth)}  ${c.cwd || "(cwd unknown)"}${mark}`,
+    );
+  }
+  console.log("");
+  if (affected.length > 0) {
+    const which = affected.length === competing.length ? "Each of them" : `${affected.length} of them`;
+    console.log(`  ${which} runs under the local rlx overlay, which matters here:`);
+    console.log(`  the Cargo.lock refresh moves ${overlay}`);
+    console.log("  aside for one `cargo metadata`, and every cargo run under");
+    console.log(`  ${overlayScope} reads that file. A build that re-resolves inside`);
+    console.log("  that window takes rlx* from git rather than your sibling checkouts.");
+  } else {
+    console.log("  None of them is under the rlx overlay, so the lockfile refresh cannot");
+    console.log("  change what they resolve — they will only contend for the cargo lock.");
+  }
+  console.log("");
+  console.log("  Nothing has been written yet: N exits cleanly, and re-running later is free.");
+  console.log("");
+
+  let fd;
+  try {
+    fd = openSync("/dev/tty", "r");
+  } catch {
+    // No controlling terminal (CI, a pipeline, an agent harness). Asking is
+    // impossible, so report and continue rather than hanging on a read that
+    // can never return.
+    console.log("  Not a terminal — continuing without asking.");
+    return;
+  }
+
+  const buf = Buffer.alloc(1);
+  process.stdout.write("  Continue anyway? [y/N] ");
+  let answer = "";
+  while (true) {
+    const bytesRead = readSync(fd, buf, 0, 1);
+    if (bytesRead === 0) break;
+    const ch = buf.toString("utf8", 0, 1);
+    if (ch === "\n" || ch === "\r") break;
+    answer += ch;
+  }
+  closeSync(fd);
+  console.log("");
+  if (!/^y(es)?$/i.test(answer.trim())) {
+    throw new Error("Bump aborted: competing cargo processes running.");
   }
 }
 

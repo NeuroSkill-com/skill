@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "Skills nach Bedeutung zuordnen",
+    "desc": "Ordnet Skills nach Bedeutung statt nach gemeinsamen Wörtern, sodass „hilf mir beim Herunterkommen vor dem Schlafen“ ein Schlafprotokoll findet. Benötigt das Text-Embedding-Modell; fällt sonst auf Wortabgleich zurück."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "Skill API",
     "desc": "Erlaubt dem LLM, die NeuroSkill API abzufragen — Gerätestatus, EEG-Sitzungen, Labels, Suche, Hooks, Kalibrierungen, TTS und mehr."

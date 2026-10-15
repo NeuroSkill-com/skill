@@ -694,7 +694,17 @@ pub const EXG_CATALOG_FILE: &str = "exg_catalog.json";
 pub const LLM_LOG_DIR: &str = "llm_logs";
 
 /// Maximum entries in the shared LLM log ring-buffer.
-pub const LLM_LOG_CAP: usize = 500;
+///
+/// This ring is the *only* thing Settings → LLM → Logs shows — it never reads
+/// the on-disk `llm_logs/` file — so an evicted line looks to a user like
+/// something that was never logged. 500 was not enough to survive one session
+/// with tools on: a single orchestration round emits a line per tool call,
+/// per result and per round, so the `chat request — …` line for an earlier
+/// turn was already gone by the time anyone looked for it.
+///
+/// Entries are short strings; several thousand costs a few MB at most, which
+/// is a cheap price for a debugging view that does not lie about what happened.
+pub const LLM_LOG_CAP: usize = 5000;
 
 // ── TTS ───────────────────────────────────────────────────────────────────────
 

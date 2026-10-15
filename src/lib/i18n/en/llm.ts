@@ -249,6 +249,50 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "Last sync",
   "llm.tools.skillsNeverSynced": "never",
   "llm.tools.skillsSection": "Agent Skills",
+  "llm.tools.skillPromptSection": "Skills in the prompt",
+  "llm.tools.skillPromptSectionHint": "paid on every message",
+  "llm.tools.skillPromptIntro":
+    "When read_file is on, every skill is listed in the system prompt so the model knows what it can load. That list is sent with every message, before you type anything — so its size is paid as slower first tokens, more memory, and small models answering the prompt instead of your question.",
+  "llm.tools.skillModeTokens": "tokens",
+  "llm.tools.semanticSkills": "Match skills by meaning",
+  "llm.tools.semanticSkillsDesc":
+    "Rank skills by what they mean rather than by shared words, so “help me wind down before bed” finds a sleep protocol. Needs the text-embedding model; falls back to word matching when it is unavailable.",
+  "llm.tools.skillMode.full": "Full",
+  "llm.tools.skillMode.full.pro":
+    "Every skill with its complete description and exact path. The most the model can possibly know without opening a file.",
+  "llm.tools.skillMode.full.con":
+    "By far the largest. A third of it is XML tags and repeated absolute paths that carry nothing the model cannot work out.",
+  "llm.tools.skillMode.compact": "Compact (recommended)",
+  "llm.tools.skillMode.compact.pro":
+    "Same skills, same descriptions, a third smaller. Drops only the XML scaffolding and the repeated paths, so nothing is actually lost.",
+  "llm.tools.skillMode.compact.con": "Still lists every skill, so it keeps growing as you add more.",
+  "llm.tools.skillMode.grouped": "Grouped",
+  "llm.tools.skillMode.grouped.pro":
+    "Collapses families such as the 14 protocol skills into one line, which also stops them competing with each other for attention.",
+  "llm.tools.skillMode.grouped.con":
+    "The model needs one extra step to see inside a family, and may not take it for a vague request.",
+  "llm.tools.skillMode.brief": "Brief",
+  "llm.tools.skillMode.brief.pro": "Keeps every skill listed but shortens each description to its first line.",
+  "llm.tools.skillMode.brief.con":
+    "The trimmed part is often the list of situations a skill is for, so the model picks the right one less reliably.",
+  "llm.tools.skillMode.names_only": "Names only",
+  "llm.tools.skillMode.names_only.pro":
+    "Almost free — a twentieth of Full. Best when the prompt is already close to the context limit.",
+  "llm.tools.skillMode.names_only.con":
+    "The model must open a file to learn what any skill does, and a small model often will not bother. Expect skills to be used less.",
+  "llm.tools.skillModeGroupSelects": "Only the relevant skills",
+  "llm.tools.skillModeGroupAll": "Every skill, formatted differently",
+  "llm.tools.semanticSkillsInactive": "Only applies to the two presets above that select skills.",
+  "llm.tools.skillMode.smart": "Smart (recommended)",
+  "llm.tools.skillMode.smart.pro":
+    "Sends only the handful of skills relevant to each message, so the prompt stops growing as you add skills. Around a fifth the size of Full — and because a long prompt is charged twice, once to read and again on every word generated, that is the largest saving on offer.",
+  "llm.tools.skillMode.smart.con":
+    "A skill the matcher misses is invisible for that message. With meaning-based matching the right skill is in the shortlist for about nine queries in ten; with word matching, closer to three.",
+  "llm.tools.skillMode.smart_grouped": "Smart, grouped",
+  "llm.tools.skillMode.smart_grouped.pro":
+    "As Smart, and also collapses any family of related skills that made the shortlist into one line.",
+  "llm.tools.skillMode.smart_grouped.con":
+    "Rarely differs from Smart, because a short shortlist seldom contains several members of one family. The model needs an extra step to look inside a collapsed family.",
   "llm.tools.skillsSectionDesc":
     "Skills provide specialised instructions the LLM can load on demand. Toggle individual skills to control which are available in chat.",
   "llm.tools.skillsNone": "No skills found. Sync community skills or add SKILL.md files to ~/.skill/skills/.",

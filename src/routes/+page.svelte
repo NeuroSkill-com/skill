@@ -759,13 +759,14 @@ const isVital = $derived(status.device_kind === "vital");
 const hasPpg = $derived(status.has_ppg);
 const hasImuCap = $derived(status.has_imu);
 const isOura = $derived(status.device_kind === "oura");
+const isWhoop = $derived(status.device_kind === "whoop");
 // Device-reported vitals, as opposed to the PPG waveform `hasPpg` gates. A
 // ring has an optical sensor but does its own beat detection, so there is no
 // waveform to chart — only values.
-const hasVitals = $derived(status.has_vitals === true || isOura);
+const hasVitals = $derived(status.has_vitals === true || isOura || isWhoop);
 const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
-const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi || isVital || isOura);
+const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi || isVital || isOura || isWhoop);
 const hasSecondary = $derived(secondarySessions.length > 0);
 
 /** Short transport/source label for the connected device. */

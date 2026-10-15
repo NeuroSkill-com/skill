@@ -1,1197 +1,1212 @@
 {
-  "updated_at": "2026-07-24T18:38:25.768Z",
+  "updated_at": "2026-10-15T19:58:41.757Z",
   "source": "huggingface",
   "endpoint": "https://huggingface.co",
-  "catalog_repos": 40,
-  "fetched_repos": 137,
+  "catalog_repos": 43,
+  "fetched_repos": 140,
   "failures": [],
   "repos": {
     "bartowski/mistralai_Mistral-Medium-3.5-128B-GGUF": {
-      "downloads": 7326,
-      "likes": 9,
+      "downloads": 3408,
+      "likes": 10,
+      "author": "bartowski"
+    },
+    "bartowski/Qwen_Qwen3.5-0.8B-GGUF": {
+      "downloads": 30043,
+      "likes": 23,
       "author": "bartowski"
     },
     "bartowski/Qwen_Qwen3.5-27B-GGUF": {
-      "downloads": 19022,
-      "likes": 73,
+      "downloads": 166309,
+      "likes": 76,
       "author": "bartowski"
     },
     "bartowski/Qwen_Qwen3.5-4B-GGUF": {
-      "downloads": 50696,
-      "likes": 42,
+      "downloads": 122295,
+      "likes": 67,
       "author": "bartowski"
     },
     "bartowski/Qwen_Qwen3.5-9B-GGUF": {
-      "downloads": 47996,
-      "likes": 83,
+      "downloads": 154531,
+      "likes": 115,
       "author": "bartowski"
     },
     "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF": {
-      "downloads": 7488,
-      "likes": 123,
+      "downloads": 9229,
+      "likes": 128,
       "author": "bartowski"
     },
     "byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF": {
-      "downloads": 1184,
+      "downloads": 2006,
       "likes": 84,
       "author": "byteshape"
     },
     "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF": {
-      "downloads": 201,
+      "downloads": 585,
       "likes": 3,
       "author": "eugenehp"
     },
     "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive": {
-      "downloads": 130989,
-      "likes": 345,
+      "downloads": 20669,
+      "likes": 366,
       "author": "HauhauCS"
     },
     "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive": {
-      "downloads": 96420,
-      "likes": 1455,
+      "downloads": 131160,
+      "likes": 1523,
       "author": "HauhauCS"
     },
     "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive": {
-      "downloads": 146809,
-      "likes": 441,
+      "downloads": 215786,
+      "likes": 634,
       "author": "HauhauCS"
     },
     "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive": {
-      "downloads": 473920,
-      "likes": 1796,
+      "downloads": 710436,
+      "likes": 2288,
       "author": "HauhauCS"
     },
     "LiquidAI/LFM2.5-1.2B-Instruct-GGUF": {
-      "downloads": 343900,
-      "likes": 196,
+      "downloads": 346076,
+      "likes": 229,
       "author": "LiquidAI"
     },
     "LiquidAI/LFM2.5-1.2B-Thinking-GGUF": {
-      "downloads": 12994,
-      "likes": 105,
+      "downloads": 9842,
+      "likes": 119,
       "author": "LiquidAI"
     },
     "LiquidAI/LFM2.5-VL-1.6B-GGUF": {
-      "downloads": 72265,
-      "likes": 97,
+      "downloads": 31225,
+      "likes": 109,
       "author": "LiquidAI"
     },
-    "mlx-community/bge-m3-mlx-fp16": {
-      "downloads": 6854,
-      "likes": 2,
-      "author": "mlx-community"
-    },
-    "mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit": {
-      "downloads": 41826,
-      "likes": 12,
-      "author": "mlx-community"
-    },
-    "mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit": {
-      "downloads": 8235,
-      "likes": 51,
-      "author": "mlx-community"
-    },
-    "mlx-community/DeepSeek-V4-Flash-2bit-DQ": {
-      "downloads": 14059,
-      "likes": 50,
-      "author": "mlx-community"
-    },
-    "mlx-community/DeepSeek-V4-Flash-4bit": {
-      "downloads": 20824,
-      "likes": 25,
-      "author": "mlx-community"
-    },
-    "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit": {
-      "downloads": 116391,
+    "mlx-community/all-MiniLM-L6-v2-4bit": {
+      "downloads": 11186,
       "likes": 6,
       "author": "mlx-community"
     },
+    "mlx-community/chatterbox-turbo-4bit": {
+      "downloads": 72855,
+      "likes": 9,
+      "author": "mlx-community"
+    },
+    "mlx-community/DeepSeek-V4-Flash-2bit-DQ": {
+      "downloads": 7414,
+      "likes": 57,
+      "author": "mlx-community"
+    },
+    "mlx-community/DeepSeek-V4-Flash-4bit": {
+      "downloads": 12715,
+      "likes": 31,
+      "author": "mlx-community"
+    },
+    "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit": {
+      "downloads": 81248,
+      "likes": 11,
+      "author": "mlx-community"
+    },
     "mlx-community/gemma-2-9b-it-4bit": {
-      "downloads": 18512,
+      "downloads": 30731,
       "likes": 1,
       "author": "mlx-community"
     },
-    "mlx-community/gemma-3-12b-it-qat-4bit": {
-      "downloads": 33778,
-      "likes": 19,
+    "mlx-community/gemma-3-12b-it-4bit": {
+      "downloads": 242980,
+      "likes": 6,
       "author": "mlx-community"
     },
-    "mlx-community/gemma-3-1b-it-4bit": {
-      "downloads": 6965,
-      "likes": 4,
+    "mlx-community/gemma-3-12b-it-bf16": {
+      "downloads": 15552,
+      "likes": 2,
+      "author": "mlx-community"
+    },
+    "mlx-community/gemma-3-12b-it-qat-4bit": {
+      "downloads": 21779,
+      "likes": 21,
       "author": "mlx-community"
     },
     "mlx-community/gemma-3-1b-it-qat-4bit": {
-      "downloads": 33390,
-      "likes": 5,
+      "downloads": 26366,
+      "likes": 6,
       "author": "mlx-community"
     },
     "mlx-community/gemma-3-27b-it-qat-4bit": {
-      "downloads": 27684,
-      "likes": 23,
+      "downloads": 22429,
+      "likes": 24,
       "author": "mlx-community"
     },
     "mlx-community/gemma-3-4b-it-8bit": {
-      "downloads": 8252,
+      "downloads": 30949,
       "likes": 6,
       "author": "mlx-community"
     },
     "mlx-community/gemma-3-4b-it-qat-4bit": {
-      "downloads": 68261,
+      "downloads": 44659,
       "likes": 9,
       "author": "mlx-community"
     },
     "mlx-community/gemma-4-12b-coder-fable5-composer2.5-4bit": {
-      "downloads": 9788,
-      "likes": 28,
-      "author": "mlx-community"
-    },
-    "mlx-community/gemma-4-12b-coder-fable5-composer2.5-8bit": {
-      "downloads": 15690,
-      "likes": 31,
+      "downloads": 7574,
+      "likes": 73,
       "author": "mlx-community"
     },
     "mlx-community/gemma-4-12B-it-4bit": {
-      "downloads": 9256,
-      "likes": 14,
-      "author": "mlx-community"
-    },
-    "mlx-community/gemma-4-12B-it-8bit": {
-      "downloads": 8991,
-      "likes": 40,
-      "author": "mlx-community"
-    },
-    "mlx-community/gemma-4-12B-it-OptiQ-4bit": {
-      "downloads": 10465,
-      "likes": 41,
+      "downloads": 7906,
+      "likes": 17,
       "author": "mlx-community"
     },
     "mlx-community/gemma-4-12B-it-qat-4bit": {
-      "downloads": 10752,
-      "likes": 25,
+      "downloads": 24839,
+      "likes": 30,
       "author": "mlx-community"
     },
     "mlx-community/gemma-4-26b-a4b-it-4bit": {
-      "downloads": 32018,
-      "likes": 78,
+      "downloads": 14299,
+      "likes": 88,
+      "author": "mlx-community"
+    },
+    "mlx-community/gemma-4-26B-A4B-it-qat-OptiQ-4bit": {
+      "downloads": 18117,
+      "likes": 4,
       "author": "mlx-community"
     },
     "mlx-community/gemma-4-31b-it-4bit": {
-      "downloads": 43093,
-      "likes": 47,
-      "author": "mlx-community"
-    },
-    "mlx-community/gemma-4-31b-it-8bit": {
-      "downloads": 6820,
-      "likes": 17,
-      "author": "mlx-community"
-    },
-    "mlx-community/gemma-4-31B-it-OptiQ-4bit": {
-      "downloads": 16306,
-      "likes": 11,
+      "downloads": 28379,
+      "likes": 50,
       "author": "mlx-community"
     },
     "mlx-community/gemma-4-e2b-it-4bit": {
-      "downloads": 69891,
-      "likes": 21,
-      "author": "mlx-community"
-    },
-    "mlx-community/gemma-4-e4b-it-4bit": {
-      "downloads": 62769,
+      "downloads": 23402,
       "likes": 34,
       "author": "mlx-community"
     },
-    "mlx-community/GLM-4.7-Flash-4bit": {
-      "downloads": 8808,
-      "likes": 66,
+    "mlx-community/gemma-4-E2B-it-qat-mobile": {
+      "downloads": 19848,
+      "likes": 3,
       "author": "mlx-community"
     },
-    "mlx-community/GLM-5.2-4bit": {
-      "downloads": 10967,
+    "mlx-community/gemma-4-e4b-it-4bit": {
+      "downloads": 30117,
+      "likes": 39,
+      "author": "mlx-community"
+    },
+    "mlx-community/gemma-4-E4B-it-qat-mobile": {
+      "downloads": 15408,
+      "likes": 0,
+      "author": "mlx-community"
+    },
+    "mlx-community/GLM-OCR-4bit": {
+      "downloads": 19982,
       "likes": 5,
-      "author": "mlx-community"
-    },
-    "mlx-community/GLM-5.2-DQ4plus-q8": {
-      "downloads": 14324,
-      "likes": 16,
-      "author": "mlx-community"
-    },
-    "mlx-community/GLM-5.2-mxfp4": {
-      "downloads": 25131,
-      "likes": 22,
-      "author": "mlx-community"
-    },
-    "mlx-community/gpt-oss-120b-MXFP4-Q8": {
-      "downloads": 7378,
-      "likes": 17,
       "author": "mlx-community"
     },
     "mlx-community/gpt-oss-20b-MXFP4-Q8": {
-      "downloads": 348795,
-      "likes": 78,
+      "downloads": 206202,
+      "likes": 97,
       "author": "mlx-community"
     },
-    "mlx-community/Huihui-Qwen3.6-35B-A3B-Claude-4.7-Opus-abliterated-mlx-8bit": {
-      "downloads": 7447,
-      "likes": 26,
+    "mlx-community/index-tts2-mlx": {
+      "downloads": 36157,
+      "likes": 0,
+      "author": "mlx-community"
+    },
+    "mlx-community/KAT-Coder-V2.5-Dev-OptiQ-4bit": {
+      "downloads": 8132,
+      "likes": 20,
       "author": "mlx-community"
     },
     "mlx-community/Kimi-K2.5": {
-      "downloads": 190968,
-      "likes": 38,
+      "downloads": 123910,
+      "likes": 41,
       "author": "mlx-community"
     },
     "mlx-community/Kokoro-82M-bf16": {
-      "downloads": 13292,
-      "likes": 63,
+      "downloads": 73059,
+      "likes": 67,
       "author": "mlx-community"
     },
     "mlx-community/LFM2.5-1.2B-Instruct-4bit": {
-      "downloads": 12524,
-      "likes": 1,
+      "downloads": 7761,
+      "likes": 3,
       "author": "mlx-community"
     },
     "mlx-community/Llama-3.1-8B-Instruct-4bit": {
-      "downloads": 26881,
-      "likes": 3,
+      "downloads": 17840,
+      "likes": 11,
       "author": "mlx-community"
     },
     "mlx-community/Llama-3.2-1B-Instruct-4bit": {
-      "downloads": 49826,
-      "likes": 20,
+      "downloads": 31406,
+      "likes": 21,
       "author": "mlx-community"
     },
     "mlx-community/Llama-3.2-3B-Instruct-4bit": {
-      "downloads": 22792,
-      "likes": 47,
-      "author": "mlx-community"
-    },
-    "mlx-community/Llama-3.3-70B-Instruct-4bit": {
-      "downloads": 15834,
-      "likes": 35,
+      "downloads": 40736,
+      "likes": 48,
       "author": "mlx-community"
     },
     "mlx-community/llava-1.5-7b-4bit": {
-      "downloads": 29011,
+      "downloads": 13478,
       "likes": 5,
       "author": "mlx-community"
     },
-    "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit": {
-      "downloads": 22822,
-      "likes": 20,
-      "author": "mlx-community"
-    },
-    "mlx-community/Meta-Llama-3.1-8B-Instruct-8bit": {
-      "downloads": 6746,
-      "likes": 10,
-      "author": "mlx-community"
-    },
-    "mlx-community/Ministral-3-3B-Instruct-2512-4bit": {
-      "downloads": 17414,
+    "mlx-community/llava-v1.6-mistral-7b-4bit": {
+      "downloads": 13668,
       "likes": 5,
       "author": "mlx-community"
     },
-    "mlx-community/Mistral-7B-Instruct-v0.3-4bit": {
-      "downloads": 10178,
-      "likes": 10,
+    "mlx-community/mel-roformer-mlx": {
+      "downloads": 36229,
+      "likes": 0,
       "author": "mlx-community"
     },
-    "mlx-community/Mistral-Nemo-Instruct-2407-4bit": {
-      "downloads": 7329,
-      "likes": 15,
-      "author": "mlx-community"
-    },
-    "mlx-community/Mistral-Small-3.1-24B-Instruct-2503-4bit": {
-      "downloads": 27071,
-      "likes": 9,
-      "author": "mlx-community"
-    },
-    "mlx-community/Ornith-1.0-35B-4bit": {
-      "downloads": 12313,
-      "likes": 11,
-      "author": "mlx-community"
-    },
-    "mlx-community/Ornith-1.0-35B-8bit": {
-      "downloads": 9342,
-      "likes": 7,
-      "author": "mlx-community"
-    },
-    "mlx-community/Ornith-1.0-35B-bf16": {
-      "downloads": 8873,
-      "likes": 6,
-      "author": "mlx-community"
-    },
-    "mlx-community/Ornith-1.0-9B-4bit": {
-      "downloads": 18555,
-      "likes": 9,
-      "author": "mlx-community"
-    },
-    "mlx-community/orpheus-3b-0.1-ft-bf16": {
-      "downloads": 6993,
-      "likes": 3,
-      "author": "mlx-community"
-    },
-    "mlx-community/parakeet-tdt_ctc-110m": {
-      "downloads": 322788,
-      "likes": 1,
-      "author": "mlx-community"
-    },
-    "mlx-community/parakeet-tdt-0.6b-v2": {
-      "downloads": 1801054,
-      "likes": 45,
-      "author": "mlx-community"
-    },
-    "mlx-community/parakeet-tdt-0.6b-v3": {
-      "downloads": 1265180,
-      "likes": 46,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen1.5-0.5B-Chat-4bit": {
-      "downloads": 17030,
-      "likes": 4,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen2.5-0.5B-Instruct-4bit": {
-      "downloads": 15693,
-      "likes": 7,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen2.5-1.5B-Instruct-4bit": {
-      "downloads": 15904,
-      "likes": 3,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen2.5-3B-Instruct-4bit": {
-      "downloads": 61841,
-      "likes": 1,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen2.5-7B-Instruct-4bit": {
-      "downloads": 19278,
-      "likes": 16,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit": {
-      "downloads": 28769,
-      "likes": 17,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-0.6B-4bit": {
-      "downloads": 43626,
-      "likes": 14,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-0.6B-8bit": {
-      "downloads": 28028,
-      "likes": 7,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-1.7B-4bit": {
-      "downloads": 13586,
-      "likes": 6,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-30B-A3B-4bit": {
-      "downloads": 7924,
-      "likes": 16,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit": {
-      "downloads": 81518,
-      "likes": 12,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-4B-4bit": {
-      "downloads": 16182,
-      "likes": 14,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-4B-Instruct-2507-4bit": {
-      "downloads": 39612,
-      "likes": 10,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-8B-4bit": {
-      "downloads": 31853,
-      "likes": 11,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-ASR-0.6B-8bit": {
-      "downloads": 64254,
-      "likes": 4,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit": {
-      "downloads": 7335,
-      "likes": 31,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ": {
-      "downloads": 16298,
-      "likes": 9,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit": {
-      "downloads": 17038,
-      "likes": 9,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16": {
-      "downloads": 16908,
-      "likes": 19,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3-VL-4B-Instruct-4bit": {
-      "downloads": 19249,
-      "likes": 7,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.5-122B-A10B-4bit": {
-      "downloads": 14287,
+    "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit": {
+      "downloads": 7866,
       "likes": 18,
       "author": "mlx-community"
     },
-    "mlx-community/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit": {
-      "downloads": 13550,
-      "likes": 234,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.5-27B-OptiQ-4bit": {
-      "downloads": 47758,
+    "mlx-community/MiniCPM5-2B-mlx-4Bit": {
+      "downloads": 8121,
       "likes": 3,
       "author": "mlx-community"
     },
+    "mlx-community/Ministral-3-3B-Instruct-2512-4bit": {
+      "downloads": 19131,
+      "likes": 7,
+      "author": "mlx-community"
+    },
+    "mlx-community/Mistral-7B-Instruct-v0.3-4bit": {
+      "downloads": 77880,
+      "likes": 11,
+      "author": "mlx-community"
+    },
+    "mlx-community/Muse-Glimmer-30B-4bit": {
+      "downloads": 9953,
+      "likes": 18,
+      "author": "mlx-community"
+    },
+    "mlx-community/nomicai-modernbert-embed-base-bf16": {
+      "downloads": 11413,
+      "likes": 1,
+      "author": "mlx-community"
+    },
+    "mlx-community/olmOCR-2-7B-1025-mlx-8bit": {
+      "downloads": 41733,
+      "likes": 2,
+      "author": "mlx-community"
+    },
+    "mlx-community/parakeet-tdt-0.6b-v2": {
+      "downloads": 707837,
+      "likes": 47,
+      "author": "mlx-community"
+    },
+    "mlx-community/parakeet-tdt-0.6b-v3": {
+      "downloads": 2407976,
+      "likes": 67,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen-Image-2.1-mflux-q4": {
+      "downloads": 25642,
+      "likes": 1,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen-Image-2512-4bit": {
+      "downloads": 8206,
+      "likes": 8,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen1.5-0.5B-Chat-4bit": {
+      "downloads": 20582,
+      "likes": 4,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2-VL-2B-Instruct-4bit": {
+      "downloads": 20068,
+      "likes": 7,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2.5-0.5B-Instruct-4bit": {
+      "downloads": 73524,
+      "likes": 8,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2.5-1.5B-Instruct-4bit": {
+      "downloads": 16051,
+      "likes": 4,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2.5-3B-Instruct-4bit": {
+      "downloads": 13338,
+      "likes": 2,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2.5-7B-Instruct-4bit": {
+      "downloads": 16016,
+      "likes": 17,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit": {
+      "downloads": 255850,
+      "likes": 30,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen2.5-VL-7B-Instruct-4bit": {
+      "downloads": 18909,
+      "likes": 6,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-0.6B-4bit": {
+      "downloads": 37105,
+      "likes": 18,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-0.6B-8bit": {
+      "downloads": 66648,
+      "likes": 8,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-1.7B-4bit": {
+      "downloads": 15796,
+      "likes": 7,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit": {
+      "downloads": 13402,
+      "likes": 16,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-4B-4bit": {
+      "downloads": 25280,
+      "likes": 16,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-4B-8bit": {
+      "downloads": 7088,
+      "likes": 1,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-4B-Instruct-2507-4bit": {
+      "downloads": 45062,
+      "likes": 14,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-8B-4bit": {
+      "downloads": 120838,
+      "likes": 14,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-ASR-0.6B-8bit": {
+      "downloads": 218376,
+      "likes": 6,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-ASR-1.7B-8bit": {
+      "downloads": 7018,
+      "likes": 20,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit": {
+      "downloads": 26762,
+      "likes": 47,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ": {
+      "downloads": 28069,
+      "likes": 15,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-6bit": {
+      "downloads": 7188,
+      "likes": 0,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit": {
+      "downloads": 8364,
+      "likes": 16,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16": {
+      "downloads": 18525,
+      "likes": 21,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit": {
+      "downloads": 8327,
+      "likes": 35,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3-VL-4B-Instruct-4bit": {
+      "downloads": 21320,
+      "likes": 9,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3.5-0.8B-4bit": {
+      "downloads": 8227,
+      "likes": 3,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3.5-2B-4bit": {
+      "downloads": 9024,
+      "likes": 5,
+      "author": "mlx-community"
+    },
     "mlx-community/Qwen3.5-2B-6bit": {
-      "downloads": 10146,
+      "downloads": 10671,
       "likes": 7,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.5-2B-MLX-4bit": {
-      "downloads": 7472,
-      "likes": 2,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.5-35B-A3B-4bit": {
-      "downloads": 11069,
-      "likes": 42,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.5-397B-A17B-4bit": {
-      "downloads": 6955,
-      "likes": 11,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.5-397B-A17B-8bit": {
-      "downloads": 104776,
-      "likes": 5,
+      "downloads": 12692,
+      "likes": 3,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.5-4B-4bit": {
-      "downloads": 19181,
-      "likes": 7,
+      "downloads": 31580,
+      "likes": 9,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.5-4B-MLX-4bit": {
-      "downloads": 25284,
-      "likes": 30,
+      "downloads": 39254,
+      "likes": 46,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3.5-4B-OptiQ-4bit": {
+      "downloads": 11030,
+      "likes": 36,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.5-9B-4bit": {
-      "downloads": 24849,
-      "likes": 12,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.5-9B-8bit": {
-      "downloads": 50085,
-      "likes": 17,
+      "downloads": 17690,
+      "likes": 18,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.5-9B-MLX-4bit": {
-      "downloads": 21160,
-      "likes": 146,
+      "downloads": 32991,
+      "likes": 185,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.5-9B-OptiQ-4bit": {
-      "downloads": 10139,
-      "likes": 87,
+      "downloads": 7800,
+      "likes": 103,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.6-27B-4bit": {
-      "downloads": 48824,
-      "likes": 47,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.6-27B-AEON-Ultimate-Uncensored-BF16-mlx-8Bit": {
-      "downloads": 7522,
-      "likes": 21,
-      "author": "mlx-community"
-    },
-    "mlx-community/Qwen3.6-27B-OptiQ-4bit": {
-      "downloads": 12696,
-      "likes": 69,
+      "downloads": 63309,
+      "likes": 52,
       "author": "mlx-community"
     },
     "mlx-community/Qwen3.6-35B-A3B-4bit": {
-      "downloads": 63002,
-      "likes": 91,
+      "downloads": 43456,
+      "likes": 113,
       "author": "mlx-community"
     },
-    "mlx-community/Qwen3.6-35B-A3B-8bit": {
-      "downloads": 117965,
-      "likes": 23,
+    "mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit-REAP-19B": {
+      "downloads": 9178,
+      "likes": 11,
       "author": "mlx-community"
     },
-    "mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit": {
-      "downloads": 13473,
-      "likes": 54,
+    "mlx-community/Qwen3.8-27B-4bit": {
+      "downloads": 883264,
+      "likes": 208,
       "author": "mlx-community"
     },
-    "mlx-community/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-8bit": {
-      "downloads": 19315,
-      "likes": 48,
+    "mlx-community/Qwen3.8-27B-8bit": {
+      "downloads": 78554,
+      "likes": 77,
       "author": "mlx-community"
     },
-    "mlx-community/whisper-base.en-mlx": {
-      "downloads": 10601,
-      "likes": 0,
+    "mlx-community/Qwen3.8-27B-MTP-4bit": {
+      "downloads": 16412,
+      "likes": 34,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3.8-27B-OptiQ-4bit": {
+      "downloads": 7365,
+      "likes": 21,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit": {
+      "downloads": 16029,
+      "likes": 36,
+      "author": "mlx-community"
+    },
+    "mlx-community/Qwen3.8-Flash-Next-4bit": {
+      "downloads": 7861,
+      "likes": 14,
+      "author": "mlx-community"
+    },
+    "mlx-community/whisper-base-mlx": {
+      "downloads": 17652,
+      "likes": 2,
       "author": "mlx-community"
     },
     "mlx-community/whisper-large-v3-mlx": {
-      "downloads": 25074,
-      "likes": 98,
+      "downloads": 66516,
+      "likes": 111,
       "author": "mlx-community"
     },
     "mlx-community/whisper-large-v3-turbo": {
-      "downloads": 69337,
-      "likes": 97,
+      "downloads": 282427,
+      "likes": 117,
+      "author": "mlx-community"
+    },
+    "mlx-community/whisper-large-v3-turbo-4bit": {
+      "downloads": 9293,
+      "likes": 8,
+      "author": "mlx-community"
+    },
+    "mlx-community/whisper-large-v3-turbo-q4": {
+      "downloads": 11766,
+      "likes": 8,
+      "author": "mlx-community"
+    },
+    "mlx-community/whisper-medium-mlx": {
+      "downloads": 10869,
+      "likes": 3,
       "author": "mlx-community"
     },
     "mlx-community/whisper-small-mlx": {
-      "downloads": 26424,
+      "downloads": 170701,
       "likes": 5,
       "author": "mlx-community"
     },
+    "mlx-community/whisper-small.en-mlx": {
+      "downloads": 11696,
+      "likes": 0,
+      "author": "mlx-community"
+    },
     "mlx-community/whisper-tiny": {
-      "downloads": 963577,
+      "downloads": 18931,
       "likes": 1,
       "author": "mlx-community"
     },
     "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF": {
-      "downloads": 8597,
-      "likes": 183,
+      "downloads": 12241,
+      "likes": 221,
       "author": "nvidia"
     },
     "openbmb/MiniCPM5-1B-GGUF": {
-      "downloads": 92701,
-      "likes": 209,
+      "downloads": 45147,
+      "likes": 264,
       "author": "openbmb"
     },
     "prism-ml/Bonsai-1.7B-gguf": {
-      "downloads": 26499,
-      "likes": 80,
+      "downloads": 71347,
+      "likes": 95,
       "author": "prism-ml"
     },
     "prism-ml/Bonsai-27B-gguf": {
-      "downloads": 2028115,
-      "likes": 630,
+      "downloads": 403985,
+      "likes": 920,
       "author": "prism-ml"
     },
     "prism-ml/Bonsai-4B-gguf": {
-      "downloads": 13650,
-      "likes": 52,
+      "downloads": 30467,
+      "likes": 64,
       "author": "prism-ml"
     },
     "prism-ml/Bonsai-8B-gguf": {
-      "downloads": 46350,
-      "likes": 759,
+      "downloads": 117283,
+      "likes": 796,
       "author": "prism-ml"
     },
     "prism-ml/Ternary-Bonsai-27B-gguf": {
-      "downloads": 595415,
-      "likes": 1003,
+      "downloads": 586187,
+      "likes": 1425,
       "author": "prism-ml"
     },
     "Tesslate/OmniCoder-9B-GGUF": {
-      "downloads": 9277,
-      "likes": 322,
+      "downloads": 18165,
+      "likes": 350,
       "author": "Tesslate"
     },
     "unsloth/gemma-3-270m-it-GGUF": {
-      "downloads": 83344,
-      "likes": 169,
+      "downloads": 81606,
+      "likes": 178,
       "author": "unsloth"
     },
     "unsloth/gemma-4-26B-A4B-it-GGUF": {
-      "downloads": 1484841,
-      "likes": 995,
+      "downloads": 809263,
+      "likes": 1219,
       "author": "unsloth"
     },
     "unsloth/gemma-4-31B-it-GGUF": {
-      "downloads": 524138,
-      "likes": 545,
+      "downloads": 280773,
+      "likes": 637,
       "author": "unsloth"
     },
     "unsloth/gemma-4-E2B-it-GGUF": {
-      "downloads": 451089,
-      "likes": 268,
+      "downloads": 389576,
+      "likes": 337,
       "author": "unsloth"
     },
     "unsloth/gemma-4-E4B-it-GGUF": {
-      "downloads": 516400,
-      "likes": 561,
+      "downloads": 591763,
+      "likes": 654,
       "author": "unsloth"
     },
     "unsloth/gpt-oss-20b-GGUF": {
-      "downloads": 513992,
-      "likes": 742,
+      "downloads": 520724,
+      "likes": 874,
       "author": "unsloth"
     },
     "unsloth/MiniMax-M2.5-GGUF": {
-      "downloads": 18671,
-      "likes": 244,
+      "downloads": 4836,
+      "likes": 247,
       "author": "unsloth"
     },
     "unsloth/Ministral-3-14B-Instruct-2512-GGUF": {
-      "downloads": 7686,
-      "likes": 87,
+      "downloads": 12803,
+      "likes": 91,
       "author": "unsloth"
     },
     "unsloth/Ministral-3-14B-Reasoning-2512-GGUF": {
-      "downloads": 6025,
-      "likes": 47,
+      "downloads": 12630,
+      "likes": 51,
       "author": "unsloth"
     },
     "unsloth/Phi-4-reasoning-plus-GGUF": {
-      "downloads": 7237,
-      "likes": 95,
+      "downloads": 4457,
+      "likes": 96,
+      "author": "unsloth"
+    },
+    "unsloth/Qwen3-0.6B-GGUF": {
+      "downloads": 145420,
+      "likes": 141,
       "author": "unsloth"
     },
     "unsloth/Qwen3-Coder-Next-GGUF": {
-      "downloads": 189304,
-      "likes": 776,
+      "downloads": 139785,
+      "likes": 883,
       "author": "unsloth"
     },
     "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF": {
-      "downloads": 74385,
-      "likes": 105,
+      "downloads": 26132,
+      "likes": 119,
+      "author": "unsloth"
+    },
+    "unsloth/Qwen3.5-0.8B-GGUF": {
+      "downloads": 230348,
+      "likes": 240,
       "author": "unsloth"
     },
     "unsloth/Qwen3.6-27B-GGUF": {
-      "downloads": 772850,
-      "likes": 895,
+      "downloads": 550011,
+      "likes": 967,
       "author": "unsloth"
     },
     "unsloth/Qwen3.6-27B-MTP-GGUF": {
-      "downloads": 2965470,
-      "likes": 1163,
+      "downloads": 165797,
+      "likes": 1336,
       "author": "unsloth"
     },
     "unsloth/Qwen3.6-35B-A3B-GGUF": {
-      "downloads": 793190,
-      "likes": 1410,
+      "downloads": 1226793,
+      "likes": 1690,
       "author": "unsloth"
     }
   },
   "mlx_community_top": [
     {
-      "repo": "mlx-community/parakeet-tdt-0.6b-v2",
-      "downloads": 1801054,
-      "likes": 45
-    },
-    {
       "repo": "mlx-community/parakeet-tdt-0.6b-v3",
-      "downloads": 1265180,
-      "likes": 46
+      "downloads": 2407976,
+      "likes": 67
     },
     {
-      "repo": "mlx-community/whisper-tiny",
-      "downloads": 963577,
-      "likes": 1
+      "repo": "mlx-community/Qwen3.8-27B-4bit",
+      "downloads": 883264,
+      "likes": 208
     },
     {
-      "repo": "mlx-community/gpt-oss-20b-MXFP4-Q8",
-      "downloads": 348795,
-      "likes": 78
-    },
-    {
-      "repo": "mlx-community/parakeet-tdt_ctc-110m",
-      "downloads": 322788,
-      "likes": 1
-    },
-    {
-      "repo": "mlx-community/Kimi-K2.5",
-      "downloads": 190968,
-      "likes": 38
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-35B-A3B-8bit",
-      "downloads": 117965,
-      "likes": 23
-    },
-    {
-      "repo": "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
-      "downloads": 116391,
-      "likes": 6
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-397B-A17B-8bit",
-      "downloads": 104776,
-      "likes": 5
-    },
-    {
-      "repo": "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit",
-      "downloads": 81518,
-      "likes": 12
-    },
-    {
-      "repo": "mlx-community/gemma-4-e2b-it-4bit",
-      "downloads": 69891,
-      "likes": 21
+      "repo": "mlx-community/parakeet-tdt-0.6b-v2",
+      "downloads": 707837,
+      "likes": 47
     },
     {
       "repo": "mlx-community/whisper-large-v3-turbo",
-      "downloads": 69337,
-      "likes": 97
-    },
-    {
-      "repo": "mlx-community/gemma-3-4b-it-qat-4bit",
-      "downloads": 68261,
-      "likes": 9
-    },
-    {
-      "repo": "mlx-community/Qwen3-ASR-0.6B-8bit",
-      "downloads": 64254,
-      "likes": 4
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-35B-A3B-4bit",
-      "downloads": 63002,
-      "likes": 91
-    },
-    {
-      "repo": "mlx-community/gemma-4-e4b-it-4bit",
-      "downloads": 62769,
-      "likes": 34
-    },
-    {
-      "repo": "mlx-community/Qwen2.5-3B-Instruct-4bit",
-      "downloads": 61841,
-      "likes": 1
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-9B-8bit",
-      "downloads": 50085,
-      "likes": 17
-    },
-    {
-      "repo": "mlx-community/Llama-3.2-1B-Instruct-4bit",
-      "downloads": 49826,
-      "likes": 20
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-27B-4bit",
-      "downloads": 48824,
-      "likes": 47
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-27B-OptiQ-4bit",
-      "downloads": 47758,
-      "likes": 3
-    },
-    {
-      "repo": "mlx-community/Qwen3-0.6B-4bit",
-      "downloads": 43626,
-      "likes": 14
-    },
-    {
-      "repo": "mlx-community/gemma-4-31b-it-4bit",
-      "downloads": 43093,
-      "likes": 47
-    },
-    {
-      "repo": "mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit",
-      "downloads": 41826,
-      "likes": 12
-    },
-    {
-      "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
-      "downloads": 39612,
-      "likes": 10
-    },
-    {
-      "repo": "mlx-community/gemma-3-12b-it-qat-4bit",
-      "downloads": 33778,
-      "likes": 19
-    },
-    {
-      "repo": "mlx-community/gemma-3-1b-it-qat-4bit",
-      "downloads": 33390,
-      "likes": 5
-    },
-    {
-      "repo": "mlx-community/gemma-4-26b-a4b-it-4bit",
-      "downloads": 32018,
-      "likes": 78
-    },
-    {
-      "repo": "mlx-community/Qwen3-8B-4bit",
-      "downloads": 31853,
-      "likes": 11
-    },
-    {
-      "repo": "mlx-community/llava-1.5-7b-4bit",
-      "downloads": 29011,
-      "likes": 5
+      "downloads": 282427,
+      "likes": 117
     },
     {
       "repo": "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
-      "downloads": 28769,
-      "likes": 17
-    },
-    {
-      "repo": "mlx-community/Qwen3-0.6B-8bit",
-      "downloads": 28028,
-      "likes": 7
-    },
-    {
-      "repo": "mlx-community/gemma-3-27b-it-qat-4bit",
-      "downloads": 27684,
-      "likes": 23
-    },
-    {
-      "repo": "mlx-community/Mistral-Small-3.1-24B-Instruct-2503-4bit",
-      "downloads": 27071,
-      "likes": 9
-    },
-    {
-      "repo": "mlx-community/Llama-3.1-8B-Instruct-4bit",
-      "downloads": 26881,
-      "likes": 3
-    },
-    {
-      "repo": "mlx-community/whisper-small-mlx",
-      "downloads": 26424,
-      "likes": 5
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-4B-MLX-4bit",
-      "downloads": 25284,
+      "downloads": 255850,
       "likes": 30
     },
     {
-      "repo": "mlx-community/GLM-5.2-mxfp4",
-      "downloads": 25131,
-      "likes": 22
+      "repo": "mlx-community/gemma-3-12b-it-4bit",
+      "downloads": 242980,
+      "likes": 6
     },
     {
-      "repo": "mlx-community/whisper-large-v3-mlx",
-      "downloads": 25074,
-      "likes": 98
+      "repo": "mlx-community/Qwen3-ASR-0.6B-8bit",
+      "downloads": 218376,
+      "likes": 6
     },
     {
-      "repo": "mlx-community/Qwen3.5-9B-4bit",
-      "downloads": 24849,
-      "likes": 12
+      "repo": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+      "downloads": 206202,
+      "likes": 97
     },
     {
-      "repo": "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
-      "downloads": 22822,
-      "likes": 20
-    },
-    {
-      "repo": "mlx-community/Llama-3.2-3B-Instruct-4bit",
-      "downloads": 22792,
-      "likes": 47
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-9B-MLX-4bit",
-      "downloads": 21160,
-      "likes": 146
-    },
-    {
-      "repo": "mlx-community/DeepSeek-V4-Flash-4bit",
-      "downloads": 20824,
-      "likes": 25
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-40B-Claude-4.6-Opus-Deckard-Heretic-Uncensored-Thinking-8bit",
-      "downloads": 19315,
-      "likes": 48
-    },
-    {
-      "repo": "mlx-community/Qwen2.5-7B-Instruct-4bit",
-      "downloads": 19278,
-      "likes": 16
-    },
-    {
-      "repo": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
-      "downloads": 19249,
-      "likes": 7
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-4B-4bit",
-      "downloads": 19181,
-      "likes": 7
-    },
-    {
-      "repo": "mlx-community/Ornith-1.0-9B-4bit",
-      "downloads": 18555,
-      "likes": 9
-    },
-    {
-      "repo": "mlx-community/gemma-2-9b-it-4bit",
-      "downloads": 18512,
-      "likes": 1
-    },
-    {
-      "repo": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
-      "downloads": 17414,
+      "repo": "mlx-community/whisper-small-mlx",
+      "downloads": 170701,
       "likes": 5
     },
     {
-      "repo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit",
-      "downloads": 17038,
+      "repo": "mlx-community/Kimi-K2.5",
+      "downloads": 123910,
+      "likes": 41
+    },
+    {
+      "repo": "mlx-community/Qwen3-8B-4bit",
+      "downloads": 120838,
+      "likes": 14
+    },
+    {
+      "repo": "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+      "downloads": 81248,
+      "likes": 11
+    },
+    {
+      "repo": "mlx-community/Qwen3.8-27B-8bit",
+      "downloads": 78554,
+      "likes": 77
+    },
+    {
+      "repo": "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+      "downloads": 77880,
+      "likes": 11
+    },
+    {
+      "repo": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+      "downloads": 73524,
+      "likes": 8
+    },
+    {
+      "repo": "mlx-community/Kokoro-82M-bf16",
+      "downloads": 73059,
+      "likes": 67
+    },
+    {
+      "repo": "mlx-community/chatterbox-turbo-4bit",
+      "downloads": 72855,
+      "likes": 9
+    },
+    {
+      "repo": "mlx-community/Qwen3-0.6B-8bit",
+      "downloads": 66648,
+      "likes": 8
+    },
+    {
+      "repo": "mlx-community/whisper-large-v3-mlx",
+      "downloads": 66516,
+      "likes": 111
+    },
+    {
+      "repo": "mlx-community/Qwen3.6-27B-4bit",
+      "downloads": 63309,
+      "likes": 52
+    },
+    {
+      "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "downloads": 45062,
+      "likes": 14
+    },
+    {
+      "repo": "mlx-community/gemma-3-4b-it-qat-4bit",
+      "downloads": 44659,
+      "likes": 9
+    },
+    {
+      "repo": "mlx-community/Qwen3.6-35B-A3B-4bit",
+      "downloads": 43456,
+      "likes": 113
+    },
+    {
+      "repo": "mlx-community/olmOCR-2-7B-1025-mlx-8bit",
+      "downloads": 41733,
+      "likes": 2
+    },
+    {
+      "repo": "mlx-community/Llama-3.2-3B-Instruct-4bit",
+      "downloads": 40736,
+      "likes": 48
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "downloads": 39254,
+      "likes": 46
+    },
+    {
+      "repo": "mlx-community/Qwen3-0.6B-4bit",
+      "downloads": 37105,
+      "likes": 18
+    },
+    {
+      "repo": "mlx-community/mel-roformer-mlx",
+      "downloads": 36229,
+      "likes": 0
+    },
+    {
+      "repo": "mlx-community/index-tts2-mlx",
+      "downloads": 36157,
+      "likes": 0
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-9B-MLX-4bit",
+      "downloads": 32991,
+      "likes": 185
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-4B-4bit",
+      "downloads": 31580,
+      "likes": 9
+    },
+    {
+      "repo": "mlx-community/Llama-3.2-1B-Instruct-4bit",
+      "downloads": 31406,
+      "likes": 21
+    },
+    {
+      "repo": "mlx-community/gemma-3-4b-it-8bit",
+      "downloads": 30949,
+      "likes": 6
+    },
+    {
+      "repo": "mlx-community/gemma-2-9b-it-4bit",
+      "downloads": 30731,
+      "likes": 1
+    },
+    {
+      "repo": "mlx-community/gemma-4-e4b-it-4bit",
+      "downloads": 30117,
+      "likes": 39
+    },
+    {
+      "repo": "mlx-community/gemma-4-31b-it-4bit",
+      "downloads": 28379,
+      "likes": 50
+    },
+    {
+      "repo": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+      "downloads": 28069,
+      "likes": 15
+    },
+    {
+      "repo": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+      "downloads": 26762,
+      "likes": 47
+    },
+    {
+      "repo": "mlx-community/gemma-3-1b-it-qat-4bit",
+      "downloads": 26366,
+      "likes": 6
+    },
+    {
+      "repo": "mlx-community/Qwen-Image-2.1-mflux-q4",
+      "downloads": 25642,
+      "likes": 1
+    },
+    {
+      "repo": "mlx-community/Qwen3-4B-4bit",
+      "downloads": 25280,
+      "likes": 16
+    },
+    {
+      "repo": "mlx-community/gemma-4-12B-it-qat-4bit",
+      "downloads": 24839,
+      "likes": 30
+    },
+    {
+      "repo": "mlx-community/gemma-4-e2b-it-4bit",
+      "downloads": 23402,
+      "likes": 34
+    },
+    {
+      "repo": "mlx-community/gemma-3-27b-it-qat-4bit",
+      "downloads": 22429,
+      "likes": 24
+    },
+    {
+      "repo": "mlx-community/gemma-3-12b-it-qat-4bit",
+      "downloads": 21779,
+      "likes": 21
+    },
+    {
+      "repo": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+      "downloads": 21320,
       "likes": 9
     },
     {
       "repo": "mlx-community/Qwen1.5-0.5B-Chat-4bit",
-      "downloads": 17030,
+      "downloads": 20582,
       "likes": 4
     },
     {
-      "repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16",
-      "downloads": 16908,
-      "likes": 19
-    },
-    {
-      "repo": "mlx-community/gemma-4-31B-it-OptiQ-4bit",
-      "downloads": 16306,
-      "likes": 11
-    },
-    {
-      "repo": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
-      "downloads": 16298,
-      "likes": 9
-    },
-    {
-      "repo": "mlx-community/Qwen3-4B-4bit",
-      "downloads": 16182,
-      "likes": 14
-    },
-    {
-      "repo": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-      "downloads": 15904,
-      "likes": 3
-    },
-    {
-      "repo": "mlx-community/Llama-3.3-70B-Instruct-4bit",
-      "downloads": 15834,
-      "likes": 35
-    },
-    {
-      "repo": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-      "downloads": 15693,
+      "repo": "mlx-community/Qwen2-VL-2B-Instruct-4bit",
+      "downloads": 20068,
       "likes": 7
     },
     {
-      "repo": "mlx-community/gemma-4-12b-coder-fable5-composer2.5-8bit",
-      "downloads": 15690,
-      "likes": 31
-    },
-    {
-      "repo": "mlx-community/GLM-5.2-DQ4plus-q8",
-      "downloads": 14324,
-      "likes": 16
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-122B-A10B-4bit",
-      "downloads": 14287,
-      "likes": 18
-    },
-    {
-      "repo": "mlx-community/DeepSeek-V4-Flash-2bit-DQ",
-      "downloads": 14059,
-      "likes": 50
-    },
-    {
-      "repo": "mlx-community/Qwen3-1.7B-4bit",
-      "downloads": 13586,
-      "likes": 6
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit",
-      "downloads": 13550,
-      "likes": 234
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit",
-      "downloads": 13473,
-      "likes": 54
-    },
-    {
-      "repo": "mlx-community/Kokoro-82M-bf16",
-      "downloads": 13292,
-      "likes": 63
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-27B-OptiQ-4bit",
-      "downloads": 12696,
-      "likes": 69
-    },
-    {
-      "repo": "mlx-community/LFM2.5-1.2B-Instruct-4bit",
-      "downloads": 12524,
-      "likes": 1
-    },
-    {
-      "repo": "mlx-community/Ornith-1.0-35B-4bit",
-      "downloads": 12313,
-      "likes": 11
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-35B-A3B-4bit",
-      "downloads": 11069,
-      "likes": 42
-    },
-    {
-      "repo": "mlx-community/GLM-5.2-4bit",
-      "downloads": 10967,
+      "repo": "mlx-community/GLM-OCR-4bit",
+      "downloads": 19982,
       "likes": 5
     },
     {
-      "repo": "mlx-community/gemma-4-12B-it-qat-4bit",
-      "downloads": 10752,
-      "likes": 25
-    },
-    {
-      "repo": "mlx-community/whisper-base.en-mlx",
-      "downloads": 10601,
-      "likes": 0
-    },
-    {
-      "repo": "mlx-community/gemma-4-12B-it-OptiQ-4bit",
-      "downloads": 10465,
-      "likes": 41
-    },
-    {
-      "repo": "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
-      "downloads": 10178,
-      "likes": 10
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-2B-6bit",
-      "downloads": 10146,
-      "likes": 7
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-9B-OptiQ-4bit",
-      "downloads": 10139,
-      "likes": 87
-    },
-    {
-      "repo": "mlx-community/gemma-4-12b-coder-fable5-composer2.5-4bit",
-      "downloads": 9788,
-      "likes": 28
-    },
-    {
-      "repo": "mlx-community/Ornith-1.0-35B-8bit",
-      "downloads": 9342,
-      "likes": 7
-    },
-    {
-      "repo": "mlx-community/gemma-4-12B-it-4bit",
-      "downloads": 9256,
-      "likes": 14
-    },
-    {
-      "repo": "mlx-community/gemma-4-12B-it-8bit",
-      "downloads": 8991,
-      "likes": 40
-    },
-    {
-      "repo": "mlx-community/Ornith-1.0-35B-bf16",
-      "downloads": 8873,
-      "likes": 6
-    },
-    {
-      "repo": "mlx-community/GLM-4.7-Flash-4bit",
-      "downloads": 8808,
-      "likes": 66
-    },
-    {
-      "repo": "mlx-community/gemma-3-4b-it-8bit",
-      "downloads": 8252,
-      "likes": 6
-    },
-    {
-      "repo": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit",
-      "downloads": 8235,
-      "likes": 51
-    },
-    {
-      "repo": "mlx-community/Qwen3-30B-A3B-4bit",
-      "downloads": 7924,
-      "likes": 16
-    },
-    {
-      "repo": "mlx-community/Qwen3.6-27B-AEON-Ultimate-Uncensored-BF16-mlx-8Bit",
-      "downloads": 7522,
-      "likes": 21
-    },
-    {
-      "repo": "mlx-community/Qwen3.5-2B-MLX-4bit",
-      "downloads": 7472,
-      "likes": 2
-    },
-    {
-      "repo": "mlx-community/Huihui-Qwen3.6-35B-A3B-Claude-4.7-Opus-abliterated-mlx-8bit",
-      "downloads": 7447,
-      "likes": 26
-    },
-    {
-      "repo": "mlx-community/gpt-oss-120b-MXFP4-Q8",
-      "downloads": 7378,
-      "likes": 17
-    },
-    {
-      "repo": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
-      "downloads": 7335,
-      "likes": 31
-    },
-    {
-      "repo": "mlx-community/Mistral-Nemo-Instruct-2407-4bit",
-      "downloads": 7329,
-      "likes": 15
-    },
-    {
-      "repo": "mlx-community/orpheus-3b-0.1-ft-bf16",
-      "downloads": 6993,
+      "repo": "mlx-community/gemma-4-E2B-it-qat-mobile",
+      "downloads": 19848,
       "likes": 3
     },
     {
-      "repo": "mlx-community/gemma-3-1b-it-4bit",
-      "downloads": 6965,
+      "repo": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+      "downloads": 19131,
+      "likes": 7
+    },
+    {
+      "repo": "mlx-community/whisper-tiny",
+      "downloads": 18931,
+      "likes": 1
+    },
+    {
+      "repo": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+      "downloads": 18909,
+      "likes": 6
+    },
+    {
+      "repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16",
+      "downloads": 18525,
+      "likes": 21
+    },
+    {
+      "repo": "mlx-community/gemma-4-26B-A4B-it-qat-OptiQ-4bit",
+      "downloads": 18117,
       "likes": 4
     },
     {
-      "repo": "mlx-community/Qwen3.5-397B-A17B-4bit",
-      "downloads": 6955,
+      "repo": "mlx-community/Llama-3.1-8B-Instruct-4bit",
+      "downloads": 17840,
       "likes": 11
     },
     {
-      "repo": "mlx-community/bge-m3-mlx-fp16",
-      "downloads": 6854,
+      "repo": "mlx-community/Qwen3.5-9B-4bit",
+      "downloads": 17690,
+      "likes": 18
+    },
+    {
+      "repo": "mlx-community/whisper-base-mlx",
+      "downloads": 17652,
       "likes": 2
     },
     {
-      "repo": "mlx-community/gemma-4-31b-it-8bit",
-      "downloads": 6820,
+      "repo": "mlx-community/Qwen3.8-27B-MTP-4bit",
+      "downloads": 16412,
+      "likes": 34
+    },
+    {
+      "repo": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "downloads": 16051,
+      "likes": 4
+    },
+    {
+      "repo": "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit",
+      "downloads": 16029,
+      "likes": 36
+    },
+    {
+      "repo": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "downloads": 16016,
       "likes": 17
     },
     {
-      "repo": "mlx-community/Meta-Llama-3.1-8B-Instruct-8bit",
-      "downloads": 6746,
-      "likes": 10
+      "repo": "mlx-community/Qwen3-1.7B-4bit",
+      "downloads": 15796,
+      "likes": 7
+    },
+    {
+      "repo": "mlx-community/gemma-3-12b-it-bf16",
+      "downloads": 15552,
+      "likes": 2
+    },
+    {
+      "repo": "mlx-community/gemma-4-E4B-it-qat-mobile",
+      "downloads": 15408,
+      "likes": 0
+    },
+    {
+      "repo": "mlx-community/gemma-4-26b-a4b-it-4bit",
+      "downloads": 14299,
+      "likes": 88
+    },
+    {
+      "repo": "mlx-community/llava-v1.6-mistral-7b-4bit",
+      "downloads": 13668,
+      "likes": 5
+    },
+    {
+      "repo": "mlx-community/llava-1.5-7b-4bit",
+      "downloads": 13478,
+      "likes": 5
+    },
+    {
+      "repo": "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit",
+      "downloads": 13402,
+      "likes": 16
+    },
+    {
+      "repo": "mlx-community/Qwen2.5-3B-Instruct-4bit",
+      "downloads": 13338,
+      "likes": 2
+    },
+    {
+      "repo": "mlx-community/DeepSeek-V4-Flash-4bit",
+      "downloads": 12715,
+      "likes": 31
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-2B-MLX-4bit",
+      "downloads": 12692,
+      "likes": 3
+    },
+    {
+      "repo": "mlx-community/whisper-large-v3-turbo-q4",
+      "downloads": 11766,
+      "likes": 8
+    },
+    {
+      "repo": "mlx-community/whisper-small.en-mlx",
+      "downloads": 11696,
+      "likes": 0
+    },
+    {
+      "repo": "mlx-community/nomicai-modernbert-embed-base-bf16",
+      "downloads": 11413,
+      "likes": 1
+    },
+    {
+      "repo": "mlx-community/all-MiniLM-L6-v2-4bit",
+      "downloads": 11186,
+      "likes": 6
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-4B-OptiQ-4bit",
+      "downloads": 11030,
+      "likes": 36
+    },
+    {
+      "repo": "mlx-community/whisper-medium-mlx",
+      "downloads": 10869,
+      "likes": 3
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-2B-6bit",
+      "downloads": 10671,
+      "likes": 7
+    },
+    {
+      "repo": "mlx-community/Muse-Glimmer-30B-4bit",
+      "downloads": 9953,
+      "likes": 18
+    },
+    {
+      "repo": "mlx-community/whisper-large-v3-turbo-4bit",
+      "downloads": 9293,
+      "likes": 8
+    },
+    {
+      "repo": "mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit-REAP-19B",
+      "downloads": 9178,
+      "likes": 11
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-2B-4bit",
+      "downloads": 9024,
+      "likes": 5
+    },
+    {
+      "repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+      "downloads": 8364,
+      "likes": 16
+    },
+    {
+      "repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+      "downloads": 8327,
+      "likes": 35
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-0.8B-4bit",
+      "downloads": 8227,
+      "likes": 3
+    },
+    {
+      "repo": "mlx-community/Qwen-Image-2512-4bit",
+      "downloads": 8206,
+      "likes": 8
+    },
+    {
+      "repo": "mlx-community/KAT-Coder-V2.5-Dev-OptiQ-4bit",
+      "downloads": 8132,
+      "likes": 20
+    },
+    {
+      "repo": "mlx-community/MiniCPM5-2B-mlx-4Bit",
+      "downloads": 8121,
+      "likes": 3
+    },
+    {
+      "repo": "mlx-community/gemma-4-12B-it-4bit",
+      "downloads": 7906,
+      "likes": 17
+    },
+    {
+      "repo": "mlx-community/MiMo-V2.6-Distill-Qwen-9B-OptiQ-4bit",
+      "downloads": 7866,
+      "likes": 18
+    },
+    {
+      "repo": "mlx-community/Qwen3.8-Flash-Next-4bit",
+      "downloads": 7861,
+      "likes": 14
+    },
+    {
+      "repo": "mlx-community/Qwen3.5-9B-OptiQ-4bit",
+      "downloads": 7800,
+      "likes": 103
+    },
+    {
+      "repo": "mlx-community/LFM2.5-1.2B-Instruct-4bit",
+      "downloads": 7761,
+      "likes": 3
+    },
+    {
+      "repo": "mlx-community/gemma-4-12b-coder-fable5-composer2.5-4bit",
+      "downloads": 7574,
+      "likes": 73
+    },
+    {
+      "repo": "mlx-community/DeepSeek-V4-Flash-2bit-DQ",
+      "downloads": 7414,
+      "likes": 57
+    },
+    {
+      "repo": "mlx-community/Qwen3.8-27B-OptiQ-4bit",
+      "downloads": 7365,
+      "likes": 21
+    },
+    {
+      "repo": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-6bit",
+      "downloads": 7188,
+      "likes": 0
+    },
+    {
+      "repo": "mlx-community/Qwen3-4B-8bit",
+      "downloads": 7088,
+      "likes": 1
+    },
+    {
+      "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+      "downloads": 7018,
+      "likes": 20
     }
   ]
 }

@@ -58,6 +58,28 @@ interface ToolRetryConfig {
   max_retries: number;
   base_delay_ms: number;
 }
+/** How the available-skills block is rendered into the system prompt. */
+type SkillPromptMode = "full" | "compact" | "grouped" | "brief" | "names_only" | "smart" | "smart_grouped";
+
+/**
+ * The presets, with what each actually costs.
+ *
+ * Token figures are measured against the 30 bundled skills by
+ * `cargo run -p skill-skills --example prompt_modes`, not estimated — rerun it
+ * if the skill set changes materially.
+ */
+const SKILL_PROMPT_MODES: { id: SkillPromptMode; tokens: number; selects: boolean }[] = [
+  // Selecting presets first: they are the only ones whose size does not grow
+  // with however many skills are installed, so they are what most people want.
+  { id: "smart", tokens: 709, selects: true },
+  { id: "smart_grouped", tokens: 544, selects: true },
+  { id: "full", tokens: 3627, selects: false },
+  { id: "compact", tokens: 2426, selects: false },
+  { id: "grouped", tokens: 1731, selects: false },
+  { id: "brief", tokens: 1475, selects: false },
+  { id: "names_only", tokens: 267, selects: false },
+];
+
 interface LlmToolsConfig {
   enabled: boolean;
   date: boolean;
@@ -75,6 +97,8 @@ interface LlmToolsConfig {
   max_calls_per_round: number;
   context_compression: ToolContextCompression;
   skills_refresh_interval_secs: number;
+  skill_prompt_mode: SkillPromptMode;
+  semantic_skill_selection: boolean;
   retry: ToolRetryConfig;
   web_cache?: {
     enabled: boolean;
@@ -149,6 +173,8 @@ let config = $state<LlmConfig>({
     max_calls_per_round: 4,
     context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 },
     skills_refresh_interval_secs: 86400,
+    skill_prompt_mode: "smart" as SkillPromptMode,
+    semantic_skill_selection: true,
     retry: { max_retries: 2, base_delay_ms: 1000 },
   },
   mmproj: null,
@@ -421,6 +447,81 @@ onMount(async () => {
   onRemoveDomain={removeDomain}
   onRemoveEntry={removeEntry}
 />
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Skills in the prompt                                                        -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <SectionHeader>{t("llm.tools.skillPromptSection")}</SectionHeader>
+    <span class="text-ui-xs text-muted-foreground/50">{t("llm.tools.skillPromptSectionHint")}</span>
+  </div>
+
+  <SettingsCard>
+    <CardContent class="flex flex-col gap-3 px-4 py-3.5">
+      <p class="text-ui-base text-muted-foreground leading-relaxed">
+        {t("llm.tools.skillPromptIntro")}
+      </p>
+
+      <div class="flex flex-col gap-1.5">
+        {#each SKILL_PROMPT_MODES as m, i (m.id)}
+          {#if i === 0 || m.selects !== SKILL_PROMPT_MODES[i - 1].selects}
+            <p class="text-ui-xs uppercase tracking-wider text-muted-foreground/60 pt-1 px-0.5">
+              {m.selects ? t("llm.tools.skillModeGroupSelects") : t("llm.tools.skillModeGroupAll")}
+            </p>
+          {/if}
+          {@const active = config.tools.skill_prompt_mode === m.id}
+          <button
+            type="button"
+            class="w-full text-left rounded-lg border px-3 py-2.5 transition-colors
+                   {active
+                     ? 'border-violet-500/50 bg-violet-500/[0.06]'
+                     : 'border-border dark:border-white/[0.08] hover:bg-muted/50'}"
+            aria-pressed={active}
+            disabled={configSaving}
+            onclick={async () => {
+              config = { ...config, tools: { ...config.tools, skill_prompt_mode: m.id } };
+              await saveConfig();
+            }}>
+            <div class="flex items-baseline justify-between gap-2">
+              <span class="text-ui-base font-semibold text-foreground">{t(`llm.tools.skillMode.${m.id}`)}</span>
+              <span class="text-ui-xs tabular-nums text-muted-foreground/70 shrink-0">
+                ≈{m.tokens} {t("llm.tools.skillModeTokens")}
+              </span>
+            </div>
+            <p class="text-ui-sm text-emerald-600 dark:text-emerald-400 leading-relaxed mt-0.5">
+              + {t(`llm.tools.skillMode.${m.id}.pro`)}
+            </p>
+            <p class="text-ui-sm text-amber-600 dark:text-amber-400 leading-relaxed">
+              − {t(`llm.tools.skillMode.${m.id}.con`)}
+            </p>
+          </button>
+        {/each}
+      </div>
+
+      {@const selecting = SKILL_PROMPT_MODES.find((m) => m.id === config.tools.skill_prompt_mode)?.selects ?? false}
+      <label class="flex items-start gap-2.5 pt-0.5 {selecting ? 'cursor-pointer' : 'opacity-50'}">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={config.tools.semantic_skill_selection}
+          disabled={configSaving || !selecting}
+          onchange={async (e) => {
+            const on = (e.currentTarget as HTMLInputElement).checked;
+            config = { ...config, tools: { ...config.tools, semantic_skill_selection: on } };
+            await saveConfig();
+          }} />
+        <span class="flex flex-col gap-0.5">
+          <span class="text-ui-base font-medium text-foreground">{t("llm.tools.semanticSkills")}</span>
+          <span class="text-ui-sm text-muted-foreground leading-relaxed">{t("llm.tools.semanticSkillsDesc")}</span>
+          {#if !selecting}
+            <span class="text-ui-sm text-muted-foreground/70">{t("llm.tools.semanticSkillsInactive")}</span>
+          {/if}
+        </span>
+      </label>
+    </CardContent>
+  </SettingsCard>
+</section>
 
 <section class="flex flex-col gap-2">
   <div class="flex items-center gap-2 px-0.5">

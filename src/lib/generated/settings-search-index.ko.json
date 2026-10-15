@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "의미로 스킬 매칭",
+    "desc": "공통 단어가 아니라 의미로 스킬 순위를 매겨, “자기 전에 진정하고 싶어”가 수면 프로토콜을 찾아냅니다. 임베딩 모델이 필요하며, 없으면 단어 매칭으로 되돌아갑니다."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "Skill API",
     "desc": "LLM이 NeuroSkill API를 조회할 수 있도록 허용합니다 — 기기 상태, EEG 세션, 라벨, 검색, 훅, 캘리브레이션, TTS 등."

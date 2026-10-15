@@ -59,8 +59,7 @@ const dashboard: Record<string, string> = {
   "dashboard.vitals": "Vitalwerte",
   "dashboard.vitalsWaiting":
     "Warte auf einen Messwert vom Gerät. Ein getragener Ring misst nach eigenem Zeitplan, das kann einige Minuten dauern.",
-  "dashboard.vitalsStale":
-    "Seit einigen Minuten kein Messwert — das Gerät misst nach eigenem Zeitplan.",
+  "dashboard.vitalsStale": "Seit einigen Minuten kein Messwert — das Gerät misst nach eigenem Zeitplan.",
   "dashboard.ibi": "Intervall",
   "dashboard.skinTemperature": "Hauttemp.",
   "dashboard.hr": "Herzfrequenz",

@@ -235,6 +235,47 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "最終同期",
   "llm.tools.skillsNeverSynced": "未同期",
   "llm.tools.skillsSection": "エージェントスキル",
+  "llm.tools.skillPromptSection": "プロンプト内のスキル",
+  "llm.tools.skillPromptSectionHint": "メッセージごとに課金",
+  "llm.tools.skillPromptIntro":
+    "read_file が有効だと、モデルが読み込めるものを知るために全スキルがシステムプロンプトに列挙されます。この一覧は入力前から毎メッセージ送られ、その大きさは最初のトークンの遅さ、メモリ、そして小さなモデルが質問ではなくプロンプトに答えてしまうことで支払われます。",
+  "llm.tools.skillModeTokens": "トークン",
+  "llm.tools.semanticSkills": "意味でスキルを照合",
+  "llm.tools.semanticSkillsDesc":
+    "共通の単語ではなく意味でスキルを並べ替えるので、「寝る前に落ち着きたい」で睡眠プロトコルが見つかります。埋め込みモデルが必要で、無い場合は単語一致に戻ります。",
+  "llm.tools.skillMode.full": "フル",
+  "llm.tools.skillMode.full.pro":
+    "全スキルを完全な説明と正確なパス付きで。ファイルを開かずにモデルが知りうる最大限です。",
+  "llm.tools.skillMode.full.con":
+    "圧倒的に最大。うち三分の一は XML タグと繰り返しの絶対パスで、モデルが推測できる以上の情報はありません。",
+  "llm.tools.skillMode.compact": "コンパクト（推奨）",
+  "llm.tools.skillMode.compact.pro":
+    "同じスキル、同じ説明で三分の一小さく。削るのは XML の骨組みと重複パスだけなので、失われるものはありません。",
+  "llm.tools.skillMode.compact.con": "全スキルを列挙し続けるため、追加するほど大きくなります。",
+  "llm.tools.skillMode.grouped": "グループ化",
+  "llm.tools.skillMode.grouped.pro":
+    "14 個のプロトコルのようなファミリーを 1 行にまとめ、互いに注意を奪い合うことも防ぎます。",
+  "llm.tools.skillMode.grouped.con": "ファミリーの中を見るには追加の手順が要り、曖昧な依頼では踏まないことがあります。",
+  "llm.tools.skillMode.brief": "簡潔",
+  "llm.tools.skillMode.brief.pro": "全スキルを残しつつ、各説明を冒頭の一行に短縮します。",
+  "llm.tools.skillMode.brief.con": "削られるのは多くの場合そのスキルが役立つ状況の列挙で、選択の確実性が下がります。",
+  "llm.tools.skillMode.names_only": "名前のみ",
+  "llm.tools.skillMode.names_only.pro":
+    "ほぼ無償 —「フル」の 20 分の 1。プロンプトが既に文脈上限に近いときに最適です。",
+  "llm.tools.skillMode.names_only.con":
+    "何をするスキルかを知るにはファイルを開く必要があり、小さなモデルは多くの場合そうしません。利用は減ります。",
+  "llm.tools.skillModeGroupSelects": "関連するスキルのみ",
+  "llm.tools.skillModeGroupAll": "全スキル、書式違い",
+  "llm.tools.semanticSkillsInactive": "スキルを選別する上記 2 つのプリセットにのみ適用されます。",
+  "llm.tools.skillMode.smart": "スマート（推奨）",
+  "llm.tools.skillMode.smart.pro":
+    "各メッセージに関連する少数のスキルだけを送るため、スキルを増やしてもプロンプトが膨らみません。「フル」の約 5 分の 1 で、長いプロンプトは読み込み時と生成する単語ごとの二重に課金されるため、これが最大の削減になります。",
+  "llm.tools.skillMode.smart.con":
+    "照合が見落としたスキルは、そのメッセージでは存在しないのと同じです。意味による照合なら正しいスキルが候補に入る割合は約 10 回中 9 回、単語照合では 3 回程度です。",
+  "llm.tools.skillMode.smart_grouped": "スマート（グループ化）",
+  "llm.tools.skillMode.smart_grouped.pro": "「スマート」に加え、候補に入った同系統のスキル群を 1 行にまとめます。",
+  "llm.tools.skillMode.smart_grouped.con":
+    "短い候補に同じファミリーが複数入ることはまれなので、「スマート」とほとんど変わりません。中を見るには追加の手順が要ります。",
   "llm.tools.skillsSectionDesc":
     "スキルはLLMがオンデマンドで読み込める専門的な指示を提供します。個別のスキルを切り替えてチャットで利用可能なものを制御します。",
   "llm.tools.skillsNone":

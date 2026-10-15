@@ -243,6 +243,51 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "Última sincronización",
   "llm.tools.skillsNeverSynced": "nunca",
   "llm.tools.skillsSection": "Habilidades del agente",
+  "llm.tools.skillPromptSection": "Skills en el prompt",
+  "llm.tools.skillPromptSectionHint": "se paga en cada mensaje",
+  "llm.tools.skillPromptIntro":
+    "Con read_file activado, todos los skills se listan en el prompt del sistema para que el modelo sepa qué puede cargar. Esa lista se envía con cada mensaje, antes de que escribas nada: su tamaño se paga en primeros tokens más lentos, más memoria y modelos pequeños respondiendo al prompt en vez de a tu pregunta.",
+  "llm.tools.skillModeTokens": "tokens",
+  "llm.tools.semanticSkills": "Emparejar skills por significado",
+  "llm.tools.semanticSkillsDesc":
+    "Ordena los skills por lo que significan y no por palabras compartidas, así «ayúdame a relajarme antes de dormir» encuentra un protocolo de sueño. Necesita el modelo de embeddings; si no está disponible vuelve al emparejamiento por palabras.",
+  "llm.tools.skillMode.full": "Completo",
+  "llm.tools.skillMode.full.pro":
+    "Cada skill con su descripción completa y su ruta exacta. Lo máximo que el modelo puede saber sin abrir un archivo.",
+  "llm.tools.skillMode.full.con":
+    "Con diferencia el más grande. Un tercio son etiquetas XML y rutas absolutas repetidas que no aportan nada que el modelo no pueda deducir.",
+  "llm.tools.skillMode.compact": "Compacto (recomendado)",
+  "llm.tools.skillMode.compact.pro":
+    "Los mismos skills y descripciones, un tercio menos. Solo quita el andamiaje XML y las rutas repetidas, así que no se pierde nada.",
+  "llm.tools.skillMode.compact.con": "Sigue listando todos los skills, así que crece a medida que añades más.",
+  "llm.tools.skillMode.grouped": "Agrupado",
+  "llm.tools.skillMode.grouped.pro":
+    "Colapsa familias como los 14 skills de protocolos en una línea, lo que además evita que compitan entre sí por la atención.",
+  "llm.tools.skillMode.grouped.con":
+    "El modelo necesita un paso extra para mirar dentro de una familia, y puede no darlo ante una petición vaga.",
+  "llm.tools.skillMode.brief": "Breve",
+  "llm.tools.skillMode.brief.pro":
+    "Mantiene todos los skills listados pero acorta cada descripción a su primera línea.",
+  "llm.tools.skillMode.brief.con":
+    "Lo recortado suele ser la lista de situaciones para las que sirve un skill, así que el modelo acierta menos al elegir.",
+  "llm.tools.skillMode.names_only": "Solo nombres",
+  "llm.tools.skillMode.names_only.pro":
+    "Casi gratis: una veinteava parte de «Completo». Ideal si el prompt ya está cerca del límite de contexto.",
+  "llm.tools.skillMode.names_only.con":
+    "El modelo debe abrir un archivo para saber qué hace cada skill, y uno pequeño a menudo no lo hará. Espera que se usen menos.",
+  "llm.tools.skillModeGroupSelects": "Solo los skills relevantes",
+  "llm.tools.skillModeGroupAll": "Todos los skills, con otro formato",
+  "llm.tools.semanticSkillsInactive": "Solo se aplica a los dos ajustes de arriba que seleccionan skills.",
+  "llm.tools.skillMode.smart": "Inteligente (recomendado)",
+  "llm.tools.skillMode.smart.pro":
+    "Envía solo los pocos skills relevantes para cada mensaje, así el prompt deja de crecer según añades skills. Alrededor de una quinta parte de «Completo» y, como un prompt largo se paga dos veces —al leerlo y en cada palabra generada—, es el mayor ahorro posible.",
+  "llm.tools.skillMode.smart.con":
+    "Un skill que el emparejador no detecte es invisible para ese mensaje. Con emparejamiento por significado el skill correcto entra en la preselección en torno a nueve de cada diez consultas; por palabras, más bien tres.",
+  "llm.tools.skillMode.smart_grouped": "Inteligente, agrupado",
+  "llm.tools.skillMode.smart_grouped.pro":
+    "Como «Inteligente», y además colapsa en una línea cualquier familia de skills relacionados que haya entrado en la preselección.",
+  "llm.tools.skillMode.smart_grouped.con":
+    "Rara vez difiere de «Inteligente», porque una preselección corta pocas veces contiene varios miembros de una familia. El modelo necesita un paso extra para mirar dentro.",
   "llm.tools.skillsSectionDesc":
     "Las habilidades proporcionan instrucciones especializadas que el LLM puede cargar según demanda. Alterna habilidades individuales para controlar cuáles están disponibles en el chat.",
   "llm.tools.skillsNone":

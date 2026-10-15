@@ -144,6 +144,9 @@ fn catalog_entry_to_llm_model(
         release_date: None,
         gguf_sources: vec![],
         capabilities: vec![],
+        // New in llmfit-core 1.1: declared languages. The catalog does not
+        // record them, and nothing in the fit computation reads the field.
+        languages: vec![],
         num_attention_heads: None,
         num_key_value_heads: None,
         license: None,

@@ -7,8 +7,11 @@ description = "Cross-modal label HNSW indices (text, context, EEG) — extracted
 build = "build.rs"
 
 [features]
-# HNSW is the runtime default and needs no BLAS. Enable `turboquant-index` for the
-# TurboQuant backend (OpenBLAS on Linux, Accelerate on macOS).
+# HNSW is the runtime default. Enable `turboquant-index` for the TurboQuant
+# backend; turbovec 1.1 carries no dependencies and needs no BLAS of its own,
+# but `accelerate-src` stays in this feature because it is the graph's only
+# BLAS provider for `ndarray`'s `blas` feature on macOS — see the
+# `extern crate accelerate_src` comment in src/lib.rs before removing it.
 default = []
 turboquant-index = ["dep:turbovec", "dep:accelerate-src"]
 
@@ -19,7 +22,7 @@ skill-data      = { path = "../skill-data" }
 fast-hnsw  = "1.0.1"
 rusqlite = { workspace = true }
 serde      = { version = "1", features = ["derive"] }
-turbovec   = { version = "0.4.1", optional = true }
+turbovec   = { version = "1.1.2", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

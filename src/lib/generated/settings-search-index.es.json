@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "Emparejar skills por significado",
+    "desc": "Ordena los skills por lo que significan y no por palabras compartidas, así «ayúdame a relajarme antes de dormir» encuentra un protocolo de sueño. Necesita el modelo de embeddings; si no está disponible vuelve al emparejamiento por palabras."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "API de habilidades",
     "desc": "Allow the LLM to query the NeuroSkill API — device status, EEG sessions, labels, search, hooks, calibrations, TTS, and more."

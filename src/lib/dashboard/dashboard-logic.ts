@@ -105,6 +105,7 @@ export type DeviceKind =
   | "openbci"
   | "vital"
   | "oura"
+  | "whoop"
   | "unknown";
 
 export function isMuseDevice(kind: DeviceKind): boolean {
@@ -119,6 +120,7 @@ export function hasBattery(kind: DeviceKind): boolean {
     kind === "idun" ||
     kind === "mendi" ||
     kind === "vital" ||
-    kind === "oura"
+    kind === "oura" ||
+    kind === "whoop"
   );
 }

@@ -82,6 +82,12 @@ pub enum DeviceKind {
     Neurosity,
     /// Brain Products BrainVision RDA stream (TCP/IP).
     BrainVision,
+    /// WHOOP 4.0 / 5.0 / MG — heart-rate and HRV strap (BLE).
+    ///
+    /// Not an EEG device: it reports heart rate with the R-R intervals behind
+    /// it, plus battery. Read directly over the strap's own BLE protocol — no
+    /// WHOOP account.
+    Whoop,
     /// Oura Ring Gen 3 / Ring 4 / Ring 5 — sleep and vitals wearable (BLE).
     ///
     /// Not an EEG device: it reports derived heart rate, SpO2, skin
@@ -236,6 +242,12 @@ impl DeviceKind {
         // unrelated products whose name merely contains the word.
         if n == "oura" || n.starts_with("oura ") || n.starts_with("oura-") || n.starts_with("oura_") {
             return Self::Oura;
+        }
+        // A strap's name is user-settable and carries no identity, so this only
+        // catches a factory name; the daemon's scanner recognises one from the
+        // WHOOP service UUID it advertises instead.
+        if n == "whoop" || n.starts_with("whoop ") || n.starts_with("whoop-") || n.starts_with("whoop_") {
+            return Self::Whoop;
         }
         if n.contains("cognionics")
             || n.contains("cgx")
@@ -421,6 +433,19 @@ impl DeviceKind {
                 sample_rate_hz: 0.0,
                 electrode_names: Vec::new(),
             },
+            Self::Whoop => DeviceCapabilities {
+                kind: Self::Whoop,
+                channel_count: 0, // a strap has no electrodes
+                // The strap has a PPG sensor but performs its own beat
+                // detection; no waveform reaches the PPG pipeline, so claiming
+                // the capability would light up a chart nothing fills.
+                has_ppg: false,
+                has_imu: false, // accelerometer data is offload-only, not live
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 0.0,
+                electrode_names: Vec::new(),
+            },
             Self::Oura => DeviceCapabilities {
                 kind: Self::Oura,
                 channel_count: 0, // a ring has no electrodes
@@ -562,6 +587,7 @@ impl DeviceKind {
             Self::NeuroSky => "neurosky",
             Self::Neurosity => "neurosity",
             Self::BrainVision => "brainvision",
+            Self::Whoop => "whoop",
             Self::Oura => "oura",
             Self::Unknown => "unknown",
         }
@@ -595,6 +621,7 @@ impl DeviceKind {
             "neurosky" => Self::NeuroSky,
             "neurosity" => Self::Neurosity,
             "brainvision" | "rda" => Self::BrainVision,
+            "whoop" => Self::Whoop,
             "oura" => Self::Oura,
             "unknown" => Self::Unknown,
             other => {
@@ -1075,6 +1102,25 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.vital1".into(),
                 "settings.supportedDevices.instruction.vital2".into(),
                 "settings.supportedDevices.instruction.vital3".into(),
+            ],
+        },
+        // ── W ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "whoop".into(),
+            name_key: "settings.supportedDevices.company.whoop".into(),
+            // No separate brand mark ships with the app; the product shot reads
+            // correctly at logo size, so it serves for both rather than
+            // pointing at a file that would 404.
+            logo: "/devices/whoop.jpg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.whoopStrap".into(),
+                ios_only: false,
+                image: "/devices/whoop.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.whoop1".into(),
+                "settings.supportedDevices.instruction.whoop2".into(),
+                "settings.supportedDevices.instruction.whoop3".into(),
             ],
         },
     ]

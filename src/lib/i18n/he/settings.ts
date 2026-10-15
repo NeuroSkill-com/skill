@@ -422,6 +422,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "רצועת WHOOP 4.0 / 5.0 / MG",
+  "settings.supportedDevices.instruction.whoop1":
+    "ענדו את הרצועה וודאו שאינה מחוברת באפליקציית WHOOP — רצועה מקבלת חיבור אחד בכל רגע.",
+  "settings.supportedDevices.instruction.whoop2":
+    "פתחו מכשירים, סרקו ובחרו את הרצועה. גם רצועות ללא שם או ששמן שונה מזוהות, לפי השירות שהן משדרות.",
+  "settings.supportedDevices.instruction.whoop3":
+    "הדופק, מרווחי ה-R-R שמאחוריו ומצב הסוללה זורמים אל ההפעלה. אין צורך בחשבון WHOOP.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1": "קבל טוקן גישה אישי מ-cloud.ouraring.com/personal-access-tokens.",
   "settings.supportedDevices.instruction.oura2": "פתח API מכשיר → Oura Ring, הדבק את הטוקן ושמור.",

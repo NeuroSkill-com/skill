@@ -443,6 +443,14 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.company.emotiv": "Emotiv",
   "settings.supportedDevices.company.idun": "IDUN",
   "settings.supportedDevices.company.oura": "Ōura",
+  "settings.supportedDevices.company.whoop": "WHOOP",
+  "settings.supportedDevices.device.whoopStrap": "Bracelet WHOOP 4.0 / 5.0 / MG",
+  "settings.supportedDevices.instruction.whoop1":
+    "Portez le bracelet et vérifiez qu'il n'est pas connecté dans l'application WHOOP : un bracelet n'accepte qu'une connexion à la fois.",
+  "settings.supportedDevices.instruction.whoop2":
+    "Ouvrez Appareils, lancez la recherche et choisissez le bracelet. Les bracelets sans nom ou renommés sont trouvés quand même, via le service qu'ils annoncent.",
+  "settings.supportedDevices.instruction.whoop3":
+    "La fréquence cardiaque, les intervalles R-R correspondants et la batterie alimentent la session. Aucun compte WHOOP n'est nécessaire.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Obtenir un jeton d'accès personnel depuis cloud.ouraring.com/personal-access-tokens.",
@@ -612,7 +620,8 @@ const settings: Record<string, string> = {
     "Lit l\u2019historique stock\u00e9 sur la bague elle-m\u00eame via Bluetooth : fr\u00e9quence cardiaque, VFC, temp\u00e9rature cutan\u00e9e, SpO2, phases de sommeil. Reprend l\u00e0 o\u00f9 la derni\u00e8re synchronisation s\u2019est arr\u00eat\u00e9e. D\u00e9connectez d\u2019abord la bague de toute session active.",
   "settings.deviceApi.ouraRingNoAnchors":
     "La bague a envoy\u00e9 des \u00e9v\u00e9nements, mais aucun ne portait de r\u00e9f\u00e9rence horaire : rien n\u2019a pu \u00eatre dat\u00e9 ni enregistr\u00e9. Ouvrez une fois l\u2019application Oura pr\u00e8s de la bague pour r\u00e9gler son horloge, puis synchronisez \u00e0 nouveau.",
-  "settings.deviceApi.ouraRingMoreRemaining": "Une partie de l\u2019historique a \u00e9t\u00e9 lue. Synchronisez \u00e0 nouveau pour continuer.",
+  "settings.deviceApi.ouraRingMoreRemaining":
+    "Une partie de l\u2019historique a \u00e9t\u00e9 lue. Synchronisez \u00e0 nouveau pour continuer.",
   "settings.deviceApi.ouraSyncBtn": "Synchroniser",
   "settings.deviceApi.ouraSyncing": "Synchronisation…",
   "settings.deviceApi.ouraSynced": "Synchronisé !",

@@ -18,6 +18,13 @@ use anyhow::Context;
 
 // ── Shared state (held in axum Router via `.with_state()`) ────────────────────
 
+/// Ranks skills against a prompt: `(prompt, skills, top_n) -> ranked`.
+///
+/// `None` means "no ranking available" — the embedder is not loaded — and the
+/// caller falls back to word overlap rather than failing the turn.
+pub type SkillRanker =
+    Arc<dyn Fn(&str, Vec<skill_skills::Skill>, usize) -> Option<Vec<skill_skills::Skill>> + Send + Sync>;
+
 pub struct LlmServerState {
     /// Channel to the inference actor.
     pub req_tx: mpsc::UnboundedSender<InferRequest>,
@@ -46,6 +53,19 @@ pub struct LlmServerState {
     /// Discovered Agent Skills — injected into the system prompt so the LLM
     /// can load specialised instructions via `read_file` on demand.
     pub skills: Arc<Vec<skill_skills::Skill>>,
+
+    /// Optional semantic ranker for the skills prompt block.
+    ///
+    /// `(prompt, skills, top_n) -> ranked skills`. Injected by the daemon,
+    /// which owns the text embedder; this crate cannot reach it without a
+    /// dependency cycle (`skill-daemon-state` already depends on `skill-llm`).
+    /// `None` — or a hook that returns `None` because no embedder is loaded —
+    /// falls back to word-overlap ranking, so chat never depends on the
+    /// embedding model being available.
+    /// A `OnceLock` because `init` hands back an `Arc` and the daemon can only
+    /// install the hook afterwards — and because installing it twice would be
+    /// a bug worth refusing rather than silently taking the last writer.
+    pub skill_ranker: std::sync::OnceLock<SkillRanker>,
 
     /// Abort signal for IPC-streamed chat (`chat_completions_ipc`).
     ///
@@ -161,5 +181,12 @@ pub fn cell_status(cell: &LlmStateCell) -> (LlmStatus, String) {
             },
             s.model_name.clone(),
         ),
+    }
+}
+
+impl LlmServerState {
+    /// Install the semantic skill ranker. Ignores a second call.
+    pub fn set_skill_ranker(&self, ranker: SkillRanker) {
+        let _ = self.skill_ranker.set(ranker);
     }
 }

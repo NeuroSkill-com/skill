@@ -22,22 +22,52 @@ bitflags    = { version = "2", features = ["serde"] }
 # Muse EEG – library only, no TUI feature.
 # 0.2 swapped the BLE backend from btleplug to webbluetooth; the
 # MuseClient / MuseDevice / MuseHandle / MuseEvent API is unchanged.
-muse-rs = { version = "0.2.1", default-features = false }
+muse-rs = { version = "0.2.2", default-features = false }
 
-# OpenBCI board drivers (Ganglion BLE, Cyton serial, …)
-openbci = { version = "0.0.1", features = ["ble"] }
+# OpenBCI board drivers (Ganglion BLE, Cyton serial, …).
+#
+# Resolved through `[patch.crates-io] openbci = { path = "patches/openbci-0.0.2" }`
+# in the workspace root: a fork of upstream 0.0.1, versioned 0.0.2, whose
+# Ganglion driver talks to `webbluetooth` instead of btleplug, so it joins the
+# one `Bluetooth::shared()` session the way awear / idun / mendi / muse-rs /
+# mw75 / poop / vital do.  The serial, WiFi and Galea boards are verbatim
+# upstream.
+#
+# "0.0.2" is NOT on crates.io and is not meant to be — the vendored copy is
+# permanent as of 2026-10-15.  The number is deliberately one the registry
+# cannot satisfy, so that dropping the patch entry fails the build instead of
+# silently resolving the published 0.0.1, which would pull real btleplug and
+# open a second CBCentralManager (the shim that used to catch that is retired).
+# It must stay in step with the version in `patches/openbci-0.0.2/Cargo.toml`:
+# bump one without the other and the patch stops being used.
+openbci = { version = "0.0.2", features = ["ble"] }
 
-# Neurable MW75 Neuro EEG headphones (BLE activation + RFCOMM data streaming)
-mw75 = { version = "0.0.6", default-features = false }
+# Neurable MW75 Neuro EEG headphones (BLE activation + RFCOMM data streaming).
+#
+# 0.0.8 dropped btleplug and talks to `webbluetooth` directly, so this is no
+# longer one of the crates the btleplug shim stands in for — it reaches
+# `Bluetooth::shared()` natively.
+mw75 = { version = "0.0.8", default-features = false }
 
 # Emotiv EPOC / Insight / Flex (Cortex WebSocket API)
 emotiv = { version = "0.0.13", default-features = false }
 
-# IDUN Guardian in-ear EEG earbud (BLE)
-idun = { version = "0.0.3", default-features = false }
+# IDUN Guardian in-ear EEG earbud (BLE).
+#
+# 0.0.4 dropped btleplug for `webbluetooth` 0.0.4, so it reaches
+# `Bluetooth::shared()` natively.  Purely additive: the three new items are the
+# service/characteristic UUIDs its grant needs (`GUARDIAN_SERVICE`,
+# `BATTERY_SERVICE`, `DEVICE_ID_CHARACTERISTIC`) and the prelude is unchanged.
+idun = { version = "0.0.4", default-features = false }
 
-# Mendi fNIRS headband (BLE)
-mendi = { version = "0.0.2", default-features = false }
+# Mendi fNIRS headband (BLE).
+#
+# 0.0.3 dropped btleplug and talks to `webbluetooth` directly (same migration
+# mw75 made in 0.0.8), so this is no longer one of the crates the btleplug
+# shim stands in for — it reaches `Bluetooth::shared()` natively.  Its
+# `webbluetooth-wasm` dep is `cfg(target_arch = "wasm32")`-gated and never
+# enters a native build.
+mendi = { version = "0.0.3", default-features = false }
 
 # Cognionics / CGX EEG headsets (USB/FTDI serial)
 cognionics = { version = "0.0.1", default-features = false }
@@ -55,15 +85,22 @@ antneuro = { version = "0.0.1", default-features = false, features = ["native"] 
 # statically into the binary.
 rusb = { version = "0.9", features = ["vendored"] }
 
-# AWEAR EEG wearable (BLE, LUCA protocol)
-awear = { version = "0.2.0", default-features = false }
+# AWEAR EEG wearable (BLE, LUCA protocol).
+#
+# 0.3.0 dropped btleplug for `webbluetooth` 0.0.4, so it reaches
+# `Bluetooth::shared()` natively.  A minor bump rather than a patch one because
+# it also grew a lot of surface (LUCA assembler, command set, EEG decoders,
+# firmware version) — but nothing was REMOVED: 45 public items became 84, and
+# the prelude only gained `BoardType`, `FirmwareVersion`, `ReadyInfo`.  That is
+# why this was a one-line change here.
+awear = { version = "0.3.0", default-features = false }
 
 # Vital Neuro EEG headphones (BLE: 3 ch @ 250 Hz, accelerometer, battery).
 #
-# Same `webbluetooth 0.0.3` requirement as muse-rs and skill-daemon, which is
+# Same `webbluetooth 0.0.4` requirement as muse-rs and skill-daemon, which is
 # what keeps `Bluetooth::shared()` a single session — see the lockstep note in
 # the workspace Cargo.toml.
-vital = { version = "0.0.1" }
+vital = { version = "0.0.2" }
 
 # Oura Ring 3/4/5 (BLE, reverse-engineered protocol via open_oura).
 #
@@ -77,8 +114,19 @@ vital = { version = "0.0.1" }
 oura-link     = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5fe0cf9a646afa790bda3731be767507", default-features = false }
 oura-protocol = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5fe0cf9a646afa790bda3731be767507" }
 
-# Same `webbluetooth 0.0.3` lockstep requirement as muse-rs / vital / skill-daemon.
-webbluetooth = { version = "0.0.3", features = ["uuid"] }
+# WHOOP 4.0 / 5.0 / MG straps (BLE).  `poop` is the crate, whoop-rs the repo.
+#
+# `default-features = false` drops its `tui` default, which would otherwise pull
+# ratatui + crossterm into the daemon for a terminal UI nothing here renders.
+#
+# Already on `webbluetooth 0.0.4` + `uuid`, the same requirement as muse-rs /
+# vital / skill-daemon, so it unifies onto the one `Bluetooth::shared()` session
+# rather than opening a second CBCentralManager.  Its `webbluetooth-wasm` dep is
+# `cfg(target_arch = "wasm32")`-gated and never enters a native build.
+poop = { version = "0.0.2", default-features = false }
+
+# Same `webbluetooth 0.0.4` lockstep requirement as muse-rs / vital / skill-daemon.
+webbluetooth = { version = "0.0.4", features = ["uuid"] }
 
 # Needed by the Oura ring adapter: `futures` for webbluetooth's notification and
 # scan streams, `hex` to parse the auth key, `anyhow`/`tracing` to report a

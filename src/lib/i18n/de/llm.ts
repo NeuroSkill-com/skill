@@ -232,6 +232,50 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLastSync": "Letzte Synchronisierung",
   "llm.tools.skillsNeverSynced": "nie",
   "llm.tools.skillsSection": "Agenten-Fähigkeiten",
+  "llm.tools.skillPromptSection": "Skills im Prompt",
+  "llm.tools.skillPromptSectionHint": "bei jeder Nachricht fällig",
+  "llm.tools.skillPromptIntro":
+    "Wenn read_file aktiv ist, werden alle Skills im System-Prompt aufgeführt, damit das Modell weiß, was es laden kann. Diese Liste wird mit jeder Nachricht gesendet, noch bevor Sie etwas tippen — ihre Größe zahlt sich in langsameren ersten Token, mehr Speicher und kleinen Modellen aus, die den Prompt statt Ihrer Frage beantworten.",
+  "llm.tools.skillModeTokens": "Token",
+  "llm.tools.semanticSkills": "Skills nach Bedeutung zuordnen",
+  "llm.tools.semanticSkillsDesc":
+    "Ordnet Skills nach Bedeutung statt nach gemeinsamen Wörtern, sodass „hilf mir beim Herunterkommen vor dem Schlafen“ ein Schlafprotokoll findet. Benötigt das Text-Embedding-Modell; fällt sonst auf Wortabgleich zurück.",
+  "llm.tools.skillMode.full": "Vollständig",
+  "llm.tools.skillMode.full.pro":
+    "Jeder Skill mit vollständiger Beschreibung und exaktem Pfad. Mehr kann das Modell ohne Dateizugriff nicht wissen.",
+  "llm.tools.skillMode.full.con":
+    "Mit Abstand am größten. Ein Drittel davon sind XML-Tags und wiederholte absolute Pfade ohne zusätzlichen Informationswert.",
+  "llm.tools.skillMode.compact": "Kompakt (empfohlen)",
+  "llm.tools.skillMode.compact.pro":
+    "Gleiche Skills, gleiche Beschreibungen, ein Drittel kleiner. Entfällt nur das XML-Gerüst und die wiederholten Pfade — es geht nichts verloren.",
+  "llm.tools.skillMode.compact.con": "Listet weiterhin jeden Skill und wächst daher mit jedem weiteren mit.",
+  "llm.tools.skillMode.grouped": "Gruppiert",
+  "llm.tools.skillMode.grouped.pro":
+    "Fasst Familien wie die 14 Protokoll-Skills zu einer Zeile zusammen, wodurch sie auch nicht mehr untereinander um Aufmerksamkeit konkurrieren.",
+  "llm.tools.skillMode.grouped.con":
+    "Das Modell braucht einen zusätzlichen Schritt, um in eine Familie zu sehen — und geht ihn bei vagen Anfragen womöglich nicht.",
+  "llm.tools.skillMode.brief": "Kurz",
+  "llm.tools.skillMode.brief.pro": "Listet weiterhin jeden Skill, kürzt aber jede Beschreibung auf ihre erste Zeile.",
+  "llm.tools.skillMode.brief.con":
+    "Gekürzt wird meist die Aufzählung der Situationen, für die ein Skill gedacht ist — die Auswahl wird dadurch unzuverlässiger.",
+  "llm.tools.skillMode.names_only": "Nur Namen",
+  "llm.tools.skillMode.names_only.pro":
+    "Nahezu kostenlos — ein Zwanzigstel von „Vollständig“. Ideal, wenn der Prompt schon nah am Kontextlimit liegt.",
+  "llm.tools.skillMode.names_only.con":
+    "Das Modell muss eine Datei öffnen, um überhaupt zu erfahren, was ein Skill tut — kleine Modelle tun das oft nicht. Skills werden seltener genutzt.",
+  "llm.tools.skillModeGroupSelects": "Nur die passenden Skills",
+  "llm.tools.skillModeGroupAll": "Alle Skills, anders formatiert",
+  "llm.tools.semanticSkillsInactive": "Gilt nur für die beiden Voreinstellungen oben, die Skills auswählen.",
+  "llm.tools.skillMode.smart": "Intelligent (empfohlen)",
+  "llm.tools.skillMode.smart.pro":
+    "Sendet nur die wenigen Skills, die zur jeweiligen Nachricht passen — der Prompt wächst also nicht mehr mit jedem neuen Skill. Etwa ein Fünftel von „Vollständig“, und da ein langer Prompt doppelt bezahlt wird (beim Lesen und bei jedem erzeugten Wort), ist das die größte mögliche Ersparnis.",
+  "llm.tools.skillMode.smart.con":
+    "Ein Skill, den die Zuordnung übersieht, ist für diese Nachricht unsichtbar. Mit bedeutungsbasierter Zuordnung liegt der richtige Skill in etwa neun von zehn Fällen in der Auswahl, mit Wortabgleich eher in drei.",
+  "llm.tools.skillMode.smart_grouped": "Intelligent, gruppiert",
+  "llm.tools.skillMode.smart_grouped.pro":
+    "Wie „Intelligent“, fasst zusätzlich verwandte Skills einer Familie in der Auswahl zu einer Zeile zusammen.",
+  "llm.tools.skillMode.smart_grouped.con":
+    "Unterscheidet sich selten von „Intelligent“, da eine kurze Auswahl selten mehrere Mitglieder einer Familie enthält. Das Modell braucht einen zusätzlichen Schritt, um in eine Familie zu sehen.",
   "llm.tools.skillsSectionDesc":
     "Skills liefern spezialisierte Anweisungen, die das LLM bei Bedarf laden kann. Einzelne Skills ein-/ausschalten.",
   "llm.tools.skillsNone":

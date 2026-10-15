@@ -314,6 +314,7 @@ export const EXEMPT_KEYS = new Set([
   "settingsTabs.extensions", // "Extensions" — identical in FR/DE
   "onboarding.step.permissions", // "Permissions" — identical in FR
   "onboarding.step.extensions", // "Extensions" — identical in FR
+  "llm.tools.skillModeTokens", // "tokens" — the loanword is the usual term in ES/FR
 ]);
 
 /** Patterns for values that are inherently language-neutral. */

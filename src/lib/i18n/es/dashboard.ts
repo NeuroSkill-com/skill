@@ -62,8 +62,7 @@ const dashboard: Record<string, string> = {
   "dashboard.vitals": "Signos vitales",
   "dashboard.vitalsWaiting":
     "Esperando una lectura del dispositivo. Un anillo puesto mide según su propio horario, así que puede tardar unos minutos.",
-  "dashboard.vitalsStale":
-    "Sin lecturas en los últimos minutos: el dispositivo mide según su propio horario.",
+  "dashboard.vitalsStale": "Sin lecturas en los últimos minutos: el dispositivo mide según su propio horario.",
   "dashboard.ibi": "Intervalo",
   "dashboard.skinTemperature": "Temp. piel",
   "dashboard.hr": "Frecuencia cardíaca",

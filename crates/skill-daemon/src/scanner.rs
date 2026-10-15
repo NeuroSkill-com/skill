@@ -28,7 +28,10 @@ pub(crate) fn is_known_eeg_ble_name(name: &str) -> bool {
     // Oura is here for the same reason: "oura" is a substring of unrelated
     // product names, and a bare `starts_with` here would surface something the
     // connect route then declines to treat as a ring.
-    if matches!(DeviceKind::from_name(Some(name)), DeviceKind::Vital | DeviceKind::Oura) {
+    if matches!(
+        DeviceKind::from_name(Some(name)),
+        DeviceKind::Vital | DeviceKind::Oura | DeviceKind::Whoop
+    ) {
         return true;
     }
 
@@ -103,7 +106,23 @@ const SERVICE_KIND_TABLE: &[(BluetoothUuid, &str)] = &[
     // package, so this also fails the build if the graph ever splits in two —
     // the one-session invariant `docs/webbluetooth-migration.md` describes.
     (skill_devices::session::oura::transport::OURA_SERVICE, "oura"),
+    // WHOOP advertises a different vendor service per generation — 4.0 is
+    // `61080001-…`, 5.0/MG is `fd4b0001-…` — so both map to the same kind.
+    // The strap's name is user-settable and carries no identity, which makes
+    // the service the only reliable discriminator, exactly as for Vital.
+    //
+    // Taken from `poop`'s own constants rather than re-spelled here: a literal
+    // that drifts from the driver is a strap that advertises but never routes.
+    (whoop_service(skill_devices::poop::protocol::WHOOP4_SERVICE), "whoop"),
+    (whoop_service(skill_devices::poop::protocol::WHOOP5_SERVICE), "whoop"),
 ];
+
+/// `poop` states its services as `uuid::Uuid`; the scanner speaks
+/// `BluetoothUuid`. Both constructors are `const`, so this costs nothing and
+/// keeps the table a `const`.
+const fn whoop_service(u: uuid::Uuid) -> BluetoothUuid {
+    BluetoothUuid::from_u128(u.as_u128())
+}
 
 /// The device-kind tag for an advertisement, when a service UUID identifies it.
 ///
@@ -155,6 +174,7 @@ fn service_kind_display_name(kind: &'static str) -> &'static str {
     match kind {
         "vital" => "Vital Neuro",
         "oura" => "Oura Ring",
+        "whoop" => "WHOOP",
         other => other,
     }
 }
@@ -1230,6 +1250,42 @@ mod tests {
             assert!(!is_known_eeg_ble_name(name), "should not be offered: {name}");
             assert_ne!(DeviceKind::from_name(Some(name)), DeviceKind::Oura);
         }
+    }
+
+    /// WHOOP advertises a *different* vendor service per generation, so both
+    /// must resolve to the same kind — registering only one silently drops
+    /// half the supported hardware.
+    #[test]
+    fn both_whoop_generations_are_recognised_by_service() {
+        for service in [
+            skill_devices::poop::protocol::WHOOP4_SERVICE,
+            skill_devices::poop::protocol::WHOOP5_SERVICE,
+        ] {
+            let uuid = BluetoothUuid::from_u128(service.as_u128());
+
+            let mut adv = Advertisement::default();
+            adv.service_uuids.push(uuid);
+            assert_eq!(kind_from_advertisement(&adv), Some("whoop"), "service {service}");
+
+            // Apple routinely moves 128-bit services to the overflow area.
+            let mut overflow = Advertisement::default();
+            overflow.overflow_service_uuids.push(uuid);
+            assert_eq!(kind_from_advertisement(&overflow), Some("whoop"));
+        }
+    }
+
+    /// The two generations are different services and must not be confused.
+    #[test]
+    fn the_two_whoop_services_are_distinct() {
+        assert_ne!(
+            skill_devices::poop::protocol::WHOOP4_SERVICE,
+            skill_devices::poop::protocol::WHOOP5_SERVICE
+        );
+    }
+
+    #[test]
+    fn whoop_has_a_display_name_for_a_nameless_sighting() {
+        assert_eq!(service_kind_display_name("whoop"), "WHOOP");
     }
 
     /// A ring recognised only by its service still needs something to show in

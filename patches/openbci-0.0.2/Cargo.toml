@@ -1,0 +1,148 @@
+[package]
+name    = "openbci"
+# 0.0.2 marks the fork: upstream's latest release is 0.0.1, and this tree's copy
+# is not it.  Nothing publishes this, so the number exists only here — see the
+# note below on keeping it in step with `skill-devices`.
+version = "0.0.2"
+edition = "2021"
+authors = ["Nataliya Kosmyna"]
+# webbluetooth requires it, so this crate does too — declared rather than
+# discovered halfway through a build.  (Upstream openbci 0.0.1 has no
+# `rust-version` at all; btleplug needed nothing this recent.)
+rust-version = "1.94"
+description   = "Native Rust driver for OpenBCI EEG/EMG boards (Cyton, Cyton+Daisy, Ganglion, Galea), with the Ganglion's BLE radio reached through webbluetooth"
+homepage      = "https://github.com/nataliyakosmyna/openbci"
+repository    = "https://github.com/nataliyakosmyna/openbci"
+documentation = "https://docs.rs/openbci"
+license       = "MIT"
+keywords      = ["eeg", "bci", "openbci", "neuroscience", "biosignal"]
+categories    = ["science", "hardware-support", "embedded"]
+readme        = "README.md"
+exclude       = ["/target"]
+# A [patch] replacement, never published from here.  Decided 2026-10-15: the
+# webbluetooth migration stays VENDORED, so this directory is the steady state,
+# not a staging area — do not "finish" it by publishing, and do not delete it
+# expecting a registry release to cover for it.  The version says 0.0.2 to mark
+# the fork, which is NOT a promise that such a release exists; see the note
+# below on what an off-registry version costs and buys.
+publish       = false
+
+# ── What this is, and why it exists ──────────────────────────────────────────
+#
+# A vendored openbci — upstream 0.0.1, versioned 0.0.2 here — with ONE
+# functional change: `board/ganglion.rs` reaches the
+# Ganglion's BLE radio through `webbluetooth` instead of `btleplug`, the same
+# migration muse-rs made in 0.2, mw75 in 0.0.8 and mendi in 0.0.3.  Pulled in
+# through the workspace root's
+# `[patch.crates-io] openbci = { path = "patches/openbci-0.0.2" }`.
+#
+# Everything that is not BLE is verbatim upstream: the Cyton/Daisy serial
+# boards, the WiFi-shield boards, Galea, packet decoding, the electrode tables
+# and the whole unit-test suite.  Diff provenance with `diff --strip-trailing-cr`
+# (upstream's tarball ships CRLF; this repo's .gitattributes normalises *.rs to
+# LF).  Note the version in the two paths differs on purpose: upstream's latest
+# release is 0.0.1, this directory is the 0.0.2 fork of it.
+#
+#   U=~/.cargo/registry/src/*/openbci-0.0.1
+#   for f in $(cd $U && find src examples -name '*.rs'); do \
+#       diff --strip-trailing-cr "$U/$f" "$f"; done
+#
+# Exactly four files should differ: src/board/ganglion.rs, src/error.rs (its
+# `Ble` variant now wraps webbluetooth::Error), src/lib.rs (two doc lines naming
+# the backend) and examples/ganglion_ble.rs (`..Default::default()`, since
+# GanglionConfig gained a field — see GanglionConfig::services).
+#
+# Why: btleplug has no session singleton — every `Manager::new().adapters()`
+# allocates another `CBCentralManager` on a detached thread — and on macOS a
+# second manager cannot discover peripherals while another is scanning.  Every
+# other BLE crate in the daemon now reaches `webbluetooth::Bluetooth::shared()`
+# directly, and `patches/btleplug-0.11.9` (the shim that used to stand in for
+# btleplug callers) is retired, so this patch is what keeps openbci from being
+# the one crate that drags real btleplug — and a second CBCentralManager — back
+# into the graph.
+#
+# NOT a vendored copy with a patch on top, in the sense that there is no
+# upstream commit this tracks — openbci has never had a webbluetooth backend,
+# and as of 2026-10-15 its `main` is byte-identical to the published 0.0.1
+# (one tag, no open PRs, last pushed 2026-03-01), so there is nothing to rebase
+# onto.  If upstream ever does move, re-sync with the diff recipe above and
+# re-apply the four files.
+#
+# This version and `skill-devices`' requirement move TOGETHER.  crates.io has
+# only 0.0.1, so 0.0.2 exists nowhere but this directory.  Cargo is fine with
+# that — a [patch] contributes a version to the patched source, and it does not
+# have to be one the registry ever shipped — but only for as long as some
+# requirement still matches it, and cargo treats 0.0.x releases as mutually
+# incompatible (`"0.0.2"` means `>=0.0.2, <0.0.3`).  So
+# `crates/skill-devices/Cargo.toml` asks for `"0.0.2"`; bump one of the two
+# without the other and the patch silently stops applying, which cargo reports
+# as `patch for `openbci` ... was not used in the crate graph` — a confusing
+# way to learn this, since the build then either resolves the published 0.0.1
+# instead or fails to resolve at all.
+#
+# The directory name tracks this version too (`patches/openbci-0.0.2`, like the
+# other entries under patches/), so a future bump is three edits plus the path
+# in the root [patch.crates-io].  Only the version/requirement pair fails
+# quietly; a stale directory name makes cargo complain that it cannot read the
+# manifest, which is self-correcting.
+#
+# Being off-registry is deliberate, and it buys one thing: no published version
+# can satisfy `0.0.2`, so deleting the [patch] entry now fails the build loudly
+# rather than quietly falling back to published 0.0.1 — and with it btleplug and
+# a second CBCentralManager.  That silent fallback was the real hazard while
+# this crate called itself 0.0.1.
+
+[lib]
+name = "openbci"
+path = "src/lib.rs"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["ble"]
+# Enable Ganglion native BLE support (requires Bluetooth hardware and webbluetooth)
+ble = ["webbluetooth", "tokio"]
+
+[dependencies]
+# Serial communication (Cyton / Ganglion dongle)
+serialport = "4"
+
+# Bluetooth LE for native Ganglion support (optional, behind `ble` feature).
+#
+# This version MUST stay in lockstep with every other `webbluetooth`
+# requirement in the graph (skill-daemon, skill-devices, the btleplug shim,
+# muse-rs, mw75, mendi, poop, vital).  Cargo treats 0.0.x releases as mutually
+# incompatible, so a mismatch here puts two copies of webbluetooth in the tree
+# — two `OnceLock`s, two sessions, two CBCentralManagers — and devices stop
+# connecting:
+#   cargo tree -p skill-daemon -i webbluetooth   # must be exactly one node
+#
+# No `uuid` feature needed: `IntoUuid` is implemented for `&str`, and openbci's
+# characteristic UUIDs were already `&str` constants.  No `unrestricted`
+# either — the Ganglion's services are named in `GanglionConfig::services`.
+webbluetooth = { version = "0.0.4", optional = true }
+
+# Owns the runtime the blocking `Board` trait drives webbluetooth's futures on,
+# and the notification pump that outlives `start_stream`.  webbluetooth itself
+# is runtime-agnostic (futures-core + a platform backend, no tokio), so this is
+# openbci's own choice of executor, not a requirement imposed by the BLE crate.
+tokio    = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"], optional = true }
+
+# Blocking HTTP client used by the WiFi Shield boards
+ureq = { version = "2", features = ["json"] }
+
+# Data serialisation (WiFi shield JSON API)
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "1"
+
+# Structured logging
+log = "0.4"
+
+[dev-dependencies]
+# Enable log output in integration tests and examples
+env_logger = "0.10"

@@ -369,6 +369,9 @@ pub fn init(
         req_tx,
         model_name,
         api_key: config.api_key.clone(),
+        // Set by the daemon after init via `set_skill_ranker` — it owns the
+        // embedder, which this crate cannot reach without a dependency cycle.
+        skill_ranker: std::sync::OnceLock::new(),
         allowed_tools,
         cancelled_tool_calls: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         scripts_dir,

@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "Match skills by meaning",
+    "desc": "Rank skills by what they mean rather than by shared words, so “help me wind down before bed” finds a sleep protocol. Needs the text-embedding model; falls back to word matching when it is unavailable."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "Skill API",
     "desc": "Allow the LLM to query the NeuroSkill API — device status, EEG sessions, labels, search, hooks, calibrations, TTS, and more."

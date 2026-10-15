@@ -415,6 +415,12 @@
   },
   {
     "tab": "llm",
+    "key": "llm.tools.semanticSkills",
+    "label": "Associer les skills par le sens",
+    "desc": "Classe les skills selon leur sens plutôt que selon les mots partagés : « aide-moi à décompresser avant de dormir » trouve ainsi un protocole de sommeil. Nécessite le modèle d'embeddings ; sinon retour à la correspondance par mots."
+  },
+  {
+    "tab": "llm",
     "key": "llm.tools.skillApi",
     "label": "Skill API",
     "desc": "Permettre au LLM d'interroger l'API NeuroSkill — état de l'appareil, sessions EEG, labels, recherche, hooks, calibrations, TTS, etc."

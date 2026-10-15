@@ -57,8 +57,6 @@ pub fn download_file(
     progress: &Arc<Mutex<DownloadProgress>>,
     size_bytes: u64,
 ) -> anyhow::Result<PathBuf> {
-    use std::io::{Read, Write};
-
     // ── 0. Initial state ──────────────────────────────────────────────────────
     {
         let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -172,8 +170,41 @@ pub fn download_file(
 
     if blob_path.exists() {
         let on_disk = blob_path.metadata().map(|m| m.len()).unwrap_or(0);
+
+        // Fast path: exactly the right size *and* already linked into the
+        // snapshot that names this commit. That combination only exists
+        // because a previous run hashed these bytes and renamed them into
+        // place, so hashing them again proves nothing a crash could have
+        // invalidated — the rename is atomic and the name is the hash.
+        //
+        // It is not free to skip: re-verifying cost 11.7 s for a 378 MB model
+        // on every call, and it scales, so merely opening a download for an
+        // already-downloaded 5 GB model stalled for minutes. `hf_hub` does not
+        // re-verify a cached blob either.
+        //
+        // The trade: same-size in-place corruption of an already-verified blob
+        // is no longer caught here, and would surface later as a model that
+        // fails to load. `SKILL_DOWNLOAD_VERIFY_CACHED=1` forces the full
+        // re-check for anyone who suspects that, rather than leaving them to
+        // delete the cache by hand.
+        let always_verify = std::env::var("SKILL_DOWNLOAD_VERIFY_CACHED").is_ok_and(|v| v != "0");
+        let snapshot_link = model_dir.join("snapshots").join(&commit_sha).join(filename);
+        if can_trust_cached(always_verify, on_disk, remote_size, snapshot_link.exists()) {
+            let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            p.state = DownloadState::Downloaded;
+            p.status_msg = None;
+            p.progress = 1.0;
+            return Ok(snapshot_link);
+        }
+
         if on_disk >= remote_size {
-            match sha256_file_hex(&blob_path) {
+            // Re-verifying a cached multi-GB blob is the same silent stall as
+            // verifying a fresh one, and it happens on every start-up probe.
+            {
+                let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                p.status_msg = Some("Verifying cached file…".into());
+            }
+            match sha256_file_hex_reporting(&blob_path, Some(progress)) {
                 Ok(actual) if actual.eq_ignore_ascii_case(blob_sha.trim()) => {
                     let final_path = register_snapshot(&model_dir, &refs_dir, &commit_sha, filename, &blob_path)?;
                     let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -190,105 +221,74 @@ pub fn download_file(
         }
     }
 
-    // ── 6. Determine resume offset ────────────────────────────────────────────
+    // ── 6. The URL, pinned to the commit the metadata came from ──────────────
     //
-    // If a previous attempt was cancelled or crashed, .incomplete still exists
-    // on disk.  We resume from its current size, sending `Range: bytes=N-`.
-    let resume_from: u64 = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
+    // Not `main`. The blob hash we verify against, the `.incomplete` filename
+    // and the snapshot directory all derive from `commit_sha`; fetching bytes
+    // from `main` instead means that if the repo moves between the metadata
+    // call and the transfer — or, far more likely, between a cancelled
+    // download and a resume days later — we append the *new* file's bytes to
+    // the *old* file's partial, and only find out at the final hash check,
+    // having paid for the whole transfer twice.
+    let file_url = blob_url(&endpoint, repo_id, &commit_sha, filename);
 
-    {
-        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if resume_from > 0 {
-            p.progress = (resume_from as f32 / remote_size as f32).min(0.99);
-            p.status_msg = Some(format!(
-                "Resuming from {:.0} / {:.0} MB…",
-                resume_from as f64 / 1_048_576.0,
-                remote_size as f64 / 1_048_576.0,
-            ));
-        } else {
-            p.progress = 0.0;
-            p.status_msg = Some(format!("Downloading {filename}…"));
-        }
-    }
-
-    // ── 7. Issue GET (with Range header when resuming) ────────────────────────
-    let file_url = format!("{endpoint}/{repo_id}/resolve/main/{filename}");
-    let dl_req = dl_agent.get(&file_url);
-    let dl_req = if let Some(tok) = &hf_token {
-        dl_req.header("Authorization", format!("Bearer {tok}"))
-    } else {
-        dl_req
-    };
-    let mut get = dl_req.header("User-Agent", "skill-app/1.0");
-    if resume_from > 0 {
-        get = get.header("Range", format!("bytes={resume_from}-"));
-    }
-
-    let resp = get.call().map_err(|e| match e {
-        ureq::Error::StatusCode(code) => {
-            anyhow::anyhow!("HTTP {code} for {filename}")
-        }
-        other => anyhow::anyhow!("download error: {other}"),
-    })?;
-
-    let http_status = resp.status().as_u16();
-    // 200 = server ignored Range and sent full content → restart from byte 0.
-    // 206 = server honoured Range → append to existing .incomplete file.
-    if http_status != 200 && http_status != 206 {
-        anyhow::bail!("unexpected HTTP {http_status} for {filename}")
-    }
-    let writing_from: u64 = if http_status == 206 { resume_from } else { 0 };
-
-    // ── 8. Open (or create) the incomplete file ───────────────────────────────
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(writing_from > 0) // append only when the server honoured Range
-        .truncate(writing_from == 0) // full restart: discard any stale partial data
-        .open(&incomplete_path)
-        .context("open .incomplete file")?;
-
-    // ── 9. Stream response bytes to disk ──────────────────────────────────────
-    let mut reader = resp.into_body().into_reader();
-    let mut buf = vec![0u8; 128 * 1024]; // 128 KB chunks — balance between
-                                         // syscall overhead and lock contention
-    let mut written = writing_from;
-    let total = remote_size.max(1);
-
+    // ── 6–9. Transfer, with resume-backed retry ──────────────────────────────
+    //
+    // A multi-gigabyte transfer over a real network will be interrupted. The
+    // resume machinery above already handles that perfectly — it just used to
+    // need a human to press the button again, which for a 5 GB model on hotel
+    // wifi meant the download effectively never finished.
+    //
+    // Each attempt re-reads the on-disk length and continues from there, so a
+    // retry is simply a resume: progress already made is never re-fetched, and
+    // several short-lived failures still converge. Only transport faults are
+    // retried — a cancellation, a pause, an auth failure or a hash mismatch
+    // are all answers that will not change by asking again.
+    let mut attempt: u32 = 0;
     loop {
-        let n = reader
-            .read(&mut buf)
-            .with_context(|| format!("read error while downloading {filename}"))?;
-        if n == 0 {
-            break;
-        }
-
-        file.write_all(&buf[..n])
-            .with_context(|| format!("write error for {filename}"))?;
-        written += n as u64;
-
-        // Update progress and honour cancellation inside the same lock acquisition
-        // to avoid a TOCTOU race between reading and writing the flag.
-        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        p.progress = (written as f32 / total as f32).min(0.99);
-        p.status_msg = Some(format!(
-            "{:.0} / {:.0} MB",
-            written as f64 / 1_048_576.0,
-            total as f64 / 1_048_576.0,
-        ));
-        if p.cancelled {
-            // Leave .incomplete on disk — it is the resume point.
-            if p.pause_requested {
-                p.state = DownloadState::Paused;
-                p.status_msg = Some("Paused — resume to continue.".into());
-                anyhow::bail!("paused")
+        attempt += 1;
+        match transfer_attempt(
+            &dl_agent,
+            &file_url,
+            hf_token.as_deref(),
+            filename,
+            &incomplete_path,
+            remote_size,
+            progress,
+        ) {
+            Ok(()) => break,
+            Err(Transfer::Fatal(e)) => return Err(e),
+            Err(Transfer::Transient(e)) => {
+                if attempt >= MAX_TRANSFER_ATTEMPTS {
+                    return Err(e.context(format!(
+                        "{filename}: giving up after {MAX_TRANSFER_ATTEMPTS} attempts \
+                         (the partial download is kept — starting again resumes it)"
+                    )));
+                }
+                let wait = retry_backoff(attempt);
+                {
+                    let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    p.status_msg = Some(format!(
+                        "Connection lost ({e}) — retrying in {}s ({attempt}/{MAX_TRANSFER_ATTEMPTS})…",
+                        wait.as_secs().max(1)
+                    ));
+                }
+                // Sleeping in slices so a cancel during the backoff is acted on
+                // then, not after the full wait.
+                if !sleep_unless_cancelled(wait, progress) {
+                    let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if p.pause_requested {
+                        p.state = DownloadState::Paused;
+                        p.status_msg = Some("Paused — resume to continue.".into());
+                        anyhow::bail!("paused")
+                    }
+                    p.state = DownloadState::Cancelled;
+                    p.status_msg = Some("Cancelled — will resume next time.".into());
+                    anyhow::bail!("cancelled")
+                }
             }
-            p.state = DownloadState::Cancelled;
-            p.status_msg = Some("Cancelled — will resume next time.".into());
-            anyhow::bail!("cancelled")
         }
     }
-    drop(file); // explicit flush + close before rename
 
     // ── 10. Sanity-check downloaded size + content hash ──────────────────────
     let final_size = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
@@ -299,8 +299,12 @@ pub fn download_file(
         )
     }
 
-    let actual_sha =
-        sha256_file_hex(&incomplete_path).with_context(|| format!("hash incomplete download for {filename}"))?;
+    {
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        p.status_msg = Some("Verifying…".into());
+    }
+    let actual_sha = sha256_file_hex_reporting(&incomplete_path, Some(progress))
+        .with_context(|| format!("hash incomplete download for {filename}"))?;
     if !actual_sha.eq_ignore_ascii_case(blob_sha.trim()) {
         // Corrupt / poisoned blob — delete so the next attempt starts clean.
         let _ = std::fs::remove_file(&incomplete_path);
@@ -328,6 +332,252 @@ pub fn download_file(
     }
 
     Ok(final_path)
+}
+
+/// The URL a file's bytes are fetched from, pinned to one commit.
+///
+/// Kept as a function so the pinning is testable: passing a moving ref here
+/// is the kind of thing that only shows up as a corrupted resume days later.
+fn blob_url(endpoint: &str, repo_id: &str, commit_sha: &str, filename: &str) -> String {
+    format!("{endpoint}/{repo_id}/resolve/{commit_sha}/{filename}")
+}
+
+/// Whether an on-disk blob can be used without re-hashing it.
+///
+/// All three conditions matter:
+/// * **exact** size — a `>=` would accept a longer file, and a shorter one is
+///   a partial wearing the finished name;
+/// * a non-zero expected size — `0` means the manifest told us nothing, so
+///   there is nothing to compare against;
+/// * the snapshot link for *this commit* already exists — that is the proof a
+///   previous run hashed these bytes and promoted them, rather than them
+///   being a stray file that happens to sit at the content-addressed path.
+fn can_trust_cached(always_verify: bool, on_disk: u64, remote_size: u64, snapshot_exists: bool) -> bool {
+    !always_verify && remote_size > 0 && on_disk == remote_size && snapshot_exists
+}
+
+// ── Transfer attempt ─────────────────────────────────────────────────────────
+
+/// How many times one file's transfer is attempted before the error surfaces.
+///
+/// Five, with the backoff below, spans about half a minute of outage — enough
+/// to ride out a roaming handover or a flaky hotspot, short enough that a
+/// genuinely dead endpoint still reports promptly.
+const MAX_TRANSFER_ATTEMPTS: u32 = 5;
+
+/// Exponential backoff, capped. 1s, 2s, 4s, 8s, 8s…
+fn retry_backoff(attempt: u32) -> std::time::Duration {
+    let secs = 1u64 << attempt.min(3);
+    std::time::Duration::from_secs(secs.min(8))
+}
+
+/// Sleep, waking early if the download is cancelled.
+///
+/// Returns `false` when cancellation was requested, so the caller can stop
+/// instead of finishing the wait. A user who hits cancel during a backoff
+/// should not watch the button do nothing for eight seconds.
+fn sleep_unless_cancelled(total: std::time::Duration, progress: &Arc<Mutex<DownloadProgress>>) -> bool {
+    const SLICE: std::time::Duration = std::time::Duration::from_millis(200);
+    let mut slept = std::time::Duration::ZERO;
+    while slept < total {
+        if progress
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cancelled
+        {
+            return false;
+        }
+        let step = SLICE.min(total - slept);
+        std::thread::sleep(step);
+        slept += step;
+    }
+    true
+}
+
+/// Why a transfer attempt stopped.
+enum Transfer {
+    /// The network gave out. The partial file is the resume point, so another
+    /// attempt continues rather than restarts.
+    Transient(anyhow::Error),
+    /// Another attempt cannot help: the user cancelled or paused, the server
+    /// refused us, or the bytes are wrong.
+    Fatal(anyhow::Error),
+}
+
+/// Human-readable transfer rate and time remaining.
+///
+/// Returns an empty string until there is enough of a sample to mean
+/// anything — a rate computed over the first few milliseconds is noise, and a
+/// wildly wrong ETA is worse than none.
+fn rate_and_eta(done_this_attempt: u64, remaining: u64, elapsed: std::time::Duration) -> String {
+    let secs = elapsed.as_secs_f64();
+    if secs < 1.0 || done_this_attempt == 0 {
+        return String::new();
+    }
+    let bps = done_this_attempt as f64 / secs;
+    if bps <= 0.0 {
+        return String::new();
+    }
+    let mb_s = bps / 1_048_576.0;
+    let eta = remaining as f64 / bps;
+    let eta = if eta < 60.0 {
+        format!("{eta:.0}s")
+    } else if eta < 3600.0 {
+        format!("{:.0}m{:02.0}s", eta / 60.0, eta % 60.0)
+    } else {
+        format!("{:.0}h{:02.0}m", eta / 3600.0, (eta % 3600.0) / 60.0)
+    };
+    format!(" · {mb_s:.1} MB/s · {eta} left")
+}
+
+/// One attempt at getting `remote_size` bytes into `incomplete_path`.
+///
+/// Resumes from whatever is already on disk, so repeated calls make forward
+/// progress rather than starting over.
+#[allow(clippy::too_many_arguments)]
+fn transfer_attempt(
+    dl_agent: &ureq::Agent,
+    file_url: &str,
+    hf_token: Option<&str>,
+    filename: &str,
+    incomplete_path: &Path,
+    remote_size: u64,
+    progress: &Arc<Mutex<DownloadProgress>>,
+) -> Result<(), Transfer> {
+    use std::io::{Read, Write};
+
+    // Re-read the on-disk length every attempt: that is what makes a retry a
+    // resume rather than a restart.
+    let resume_from: u64 = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
+
+    // Already have everything — nothing to transfer, let the caller verify.
+    if resume_from >= remote_size && remote_size > 0 {
+        return Ok(());
+    }
+
+    {
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if p.cancelled {
+            return Err(Transfer::Fatal(cancel_error(&mut p)));
+        }
+        p.progress = (resume_from as f32 / remote_size.max(1) as f32).min(0.99);
+        p.status_msg = Some(if resume_from > 0 {
+            format!(
+                "Resuming from {:.0} / {:.0} MB…",
+                resume_from as f64 / 1_048_576.0,
+                remote_size as f64 / 1_048_576.0,
+            )
+        } else {
+            format!("Downloading {filename}…")
+        });
+    }
+
+    let dl_req = dl_agent.get(file_url);
+    let dl_req = match hf_token {
+        Some(tok) => dl_req.header("Authorization", format!("Bearer {tok}")),
+        None => dl_req,
+    };
+    let mut get = dl_req.header("User-Agent", "skill-app/1.0");
+    if resume_from > 0 {
+        get = get.header("Range", format!("bytes={resume_from}-"));
+    }
+
+    let resp = get.call().map_err(|e| match e {
+        // 4xx is an answer, not an outage: a missing file, a gated repo or a
+        // bad token will say the same thing however many times we ask.
+        ureq::Error::StatusCode(code) if (400..500).contains(&code) && code != 408 && code != 429 => {
+            Transfer::Fatal(anyhow::anyhow!("HTTP {code} for {filename}"))
+        }
+        ureq::Error::StatusCode(code) => Transfer::Transient(anyhow::anyhow!("HTTP {code}")),
+        other => Transfer::Transient(anyhow::anyhow!("{other}")),
+    })?;
+
+    let http_status = resp.status().as_u16();
+    if http_status != 200 && http_status != 206 {
+        return Err(Transfer::Transient(anyhow::anyhow!("unexpected HTTP {http_status}")));
+    }
+    // 200 = the server ignored our Range and is sending the whole file, so the
+    // existing partial must be discarded rather than appended to.
+    let writing_from: u64 = if http_status == 206 { resume_from } else { 0 };
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(writing_from > 0)
+        .truncate(writing_from == 0)
+        .open(incomplete_path)
+        .map_err(|e| Transfer::Fatal(anyhow::Error::new(e).context("open .incomplete file")))?;
+
+    let mut reader = resp.into_body().into_reader();
+    // 128 KB — balances syscall overhead against lock contention.
+    let mut buf = vec![0u8; 128 * 1024];
+    let mut written = writing_from;
+    let total = remote_size.max(1);
+    let started = std::time::Instant::now();
+    let start_bytes = writing_from;
+
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(n) => n,
+            // A broken read is the common interruption; the bytes already
+            // written stay on disk and the next attempt continues from them.
+            Err(e) => return Err(Transfer::Transient(anyhow::anyhow!("{e}"))),
+        };
+        if n == 0 {
+            break;
+        }
+
+        if let Err(e) = file.write_all(&buf[..n]) {
+            // A write failure is local — a full disk or a vanished cache dir.
+            // Retrying the network will not fix it.
+            return Err(Transfer::Fatal(
+                anyhow::Error::new(e).context(format!("write error for {filename}")),
+            ));
+        }
+        written += n as u64;
+
+        // Progress and cancellation under one lock, so the flag cannot change
+        // between reading and acting on it.
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        p.progress = (written as f32 / total as f32).min(0.99);
+        p.status_msg = Some(format!(
+            "{:.0} / {:.0} MB{}",
+            written as f64 / 1_048_576.0,
+            total as f64 / 1_048_576.0,
+            rate_and_eta(written - start_bytes, total.saturating_sub(written), started.elapsed()),
+        ));
+        if p.cancelled {
+            // The partial stays on disk; it is the resume point.
+            return Err(Transfer::Fatal(cancel_error(&mut p)));
+        }
+    }
+
+    file.flush()
+        .map_err(|e| Transfer::Fatal(anyhow::Error::new(e).context("flush .incomplete file")))?;
+    drop(file);
+
+    // Short read without an error: the connection closed early. Another
+    // attempt resumes from what did arrive.
+    let on_disk = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
+    if on_disk < remote_size {
+        return Err(Transfer::Transient(anyhow::anyhow!(
+            "connection closed at {on_disk} of {remote_size} bytes"
+        )));
+    }
+    Ok(())
+}
+
+/// Mark the shared progress cancelled-or-paused and produce the matching error.
+fn cancel_error(p: &mut DownloadProgress) -> anyhow::Error {
+    if p.pause_requested {
+        p.state = DownloadState::Paused;
+        p.status_msg = Some("Paused — resume to continue.".into());
+        anyhow::anyhow!("paused")
+    } else {
+        p.state = DownloadState::Cancelled;
+        p.status_msg = Some("Cancelled — will resume next time.".into());
+        anyhow::anyhow!("cancelled")
+    }
 }
 
 // ── Multi-shard download ──────────────────────────────────────────────────────
@@ -658,27 +908,54 @@ fn register_snapshot(
 }
 
 /// SHA-256 hex digest of a file (lowercase). Used to verify HF LFS blobs.
-fn sha256_file_hex(path: &Path) -> anyhow::Result<String> {
+/// SHA-256 of a file, optionally reporting progress while it reads.
+///
+/// Verification is neither free nor quick: hashing a 378 MB model took ~12 s
+/// of a measured 48 s download, and it scales with the file, so a 5 GB model
+/// spends minutes here. Without this the bar sat at 99 % behind a stale
+/// "378 / 378 MB · 10.6 MB/s · 0s left" line — indistinguishable from a hang,
+/// at exactly the point where a user is most likely to force-quit and leave a
+/// partial file behind.
+fn sha256_file_hex_reporting(path: &Path, progress: Option<&Arc<Mutex<DownloadProgress>>>) -> anyhow::Result<String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
 
     let mut file = std::fs::File::open(path).with_context(|| format!("open {} for hashing", path.display()))?;
+    let total = file.metadata().map(|m| m.len()).unwrap_or(0).max(1);
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 128 * 1024];
+    let mut read_so_far: u64 = 0;
+    // Touch the shared lock a few times a second, not once per 128 KB.
+    let mut last_report = std::time::Instant::now();
+
     loop {
         let n = file.read(&mut buf)?;
         if n == 0 {
             break;
         }
         hasher.update(&buf[..n]);
+        read_so_far += n as u64;
+
+        if let Some(p) = progress {
+            if last_report.elapsed() >= std::time::Duration::from_millis(250) {
+                last_report = std::time::Instant::now();
+                let pct = read_so_far as f64 / total as f64 * 100.0;
+                let mut g = p.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                g.status_msg = Some(format!("Verifying… {pct:.0}%"));
+            }
+        }
     }
     Ok(hex::encode(hasher.finalize()))
 }
 
 #[cfg(test)]
 mod hash_tests {
-    use super::sha256_file_hex;
+    use super::{
+        blob_url, can_trust_cached, cancel_error, rate_and_eta, retry_backoff, sha256_file_hex_reporting,
+        sleep_unless_cancelled, DownloadProgress, DownloadState, MAX_TRANSFER_ATTEMPTS,
+    };
     use std::io::Write;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn sha256_matches_known_vector() {
@@ -689,8 +966,166 @@ mod hash_tests {
         drop(f);
         // echo -n hello | shasum -a 256
         assert_eq!(
-            sha256_file_hex(&path).unwrap(),
+            sha256_file_hex_reporting(&path, None).unwrap(),
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+    }
+
+    // ── Retry / resume behaviour ─────────────────────────────────────────────
+
+    /// Backoff must grow and then stop growing — an unbounded doubling would
+    /// have the last attempt waiting minutes.
+    #[test]
+    fn backoff_grows_then_caps() {
+        let waits: Vec<u64> = (1..=6).map(|a| retry_backoff(a).as_secs()).collect();
+        assert_eq!(waits, vec![2, 4, 8, 8, 8, 8]);
+        // The whole retry budget stays in the tens of seconds, not minutes.
+        let total: u64 = (1..MAX_TRANSFER_ATTEMPTS).map(|a| retry_backoff(a).as_secs()).sum();
+        assert!(total <= 60, "total backoff {total}s should stay under a minute");
+    }
+
+    fn progress_handle(cancelled: bool) -> Arc<Mutex<DownloadProgress>> {
+        Arc::new(Mutex::new(DownloadProgress {
+            cancelled,
+            ..Default::default()
+        }))
+    }
+
+    /// Cancelling during a backoff must be acted on promptly, not after the
+    /// full wait — otherwise the button appears dead for up to 8 seconds.
+    #[test]
+    fn a_cancel_during_backoff_returns_early() {
+        let p = progress_handle(false);
+        let p2 = Arc::clone(&p);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            p2.lock().unwrap().cancelled = true;
+        });
+
+        let started = std::time::Instant::now();
+        let completed = sleep_unless_cancelled(std::time::Duration::from_secs(8), &p);
+        let waited = started.elapsed();
+
+        assert!(!completed, "should report that it was cancelled");
+        assert!(waited < std::time::Duration::from_secs(2), "returned after {waited:?}");
+    }
+
+    #[test]
+    fn an_uninterrupted_backoff_sleeps_the_full_time() {
+        let p = progress_handle(false);
+        let started = std::time::Instant::now();
+        assert!(sleep_unless_cancelled(std::time::Duration::from_millis(400), &p));
+        assert!(started.elapsed() >= std::time::Duration::from_millis(350));
+    }
+
+    #[test]
+    fn an_already_cancelled_download_does_not_sleep_at_all() {
+        let p = progress_handle(true);
+        let started = std::time::Instant::now();
+        assert!(!sleep_unless_cancelled(std::time::Duration::from_secs(8), &p));
+        assert!(started.elapsed() < std::time::Duration::from_millis(100));
+    }
+
+    /// A pause and a cancel are different outcomes and the UI shows them
+    /// differently; both must leave the partial file alone.
+    #[test]
+    fn cancel_and_pause_produce_distinct_states() {
+        let mut p = DownloadProgress {
+            cancelled: true,
+            pause_requested: true,
+            ..Default::default()
+        };
+        assert_eq!(cancel_error(&mut p).to_string(), "paused");
+        assert_eq!(p.state, DownloadState::Paused);
+
+        let mut p = DownloadProgress {
+            cancelled: true,
+            pause_requested: false,
+            ..Default::default()
+        };
+        assert_eq!(cancel_error(&mut p).to_string(), "cancelled");
+        assert_eq!(p.state, DownloadState::Cancelled);
+    }
+
+    // ── Rate / ETA ───────────────────────────────────────────────────────────
+
+    /// A rate computed over a few milliseconds is noise, and a wildly wrong
+    /// ETA is worse than none — so there is nothing to show yet.
+    #[test]
+    fn no_rate_until_the_sample_is_meaningful() {
+        assert_eq!(rate_and_eta(1024, 1024, std::time::Duration::from_millis(10)), "");
+        assert_eq!(rate_and_eta(0, 1024, std::time::Duration::from_secs(5)), "");
+    }
+
+    #[test]
+    fn rate_and_eta_read_sensibly() {
+        // 10 MB in 10 s = 1 MB/s, with 30 MB to go = 30 s left.
+        let s = rate_and_eta(10 * 1_048_576, 30 * 1_048_576, std::time::Duration::from_secs(10));
+        assert!(s.contains("1.0 MB/s"), "got {s}");
+        assert!(s.contains("30s left"), "got {s}");
+    }
+
+    #[test]
+    fn a_long_eta_is_shown_in_minutes_and_hours() {
+        // 1 MB/s with 600 MB left = 10 minutes.
+        let s = rate_and_eta(1_048_576, 600 * 1_048_576, std::time::Duration::from_secs(1));
+        assert!(s.contains("10m00s left"), "got {s}");
+
+        // 1 MB/s with 7200 MB left = 2 hours.
+        let s = rate_and_eta(1_048_576, 7200 * 1_048_576, std::time::Duration::from_secs(1));
+        assert!(s.contains("2h00m left"), "got {s}");
+    }
+
+    /// The bytes must come from the same commit the hash and the snapshot
+    /// directory came from. Fetching from a moving ref means a resume days
+    /// later can append a *different* file's bytes to the old partial, and
+    /// only the final hash catches it — after paying for the transfer twice.
+    #[test]
+    fn the_download_url_is_pinned_to_a_commit() {
+        let url = blob_url(
+            "https://huggingface.co",
+            "unsloth/Qwen3-0.6B-GGUF",
+            "abc123def456",
+            "Qwen3-0.6B-Q4_K_M.gguf",
+        );
+        assert_eq!(
+            url,
+            "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/abc123def456/Qwen3-0.6B-Q4_K_M.gguf"
+        );
+        assert!(!url.contains("/resolve/main/"), "must not fetch from a moving ref");
+    }
+
+    // ── Cached-blob fast path ────────────────────────────────────────────────
+
+    /// The whole point: an already-downloaded, already-linked model resolves
+    /// without re-reading gigabytes. Measured 11.7 s → 0.5 s for 378 MB.
+    #[test]
+    fn a_registered_blob_of_the_right_size_is_trusted() {
+        assert!(can_trust_cached(false, 1000, 1000, true));
+    }
+
+    /// Each condition must be load-bearing on its own.
+    #[test]
+    fn anything_less_than_certain_is_re_verified() {
+        // Wrong size, either way.
+        assert!(!can_trust_cached(false, 999, 1000, true), "short file is a partial");
+        assert!(!can_trust_cached(false, 1001, 1000, true), "long file is not this file");
+        // No snapshot link: nothing proves these bytes were ever verified.
+        assert!(!can_trust_cached(false, 1000, 1000, false));
+        // The manifest gave no size, so there is nothing to compare.
+        assert!(!can_trust_cached(false, 0, 0, true));
+        // And the escape hatch overrides all of it.
+        assert!(!can_trust_cached(true, 1000, 1000, true));
+    }
+
+    /// `HF_ENDPOINT` is how mirrors and corporate proxies are pointed at, so
+    /// it has to survive into the transfer URL, not just the metadata call.
+    #[test]
+    fn a_custom_endpoint_is_honoured() {
+        let url = blob_url("https://hf-mirror.example", "org/repo", "deadbeef", "m.gguf");
+        assert!(
+            url.starts_with("https://hf-mirror.example/org/repo/resolve/deadbeef/"),
+            "got {url}"
         );
     }
 }

@@ -67,7 +67,11 @@ metrics (band powers, meditation / cognitive-load scores) do not apply.
 |--------|-------------|---------|-----------|-------|-------|
 | **Oura Ring** (Gen 3 / Ring 4 / Ring 5) | Ōura Health | Heart rate + IBI, SpO2, skin temperature, 3-axis motion, battery | BLE | `oura-link` / `oura-protocol` ([open_oura]) | Cloud-free, reads the ring directly. **Needs the ring's 16-byte BLE app-auth key** — see below. Live samples record to a `_vitals` sidecar |
 
+| **WHOOP** (4.0 / 5.0 / MG) | WHOOP | Heart rate + R-R intervals, battery | BLE | [`poop`] ([whoop-rs]) | Cloud-free, reads the strap directly. No account and no key needed |
+
 [open_oura]: https://github.com/Th0rgal/open_oura
+[`poop`]: https://docs.rs/poop
+[whoop-rs]: https://github.com/eugenehp/whoop-rs
 
 ### Oura: the two integrations are different things
 
@@ -144,6 +148,31 @@ refused, so a future upstream decoder cannot silently start feeding the health
 database guesses. `ibi_and_amplitude_event` is skipped for the same reason: 7–13 %
 of its beats read above 100 bpm during sleep on two different rings.
 
+### WHOOP: what the strap gives you
+
+No credential at all — unlike the ring, a strap's read surface is open, and
+`poop` admits no destructive command whatever policy is set.
+
+* **Heart rate** from the standard Heart Rate Measurement characteristic, which
+  works unbonded, plus the proprietary live packet (enabled by this adapter,
+  since a recording session is exactly what it is for).
+* **Every R-R interval**, not just the beat rate. A strap reports the bpm and
+  the intervals behind it as separate fields — the intervals are what HRV is
+  computed from — so each becomes its own vitals sample and the rate is
+  reported once rather than repeated onto every interval.
+* **Battery**, with pack voltage where the source carries it.
+
+The two generations advertise **different** vendor services — 4.0 is
+`61080001-…`, 5.0/MG is `fd4b0001-…` — and both are registered, so a strap is
+found by service rather than by its user-settable name. A strap accepts **one
+connection at a time**: disconnect it in the WHOOP phone app first.
+
+Offloaded history arrives on the same event channel as live data, tagged
+`Historical`, and is **deliberately dropped** by the live adapter — emitting it
+would backfill a recording with measurements from another day, stamped with the
+moment they transferred. Draining it into the health store is a separate piece
+of work, not yet built (the ring's equivalent is).
+
 ## Virtual & Network Sources
 
 | Source | Type | Channels | Transport | Notes |
@@ -159,7 +188,7 @@ of its beats read above 100 bpm during sleep on two different rings.
 
 | Transport | Devices | Protocol |
 |-----------|---------|----------|
-| **BLE** | Muse, MW75, Vital Neuro, Ganglion, IDUN, Mendi, Oura Ring, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth / btleplug / vendor SDK) |
+| **BLE** | Muse, MW75, Vital Neuro, Ganglion, IDUN, Mendi, Oura Ring, WHOOP, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth, or a vendor SDK for BrainBit / g.tec) |
 | **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster, NeuroSky | FTDI/CDC serial at 57600–115200 baud |
 | **WiFi** | Cyton WiFi, Cyton+Daisy WiFi, Ganglion WiFi | TCP via OpenBCI WiFi Shield |
 | **UDP** | Galea | Direct UDP streaming |
@@ -185,6 +214,7 @@ of its beats read above 100 bpm during sleep on two different rings.
 | IDUN Technologies | Zurich, Switzerland | 2016 | iduntechnologies.com |
 | Mendi | Stockholm, Sweden | 2019 | mendi.io |
 | Ōura Health | Oulu, Finland | 2013 | ouraring.com |
+| WHOOP | Boston, USA | 2012 | whoop.com |
 | BrainBit LLC | Saratov, Russia | 2016 | brainbit.com |
 | g.tec medical engineering | Schiedlberg, Austria | 1999 | gtec.at |
 | Neurofield Inc | Santa Barbara, USA | 2009 | neurofieldneuroscience.com |
@@ -216,7 +246,7 @@ of its beats read above 100 bpm during sleep on two different rings.
 
 | Prefix | Example | Device |
 |--------|---------|--------|
-| `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse, Vital Neuro, Oura Ring (webbluetooth); MW75, IDUN, Mendi (btleplug) |
+| `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse, Vital Neuro, Oura Ring, WHOOP, MW75, Mendi, Ganglion, IDUN, AWEAR — all on `webbluetooth`, one shared session |
 | `usb:` | `usb:COM3`, `usb:/dev/ttyUSB0` | OpenBCI Cyton/Daisy, BrainMaster serial |
 | `cgx:` | `cgx:/dev/ttyUSB1` | Cognionics CGX |
 | `wifi:` | `wifi:192.168.1.100` | OpenBCI WiFi Shield |

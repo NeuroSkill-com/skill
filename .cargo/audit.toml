@@ -1,6 +1,10 @@
 # cargo-audit ignore list — all transitive deps we cannot directly upgrade.
-# These are informational-only advisories (unmaintained / unsound);
-# no actual vulnerabilities are present.
+# Everything here is informational (unmaintained / unsound) — `--deny warnings`
+# makes those fatal too, which is why the list is long. Anything genuinely
+# exploitable gets upgraded instead of listed: on 2026-10-15 that meant rustls
+# 0.23.46, event-listener 5.4.2, lru 0.18.5, and llmfit-core 1.1.17 (which took
+# the whole serde_yml / noyalib YAML stack out of the graph rather than ignoring
+# three advisories against it).
 
 # Yanked crates — transitive deps we can't control.
 [yanked]
@@ -42,9 +46,26 @@ ignore = [
     # ── Unsound warnings in legacy transitive deps ────────────────────────────
     "RUSTSEC-2021-0145", # atty potential unaligned read (legacy clap2 chain)
 
-    # ── lru — unsound IterMut, patched in >=0.16.3; transitive dep ───────────
-    "RUSTSEC-2026-0002", # lru
-
     # ── rand — unsound with custom logger using rand::rng(); transitive dep ──
     "RUSTSEC-2026-0097", # rand (0.7.3 via tauri/phf, 0.8.5 via keyring/emotiv/etc.)
+
+    # ── unsafe-libyaml — unmaintained, no patched release ────────────────────
+    # Reached as neurorvq-rs 0.2 -> serde_yaml 0.9 (itself deprecated) ->
+    # unsafe-libyaml. `patched = []`, so there is nothing to upgrade to short of
+    # neurorvq-rs moving off serde_yaml. It used to arrive by a second road as
+    # well — llmfit-core 0.9 -> serde_yml -> unsafe-libyaml — and that one is
+    # gone as of llmfit-core 1.1.17, which also removed serde_yml's own
+    # RUSTSEC-2025-0068 and noyalib's RUSTSEC-2026-0333 from this list.
+    "RUSTSEC-2024-0449", # unsafe-libyaml — unmaintained (serde_yaml's backend)
+
+    # ── Mirrors of deny.toml's reviewed ignores ─────────────────────────────
+    # cargo-deny reads deny.toml and cargo-audit reads this file, so a decision
+    # recorded in one is invisible to the other — and CI runs both. These three
+    # are the same calls, with the same reasoning, as the `[advisories] ignore`
+    # entries in deny.toml; change them together or the audit job disagrees
+    # with the deny job.
+    "RUSTSEC-2026-0194", # quick-xml <0.41 pinned by tauri/plist; trusted local XML only
+    "RUSTSEC-2026-0195", # quick-xml <0.41 pinned by tauri/plist; trusted local XML only
+    "RUSTSEC-2024-0437", # protobuf <3.7.2, build-only protoc codegen; not in the shipped binary
+
 ]
