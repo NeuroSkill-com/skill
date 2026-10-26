@@ -60,6 +60,7 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 - **WHOOP:** WHOOP 4.0 / 5.0 / MG strap
 
 Plus any compatible **LSL** source (e.g. BrainFlow, MATLAB, pylsl).
+
 <!-- AUTO-GENERATED:SUPPORTED_DEVICES:END -->
 
 ## Supported EXG/BCI foundation models
