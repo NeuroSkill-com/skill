@@ -8,6 +8,24 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.2] — 2026-10-26
+
+### Bugfixes
+
+- **Windows auto-update could not unpack its own update package.** `tauri-plugin-updater` takes `zip` with `default-features = false` and no features, so its copy has no Deflate decoder unless something else in the build turns one on — and `release-windows.yml` writes the `.nsis.zip` with `CompressionLevel::Optimal`, which is method 8, Deflate. A `zip` dependency in `src-tauri` existed for exactly this, and comments in both files said so, but Cargo unions features per *resolved package*: ours had moved to a major version the updater's `^4` requirement cannot share, so they were two separate packages and the feature landed on the wrong one. `Cargo.lock` showed it plainly — the updater's `zip 4.6.1` resolved with no `flate2` at all. It is now a renamed `^4` dependency aimed at that copy, which puts `flate2`, `deflate64` and `zopfli` back under `zip 4.6.1`, and the comment explains the invariant to check after any future zip bump on either side.
+
+### Build
+
+- **`cargo deny` prints nothing but `ok` again.** Every pre-push run carried twelve warnings that no longer meant anything. Nine were `unmatched-skip` against `[bans].skip`, a list that could not have worked in the first place: `skip` only suppresses `multiple-versions` diagnostics, and that lint is `allow`ed here, so all 44 entries were inert — they silenced nothing, and each one whose exact version left the graph turned into a warning instead (`zip@2.4.2` and `zip@7.2.0` after the upgrade above, seven `windows_*@0.48.5` after that stack moved on). The list is gone, with a note to rebuild it from real output *if* `multiple-versions` is ever enforced, rather than restoring one that was already wrong. The other three were `unmatched-source`, which cannot be a signal in this repo at all — `scripts/rlx local` path-patches rlx and rlx-models onto sibling checkouts, so the same `deny.toml` leaves those two entries unmatched on a developer machine and matched in CI; that class is now `allow`ed, the way the unmatched-license classes already were. The one entry that was genuinely dead, the `eugenehp/btleplug.git` fork, is deleted instead of silenced, since a stale `allow-git` keeps quietly permitting a source nothing uses.
+
+### Dependencies
+
+- **`zip` 7 → 9.1.1, here and upstream in rlx / rlx-models.** Three advisories (RUSTSEC-2026-0367, -0368, -0369) cover zip's extraction APIs: SUID/SGID bits preserved out of the archive's `external_attributes`, symlinks whose targets resolve outside the destination, and Unix permissions applied through those symlinks. All three are fixed only in 9.0.0, so the eight archive readers in the three repos moved together — `skill-neutts`, plus `rlx-pkg`, `rlx-dduf`, `rlx-asr`, `rlx-funasr`, `rlx-kittentts`, `rlx-kittentts2` and `rlx-voxtral-tts`. zip 9 made two API changes worth knowing: `ZipFile::name()` returns `Result<Cow<str>, _>`, reporting a name it cannot decode rather than converting it lossily, and `data_start()` returns `Option<u64>`, `None` until the local header has actually been read.
+- **Two zip copies are left that we cannot move, and both are recorded with their reasoning in `deny.toml` and `.cargo/audit.toml`.** `tauri-plugin-updater`'s `zip ^4` is the only code in the graph that actually calls `extract()` — but it is `cfg(target_os = "windows")`, where the Unix permission and symlink semantics all three advisories describe do not exist, and the bytes it extracts come from `Update::download`, which checks their minisign signature against the pinned public key first. There is nothing to upgrade to: even tauri-plugin-updater 3.0.0-alpha.3 still requires `zip ^4`. The other is `npyz`'s `zip ^0.6`, reached through `rlx-mlx-io`, which reads `.npz` members by name and never extracts; npyz 0.9.1, its newest release, still requires `^0.6`.
+- **Security updates**: `tokio` 1.53.1 → 1.54.1 (RUSTSEC-2026-0386 — `AsyncFd::new` violated I/O safety), `rustls-webpki` 0.103.15 → 0.103.16 (RUSTSEC-2026-0382 — certificate verification could accept distrusted intermediates), `webpki-roots` and `webpki-root-certs` 1.0.9 → 1.0.11 (RUSTSEC-2026-0381, -0383 — the bundled root set still trusted distrusted emSign intermediates), `ctutils` 0.4.2 → 0.4.6 (RUSTSEC-2026-0385 — non-constant-time mask generation and `u128` comparisons).
+- **The zbus stack is now flagged unmaintained, and that one cannot be fixed from here.** `zvariant`, `zvariant_derive` and `zbus_names` stopped being published separately on 2026-10-16 — all three advisories carry `patched = []` and point at zbus 6.0.0, which absorbed them as its `wire` and `names` modules. We are on zbus 5.18.0 (notify-rust, tauri-plugin-opener, tauri-plugin-single-instance, xcap) and zbus 4.4.0 (secret-service, via keyring), so the migration belongs to those five upstreams. It is D-Bus, so the whole stack is Linux-only. Ignored for `cargo audit`, which denies every warning; `cargo deny` never needed an entry, because its `unmaintained = "workspace"` already scopes that lint to our own crates.
+- **One new license exception**: `rlx-audio-blocks`, the shared TDT/RNN-T decoder loops that rlx-models 0.2.19 split out of `rlx-nemotron-asr` and `rlx-funasr`. GPL-3.0-only like the rest of rlx, and it reaches us through `skill-asr`.
+
 ## [0.1.0-rc.1] — 2026-10-26
 
 ### Features
@@ -686,16 +704,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - **Windows Vulkan SDK removal**: Drop Vulkan SDK requirements from Windows PR clippy/release paths where no longer needed.
 
-## [0.0.131-rc.17] — 2026-07-24
-
-### Features
-
-- Minor updates and improvements
-
 ## Earlier releases
 
-The 145 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 146 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.17](changes/releases/0.0.131-rc.17.md)
 - [0.0.131-rc.16](changes/releases/0.0.131-rc.16.md)
 - [0.0.131-rc.15](changes/releases/0.0.131-rc.15.md)
 - [0.0.131-rc.14](changes/releases/0.0.131-rc.14.md)
