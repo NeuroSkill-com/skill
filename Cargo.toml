@@ -176,6 +176,15 @@ rlx-nemo         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main"
 # this block exists to prevent.
 rlx-torch-ckpt   = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+# Two more rlx workspace crates that rlx-models 0.2.19 pins from the registry
+# (`rlx-search = "^0.2.19"`, `rlx-rng = "^0.2.19"`) — the decoders moved onto
+# rlx-search, and the torch initialisers / DataLoader shuffle onto rlx-rng.
+# Without these entries rlx-search appears TWICE in the lock, once by path
+# (pulled in by the patched rlx crates that depend on it inside rlx's own
+# workspace) and once from crates.io (pulled in by rlx-models) — two copies of
+# one crate at one version, which is the dual-source split this block prevents.
+rlx-search       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-rng          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-distributed  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
@@ -213,7 +222,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 # Deflate-compressed entries. Without this, zip 4.6.1 is compiled without
 # flate2 and produces "unsupported compression method" when the updater tries
 # to unpack a .nsis.zip built with standard Deflate (method 8).
-zip = { version = "7", features = ["deflate"] }
+zip = { version = "9", features = ["deflate"] }
 
 # RLX — from GitHub (`branch = "main"`; Cargo.lock pins the resolved commit).
 #   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR (+ rlx-runtime, rlx-umap, …)
@@ -221,7 +230,7 @@ zip = { version = "7", features = ["deflate"] }
 # Local sibling checkouts: `bash scripts/ensure-rlx.sh` / `scripts/rlx local`
 # (writes `[patch."<git-url>"]` outside the repo; never commit `../` paths).
 # CI fetches these git URLs from main (commit pinned in Cargo.lock) — no sibling clone.
-rlx          = { git = "https://github.com/MIT-RLX/rlx.git", version = "0.2.16", branch = "main", default-features = false }
+rlx          = { git = "https://github.com/MIT-RLX/rlx.git", version = "0.2.19", branch = "main", default-features = false }
 rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 

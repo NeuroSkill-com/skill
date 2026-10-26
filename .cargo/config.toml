@@ -5,11 +5,15 @@
 #
 # RLX: Cargo.toml points all rlx* deps at GitHub (MIT-RLX/rlx + rlx-models).
 #   Local — `scripts/rlx local` / direnv overlays sibling checkouts via
-#           ../.cargo/config.toml (never commit path patches).
-#   CI — uses Cargo.lock git pins; no sibling clone.
+#           .cargo/rlx-local.toml, included below (gitignored; never commit
+#           path patches). Repo-scoped so other checkouts under ../ are
+#           unaffected.
+#   CI — the file is absent, so Cargo.lock git pins are used; no sibling clone.
 #
 # `relative = true` paths are resolved relative to this file's parent
 # directory (the project root).
+
+include = [{ path = "rlx-local.toml", optional = true }]
 
 # ── Default build target ──────────────────────────────────────────────────────
 #

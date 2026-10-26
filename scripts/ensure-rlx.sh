@@ -9,7 +9,9 @@
 #
 # Locally, this generates cargo `[patch."<git-url>"]` overrides so builds
 # resolve rlx AND rlx-models from your sibling checkouts:
-#   • the override lives OUTSIDE the repo (../.cargo/config.toml);
+#   • the override lives in .cargo/rlx-local.toml (gitignored), pulled in by
+#     the `include` in .cargo/config.toml — so it applies to skill only, not
+#     to other checkouts under ../ (rlx, rlx-models, …);
 #   • [patch] rewrites Cargo.lock to path-based on local builds, so we mark
 #     Cargo.lock `skip-worktree`: local churn is ignored by git and the
 #     committed git-pinned lock stays intact for CI / `--locked` builds.
@@ -24,9 +26,17 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT="$(cd "${REPO_ROOT}/.." && pwd)"
-CONFIG_DIR="${PARENT}/.cargo"
-CONFIG="${CONFIG_DIR}/config.toml"
+CONFIG_DIR="${REPO_ROOT}/.cargo"
+CONFIG="${CONFIG_DIR}/rlx-local.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
+# Where the override used to live. As a parent-directory config it applied to
+# every cargo project under ../, so remove it if we wrote it.
+LEGACY_CONFIG="${PARENT}/.cargo/config.toml"
+if [[ -f "${LEGACY_CONFIG}" ]] && grep -qF "${MARK}" "${LEGACY_CONFIG}"; then
+  rm -f "${LEGACY_CONFIG}"
+  rmdir "${PARENT}/.cargo" 2>/dev/null || true
+  echo "ensure-rlx: removed legacy shared override ${LEGACY_CONFIG}"
+fi
 
 # Must match the `git =` URLs in Cargo.toml [workspace.dependencies].
 RLX_GIT="https://github.com/MIT-RLX/rlx.git"
@@ -159,7 +169,8 @@ for extra in \
   rlx rlx-ir rlx-flow rlx-runtime rlx-driver rlx-opt rlx-autodiff \
   rlx-compile rlx-fusion rlx-cpu rlx-gguf rlx-pkg rlx-text rlx-metal \
   rlx-mlx rlx-cuda rlx-wgpu rlx-rocm rlx-onnx-import rlx-nemo rlx-umap rlx-tensor \
-  rlx-macros rlx-funasr rlx-nemotron-asr rlx-asr rlx-tts-bench rlx-whisper rlx-vad
+  rlx-macros rlx-funasr rlx-nemotron-asr rlx-asr rlx-tts-bench rlx-whisper rlx-vad \
+  rlx-search rlx-rng
 do
   needed_rlx="$(printf '%s\n%s\n' "${needed_rlx}" "${extra}" | sort -u)"
 done

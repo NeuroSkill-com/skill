@@ -72,13 +72,13 @@ pub fn local_tz_offset_secs() -> i32 {
 
 /// Deserialise a SQLite `BLOB` (little-endian packed `f32` values) into a `Vec<f32>`.
 ///
-/// This replaces the `chunks_exact(4).map(…)` pattern that was duplicated in
+/// This replaces the per-4-byte `map(…)` pattern that was duplicated in
 /// skill-commands, skill-label-index, skill-router, and skill-data/screenshot_store.
+/// `as_chunks` rather than `chunks_exact` so each chunk is a `[u8; 4]` that
+/// `from_le_bytes` takes directly, with no bounds checks and no re-indexing.
 #[inline]
 pub fn blob_to_f32(blob: &[u8]) -> Vec<f32> {
-    blob.chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-        .collect()
+    blob.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect()
 }
 
 /// Serialise a `&[f32]` slice into a `Vec<u8>` (little-endian) for SQLite storage.

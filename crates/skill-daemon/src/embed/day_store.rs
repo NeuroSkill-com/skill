@@ -6,12 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tracing::{error, info, warn};
 
-fn blob_to_f32(blob: &[u8]) -> Vec<f32> {
-    blob.chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-        .collect()
-}
-
 fn rebuild_hnsw_from_sqlite(
     conn: &rusqlite::Connection,
     hnsw_m: usize,
@@ -41,7 +35,7 @@ fn rebuild_hnsw_from_sqlite(
                 if blob.len() < 4 || blob.len() % 4 != 0 {
                     continue;
                 }
-                let emb = blob_to_f32(&blob);
+                let emb = skill_data::util::blob_to_f32(&blob);
                 if emb.is_empty() {
                     continue;
                 }

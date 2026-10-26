@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.131-rc.35"
+version = "0.1.0-rc.1"
 description = "A Tauri App"
 authors = ["NeuroSkill authors"]
 edition = "2021"
@@ -53,9 +53,6 @@ dirs = "6"
 log = "0.4"
 regex = "1"
 stacker = "0.1"
-# Ensure zip is compiled with deflate support so tauri-plugin-updater can
-# extract Deflate-compressed (method 8) entries from .nsis.zip update packages.
-zip = { workspace = true }
 
 # rustls is pulled transitively by reqwest (tauri-plugin-updater), emotiv
 # (tokio-tungstenite), hf-hub etc.  Because *both* the `ring`
@@ -183,6 +180,24 @@ rfd = { version = "0.17", default-features = false, features = ["file-handle-inn
 ureq      = { version = "3", features = ["native-tls"] }
 
 erased-serde = "0.4.10"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Not used by our own code — this entry exists purely to turn Deflate on in
+# tauri-plugin-updater's copy of `zip`.
+#
+# The updater takes `zip = { version = "4", default-features = false,
+# features = [] }`, Windows-only, so on its own it cannot inflate a method-8
+# entry — and `release-windows.yml` builds the `.nsis.zip` updater package with
+# `CompressionLevel::Optimal`, which is exactly method 8. Cargo unions features
+# per resolved package, so the knob has to be turned on the SAME package: the
+# `^4` line below, not our own `zip` (on 9.x, a different package entirely).
+# That is why this is a renamed dependency rather than the workspace one — the
+# workspace `zip = { features = ["deflate"] }` reached the updater only while
+# both requirements resolved to one package, and stopped once ours moved past 4.
+#
+# Verify after any zip bump, on either side: the `zip 4.x` entry in Cargo.lock
+# must list `flate2`. If it does not, Windows auto-update fails at extract time.
+zip-updater-deflate = { package = "zip", version = "4", default-features = false, features = ["deflate", "deflate64"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pure-Rust Focus Mode / Do Not Disturb control — no Swift, no ObjC, no

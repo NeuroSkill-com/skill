@@ -197,7 +197,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -208,7 +208,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -517,9 +517,9 @@ checksum = "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
 
 [[package]]
 name = "async-trait"
-version = "0.1.91"
+version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae36dc4177970ef04fde5178d3e2429882def40e57a451f919c098f72baa6cec"
+checksum = "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -595,22 +595,22 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "awear"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11ad906bc59e0a2c78a3f671425351166b05040faea432178e37ca0ca81bccda"
+checksum = "349540a9d96836a4096c6b42ab7359a800aa1136ce2d5db420c0f74a9e530481"
 dependencies = [
  "anyhow",
- "btleplug",
  "env_logger",
- "futures",
  "hex",
- "hmac",
+ "hmac 0.12.1",
  "log",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tokio",
  "uuid",
+ "webbluetooth",
+ "webbluetooth-wasm",
 ]
 
 [[package]]
@@ -639,7 +639,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
- "sha1",
+ "sha1 0.10.7",
  "sync_wrapper",
  "tokio",
  "tokio-tungstenite 0.29.0",
@@ -708,6 +708,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "base64ct"
@@ -826,16 +832,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blas-src"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b95e83dc868db96e69795c0213143095f03de9dd3252f205d4ac716e4076a7e0"
-dependencies = [
- "accelerate-src",
- "openblas-src",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -851,6 +847,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -997,22 +994,6 @@ dependencies = [
  "memchr",
  "regex-automata",
  "serde_core",
-]
-
-[[package]]
-name = "btleplug"
-version = "0.11.9"
-dependencies = [
- "async-trait",
- "bitflags 2.13.1",
- "dashmap",
- "futures",
- "log",
- "thiserror 2.0.19",
- "tokio",
- "tokio-stream",
- "uuid",
- "webbluetooth",
 ]
 
 [[package]]
@@ -1438,12 +1419,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coe-rs"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e8f1e641542c07631228b1e0dc04b69ae3c1d58ef65d5691a439711d805c698"
-
-[[package]]
 name = "cognionics"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1559,6 +1534,15 @@ name = "constant_time_eq"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "convert_case"
@@ -1705,7 +1689,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "windows 0.61.3",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -1961,9 +1945,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.2"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+checksum = "fe3e9d21d39e6f39ff46e03d5b621424f88ee23d8a1672c6bfc9ccc7f2da4f6a"
 dependencies = [
  "cmov",
 ]
@@ -2107,20 +2091,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dashmap"
-version = "6.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
-]
-
-[[package]]
 name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2151,12 +2121,6 @@ dependencies = [
  "data-encoding",
  "syn 1.0.109",
 ]
-
-[[package]]
-name = "dbgf"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6ca96b45ca70b8045e0462f191bd209fcb3c3bfe8dbfb1257ada54c4dd59169"
 
 [[package]]
 name = "dbus"
@@ -2361,7 +2325,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
 dependencies = [
  "block-buffer 0.12.1",
+ "const-oid",
  "crypto-common 0.2.2",
+ "ctutils",
+ "zeroize",
 ]
 
 [[package]]
@@ -2392,7 +2359,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2435,7 +2402,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -2598,31 +2565,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
-name = "dyn-stack"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf6fa63092e3ca9f602f6500fddd05502412b748c4c4682938565b44eb9e0066"
-dependencies = [
- "bytemuck",
-]
-
-[[package]]
-name = "dyn-stack"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c4713e43e2886ba72b8271aa66c93d722116acf7a75555cce11dcde84388fe8"
-dependencies = [
- "bytemuck",
- "dyn-stack-macros",
-]
-
-[[package]]
-name = "dyn-stack-macros"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1d926b4d407d372f141f93bb444696142c29d32962ccbd3531117cf3aa0bfa9"
-
-[[package]]
 name = "ed25519"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2713,12 +2655,11 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "emotiv"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28936decb4e5cd37d5e93f3e7edd790970ef34e2f49b969c0193d375c24f14a"
+checksum = "230f550cbfc17962736786457703e778adb25e8e5c6db6cedeaef57ab5b01382"
 dependencies = [
  "anyhow",
- "chrono",
  "env_logger",
  "futures-util",
  "log",
@@ -2752,18 +2693,6 @@ name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
-
-[[package]]
-name = "enum-as-inner"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e6a265c649f3f5979b601d26f1d05ada116434c87741c9493cb56218f76cbc"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
 
 [[package]]
 name = "enum-assoc"
@@ -2821,46 +2750,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "equator"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c35da53b5a021d2484a7cc49b2ac7f2d840f8236a286f84202369bd338d761ea"
-dependencies = [
- "equator-macro 0.2.1",
-]
-
-[[package]]
-name = "equator"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4711b213838dfee0117e3be6ac926007d7f433d7bbe33595975d4190cb07e6fc"
-dependencies = [
- "equator-macro 0.4.2",
-]
-
-[[package]]
-name = "equator-macro"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bf679796c0322556351f287a51b49e48f7c4986e727b5dd78c972d30e2e16cc"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "equator-macro"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44f23cf4b44bfce11a86ace86f8a73ffdec849c9fd00a386a53d278bd9e81fb3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2884,7 +2773,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2959,11 +2848,10 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "5.4.1"
+version = "5.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13b66accf52311f30a0db42147dadea9850cb48cd070028831ae5f5d4b856ab"
+checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
 dependencies = [
- "concurrent-queue",
  "parking",
  "pin-project-lite",
 ]
@@ -3011,50 +2899,6 @@ name = "extended"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
-
-[[package]]
-name = "faer"
-version = "0.20.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2b19b8c3570ea226e507fe3dbae2aa9d7e0f16676abd35ea3adeeb9f90f7b5d"
-dependencies = [
- "bytemuck",
- "coe-rs",
- "dbgf",
- "dyn-stack 0.11.0",
- "equator 0.4.2",
- "faer-entity",
- "gemm",
- "generativity",
- "libm",
- "matrixcompare",
- "matrixcompare-core",
- "nano-gemm",
- "npyz",
- "num-complex",
- "num-traits",
- "paste",
- "rand 0.8.7",
- "rand_distr",
- "rayon",
- "reborrow",
- "serde",
-]
-
-[[package]]
-name = "faer-entity"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "072f96f1bc8b2b30dfc26c086baeadb63aae08019b1ed84721809b9fd2006685"
-dependencies = [
- "bytemuck",
- "coe-rs",
- "libm",
- "num-complex",
- "num-traits",
- "pulp 0.18.22",
- "reborrow",
-]
 
 [[package]]
 name = "fallible-iterator"
@@ -3553,131 +3397,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gemm"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab96b703d31950f1aeddded248bc95543c9efc7ac9c4a21fda8703a83ee35451"
-dependencies = [
- "dyn-stack 0.13.2",
- "gemm-c32",
- "gemm-c64",
- "gemm-common",
- "gemm-f16",
- "gemm-f32",
- "gemm-f64",
- "num-complex",
- "num-traits",
- "paste",
- "raw-cpuid",
- "seq-macro",
-]
-
-[[package]]
-name = "gemm-c32"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6db9fd9f40421d00eea9dd0770045a5603b8d684654816637732463f4073847"
-dependencies = [
- "dyn-stack 0.13.2",
- "gemm-common",
- "num-complex",
- "num-traits",
- "paste",
- "raw-cpuid",
- "seq-macro",
-]
-
-[[package]]
-name = "gemm-c64"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfcad8a3d35a43758330b635d02edad980c1e143dc2f21e6fd25f9e4eada8edf"
-dependencies = [
- "dyn-stack 0.13.2",
- "gemm-common",
- "num-complex",
- "num-traits",
- "paste",
- "raw-cpuid",
- "seq-macro",
-]
-
-[[package]]
-name = "gemm-common"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a352d4a69cbe938b9e2a9cb7a3a63b7e72f9349174a2752a558a8a563510d0f3"
-dependencies = [
- "bytemuck",
- "dyn-stack 0.13.2",
- "half",
- "libm",
- "num-complex",
- "num-traits",
- "once_cell",
- "paste",
- "pulp 0.21.5",
- "raw-cpuid",
- "rayon",
- "seq-macro",
- "sysctl",
-]
-
-[[package]]
-name = "gemm-f16"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cff95ae3259432f3c3410eaa919033cd03791d81cebd18018393dc147952e109"
-dependencies = [
- "dyn-stack 0.13.2",
- "gemm-common",
- "gemm-f32",
- "half",
- "num-complex",
- "num-traits",
- "paste",
- "raw-cpuid",
- "rayon",
- "seq-macro",
-]
-
-[[package]]
-name = "gemm-f32"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc8d3d4385393304f407392f754cd2dc4b315d05063f62cf09f47b58de276864"
-dependencies = [
- "dyn-stack 0.13.2",
- "gemm-common",
- "num-complex",
- "num-traits",
- "paste",
- "raw-cpuid",
- "seq-macro",
-]
-
-[[package]]
-name = "gemm-f64"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35b2a4f76ce4b8b16eadc11ccf2e083252d8237c1b589558a49b0183545015bd"
-dependencies = [
- "dyn-stack 0.13.2",
- "gemm-common",
- "num-complex",
- "num-traits",
- "paste",
- "raw-cpuid",
- "seq-macro",
-]
-
-[[package]]
-name = "generativity"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2c81fb5260e37854d09d5c87183309fd8c555b75289427884b25660bc87a85e"
-
-[[package]]
 name = "generator"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3688,8 +3407,8 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.1.3",
- "windows-result 0.3.4",
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
 ]
 
 [[package]]
@@ -4059,12 +3778,6 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
-version = "0.14.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
-
-[[package]]
-name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
@@ -4259,7 +3972,7 @@ version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
 dependencies = [
- "hmac",
+ "hmac 0.12.1",
 ]
 
 [[package]]
@@ -4269,6 +3982,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "hmac"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
+dependencies = [
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -4481,7 +4203,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -4501,7 +4223,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.61.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -4640,13 +4362,12 @@ dependencies = [
 
 [[package]]
 name = "idun"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef4870c15acd4691d274c8817b5987f968b8bf9b3be2ebeed3d1cfe14f1547c0"
+checksum = "986e0ef5604e9538ab86b9dfa0a110590146515acd192f8337781c3b1c3d4267"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
- "btleplug",
  "env_logger",
  "futures",
  "log",
@@ -4655,6 +4376,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.24.0",
  "uuid",
+ "webbluetooth",
 ]
 
 [[package]]
@@ -5053,7 +4775,7 @@ dependencies = [
  "tokio-websockets",
  "tracing",
  "url",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.11",
  "ws_stream_wasm",
 ]
 
@@ -5094,7 +4816,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5432,8 +5154,7 @@ dependencies = [
 
 [[package]]
 name = "kitten_tts_mini_rlx"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "dirs",
@@ -5667,6 +5388,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libyaml-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e126dda6f34391ab7b444f9922055facc83c07a910da3eb16f1e4d9c45dc777"
+
+[[package]]
 name = "line-clipping"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5717,19 +5444,21 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llmfit-core"
-version = "0.9.38"
+version = "1.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68bc7da401ce3326a63ac7373c33212d8adf883bcc91c36595fb33b00367ecc5"
+checksum = "0ba69ba49acf701186fa58f2736a42a48b50ceb5a2ca99066e468e93ceb14578"
 dependencies = [
+ "base64 0.23.1",
  "dirs",
  "http",
+ "objc2-metal",
  "regex",
  "serde",
  "serde_json",
- "serde_yml",
  "sysinfo 0.39.6",
  "ureq 3.3.0",
  "which",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -5795,9 +5524,9 @@ dependencies = [
 
 [[package]]
 name = "lru"
-version = "0.18.1"
+version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b6180140927ee907000b0aa540091f6ea512ead4447c92b8fc35bc72788a5a6"
+checksum = "ef9ac18847474e638e3702b76c65d4eb93428471a74778ef0f1be711717f89b5"
 dependencies = [
  "hashbrown 0.17.1",
 ]
@@ -5859,11 +5588,11 @@ dependencies = [
 
 [[package]]
 name = "lzma-rust2"
-version = "0.15.8"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e20f57f9918e5bd7bc58c22cdd70a6afc7375d4dd9683af5f2b34bd3d2bba619"
+checksum = "f1c46f3fcd2e888afdb01a07efc071cb21300e07c68d32c3e8b01b5c8cb1fcaa"
 dependencies = [
- "sha2 0.10.9",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -5991,22 +5720,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
-name = "matrixcompare"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37832ba820e47c93d66b4360198dccb004b43c74abc3ac1ce1fed54e65a80445"
-dependencies = [
- "matrixcompare-core",
- "num-traits",
-]
-
-[[package]]
-name = "matrixcompare-core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0bdabb30db18805d5290b3da7ceaccbddba795620b86c02145d688e04900a73"
-
-[[package]]
 name = "matrixmultiply"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6057,19 +5770,19 @@ dependencies = [
 
 [[package]]
 name = "mendi"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e22f15003e7594bd1a24b0591408612d1b7bc191fe3f61e9191a18bd926fc03c"
+checksum = "d0c6335532392a4ac0ee9aa6cf5ff59b099ca9f79ed5ddb6bfa1d2f71fea82a5"
 dependencies = [
  "anyhow",
- "btleplug",
  "env_logger",
- "futures",
  "log",
  "prost 0.13.5",
  "rand 0.9.5",
  "tokio",
  "uuid",
+ "webbluetooth",
+ "webbluetooth-wasm",
 ]
 
 [[package]]
@@ -6118,9 +5831,9 @@ dependencies = [
 
 [[package]]
 name = "minijinja"
-version = "2.21.0"
+version = "2.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb3d648e68cea56d9858d535ee28f9538404e2dd8cb08ed0bd05dca379477f39"
+checksum = "86886cf6dbf4e614b19c9a1eec9775f021869d7eadde0fc73921a81b90c9b4c9"
 dependencies = [
  "memo-map",
  "serde",
@@ -6227,7 +5940,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6260,9 +5973,9 @@ dependencies = [
 
 [[package]]
 name = "muse-rs"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "591da56ca151661e2cb17dc83a760ea498cace4ea1a10c9d2547e5837e72fbd6"
+checksum = "d1df01a6a6d8cb9fff8d5638e8ce2e230c03a62625f5aec9d15395e4d148a978"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -6277,13 +5990,12 @@ dependencies = [
 
 [[package]]
 name = "mw75"
-version = "0.0.6"
+version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8886e4b7b1a83160427e4820ecb22980b91586ea8257a9070ae02dcf8254b60c"
+checksum = "17de2e27aad5292b760ad2e00d65251efd65c2989221b6ef782112172f7dbf25"
 dependencies = [
  "anyhow",
  "bluer",
- "btleplug",
  "crossterm",
  "env_logger",
  "futures",
@@ -6298,6 +6010,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
+ "webbluetooth",
  "windows 0.62.2",
 ]
 
@@ -6422,76 +6135,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nano-gemm"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb5ba2bea1c00e53de11f6ab5bd0761ba87dc0045d63b0c87ee471d2d3061376"
-dependencies = [
- "equator 0.2.2",
- "nano-gemm-c32",
- "nano-gemm-c64",
- "nano-gemm-codegen",
- "nano-gemm-core",
- "nano-gemm-f32",
- "nano-gemm-f64",
- "num-complex",
-]
-
-[[package]]
-name = "nano-gemm-c32"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a40449e57a5713464c3a1208c4c3301c8d29ee1344711822cf022bc91373a91b"
-dependencies = [
- "nano-gemm-codegen",
- "nano-gemm-core",
- "num-complex",
-]
-
-[[package]]
-name = "nano-gemm-c64"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743a6e6211358fba85d1009616751e4107da86f4c95b24e684ce85f25c25b3bf"
-dependencies = [
- "nano-gemm-codegen",
- "nano-gemm-core",
- "num-complex",
-]
-
-[[package]]
-name = "nano-gemm-codegen"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "963bf7c7110d55430169dc74c67096375491ed580cd2ef84842550ac72e781fa"
-
-[[package]]
-name = "nano-gemm-core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe3fc4f83ae8861bad79dc3c016bd6b0220da5f9de302e07d3112d16efc24aa6"
-
-[[package]]
-name = "nano-gemm-f32"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e3681b7ce35658f79da94b7f62c60a005e29c373c7111ed070e3bf64546a8bb"
-dependencies = [
- "nano-gemm-codegen",
- "nano-gemm-core",
-]
-
-[[package]]
-name = "nano-gemm-f64"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc1e619ed04d801809e1f63e61b669d380c4119e8b0cdd6ed184c6b111f046d8"
-dependencies = [
- "nano-gemm-codegen",
- "nano-gemm-core",
-]
-
-[[package]]
 name = "native-tls"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6532,8 +6175,6 @@ version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "520080814a7a6b4a6e9070823bb24b4531daac8c4627e08ba5de8c5ef2f2752d"
 dependencies = [
- "cblas-sys",
- "libc",
  "matrixmultiply",
  "num-complex",
  "num-integer",
@@ -6821,7 +6462,7 @@ dependencies = [
  "pin-project-lite",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.19",
  "tokio",
  "tokio-stream",
@@ -6864,7 +6505,7 @@ checksum = "bde7a5d5102f1cff03d482240f0ed20551661f63663620f4b26112ed751165e9"
 dependencies = [
  "cfg_aliases",
  "libc",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -6911,19 +6552,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "noyalib"
-version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e493c05128df7a83b9676b709d590e0ebc285c7ed3152bc679668e8c1e506af5"
-dependencies = [
- "indexmap 2.14.0",
- "memchr",
- "rustc-hash 2.1.3",
- "serde",
- "smallvec",
-]
-
-[[package]]
 name = "npyz"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6951,7 +6579,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6990,9 +6618,7 @@ version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
- "bytemuck",
  "num-traits",
- "rand 0.8.7",
 ]
 
 [[package]]
@@ -7423,7 +7049,9 @@ checksum = "a0125f776a10d00af4152d74616409f0d4a2053a6f57fa5b7d6aa2854ac04794"
 dependencies = [
  "bitflags 2.13.1",
  "block2",
+ "dispatch2",
  "objc2",
+ "objc2-core-foundation",
  "objc2-foundation",
 ]
 
@@ -7625,12 +7253,8 @@ dependencies = [
 
 [[package]]
 name = "openbci"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4bb76c1335251e20501eae68868b0e8d8f71ee54f9ff1fd420a0ebdd2c2090f"
+version = "0.0.2"
 dependencies = [
- "btleplug",
- "futures",
  "log",
  "serde",
  "serde_json",
@@ -7638,32 +7262,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "ureq 2.12.1",
-]
-
-[[package]]
-name = "openblas-build"
-version = "0.10.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb9c85e9e7dd5acdc67b9f3f0c99656b550df716bc63540c6a224a920754a5c2"
-dependencies = [
- "anyhow",
- "cc",
- "flate2",
- "tar",
- "thiserror 2.0.19",
- "ureq 3.3.0",
-]
-
-[[package]]
-name = "openblas-src"
-version = "0.10.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1a81a5e467f1861ad6ac32d5ec1690ad097d19854753b7424250fe27da46b98"
-dependencies = [
- "dirs",
- "openblas-build",
- "pkg-config",
- "vcpkg",
+ "webbluetooth",
 ]
 
 [[package]]
@@ -7957,19 +7556,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
 dependencies = [
  "digest 0.10.7",
- "hmac",
+ "hmac 0.12.1",
  "password-hash",
  "sha2 0.10.9",
 ]
 
 [[package]]
 name = "pbkdf2"
-version = "0.12.2"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
+checksum = "112d82ceb8c5bf524d9af484d4e4970c9fd5a0cc15ba14ad93dccd28873b0629"
 dependencies = [
- "digest 0.10.7",
- "hmac",
+ "digest 0.11.3",
+ "hmac 0.13.0",
 ]
 
 [[package]]
@@ -8338,6 +7937,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "poop"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6c989c756158c3ea59e2070dd6ff0738597b898081c06b1d4e2d3b9bec04de6"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+ "webbluetooth",
+ "webbluetooth-wasm",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8425,9 +8041,9 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "ppmd-rust"
-version = "1.4.0"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efca4c95a19a79d1c98f791f10aebd5c1363b473244630bb7dbde1dc98455a24"
+checksum = "cd4acc8d264ea385db64ccfdcdfd5909ee9eda0975666723d59f3bfec80b3611"
 
 [[package]]
 name = "ppv-lite86"
@@ -8606,7 +8222,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -8773,32 +8389,6 @@ checksum = "645dbe486e346d9b5de3ef16ede18c26e6c70ad97418f4874b8b1889d6e761ea"
 dependencies = [
  "ar_archive_writer",
  "cc",
-]
-
-[[package]]
-name = "pulp"
-version = "0.18.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0a01a0dc67cf4558d279f0c25b0962bd08fc6dec0137699eae304103e882fe6"
-dependencies = [
- "bytemuck",
- "libm",
- "num-complex",
- "reborrow",
-]
-
-[[package]]
-name = "pulp"
-version = "0.21.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b86df24f0a7ddd5e4b95c94fc9ed8a98f1ca94d3b01bdce2824097e7835907"
-dependencies = [
- "bytemuck",
- "cfg-if",
- "libm",
- "num-complex",
- "reborrow",
- "version_check",
 ]
 
 [[package]]
@@ -9188,12 +8778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reborrow"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03251193000f4bd3b042892be858ee50e8b3719f2b08e5833ac4353724632430"
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9481,8 +9065,7 @@ dependencies = [
 
 [[package]]
 name = "rlx"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-driver",
@@ -9496,22 +9079,21 @@ dependencies = [
 
 [[package]]
 name = "rlx-asr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-gguf",
  "rlx-ir",
  "rlx-pkg",
  "rlx-runtime",
+ "rlx-search",
  "serde_json",
- "zip 2.4.2",
+ "zip 9.1.1",
 ]
 
 [[package]]
 name = "rlx-assets"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "memmap2",
@@ -9523,9 +9105,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-audio-blocks"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "rlx-autodiff"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "half",
  "rlx-fusion",
@@ -9535,8 +9123,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-bert"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -9550,8 +9137,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-bioclip2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -9570,8 +9156,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-bonsai"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9584,8 +9169,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-chatterbox"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -9600,8 +9184,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-cli"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "clap",
@@ -9615,8 +9198,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-clinicalbert"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-bert",
@@ -9633,8 +9215,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-cohere"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9644,8 +9225,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-compile"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-autodiff",
  "rlx-fusion",
@@ -9654,8 +9234,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-conformer-ctc"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9664,13 +9243,14 @@ dependencies = [
  "rlx-models-core",
  "rlx-nemo",
  "rlx-runtime",
+ "rlx-search",
  "rustfft",
+ "serde_json",
 ]
 
 [[package]]
 name = "rlx-coreml"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "bytemuck",
  "cc",
@@ -9687,25 +9267,27 @@ dependencies = [
 
 [[package]]
 name = "rlx-cpu"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "half",
+ "libm",
  "rayon",
  "rlx-gguf",
  "rlx-ir",
  "rlx-mlx-io",
  "rlx-opt",
+ "rlx-pocketfft",
+ "rlxsl",
  "strum_macros 0.28.0",
 ]
 
 [[package]]
 name = "rlx-cuda"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "bytemuck",
  "cudarc",
+ "half",
  "libloading 0.8.9",
  "rlx-cpu",
  "rlx-gguf",
@@ -9721,8 +9303,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-dac"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -9740,25 +9321,22 @@ dependencies = [
 
 [[package]]
 name = "rlx-dduf"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
  "safetensors 0.7.0",
  "serde_json",
- "zip 2.4.2",
+ "zip 9.1.1",
 ]
 
 [[package]]
 name = "rlx-diamond"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 
 [[package]]
 name = "rlx-diarize"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -9768,8 +9346,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-dinov2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -9787,8 +9364,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-dinov3"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -9804,8 +9380,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-distributed"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "libc",
@@ -9819,8 +9394,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-driver"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "half",
  "rlx-ir",
@@ -9828,10 +9402,10 @@ dependencies = [
 
 [[package]]
 name = "rlx-embed"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
+ "half",
  "hf-hub",
  "rlx-bert",
  "rlx-cpu",
@@ -9850,9 +9424,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-embeddinggemma"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-gemma",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-runtime",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-encodec"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -9868,29 +9456,28 @@ dependencies = [
 
 [[package]]
 name = "rlx-f0"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 
 [[package]]
 name = "rlx-f5tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
  "hound",
+ "rlx-ir",
  "rlx-runtime",
  "rlx-tiny-tts",
 ]
 
 [[package]]
 name = "rlx-fara"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
  "rlx-cli",
+ "rlx-ir",
  "rlx-models-core",
  "rlx-qwen35",
  "rlx-runtime",
@@ -9901,8 +9488,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-fft"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "getrandom 0.3.4",
@@ -9924,8 +9510,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-fireredaudio"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -9941,9 +9526,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-fish"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "clap",
+ "half",
+ "hound",
+ "memmap2",
+ "rayon",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-runtime",
+ "rlx-torch-ckpt",
+ "safetensors 0.7.0",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
+name = "rlx-flint"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "half",
+ "libc",
+ "memmap2",
+ "rayon",
+ "rlx-cli",
+ "rlx-cpu",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-llada2",
+ "rlx-models-core",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-florence2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -9963,19 +9589,39 @@ dependencies = [
 
 [[package]]
 name = "rlx-flow"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
+ "half",
  "rlx-ir",
  "serde",
  "toml 0.8.2",
 ]
 
 [[package]]
+name = "rlx-flux1"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "half",
+ "image",
+ "rayon",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-flux2",
+ "rlx-gguf",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-flux2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -9998,9 +9644,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-flux3"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "half",
+ "image",
+ "rayon",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-flux1",
+ "rlx-flux2",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-qwen35",
+ "rlx-rng",
+ "rlx-runtime",
+ "rlx-text",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-funasr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -10011,26 +9679,26 @@ dependencies = [
  "rlx-nemo",
  "rlx-opt",
  "rlx-runtime",
+ "rlx-search",
  "rustfft",
  "safetensors 0.7.0",
  "serde",
  "serde_json",
  "symphonia",
- "zip 2.4.2",
+ "zip 9.1.1",
 ]
 
 [[package]]
 name = "rlx-fusion"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-ir",
+ "rlx-pocketfft",
 ]
 
 [[package]]
 name = "rlx-gemma"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -10054,8 +9722,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-gepard"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "clap",
@@ -10078,8 +9745,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-gguf"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10087,17 +9753,16 @@ dependencies = [
  "libc",
  "memmap2",
  "rayon",
+ "rlx-ir",
 ]
 
 [[package]]
 name = "rlx-gpu-dispatch"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 
 [[package]]
 name = "rlx-gpu-host"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "bytemuck",
  "half",
@@ -10110,8 +9775,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-gpu-kernels"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-gpu-dispatch",
  "rlx-ir",
@@ -10120,8 +9784,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-granite"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10131,8 +9794,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-hoct"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -10151,8 +9813,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-hy-mt"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10165,8 +9826,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-inflect-nano"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -10185,11 +9845,11 @@ dependencies = [
 
 [[package]]
 name = "rlx-ir"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "aes 0.9.1",
  "bincode",
+ "libm",
  "serde",
  "serde_json",
  "smallvec",
@@ -10197,13 +9857,13 @@ dependencies = [
 
 [[package]]
 name = "rlx-jina-ocr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hf-hub",
  "image",
  "rlx-cli",
+ "rlx-ir",
  "rlx-models-core",
  "rlx-runtime",
  "rlx-unlimited-ocr",
@@ -10213,9 +9873,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-jina-v5"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-llama32",
+ "rlx-models-core",
+ "rlx-runtime",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-kittentts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "espeak-ng 0.2.0",
@@ -10231,17 +9905,17 @@ dependencies = [
  "rlx-runtime",
  "serde",
  "serde_json",
- "zip 2.4.2",
+ "zip 9.1.1",
 ]
 
 [[package]]
 name = "rlx-kokoro"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
  "once_cell",
+ "rlx-ir",
  "rlx-kittentts",
  "rlx-runtime",
  "rlx-tiny-tts",
@@ -10251,8 +9925,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-kyutai-tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -10273,8 +9946,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-lfm"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10292,8 +9964,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-lfm-vl"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -10313,8 +9984,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-llada2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10333,8 +10003,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-llama-base"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-gguf",
@@ -10343,8 +10012,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-llama32"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10365,8 +10033,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-llama4"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -10384,8 +10051,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-locateanything"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -10403,11 +10069,11 @@ dependencies = [
 
 [[package]]
 name = "rlx-luxtts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
+ "rlx-ir",
  "rlx-kittentts",
  "rlx-runtime",
  "rlx-tiny-tts",
@@ -10418,8 +10084,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-macros"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10428,8 +10093,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-maya1"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -10439,18 +10103,17 @@ dependencies = [
 
 [[package]]
 name = "rlx-melotts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
+ "rlx-ir",
  "rlx-runtime",
  "rlx-tiny-tts",
 ]
 
 [[package]]
 name = "rlx-metal"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "bytemuck",
  "half",
@@ -10469,8 +10132,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-metavoice"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -10489,8 +10151,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mimi"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -10508,9 +10169,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-minicpm-sala"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-fish",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-qwen3",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde_json",
+ "tokenizers",
+ "web-time",
+]
+
+[[package]]
+name = "rlx-minicpm-v"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "image",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-gguf",
+ "rlx-ir",
+ "rlx-minicpm-sala",
+ "rlx-models-core",
+ "rlx-qwen35",
+ "rlx-runtime",
+ "serde_json",
+ "tokenizers",
+ "web-time",
+]
+
+[[package]]
 name = "rlx-minicpm5"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10523,8 +10220,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-minimax"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10542,12 +10238,12 @@ dependencies = [
 
 [[package]]
 name = "rlx-miotts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "clap",
  "hound",
+ "rlx-ir",
  "rlx-qwen3",
  "rlx-runtime",
  "rlx-tiny-tts",
@@ -10560,11 +10256,11 @@ dependencies = [
 
 [[package]]
 name = "rlx-miratts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
+ "rlx-ir",
  "rlx-qwen3",
  "rlx-runtime",
  "rlx-tiny-tts",
@@ -10575,8 +10271,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mistral"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10587,8 +10282,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mistral-vl"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -10605,8 +10299,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mllama"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -10625,8 +10318,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mlx"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "half",
  "libc",
@@ -10637,14 +10329,14 @@ dependencies = [
  "rlx-mlx-io",
  "rlx-mlx-sys",
  "rlx-opt",
+ "rlxsl",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "rlx-mlx-io"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -10660,8 +10352,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-mlx-sys"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "cc",
  "cmake",
@@ -10669,8 +10360,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-models"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10689,12 +10379,16 @@ dependencies = [
  "rlx-dinov2",
  "rlx-dinov3",
  "rlx-embed",
+ "rlx-embeddinggemma",
  "rlx-f5tts",
  "rlx-fara",
  "rlx-fireredaudio",
+ "rlx-flint",
  "rlx-florence2",
  "rlx-flow",
+ "rlx-flux1",
  "rlx-flux2",
+ "rlx-flux3",
  "rlx-funasr",
  "rlx-gemma",
  "rlx-gguf",
@@ -10703,6 +10397,7 @@ dependencies = [
  "rlx-hy-mt",
  "rlx-ir",
  "rlx-jina-ocr",
+ "rlx-jina-v5",
  "rlx-kittentts",
  "rlx-kokoro",
  "rlx-kyutai-tts",
@@ -10715,6 +10410,8 @@ dependencies = [
  "rlx-luxtts",
  "rlx-maya1",
  "rlx-metal",
+ "rlx-minicpm-sala",
+ "rlx-minicpm-v",
  "rlx-minicpm5",
  "rlx-minimax",
  "rlx-miratts",
@@ -10724,6 +10421,7 @@ dependencies = [
  "rlx-mlx",
  "rlx-models-core",
  "rlx-moonshine",
+ "rlx-moonshine-streaming",
  "rlx-moshi",
  "rlx-moss-nano",
  "rlx-nanbeige",
@@ -10754,6 +10452,7 @@ dependencies = [
  "rlx-supertonic",
  "rlx-ten-vad",
  "rlx-timesfm3",
+ "rlx-timestral",
  "rlx-tinyllama",
  "rlx-translategemma",
  "rlx-trellis2",
@@ -10781,8 +10480,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-models-core"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -10809,13 +10507,13 @@ dependencies = [
  "safetensors 0.7.0",
  "serde",
  "serde_json",
+ "serde_yaml",
  "unicode-normalization",
 ]
 
 [[package]]
 name = "rlx-moonshine"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rayon",
@@ -10832,9 +10530,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-moonshine-streaming"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "rlx-cli",
+ "rlx-flow",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-moonshine",
+ "rlx-runtime",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "rlx-moshi"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -10855,13 +10567,13 @@ dependencies = [
 
 [[package]]
 name = "rlx-moss-nano"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
  "rlx-assets",
  "rlx-gguf",
+ "rlx-ir",
  "rlx-runtime",
  "rlx-tiny-tts",
  "serde",
@@ -10871,12 +10583,12 @@ dependencies = [
 
 [[package]]
 name = "rlx-nanbeige"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
  "rlx-flow",
+ "rlx-ir",
  "rlx-llama-base",
  "rlx-llama32",
  "rlx-models-core",
@@ -10887,8 +10599,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-nanocodec"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -10902,8 +10613,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-nanowakeword"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -10912,8 +10622,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-nemo"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-ir",
@@ -10923,8 +10632,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-nemotron"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -10943,10 +10651,10 @@ dependencies = [
 
 [[package]]
 name = "rlx-nemotron-asr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
+ "rlx-audio-blocks",
  "rlx-cli",
  "rlx-flow",
  "rlx-ir",
@@ -10962,19 +10670,18 @@ dependencies = [
 
 [[package]]
 name = "rlx-neutrino"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-gguf",
  "rlx-qwen3",
  "rlx-qwen35",
+ "rlx-search",
 ]
 
 [[package]]
 name = "rlx-neutts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "encoding_rs",
@@ -10983,6 +10690,7 @@ dependencies = [
  "once_cell",
  "rand 0.8.7",
  "regex",
+ "rlx-ir",
  "rlx-llama-base",
  "rlx-llama32",
  "rlx-models-core",
@@ -10996,8 +10704,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-nllb"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -11016,8 +10723,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-nomic"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -11031,8 +10737,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-ocr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11044,6 +10749,7 @@ dependencies = [
  "rlx-ir",
  "rlx-models-core",
  "rlx-runtime",
+ "rlx-search",
  "rten-imageproc",
  "rten-tensor",
  "safetensors 0.7.0",
@@ -11051,8 +10757,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-omnicoder"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11062,8 +10767,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-onnx-import"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11080,16 +10784,14 @@ dependencies = [
 
 [[package]]
 name = "rlx-onnx-proto"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "protobuf",
 ]
 
 [[package]]
 name = "rlx-openwakeword"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11098,8 +10800,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-opt"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-autodiff",
  "rlx-compile",
@@ -11108,9 +10809,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-optim"
+version = "0.2.19"
+dependencies = [
+ "rayon",
+]
+
+[[package]]
 name = "rlx-orpheus"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -11136,8 +10843,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-parlertts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -11155,8 +10861,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-phi"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11167,11 +10872,11 @@ dependencies = [
 
 [[package]]
 name = "rlx-piper"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
+ "rlx-ir",
  "rlx-kittentts",
  "rlx-runtime",
  "rlx-tiny-tts",
@@ -11181,8 +10886,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-pkg"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bincode",
@@ -11197,33 +10901,38 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "xxhash-rust",
- "zip 2.4.2",
+ "zip 9.1.1",
  "zstd 0.13.3",
 ]
 
 [[package]]
 name = "rlx-pocket-tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
+ "clap",
  "half",
  "hound",
  "ndarray 0.16.1",
  "rand 0.8.7",
  "rand_distr",
- "rlx",
+ "rlx-ir",
+ "rlx-models-core",
  "rlx-runtime",
  "safetensors 0.7.0",
  "sentencepiece",
  "serde",
  "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
+name = "rlx-pocketfft"
+version = "0.2.19"
+
+[[package]]
 name = "rlx-porcupine"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11231,9 +10940,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-quant-calib"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "half",
+ "rlx-gguf",
+]
+
+[[package]]
 name = "rlx-qwen3"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -11254,8 +10971,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-qwen3-asr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11274,8 +10990,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-qwen3-tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hf-hub",
@@ -11299,8 +11014,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-qwen3-vl"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -11320,8 +11034,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-qwen35"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -11339,12 +11052,16 @@ dependencies = [
  "serde",
  "serde_json",
  "tokenizers",
+ "web-time",
 ]
 
 [[package]]
+name = "rlx-rng"
+version = "0.2.19"
+
+[[package]]
 name = "rlx-rocm"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "libloading 0.8.9",
  "rlx-cpu",
@@ -11361,8 +11078,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-runtime"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -11385,15 +11101,16 @@ dependencies = [
  "rlx-opt",
  "rlx-pkg",
  "rlx-rocm",
+ "rlx-search",
  "rlx-wgpu",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
 name = "rlx-s1"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11405,8 +11122,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -11425,8 +11141,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam-ir"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cpu",
@@ -11439,8 +11154,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11459,8 +11173,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-sam3"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11478,9 +11191,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-search"
+version = "0.2.19"
+
+[[package]]
 name = "rlx-sesame"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "clap",
@@ -11503,8 +11219,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-soprano"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11525,8 +11240,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-ssm"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cpu",
@@ -11536,8 +11250,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-styletts2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "clap",
@@ -11549,11 +11262,11 @@ dependencies = [
 
 [[package]]
 name = "rlx-supertonic"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
+ "rlx-ir",
  "rlx-runtime",
  "rlx-tiny-tts",
  "serde",
@@ -11563,8 +11276,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-ten-vad"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11576,16 +11288,14 @@ dependencies = [
 
 [[package]]
 name = "rlx-ten-vad-core"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "libm",
 ]
 
 [[package]]
 name = "rlx-tensor"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-ir",
  "rlx-runtime",
@@ -11593,8 +11303,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-text"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "minijinja",
@@ -11607,8 +11316,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-timesfm3"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "ndarray 0.16.1",
@@ -11623,9 +11331,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-timestral"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "ndarray 0.16.1",
+ "rlx-cli",
+ "rlx-ir",
+ "rlx-models-core",
+ "rlx-runtime",
+ "rlx-tune",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rlx-tiny-tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "dirs",
@@ -11649,8 +11371,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-tinyllama"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11663,8 +11384,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-torch-ckpt"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "flate2",
@@ -11673,8 +11393,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-translategemma"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11687,8 +11406,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-trellis2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11709,8 +11427,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -11731,8 +11448,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-tts-bench"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "clap",
@@ -11741,6 +11457,7 @@ dependencies = [
  "rlx-chatterbox",
  "rlx-f5tts",
  "rlx-gepard",
+ "rlx-ir",
  "rlx-kittentts",
  "rlx-kyutai-tts",
  "rlx-luxtts",
@@ -11769,9 +11486,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlx-tune"
+version = "0.2.19"
+dependencies = [
+ "anyhow",
+ "rlx-autodiff",
+ "rlx-driver",
+ "rlx-ir",
+ "rlx-optim",
+ "rlx-quant-calib",
+ "rlx-runtime",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rlx-umap"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "crossbeam-channel",
  "ctrlc",
@@ -11793,16 +11525,14 @@ dependencies = [
 
 [[package]]
 name = "rlx-unfuse"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-ir",
 ]
 
 [[package]]
 name = "rlx-uni2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "image",
@@ -11818,8 +11548,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-unlimited-ocr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "half",
@@ -11838,8 +11567,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-vad"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11852,8 +11580,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-vibevoice-asr"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -11869,8 +11596,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-vision"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-flow",
@@ -11884,8 +11610,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-vjepa2"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11902,16 +11627,14 @@ dependencies = [
 
 [[package]]
 name = "rlx-vlm-base"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "rlx-voice-gender"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-f0",
@@ -11921,8 +11644,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-voxrt"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-runtime",
@@ -11931,8 +11653,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-voxtral"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11951,8 +11672,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-voxtral-tts"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -11972,13 +11692,12 @@ dependencies = [
  "safetensors 0.7.0",
  "serde",
  "serde_json",
- "zip 2.4.2",
+ "zip 9.1.1",
 ]
 
 [[package]]
 name = "rlx-wake"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -11990,8 +11709,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-wakeword"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-vad",
@@ -12003,13 +11721,11 @@ dependencies = [
 
 [[package]]
 name = "rlx-wakeword-core"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 
 [[package]]
 name = "rlx-wav2vec2-bert"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-cli",
@@ -12026,18 +11742,17 @@ dependencies = [
 
 [[package]]
 name = "rlx-wespeaker"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
+ "rlx-ir",
  "rlx-runtime",
  "rlx-tiny-tts",
 ]
 
 [[package]]
 name = "rlx-wgpu"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "bytemuck",
  "half",
@@ -12058,8 +11773,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-whisper"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rayon",
@@ -12070,6 +11784,7 @@ dependencies = [
  "rlx-models-core",
  "rlx-opt",
  "rlx-runtime",
+ "rlx-search",
  "rustfft",
  "safetensors 0.7.0",
  "serde",
@@ -12079,8 +11794,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-xcodec"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "rlx-ir",
@@ -12093,8 +11807,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-zipvoice"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -12104,8 +11817,7 @@ dependencies = [
 
 [[package]]
 name = "rlx-zonos"
-version = "0.2.16"
-source = "git+https://github.com/MIT-RLX/rlx-models.git?branch=main#50285bc1c8fd6232aa2cc1a51630eea7fc0ccf1c"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "hound",
@@ -12123,8 +11835,7 @@ dependencies = [
 
 [[package]]
 name = "rlxsl"
-version = "0.2.17"
-source = "git+https://github.com/MIT-RLX/rlx.git?branch=main#5efa904b4b6a654ac21d5c952425351881cec1ef"
+version = "0.2.19"
 dependencies = [
  "rlx-ir",
 ]
@@ -12283,14 +11994,14 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -12341,7 +12052,7 @@ dependencies = [
  "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -12352,9 +12063,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -12568,7 +12279,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -12824,16 +12535,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yml"
-version = "0.0.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "909764a65f86829ccdb5eea9ab355843aa02c019a7bfd47465092953565caa05"
-dependencies = [
- "noyalib",
- "serde",
-]
-
-[[package]]
 name = "serdect"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12902,6 +12603,17 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest 0.10.7",
+]
+
+[[package]]
+name = "sha1"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -13045,7 +12757,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skill"
-version = "0.0.131-rc.35"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -13110,7 +12822,7 @@ dependencies = [
  "tokio-util",
  "ureq 3.3.0",
  "url",
- "zip 7.2.0",
+ "zip 4.6.1",
 ]
 
 [[package]]
@@ -13174,7 +12886,7 @@ dependencies = [
 
 [[package]]
 name = "skill-daemon"
-version = "0.0.131-rc.35"
+version = "0.1.0-rc.1"
 dependencies = [
  "antneuro",
  "anyhow",
@@ -13305,6 +13017,7 @@ dependencies = [
  "skill-llm",
  "skill-lsl",
  "skill-settings",
+ "skill-skills",
  "tempfile",
  "thiserror 2.0.19",
  "tokenizers",
@@ -13359,6 +13072,7 @@ dependencies = [
  "openbci",
  "oura-link",
  "oura-protocol",
+ "poop",
  "rusb",
  "serde",
  "serde_json",
@@ -13585,7 +13299,7 @@ dependencies = [
  "rlx-neutts",
  "safetensors 0.5.3",
  "sha2 0.10.9",
- "zip 7.2.0",
+ "zip 9.1.1",
 ]
 
 [[package]]
@@ -13698,6 +13412,7 @@ dependencies = [
  "skill-constants",
  "skill-headless",
  "skill-location",
+ "skill-skills",
  "thiserror 2.0.19",
  "tokio",
  "ureq 3.3.0",
@@ -13739,7 +13454,7 @@ dependencies = [
 
 [[package]]
 name = "skill-tty"
-version = "0.0.131-rc.35"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -13793,7 +13508,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -13937,7 +13652,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -14216,20 +13931,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "sysctl"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01198a2debb237c62b6826ec7081082d951f46dbb64b0e8c7649a452230d1dfc"
-dependencies = [
- "bitflags 2.13.1",
- "byteorder",
- "enum-as-inner",
- "libc",
- "thiserror 1.0.69",
- "walkdir",
 ]
 
 [[package]]
@@ -14793,10 +14494,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -14838,7 +14539,7 @@ dependencies = [
  "parking_lot",
  "rustix 1.1.4",
  "signal-hook",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15074,6 +14775,7 @@ dependencies = [
  "dary_heap",
  "derive_builder",
  "esaxx-rs",
+ "fancy-regex 0.14.0",
  "getrandom 0.3.4",
  "itertools 0.14.0",
  "log",
@@ -15097,9 +14799,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
 dependencies = [
  "bytes",
  "libc",
@@ -15375,10 +15077,10 @@ checksum = "50e69a15e21b2ff22c415446983978bded3244195f17d59cb113551c1e806f91"
 dependencies = [
  "base32",
  "constant_time_eq 0.3.1",
- "hmac",
+ "hmac 0.12.1",
  "qrcodegen-image",
  "rand 0.9.5",
- "sha1",
+ "sha1 0.10.7",
  "sha2 0.10.9",
  "url",
  "urlencoding",
@@ -15530,7 +15232,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15613,7 +15315,7 @@ dependencies = [
  "log",
  "native-tls",
  "rand 0.8.7",
- "sha1",
+ "sha1 0.10.7",
  "thiserror 1.0.69",
  "utf-8",
 ]
@@ -15632,7 +15334,7 @@ dependencies = [
  "rand 0.9.5",
  "rustls",
  "rustls-pki-types",
- "sha1",
+ "sha1 0.10.7",
  "thiserror 2.0.19",
  "utf-8",
 ]
@@ -15649,7 +15351,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
- "sha1",
+ "sha1 0.10.7",
  "thiserror 2.0.19",
  "utf-8",
 ]
@@ -15666,24 +15368,19 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
- "sha1",
+ "sha1 0.10.7",
  "thiserror 2.0.19",
 ]
 
 [[package]]
 name = "turbovec"
-version = "0.4.1"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0185030ca15ea4f8b00c22f02021baa613c2ed3fc83449e32c368debd4a4fe37"
+checksum = "02be82b6ee47e044e77c63b40371b8b1ccc1779b98a9b5d4cfd3cb89728d370a"
 dependencies = [
- "blas-src",
- "faer",
- "ndarray 0.17.2",
- "openblas-src",
  "ordered-float 4.6.0",
  "rand 0.8.7",
  "rand_chacha 0.3.1",
- "rand_distr",
  "rayon",
  "statrs",
 ]
@@ -15716,9 +15413,9 @@ dependencies = [
 
 [[package]]
 name = "typed-path"
-version = "0.12.3"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typeid"
@@ -15746,7 +15443,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15949,7 +15646,7 @@ dependencies = [
  "ureq-proto",
  "utf8-zero",
  "webpki-root-certs",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.11",
 ]
 
 [[package]]
@@ -16068,9 +15765,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vital"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a9d23daf944214827f451628d9cb918d37cb77591907035004b04ae48f8aaf2"
+checksum = "cc4266c754a94e7ad2a2885b01e29715806e9bebc9e2c0b80745ea084d291fce"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -16362,9 +16059,9 @@ dependencies = [
 
 [[package]]
 name = "webbluetooth"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15ee140f813b72a7edbae7daa5fba43d8aaa5356b499ddebafd41ce28add0835"
+checksum = "4502750f466fa28daf4f03fad699c1edba31f349f2b3fdba68c64d55225442bf"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -16379,9 +16076,9 @@ dependencies = [
 
 [[package]]
 name = "webbluetooth-android"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67b3f0bf21c5efb1ef3dd051490732a5c2ce8f8fffda948182f4030270b4ff7f"
+checksum = "0ccb46f769fb35848c067069aee646328dca379380df373d1a7f8c56dd8fa562"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -16391,9 +16088,9 @@ dependencies = [
 
 [[package]]
 name = "webbluetooth-apple"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ed71e8318511169cebc673f7a8feb869f08beda93e3e47fc345e696a5c389d"
+checksum = "d676f3300b258b33f8a0fe70215ca7ce16704ebb547df2fc0581acd51d888723"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -16403,9 +16100,9 @@ dependencies = [
 
 [[package]]
 name = "webbluetooth-core"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d9d4e0b866240f37513d958260ae4673d44af9479bc454d40aa521ea0d02c37"
+checksum = "98eba583230172e2be2c3859bcc81888b8eea82741618ba54c58207b26e17998"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -16415,9 +16112,9 @@ dependencies = [
 
 [[package]]
 name = "webbluetooth-linux"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "251d1f9762dcdbf14a9844c0b7f195a311453d49532c1c7af0131bc87962039c"
+checksum = "2045179eec49db3137f26f62bcdb42d387d53515eb0be14a64bee7e8a4d2f667"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -16428,18 +16125,18 @@ dependencies = [
 
 [[package]]
 name = "webbluetooth-wasm"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc6966f6a21279b36e86bb9d7c6b313dc3d57863de68a80b62b86eb915fe1cbe"
+checksum = "5ab6a6dd96032dcd1731e0d78647d85ec39c92fe6a4dfe37505cc23011b8f5b4"
 dependencies = [
  "webbluetooth-core",
 ]
 
 [[package]]
 name = "webbluetooth-windows"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d175f8cd5c80260caa54986ab7135f0752676e22ddb7c4c12f0c1412d87dbd8"
+checksum = "abb6e09806062b2505cbae6c159a2489312ccd3fa5fc4411b49b1d64b677fbb4"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -16494,9 +16191,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.9"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b96554aa2acc8ccdb7e1c9a58a7a68dd5d13bccc69cd124cb09406db612a1c9b"
+checksum = "e49d0e65abc00c142e8f9428da991da9f1a250c39be97459901eb12b9b49f62a"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -16507,14 +16204,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.11",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -16834,7 +16531,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -17359,8 +17056,8 @@ dependencies = [
  "log",
  "serde",
  "thiserror 2.0.19",
- "windows 0.61.3",
- "windows-core 0.61.2",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -17604,6 +17301,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aee1b19627c7c60102ab80d3a9cbe18de90bfe03bfa6c3715447681f0e8c8af6"
 
 [[package]]
+name = "yaml_serde"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33b729a08a9a6be689bbad3e2bf8015926db54b6622cc89c3a5f7dc174b9e918"
+dependencies = [
+ "indexmap 2.14.0",
+ "itoa",
+ "libyaml-rs",
+ "ryu",
+ "serde",
+]
+
+[[package]]
 name = "yoke"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17647,7 +17357,7 @@ dependencies = [
  "rand 0.8.7",
  "serde",
  "serde_repr",
- "sha1",
+ "sha1 0.10.7",
  "static_assertions",
  "tracing",
  "uds_windows",
@@ -17850,28 +17560,11 @@ dependencies = [
  "crc32fast",
  "crossbeam-utils",
  "flate2",
- "hmac",
+ "hmac 0.12.1",
  "pbkdf2 0.11.0",
- "sha1",
+ "sha1 0.10.7",
  "time",
  "zstd 0.11.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zip"
-version = "2.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
-dependencies = [
- "arbitrary",
- "crc32fast",
- "crossbeam-utils",
- "displaydoc",
- "flate2",
- "indexmap 2.14.0",
- "memchr",
- "thiserror 2.0.19",
- "zopfli",
 ]
 
 [[package]]
@@ -17882,36 +17575,40 @@ checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
 dependencies = [
  "arbitrary",
  "crc32fast",
+ "deflate64",
+ "flate2",
  "indexmap 2.14.0",
  "memchr",
+ "zopfli",
 ]
 
 [[package]]
 name = "zip"
-version = "7.2.0"
+version = "9.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c42e33efc22a0650c311c2ef19115ce232583abbe80850bc8b66509ebef02de0"
+checksum = "518b847fd864440c379748ad684c449f293af68978a485a4ff16f7c901c1f7c4"
 dependencies = [
- "aes 0.8.4",
+ "aes 0.9.1",
  "bzip2 0.6.1",
- "constant_time_eq 0.3.1",
+ "constant_time_eq 0.6.1",
  "crc32fast",
  "deflate64",
  "flate2",
- "generic-array",
- "getrandom 0.3.4",
- "hmac",
+ "getrandom 0.4.3",
+ "hmac 0.13.0",
  "indexmap 2.14.0",
  "lzma-rust2",
  "memchr",
- "pbkdf2 0.12.2",
+ "nix 0.31.3",
+ "pbkdf2 0.13.0",
  "ppmd-rust",
- "sha1",
+ "sha1 0.11.0",
  "time",
  "typed-path",
+ "windows-sys 0.61.2",
  "zeroize",
  "zopfli",
- "zstd 0.13.3",
+ "zstd 0.14.3",
 ]
 
 [[package]]
@@ -17957,6 +17654,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zstd"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
+dependencies = [
+ "zstd-safe 8.2.0",
+]
+
+[[package]]
 name = "zstd-safe"
 version = "5.0.2+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17976,10 +17682,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "zstd-sys"
-version = "2.0.16+zstd.1.5.7"
+name = "zstd-safe"
+version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.1.2+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
 dependencies = [
  "cc",
  "pkg-config",

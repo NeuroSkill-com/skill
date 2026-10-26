@@ -198,7 +198,7 @@ fn read_index(path: &Path) -> anyhow::Result<Vec<IdxEntry>> {
 
 fn parse_index(bytes: &[u8]) -> anyhow::Result<Vec<IdxEntry>> {
     let mut out = Vec::with_capacity(bytes.len() / 16);
-    for chunk in bytes.chunks_exact(16) {
+    for chunk in bytes.as_chunks::<16>().0 {
         let offset = u64::from_le_bytes(chunk[..8].try_into().unwrap());
         let micros = u64::from_le_bytes(chunk[8..].try_into().unwrap());
         out.push(IdxEntry { offset, micros });

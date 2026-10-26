@@ -50,7 +50,17 @@ openbci = { version = "0.0.2", features = ["ble"] }
 mw75 = { version = "0.0.8", default-features = false }
 
 # Emotiv EPOC / Insight / Flex (Cortex WebSocket API)
-emotiv = { version = "0.0.13", default-features = false }
+#
+# `default-features = false` turns off `tui` (the crate's default) and leaves
+# `raw` off, so only the Cortex WebSocket client is compiled.  Everything
+# 0.0.14 changed lives behind `raw` — `DeviceState::Reconnecting`, the new
+# `DecryptedData` / `StreamDebugStats` fields, reconnect-by-default, and the
+# btleplug → `webbluetooth` 0.0.4 port — while `types.rs`, `client.rs` and
+# `protocol.rs` are byte-identical to 0.0.13.  Enabling `raw` later would give
+# Emotiv headsets a direct BLE path (no Cortex service) and make this the
+# eleventh member of the `webbluetooth` lockstep set documented in the
+# workspace root; it asks for 0.0.4, the version everything else is on.
+emotiv = { version = "0.0.14", default-features = false }
 
 # IDUN Guardian in-ear EEG earbud (BLE).
 #

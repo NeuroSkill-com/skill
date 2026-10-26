@@ -156,9 +156,11 @@ pub fn parse_npy(raw: &[u8]) -> Result<NpyData> {
     match dtype {
         Dtype::Float32 => {
             let data: Vec<f32> = data_bytes[..byte_size]
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|b| {
-                    let arr = [b[0], b[1], b[2], b[3]];
+                    let arr = *b;
                     if big_endian {
                         f32::from_be_bytes(arr)
                     } else {
@@ -170,9 +172,11 @@ pub fn parse_npy(raw: &[u8]) -> Result<NpyData> {
         }
         Dtype::Int32 => {
             let data: Vec<i32> = data_bytes[..byte_size]
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|b| {
-                    let arr = [b[0], b[1], b[2], b[3]];
+                    let arr = *b;
                     if big_endian {
                         i32::from_be_bytes(arr)
                     } else {
@@ -231,7 +235,11 @@ pub fn load_npz(path: &Path) -> Result<HashMap<String, NpyData>> {
     let mut arrays = HashMap::new();
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).context("Failed to read ZIP entry")?;
-        let name = entry.name().trim_end_matches(".npy").to_string();
+        let name = entry
+            .name()
+            .with_context(|| format!("ZIP entry {i} has an unreadable name"))?
+            .trim_end_matches(".npy")
+            .to_string();
         let mut buf = Vec::with_capacity(entry.size() as usize);
         entry.read_to_end(&mut buf).context("Failed to read NPY entry")?;
         let arr = parse_npy(&buf).with_context(|| format!("Failed to parse NPY entry '{name}'"))?;

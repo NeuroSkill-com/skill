@@ -427,7 +427,11 @@ fn convert_checkpoint_inner(
 
     let prefix = {
         let first = zip.by_index(0).context("Empty ZIP archive")?;
-        first.name().split('/').next().unwrap_or("archive").to_string()
+        // zip 9 returns the entry name as `Result<Cow<str>, _>`: it decodes the
+        // raw bytes and reports a name it cannot read rather than lossily
+        // converting it.
+        let name = first.name().context("First ZIP entry has an unreadable name")?;
+        name.split('/').next().unwrap_or("archive").to_string()
     };
 
     let pkl_bytes = {
@@ -466,9 +470,11 @@ fn convert_checkpoint_inner(
 
         let f32_bytes = if meta.is_bf16 {
             raw_bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|b| {
-                    let bits = u16::from_le_bytes([b[0], b[1]]);
+                    let bits = u16::from_le_bytes(*b);
                     f32::from_bits((bits as u32) << 16)
                 })
                 .flat_map(|v| v.to_le_bytes())

@@ -43,11 +43,28 @@ ignore = [
     "RUSTSEC-2025-0134", # rustls-pemfile (via oura-api/reqwest 0.11)
     "RUSTSEC-2025-0141", # bincode
 
+    # ── zbus stack — folded into `zbus` 6.0.0, so there is nothing to upgrade ──
+    # zvariant, zvariant_derive and zbus_names stopped being published as
+    # standalone crates on 2026-10-16; all three advisories carry
+    # `patched = []` and say to migrate to zbus >= 6.0.0 (its `wire` / `names`
+    # modules). We are on zbus 5.18.0 (notify-rust, tauri-plugin-opener,
+    # tauri-plugin-single-instance, xcap) and zbus 4.4.0 (secret-service, via
+    # keyring), so reaching 6.0.0 is up to those five upstreams. D-Bus, so this
+    # whole stack is Linux-only. cargo-deny does not need these: its
+    # `unmaintained = "workspace"` already scopes the lint to our own crates.
+    "RUSTSEC-2026-0370", # zvariant unmaintained — merged into zbus 6.0.0
+    "RUSTSEC-2026-0371", # zbus_names unmaintained — merged into zbus 6.0.0
+    "RUSTSEC-2026-0372", # zvariant_derive unmaintained — merged into zbus 6.0.0
+
     # ── Unsound warnings in legacy transitive deps ────────────────────────────
     "RUSTSEC-2021-0145", # atty potential unaligned read (legacy clap2 chain)
 
     # ── rand — unsound with custom logger using rand::rng(); transitive dep ──
-    "RUSTSEC-2026-0097", # rand (0.7.3 via tauri/phf, 0.8.5 via keyring/emotiv/etc.)
+    # 0.8.7 only, as of 2026-10-19: nalgebra / statrs / turbovec / fast-hnsw /
+    # tungstenite, the rlx-models TTS crates, and phf_generator as a build dep.
+    # (The 0.7.3 copy tauri/phf used to pull is gone, and so is emotiv's — it
+    # dropped rand in 0.0.13.)
+    "RUSTSEC-2026-0097", # rand
 
     # ── unsafe-libyaml — unmaintained, no patched release ────────────────────
     # Reached as neurorvq-rs 0.2 -> serde_yaml 0.9 (itself deprecated) ->
@@ -67,5 +84,18 @@ ignore = [
     "RUSTSEC-2026-0194", # quick-xml <0.41 pinned by tauri/plist; trusted local XML only
     "RUSTSEC-2026-0195", # quick-xml <0.41 pinned by tauri/plist; trusted local XML only
     "RUSTSEC-2024-0437", # protobuf <3.7.2, build-only protoc codegen; not in the shipped binary
+
+    # zip <9.0.0 extraction advisories. Everything we own moved to zip 9.1.1 on
+    # 2026-10-25 (workspace root, plus rlx-pkg / rlx-dduf / rlx-asr / rlx-funasr
+    # / rlx-kittentts / rlx-kittentts2 / rlx-voxtral-tts upstream). What is left
+    # is tauri-plugin-updater's `zip ^4`, compiled only for Windows — where the
+    # Unix permission-bit and symlink semantics all three advisories describe do
+    # not exist — extracting a `.nsis.zip` whose minisign signature
+    # `Update::download` has already checked against the pinned pubkey; and
+    # npyz's `zip ^0.6`, which rlx-mlx-io only reads members from. See deny.toml
+    # for the full reasoning; both files must list these or the two jobs disagree.
+    "RUSTSEC-2026-0367", # zip <9 — SUID/SGID bits preserved during extract()
+    "RUSTSEC-2026-0368", # zip <9 — extract() symlink target escapes destination
+    "RUSTSEC-2026-0369", # zip <9 — extract() applies permissions through symlinks
 
 ]

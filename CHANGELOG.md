@@ -8,6 +8,109 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] — 2026-10-26
+
+### Features
+
+- **The skills prompt block is now a choice, with its cost shown.** Settings → Tools → *Skills in the prompt* offers five presets and states what each gives up, because the right answer depends on the model you run. Measured against the 30 bundled skills: **Full** 3,627 tokens · **Compact** 2,426 · **Grouped** 1,731 · **Brief** 1,475 · **Names only** 267. `cargo run -p skill-skills --example prompt_modes` reproduces the table against whatever skills you actually have.
+- **Compact is the new default, and it is lossless.** Measured on the real skill set, 35% of the old block was XML scaffolding (20.7%) and a repeated ~65-character absolute path per entry (14.0%) — neither of which tells the model anything it cannot derive from the skill's name and a base directory stated once. Same skills, same descriptions, a third smaller.
+- **Grouped collapses families.** 14 of the 30 bundled skills are `neuroskill-protocols-*`, one family competing with itself for the model's attention; it becomes a single line naming its members. A lone skill that merely looks like a family is left alone, since replacing it with a pointer would cost a round trip for nothing.
+- **Skills can be matched by meaning instead of shared words.** Word overlap only fires when the user happens to reuse a word from a description, so "help me wind down before bed" matched nothing in a skill described as "sleep hygiene protocol" and the cut became arbitrary exactly when it mattered. Ranking now runs through the text-embedding model when it is loaded. Skill vectors are embedded once and cached — only the prompt is embedded per turn — and a missing or cold embedder falls back to word overlap rather than failing the turn.
+
+- **Two selecting presets, and they are now the default.** *Smart* sends only the handful of skills relevant to each message, and *Smart, grouped* additionally collapses any family that made the shortlist. They are the only presets whose size does not grow with however many skills are installed: measured over the query set, **Smart ≈709 tokens and Smart-grouped ≈544**, against 2,426 for Compact and 3,627 for Full. Settings now groups the list into "only the relevant skills" and "every skill, formatted differently", so the trade being made is visible in the picker rather than inferred from two separate controls.
+- **The meaning-vs-words toggle is scoped to where it applies.** It only governs the selecting presets, so it is now disabled with an explanation under the others instead of appearing to do something it cannot.
+
+- **WHOOP straps (4.0 / 5.0 / MG)**: added support for reading a WHOOP strap directly over Bluetooth with no WHOOP account, using the [`poop`](https://docs.rs/poop) crate from [whoop-rs](https://github.com/eugenehp/whoop-rs). A connected strap streams heart rate, the R-R intervals behind it, and battery into the live vitals card and the session's `_vitals` sidecar. No credential to configure — unlike the Oura ring, a strap's read surface is open.
+- **Every R-R interval is kept**: a strap reports a beat rate and the intervals behind it as separate fields, and the intervals are what HRV is computed from. One observation therefore becomes one vitals sample per interval, with the rate reported once rather than repeated onto each — repeating it would invent measurements, and collapsing to the rate alone would throw away the HRV data.
+
+### Performance
+
+- **Measured what the skills block costs in prefill *and* in decode.** A long system prompt is charged twice — once to prefill it, then again on every generated token, because each one attends over the whole context. On Qwen3-0.6B/Metal with a 96-token answer, decode throughput collapses from **42.9 tok/s with no system prompt to ~9 tok/s at 2,200 prompt tokens**, so `compact` costs +3.5 s of prefill and **+8.8 s of decode**. The decode penalty overtakes the prefill penalty at roughly 38 output tokens. Two consequences: shrinking the prompt is worth more than caching it (a prefix-KV cache would recover only the prefill half), and the preset choice is worth 1.5–16.5 s per turn rather than the token counts alone suggest. `scripts/bench-prefill-vs-prompt.py` reproduces the table; throughput is bucketed rather than smooth, so do not interpolate between rows.
+
+- **The Agent Skills block is now relevance-capped, like tools already were.** Turning on `read_file` injects a catalogue of every discovered skill so the model knows what it can load — 33 skills measured at ~3,900 prompt tokens, on top of ~1,800 for the tool block, so a one-word "hi" arrived as ~5,600 prompt tokens. Tools were already cut to the top-N most relevant per prompt; skills were not, even though they are the larger half. They now go through the same `intelligent_selection` setting and the same top-N, which more than halves the block at 33 skills. This is paid on every turn, three times over: prefill latency before the first byte, a prefill graph sized for the larger prompt, and small models answering the system prompt instead of the user.
+
+- **Sampling is ~5× cheaper per token.** The temperature / top-k / top-p path full-sorted the whole vocabulary twice per token; it now runs through rlx's `SamplerChain` — 2.9 ms → 0.6 ms on a 151,936-entry row, drawing the same token in 1500 of 1500 seeded trials. Shared by every family skill can load.
+- **Greedy argmax is lane-parallel** (46 µs vs 164 µs on a 151,936-entry row) and, in the ten runners that had hand-written `max_by(partial_cmp)` copies, no longer returns the *last* index on an exact tie or panics on a NaN.
+- **Packed prefill plans about half the memory it used to.** rlx-compile pinned the entire ancestor chain of every `DequantMatMul` input to graph end, where only the tensor and the views aliasing it need to live that long; a packed Qwen3-1.7B prefill planned 2.6 GiB with almost nothing reused, now 1.4 GiB.
+
+- **An already-downloaded model resolves instantly instead of being re-hashed.** Every call re-read the whole blob to verify its SHA-256 — 11.7 s for a 378 MB model, scaling linearly, so merely opening the download screen for a cached 5 GB model stalled for minutes. A blob that is exactly the expected size *and* already linked into the snapshot for this commit was hashed and promoted by a previous run, so it is now trusted (as `hf_hub` does): **11.7 s → 0.5 s**, measured. `SKILL_DOWNLOAD_VERIFY_CACHED=1` forces the old full re-check for a cache you suspect.
+- **Verification reports progress instead of looking hung.** Hashing a freshly-downloaded file took ~12 s of a measured 48 s download with the bar frozen at 99 % behind a stale "378 / 378 MB · 10.6 MB/s · 0s left" — indistinguishable from a hang, at exactly the moment a user is most likely to force-quit and leave a partial behind. It now reports `Verifying… 42%`.
+
+### Bugfixes
+
+- **Skills came out in a different order on every daemon start.** `load_skills` returned `HashMap::into_values()`, whose order is unspecified and whose hasher Rust seeds per process. Three consequences, all real: the system prompt differed between restarts (which would defeat any prompt-prefix cache before it was built), ties in the relevance ranking resolved arbitrarily so a different set of skills survived the top-N cut, and no measurement or bug report over the list was reproducible. Now sorted by name, with a test. Found because a retrieval eval's supposedly deterministic lexical baseline scored 12, 14 and 12 out of 30 on three consecutive runs.
+- **Semantic skill ranking embedded both sides the same way.** `nomic-embed-text-v1.5` is an asymmetric retrieval model: the indexed side wants a `search_document:` prefix and the query a `search_query:` one, and the embedder already exposed `embed_documents` / `embed_query` for exactly this. Using plain `embed` for both cost real accuracy — on paraphrased queries, recall@1 went **20% → 40%** and recall@3 **53% → 80%** once the prefixes were used.
+
+- **Settings → LLM → Logs stopped losing lines.** That view reads only an in-memory ring buffer — never the on-disk `llm_logs/` file — and the ring held 500 entries. One session with tools on overruns that easily, because a single orchestration round logs a line per tool call, per result and per round, so the `chat request — …` line for an earlier turn was already evicted by the time anyone looked for it. It read as "the request was never logged". The ring now holds 5,000 entries; they are short strings, so the cost is a few MB.
+
+- **The default model no longer samples every token at the same quantile.** `rlx-qwen35`'s sampled decode drew `Philox(seed)`'s *first* value at every step and for every batch row, so each token came off its distribution at an identical position — temperature and top-p were being applied to a constant draw. Rows now get their own stream, advanced per generated token. Qwen3.5-0.8B is skill's default LLM, so this changes the text the app produces.
+- **Speech recognition used a wrong mel filterbank.** `rlx-asr`'s port wrote each filter's bumped edges back for the next filter, which the Python reference does not: 7 of 80 filters differed, by as much as 1.0, on every transcription.
+- **Screenshot OCR's beam search disagreed with its reference on 141 of 150 inputs, and now on none.** The CTC beam keyed prefixes by label *and* frame and moved repeat-after-blank probability mass onto the wrong prefix.
+
+- **Transfers now retry instead of giving up on the first network hiccup.** A single dropped read aborted the whole download and waited for a human to press the button again — which, for a multi-gigabyte model on unreliable wifi, meant it often never finished. Up to five attempts with capped exponential backoff (1→8 s, ~15 s total). Each attempt re-reads the partial file and resumes from it, so nothing already transferred is re-fetched. Cancellations, pauses, HTTP 4xx and hash mismatches are **not** retried — they are answers that will not change. A cancel during a backoff is acted on within 200 ms rather than after the full wait.
+- **The transfer is pinned to the commit its metadata came from.** Bytes were fetched from `resolve/main/` while the hash to verify against, the `.incomplete` filename and the snapshot directory all came from the resolved commit. If the repo moved in between — far more likely across a cancelled download and a resume days later — the *new* file's bytes were appended to the *old* file's partial, and only the final hash caught it, after paying for the transfer twice.
+- **A short read is treated as an interruption, not a success.** A connection that closed early left `.incomplete` shorter than expected and fell through to the size check as a hard failure; it is now a retryable condition that resumes.
+
+- **TurboVec node counts no longer drift.** A label was counted before its vector was handed to the index, so any rejected insert left the reported node total one ahead of what the index actually held — visible in the backend footprint shown in settings. The count now follows the insert.
+
+### Refactor
+
+- **`skill-llm` stays embedder-agnostic.** The embedder is daemon state and `skill-daemon-state` already depends on `skill-llm`, so the ranker is injected as a hook (`LlmServerState::set_skill_ranker`) rather than inverting the dependency. The hook returns an `Option`, which is what makes "no embedding model loaded" a fallback rather than an error.
+
+### Build
+
+- **A wrong buffer handed to a compiled graph is now an error instead of plausible numbers.** rlx 0.2.19 checks bindings at the `CompiledGraph` boundary: a misspelled input name, or a buffer whose length does not match the declared shape, used to compute on the arena's zeros and return something that looked like a result. skill calls `run` in exactly one place — `skill-eeg`'s GPU FFT — whose input names match the graph it compiled and whose callers (`eeg_filter`, `eeg_bands`) build fixed-size windows, so the preconditions hold; but `fft_batch`'s documented "all signals must have the same length" is now enforced rather than absorbed.
+- **`scripts/ensure-rlx.sh` learned the same two crate names** as the `[patch]` block it is documented to mirror, so a local sibling build resolves `rlx-search` and `rlx-rng` from `../rlx` like everything else rather than from the registry.
+
+- **Rust 1.99 broke the clippy gate, and it was not the rlx upgrade.** The toolchain moved 1.97.1 → 1.99.1 and clippy 0.1.99 turned on two lints that `-D warnings` makes fatal on code that was clean the week before. CI pins no toolchain (`dtolnay/rust-toolchain@stable`), so the gate went red on its own. Eight warnings, two kinds, now zero: six `chunks_exact(N)` call sites became `as_chunks::<N>()`, which is also simply better — the chunk arrives as a `[u8; N]` that `from_le_bytes` takes directly, instead of a slice that had to be re-indexed byte by byte into an array — and `skill-daemon`'s private `blob_to_f32` is gone in favour of `skill_data::util::blob_to_f32`, the shared helper whose doc comment already named that duplication.
+
+- **The btleplug compatibility shim is retired.** `patches/btleplug-0.11.9` reimplemented btleplug's API over `webbluetooth` so that crates which had not migrated still shared one session. Nothing depends on btleplug any more, so it compiles no longer and its `[patch.crates-io]` entry is removed — an unused patch makes cargo print `warning: patch ... was not used in the crate graph` on every build. The directory is kept as the record of what it did. Anything that adds a btleplug dependency in future has to migrate it or restore the shim, or the second-manager bug comes back with it.
+- **The vendored openbci is a permanent patch, not a staging area.** It is versioned 0.0.2 — a version crates.io does not have and is not going to get — so `skill-devices` requires `"0.0.2"` and nothing published can satisfy it. Dropping the patch entry therefore fails the build outright rather than silently resolving the registry's 0.0.1 and pulling btleplug back in.
+
+### CLI
+
+- **Two evals for the skills prompt, because token count proves nothing about whether the right skill is still found.**
+  - `cargo run --release -p skill-daemon-state --features text-embeddings-rlx-metal --bin eval_skill_retrieval` scores the *selection* half against 30 labelled queries, split into an easy tier (the query reuses a word from the description) and a hard tier (a natural paraphrase that avoids it). On the hard tier, word overlap finds the right skill in **27%** of cases at top-8; embeddings find it in **87%**. On the easy tier both reach 100%, which is the point: the gap only opens where real phrasing lives.
+  - `python3 scripts/eval-skill-presets.py <gguf>` puts a model in the loop and asks it to pick a skill from each rendering. At Qwen3-0.6B the model hallucinates names that are not in the list (`neuroskill-protocols-mental`, `-eyes`), so it cannot discriminate between renderings — all configurations land between 0% and 33% with run-to-run swings of ±13 points on 15 queries. Reported as a harness and a caveat, not a ranking.
+
+- **`cargo run -p skill-llm --example download_probe`** drives the real downloader against a public repo and prints what the UI would show. It found both performance problems above; pass a megabyte count as the third argument to interrupt partway and verify that re-running resumes.
+
+### UI
+
+- **A strap no longer shows a Muse head map**: the electrode guide gained a WHOOP tab reporting zero electrodes and no positions, the same treatment the Oura ring, Hermes and Ganglion get.
+
+### Server
+
+- **Both strap generations are discoverable**: WHOOP 4.0 advertises `61080001-…` and WHOOP 5.0/MG advertises `fd4b0001-…`, so both services are registered against one device kind. As with Vital Neuro and the Oura ring the strap's name is user-settable and carries no identity, so the service is what identifies it; the UUIDs are taken from `poop`'s own constants rather than re-spelled, so a literal cannot drift from the driver.
+- **Offloaded history is not emitted as live data**: `poop` delivers a strap's stored records through the same event channel as live readings, tagged `Historical`. The adapter drops those — emitting them would backfill a recording with measurements from another day, stamped with the moment they were transferred.
+- **One BLE session, including the strap**: `poop` already resolves `webbluetooth 0.0.4`, the same requirement as muse-rs / vital / skill-daemon, so it unifies onto the single `Bluetooth::shared()` session rather than opening a second `CBCentralManager`. It is taken with `default-features = false` to drop its `tui` default, which would otherwise pull ratatui and crossterm into the daemon for a terminal UI nothing here renders.
+
+- **The OpenBCI Ganglion's BLE radio joins that session too.** Its driver was the last one still on btleplug, so it is vendored at `patches/openbci-0.0.2` with `board/ganglion.rs` ported to `webbluetooth` and everything else — the Cyton and Cyton+Daisy serial boards, the WiFi-shield boards, Galea, packet decoding, the electrode tables — left verbatim upstream. Web Bluetooth also needs the GATT *service* named before it will hand over a characteristic, which btleplug never required and which neither openbci's source nor its README recorded: it is the Simblee service `0xfe84`, taken from OpenBCI's own `OpenBCI_JavaScript_Utilities/src/constants.js`, whose table also lists the two characteristic UUIDs the driver already used. It is exposed as `GanglionConfig::services` rather than hard-coded, because this path has not yet been exercised against a physical Ganglion and a wrong service should cost a setting rather than a release.
+- **An AWEAR headband now records what it says it is.** `awear` 0.3.0 reports board type, firmware and bootloader versions in a packet sent between connect and ready; that lands in the session's metadata alongside the diagnostics Mendi already writes, instead of being discarded.
+
+- **Existing label indices rebuild themselves once after this update.** turbovec 0.4 wrote format v2 and 1.1 reads only v7/v8, so the first load of an old `.tv` file fails with an error naming the version, the index falls back to HNSW for that run, and the next rebuild writes the new format. Nothing is lost — every embedding lives in `labels.sqlite` — and no action is required.
+- **TurboVec encodings are now platform-independent.** In 0.4 the rotation ran through whichever BLAS the OS supplied, so the same vectors encoded to different bytes on macOS and Linux; 1.1 computes it the same way everywhere, which is also why the on-disk format moved.
+
+### Docs
+
+- **`docs/webbluetooth-migration.md` records the finished state**: which crate moved where, the three properties of the Web Bluetooth model that cost real bugs during the port (services must be granted up front, notifications are per-characteristic and per-stream, and GATT handles go stale across a disconnect), and how to run the vendored crate's own test suite, which cannot run from the workspace root.
+
+### Dependencies
+
+- **`rlx` and `rlx-models` move to 0.2.19** (from rlx 0.2.18 / rlx-models 0.2.16) — 173 crates, every one of them, and the largest upstream jump this release carries. It brings correctness fixes to three paths skill ships (see **Bugfixes**), a faster sampler, and a smaller prefill footprint. Nothing in skill's own source had to change for it: the whole workspace type-checks and lints clean against it.
+- **Two new `[patch.crates-io]` entries, `rlx-search` and `rlx-rng`.** rlx-models 0.2.19 moved beam search, CTC decoding and forced alignment onto `rlx-search`, and torch's initialisers and `DataLoader(shuffle=True)` stream onto `rlx-rng`, and pins both from the registry. Without the entries `rlx-search` resolved **twice** — once by path, from the patched rlx crates that depend on it inside rlx's own workspace, and once from crates.io, from rlx-models — which is the dual-source split that block exists to prevent. The invariant it protects is now checkable in one line: every `rlx*` package in the lock is 0.2.19, and none of them comes from crates.io.
+
+- **`async-trait` 0.1.91 → 0.1.92**, for the other half of the 1.99 clippy gate. The new `double_must_use` lint fires on `#[must_use]` applied to a function already returning a `#[must_use]` type, and async-trait pushed exactly that onto every method it generates — so the warning landed on `DeviceAdapter` in `skill-devices` with no way to fix it from our side, since it originates inside the macro expansion. Removing that attribute is upstream's only change in 0.1.92.
+
+- **Every Bluetooth device now reaches the radio through one library.** The device crates moved to `webbluetooth` upstream — `awear` 0.2.0 → 0.3.0, `idun` 0.0.3 → 0.0.4, `mendi` 0.0.2 → 0.0.3, `mw75` 0.0.6 → 0.0.8, `muse-rs` 0.2.1 → 0.2.2, `vital` 0.0.1 → 0.0.2 — and `webbluetooth` itself went 0.0.3 → 0.0.4 along with its seven platform backends. `btleplug` and `dashmap` leave the build entirely; `cargo tree -i btleplug` now answers "did not match any packages".
+- **That unification is a correctness requirement, not tidiness.** `Bluetooth::shared()` memoises the session into a `OnceLock`, so two copies of the crate in one build mean two `CBCentralManager`s on macOS — and a second manager cannot discover peripherals while the first is scanning, which presents as devices that simply never connect. Cargo treats `0.0.x` releases as mutually incompatible, so all ten dependents (the eight device crates plus `skill-daemon` and `skill-devices`) have to name the same version; `cargo tree -p skill-daemon -i webbluetooth` must print exactly one node.
+
+- **`llmfit-core` 0.9.38 → 1.1.17**, which replaces its `serde_yml` YAML stack with `yaml_serde`. That takes `serde_yml` and `noyalib` out of the build and with them two security advisories — a YAML resource-budget DoS (`RUSTSEC-2026-0333`) and `serde_yml`'s own unsound/unmaintained notice (`RUSTSEC-2025-0068`) — which were otherwise unfixable by upgrade, since the patched `noyalib` is semver-incompatible with the one `serde_yml` pins. skill uses the crate for hardware detection and model-fit scoring, and the API it depends on is unchanged: `FitLevel` and `RunMode` still have exactly the variants the UI maps, so fit verdicts keep their meaning. The structs gained one field each (`LlmModel.languages`, `SystemSpecs.gpu_available_gb`).
+- **`turbovec` 0.4.1 → 1.1.2, which now has no dependencies at all.** It does its own SIMD instead of a BLAS GEMM, so the 42 MB OpenBLAS build dependency goes away along with `faer`, `gemm`, `nano-gemm`, `pulp`, `blas-src` and a dozen of their companions. Index construction and vector insertion became fallible (a bit width outside 2–4, a dim that is not a multiple of 8, a dim mismatch), and both are now handled by falling back to HNSW for that index rather than by panicking.
+- **`emotiv` 0.0.13 → 0.0.14.** The release is a large one upstream — the `raw` feature's direct-BLE path moved off btleplug to `webbluetooth` 0.0.4, gained automatic reconnect, and fixed decryption locking onto a wrong key — but skill builds the crate with `default-features = false` and only uses the Cortex WebSocket client, whose sources (`types.rs`, `client.rs`, `protocol.rs`) are byte-identical to 0.0.13. So nothing changes for an Emotiv headset today, and the upgrade is taken now because it is free: the breaking changes (`DeviceState::Reconnecting`, new `DecryptedData` and `StreamDebugStats` fields) are all behind a feature we do not enable. It also stops pulling `chrono`, `uuid/v4` and — together with the rest of the BLE work in this release — any road back to btleplug.
+- **Security updates**: `rustls` 0.23.45 → 0.23.46 (four advisories: ECH data leakage, brotli pre-auth allocation, `Debug` impls exposing session secrets, and an unauthenticated ServerHello downgrade), `event-listener` 5.4.1 → 5.4.2, `lru` 0.18.1 → 0.18.5.
+- Net effect on the lockfile against the last tagged release: **36 crates leave, 3 arrive.** `btleplug` and `dashmap` are among the departures, from the Bluetooth work in this same release.
+
 ## [0.0.131-rc.35] — 2026-10-12
 
 ### Features
@@ -589,24 +692,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - Minor updates and improvements
 
-## [0.0.131-rc.16] — 2026-07-24
-
-### Features
-
-- updates skill daemono# Please enter the commit message for your changes. Lines starting
-- Gate LLM e2e tests on llm-rlx so default cargo test skips them.
-- Feature unification from skill-daemon was enabling the llm marker without a backend, which made pre-push fail.
-- Allow GPL for new rlx TTS crates and ignore protobuf advisory.
-- rlx-tiny-tts pulled onnx/protobuf back into the graph; extend cargo-deny exceptions so pre-push stays green.
-- Fix release CI: patch remaining crates.io rlx models and drop Windows wgpu.
-- rc.15 failed on Mac/Linux from registry rlx-qwen3 vs git rlx-flow, and on Windows from wgpu-hal/windows-rs 0.62 vs gpu-allocator on 0.61. Patch the leftover model crates and keep the Windows umbrella on CUDA until gpu-allocator aligns.
-- Simplify release CI setup and pin rlx git patches.
-- Fold Linux Vulkan/apt into a shared release-setup action, drop sccache from CI, scope daemon features per OS, and keep Cargo.lock on GitHub rlx main.
-
 ## Earlier releases
 
-The 144 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 145 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.16](changes/releases/0.0.131-rc.16.md)
 - [0.0.131-rc.15](changes/releases/0.0.131-rc.15.md)
 - [0.0.131-rc.14](changes/releases/0.0.131-rc.14.md)
 - [0.0.131-rc.13](changes/releases/0.0.131-rc.13.md)

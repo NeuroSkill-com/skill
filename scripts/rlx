@@ -14,7 +14,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONFIG="$(cd "${REPO_ROOT}/.." && pwd)/.cargo/config.toml"
+CONFIG="${REPO_ROOT}/.cargo/rlx-local.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
 
 if [[ -t 1 ]]; then G=$'\033[1;32m'; B=$'\033[1;34m'; DIM=$'\033[2m'; R=$'\033[0m'; else G=""; B=""; DIM=""; R=""; fi
