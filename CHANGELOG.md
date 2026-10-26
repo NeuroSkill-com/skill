@@ -8,6 +8,58 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.4] — 2026-10-26
+
+### Features
+
+- **Export recordings as a BIDS-EEG dataset, over any time range.** History has an **Export BIDS** button on each day and on each session. It opens a dialog with a from/to range (presets: this session, this day, last 7 days, everything), subject and task labels, mains frequency, and toggles for labels, PPG and IMU. A live preview shows how many recordings and how much time the range covers before anything is written. Every recording that overlaps the range is clipped to it and becomes one BIDS run under `ses-<local day>`: BrainVision EEG (float32 µV), `_eeg.json`, `_channels.tsv`, and `_events.tsv` with your labels plus any signal gaps. PPG goes to `_physio.tsv.gz`, IMU to `motion/` (`tracksys-imu`), each session gets a `scans.tsv` with acquisition times, and the dataset gets `dataset_description.json`, `participants.tsv` and a README. The result is checked with bids-validate and the summary reports any issues. Output goes to `~/.skill/exports/bids/…` unless you choose a folder, and an existing non-empty folder is refused rather than overwritten.
+- **Daemon:** `POST /v1/history/export/bids` (runs one export at a time and streams `bids-export-progress` events) and `POST /v1/history/export/bids/preview`. The logic lives in the new `skill-bids` crate, built on bids-rs (`bids-core`, `bids-io`, `bids-eeg`, `bids-validate`).
+- **Bluetooth drops are kept, not hidden.** The EEG file is continuous, so a gap longer than 0.5 s is cut out and recorded as a `gap` event (value = seconds missing), and `RecordingType` becomes `discontinuous`. Labels after a gap are shifted onto file time to match.
+- **Checked against independent tools:** MNE-BIDS reads the export with the right channels, sampling rate, measurement date and µV values (identical to the source CSV at float32 precision).
+
+### Bugfixes
+
+- **Auto-labels from VS Code, browser and terminal events were not being saved on most installs.** The inserts named `wall_start`/`wall_end`. On label databases created by `LabelStore`, where `label_start` is `NOT NULL` without a default, every insert failed silently (`.ok()`). The labels table now carries both column pairs with defaults, and the auto-label paths and the `label` CLI command write through the label store. The `label` e2e check no longer needs its "stale labels.sqlite" skip.
+- Deleting a chat session now also deletes its tool calls. SQLite never enforced the `ON DELETE CASCADE` they relied on, because foreign keys were never enabled.
+
+- **Inference now uses the GPU whenever there is one, unless the settings name a different backend.** 0.1.0-rc.3 shipped running the default model on **CPU** on Apple Silicon: `inference_device` read `"gpu"` and `llm.rlx_device` read `"metal"`, yet the daemon logged `[rlx] Qwen35 load device=Cpu`. The culprit was `llm.n_gpu_layers`, which is llama.cpp's *per-layer offload count* — RLX has no per-layer offload, it picks one device for the whole graph, so the only thing a layer count could ever do on that path was veto the device, and a stale `0` did exactly that. It no longer participates in RLX device selection; where inference runs is decided by the device setting alone. Measured on the shipped rc.3 binary, same prompt, same build: **21.0 s on CPU → 11.8 s on Metal**.
+- **The CPU/GPU switch now speaks to both runtimes.** It used to express "run on CPU" only by zeroing `n_gpu_layers`, which is meaningless to RLX — so with the veto gone it would have stopped working there. It now also sets `llm.rlx_device`, saving the previous value in `llm_rlx_device_saved` the way `llm_gpu_layers_saved` has always worked, so a trip through CPU and back does not silently downgrade someone who had chosen `mlx` or `cuda`. A profile with nothing saved restores the per-platform default rather than an empty string, via the now-public `default_rlx_device_tag()` — one definition, not a second copy of the rule.
+- **The notarization ticket is stapled to the `.app`, not only to the DMG.** `stapler validate` on the app *inside* the shipped rc.3 image reported "does not have a ticket stapled to it", because the app was stapled after `appdmg` had already copied it in. Gatekeeper still admitted it by looking the notarization up online — I verified the copied-out, quarantined app is `accepted` — so this only bit a first launch on a machine with no network. The script now notarizes and staples the `.app` before building the image and the DMG after, two submissions, one per artifact, each `stapler validate`d.
+- **`skill-daemon --version` prints a version instead of starting a daemon.** It ignored the flag and booted the whole server — API listener, device scanner, file watchers and all — which is a surprising thing for a version check to do, and the obvious thing a release check or a support request reaches for. `--help` is new too, documenting `--uninstall`, `--iroh-logs`, the `tty` subcommand and the two environment variables that matter.
+
+### Refactor
+
+- **All local stores now use DuckDB instead of SQLite.** That covers labels, activity, screenshots, chat history, health, hooks audit log, validation (KSS/TLX/PVT), calibration profiles and the per-day EEG embedding stores. Files are now `*.duckdb`: `labels.duckdb`, `activity.duckdb`, `screenshots.duckdb`, `chats/chat_history.duckdb`, `health.duckdb`, `hooks.duckdb`, `validation.duckdb`, `calibrations.duckdb` and `YYYYMMDD/eeg.duckdb`.
+- **Upgrading imports your data once and keeps the originals.** On first open, each store copies its old `.sqlite` file (or `calibrations.db`) into the new database. SQLite's loosely typed values are coerced to the declared column types, row counts are verified, the import is recorded, and only then is the old file renamed to `.sqlite.bak`. Nothing is deleted. A failed import rolls back, leaves the SQLite file in place and is retried next start. The importer reads SQLite through `rusqlite`, so it works offline; DuckDB extension autoloading is off.
+- **New `skill-db` crate.** DuckDB locks a file per *instance*, so a second open of the same file fails even inside one process. `skill-db` therefore keeps one instance per file and hands out leased connections. Idle per-day instances beyond the 8 most recent are closed, while instances with live connections are never dropped, so a later open can't start a second instance on a locked file. Each instance is capped at 2 threads and 256 MB of buffer pool. The crate also owns the one-time importer and sequence re-seeding.
+- **`skill_data::eeg_store`** is now the only way to open a day's EEG store: schema, import, the `unix_ms` backfill, and `metric()` for typed reads from `metrics_json`. All readers use it: history, search, label index, UMAP, analysis, reembed, BIDS export.
+- Conversation and terminal-output search (previously SQLite FTS5) now matches when every query term appears (case-insensitive), newest first. FTS5 ranked by BM25. All `LIKE` searches are `ILIKE` to keep SQLite's case-insensitive matching.
+- Queries that relied on SQLite picking a "bare" column from the `MAX()` row now say so explicitly with `arg_max(col, time)` (latest project/language for a file, latest category for a domain or binary).
+- `scripts/verify_sqlite.sh` is replaced by `scripts/verify_day_store.sh` (DuckDB CLI). `scripts/health.mjs` counts `.duckdb` day stores.
+- DuckDB allows one writing process per file: quit the app before opening a `.duckdb` file with another tool.
+
+- **The Headache index is gone.** It is no longer computed (`BandSnapshot.headache_index`), shown on the dashboard's EEG indices card, returned by search neighbour metrics, or used by the `physical` hook gate. That gate now fires on drowsiness ≥ 55, migraine index ≥ 45, or out-of-range heart rate. The Migraine index is unchanged and keeps its citation (Bjørk et al. 2009). The dashboard label and tooltip strings are removed from all nine locales, the metric reference now names only the migraine index, and METRICS.md §11 is now "Migraine EEG Correlate". Skill protocols that keyed on `headache_index` now trigger on `migraine_index`, `bar` or `stillness`, or on the user saying they have a headache.
+- Older rows keep `headache_index` inside their stored metrics JSON. Nothing reads it any more.
+
+### Build
+
+- **bids-rs comes from GitHub `main`** (0.0.4: DuckDB layout index, the BIDS-EEG writer, the headerless physio fix).
+- `deny.toml` gains GPL-3.0-or-later exceptions for the nine bids-rs crates, and GPL-3.0-only for `skill-bids`. `cargo deny` and `cargo audit` are green.
+
+### UI
+
+- **The "GPU layers" control is hidden on the RLX runtime, where it does nothing.** It is a llama.cpp setting, and offering it alongside an RLX engine was worse than useless: picking "CPU" wrote the `n_gpu_layers: 0` that pinned the engine to CPU while every device setting still said Metal. That is reachable in one click and nothing ever put it back, which is how a developer machine ended up running the default model at half speed without noticing.
+
+### Docs
+
+- **Help → FAQ, in all nine languages:** a new "How do I export my recordings as BIDS?" entry, and "Why did my data files change from .sqlite to .duckdb?", which covers the one-time import, the `.sqlite.bak` backups, and quitting the app before opening a database with another tool. All other help text now says DuckDB/`.duckdb` instead of SQLite/`.sqlite`.
+
+### Dependencies
+
+- **`bbtree` replaces std's `BTreeMap` / `BTreeSet` at all 11 of our call sites.** `bbtree::unsync::BBTreeMap` and `BBTreeSet` are drop-in — same methods, same `Index`, `FromIterator` and `IntoIterator` impls — so the swap is mechanical and reversible: the distinct-set and shared-prefix sets in the retrieval eval, the device-name set in `/search/devices`, the day sets in the history cache and local-day listing, and the four safetensors / pickle metadata maps in the NeuTTS downloader. It is formally verified with Verus and carries miri, sanitizer, fuzzing and deterministic-simulation CI, and upstream measures 5× over std single-threaded with 30% lower memory.
+- **Be clear-eyed about where the win lands, though: nowhere measurable yet.** Every one of those 11 sites is a cold, one-shot path — dedup sets built once per request or per eval run, and metadata maps built once per model download. None is in a hot loop, so this is a correctness-neutral swap that puts the faster structure in place rather than a speedup anyone will notice. The concurrent `BBTreeMap`, which is where the concurrency numbers live, is not used: our shared state is `Mutex<HashMap<…>>`, and unordered → ordered is a semantics change, not a drop-in.
+- **It is not dependency-free, despite the README's claim.** The published crate requires `vstd` pinned exactly to `=0.0.0-2026-08-30-0159` — Verus's standard library, for the proofs it ships with — which brings `verus_builtin`, `verus_builtin_macros`, `verus_state_machines_macros`, `verus_syn`, `verus_prettyplease` and `convert_case`. Eight packages in total, all MIT or `MIT OR Apache-2.0`, so `cargo deny` and `cargo audit` both stay green. The `=` pins are the thing to watch: nothing else in the graph may ever want a different `vstd`, and these are dated `0.0.0` prereleases rather than semver releases. The rationale is recorded next to the dependency in the workspace root.
+
 ## [0.1.0-rc.3] — 2026-10-26
 
 ### Build
@@ -617,16 +669,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 - vendored gpu allocator
 - updated cache
 
-## [0.0.131-rc.19] — 2026-07-28
-
-### Features
-
-- Minor updates and improvements
-
 ## Earlier releases
 
-The 147 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 148 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.19](changes/releases/0.0.131-rc.19.md)
 - [0.0.131-rc.18](changes/releases/0.0.131-rc.18.md)
 - [0.0.131-rc.17](changes/releases/0.0.131-rc.17.md)
 - [0.0.131-rc.16](changes/releases/0.0.131-rc.16.md)

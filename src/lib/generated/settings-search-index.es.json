@@ -651,13 +651,13 @@
     "tab": "settings",
     "key": "settings.calendarToggle",
     "label": "Rastrear eventos del calendario",
-    "desc": "Lee los metadatos de tus eventos próximos y recientes del calendario (título, hora, duración, cantidad de asistentes) para que la app pueda correlacionar caídas de concentración con la densidad de reuniones. Por qué es útil: muestra si reuniones consecutivas están erosionando tus bloques de trabajo profundo. Permiso necesario: macOS mostrará un aviso de acceso al Calendario la primera vez que se consulte. Privacidad: los eventos se leen bajo demanda y solo se guardan recuentos agregados en activity.sqlite, nada se carga."
+    "desc": "Lee los metadatos de tus eventos próximos y recientes del calendario (título, hora, duración, cantidad de asistentes) para que la app pueda correlacionar caídas de concentración con la densidad de reuniones. Por qué es útil: muestra si reuniones consecutivas están erosionando tus bloques de trabajo profundo. Permiso necesario: macOS mostrará un aviso de acceso al Calendario la primera vez que se consulte. Privacidad: los eventos se leen bajo demanda y solo se guardan recuentos agregados en activity.duckdb, nada se carga."
   },
   {
     "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Rastrear actividad del portapapeles",
-    "desc": "Registra cuándo cambia el portapapeles — qué app copió, el tipo de contenido y su tamaño. El contenido del portapapeles nunca se lee ni se almacena. Por qué es útil: las ráfagas de copiar/pegar son una señal fuerte de cambio de contexto, y combinarlas con el EEG puede mostrar cuándo malabarear fuentes está rompiendo tu concentración. Permiso necesario: macOS pedirá acceso de Automatización para leer los metadatos del portapapeles. Privacidad: solo se almacenan metadatos, localmente en activity.sqlite, nunca cargados. Solo macOS."
+    "desc": "Registra cuándo cambia el portapapeles — qué app copió, el tipo de contenido y su tamaño. El contenido del portapapeles nunca se lee ni se almacena. Por qué es útil: las ráfagas de copiar/pegar son una señal fuerte de cambio de contexto, y combinarlas con el EEG puede mostrar cuándo malabarear fuentes está rompiendo tu concentración. Permiso necesario: macOS pedirá acceso de Automatización para leer los metadatos del portapapeles. Privacidad: solo se almacenan metadatos, localmente en activity.duckdb, nunca cargados. Solo macOS."
   },
   {
     "tab": "settings",
@@ -729,7 +729,7 @@
     "tab": "settings",
     "key": "settings.logChatStore",
     "label": "Tienda de chat",
-    "desc": "Operaciones de Chat SQLite (guardar, migrar, abrir)"
+    "desc": "Operaciones de Chat DuckDB (guardar, migrar, abrir)"
   },
   {
     "tab": "settings",

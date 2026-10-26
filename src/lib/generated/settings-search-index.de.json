@@ -651,13 +651,13 @@
     "tab": "settings",
     "key": "settings.calendarToggle",
     "label": "Kalenderereignisse verfolgen",
-    "desc": "Liest die Metadaten deiner anstehenden und kürzlichen Kalenderereignisse (Titel, Zeit, Dauer, Teilnehmerzahl), damit die App Konzentrationseinbrüche mit Meeting-Dichte korrelieren kann. Nutzen: Zeigt, ob Back-to-Back-Meetings deine Deep-Work-Blöcke aushöhlen. Berechtigung: macOS zeigt beim ersten Zugriff einen Kalender-Berechtigungsdialog. Datenschutz: Ereignisse werden on-demand gelesen und nur Aggregat-Zahlen werden in activity.sqlite gespeichert, nichts wird hochgeladen."
+    "desc": "Liest die Metadaten deiner anstehenden und kürzlichen Kalenderereignisse (Titel, Zeit, Dauer, Teilnehmerzahl), damit die App Konzentrationseinbrüche mit Meeting-Dichte korrelieren kann. Nutzen: Zeigt, ob Back-to-Back-Meetings deine Deep-Work-Blöcke aushöhlen. Berechtigung: macOS zeigt beim ersten Zugriff einen Kalender-Berechtigungsdialog. Datenschutz: Ereignisse werden on-demand gelesen und nur Aggregat-Zahlen werden in activity.duckdb gespeichert, nichts wird hochgeladen."
   },
   {
     "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Zwischenablage-Aktivität verfolgen",
-    "desc": "Erfasst, wann sich die Zwischenablage ändert — welche App kopiert hat, Inhaltstyp und Größe. Der Inhalt selbst wird niemals gelesen oder gespeichert. Nutzen: Häufiges Kopieren/Einfügen ist ein starkes Signal für Kontextwechsel; in Kombination mit dem EEG erkennt man, wann das Jonglieren mit Quellen den Flow bricht. Berechtigung: macOS fragt nach Automatisierungszugriff, um die Zwischenablage-Metadaten zu lesen. Datenschutz: nur Metadaten werden gespeichert, lokal in activity.sqlite, nie hochgeladen. Nur macOS."
+    "desc": "Erfasst, wann sich die Zwischenablage ändert — welche App kopiert hat, Inhaltstyp und Größe. Der Inhalt selbst wird niemals gelesen oder gespeichert. Nutzen: Häufiges Kopieren/Einfügen ist ein starkes Signal für Kontextwechsel; in Kombination mit dem EEG erkennt man, wann das Jonglieren mit Quellen den Flow bricht. Berechtigung: macOS fragt nach Automatisierungszugriff, um die Zwischenablage-Metadaten zu lesen. Datenschutz: nur Metadaten werden gespeichert, lokal in activity.duckdb, nie hochgeladen. Nur macOS."
   },
   {
     "tab": "settings",
@@ -729,7 +729,7 @@
     "tab": "settings",
     "key": "settings.logChatStore",
     "label": "Chat-Speicher",
-    "desc": "Chat-SQLite-Operationen (Speichern, Migrieren, Öffnen)"
+    "desc": "Chat-DuckDB-Operationen (Speichern, Migrieren, Öffnen)"
   },
   {
     "tab": "settings",

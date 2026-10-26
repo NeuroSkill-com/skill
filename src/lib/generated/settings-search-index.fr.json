@@ -651,13 +651,13 @@
     "tab": "settings",
     "key": "settings.calendarToggle",
     "label": "Suivre les événements du calendrier",
-    "desc": "Lit les métadonnées de vos événements de calendrier à venir et récents (titre, heure, durée, nombre de participants) afin que l'app puisse corréler les baisses de concentration avec la densité de réunions. Pourquoi c'est utile : montre si des réunions enchaînées érodent vos blocs de travail profond. Permission requise : macOS affichera une demande d'Accès au Calendrier la première fois. Confidentialité : les événements sont lus à la demande, seuls des comptages agrégés sont enregistrés dans activity.sqlite, rien n'est transmis."
+    "desc": "Lit les métadonnées de vos événements de calendrier à venir et récents (titre, heure, durée, nombre de participants) afin que l'app puisse corréler les baisses de concentration avec la densité de réunions. Pourquoi c'est utile : montre si des réunions enchaînées érodent vos blocs de travail profond. Permission requise : macOS affichera une demande d'Accès au Calendrier la première fois. Confidentialité : les événements sont lus à la demande, seuls des comptages agrégés sont enregistrés dans activity.duckdb, rien n'est transmis."
   },
   {
     "tab": "settings",
     "key": "settings.clipboardToggle",
     "label": "Suivre l'activité du presse-papiers",
-    "desc": "Enregistre quand le presse-papiers change — quelle app a copié, le type de contenu et sa taille. Le contenu du presse-papiers lui-même n'est jamais lu ni stocké. Pourquoi c'est utile : les rafales de copier/coller sont un signal fort de changement de contexte, et les associer à l'EEG peut révéler quand jongler entre les sources brise votre flow. Permission requise : macOS demandera un accès Automatisation pour lire les métadonnées du presse-papiers. Confidentialité : seules les métadonnées sont stockées, localement dans activity.sqlite, jamais transmises. macOS uniquement."
+    "desc": "Enregistre quand le presse-papiers change — quelle app a copié, le type de contenu et sa taille. Le contenu du presse-papiers lui-même n'est jamais lu ni stocké. Pourquoi c'est utile : les rafales de copier/coller sont un signal fort de changement de contexte, et les associer à l'EEG peut révéler quand jongler entre les sources brise votre flow. Permission requise : macOS demandera un accès Automatisation pour lire les métadonnées du presse-papiers. Confidentialité : seules les métadonnées sont stockées, localement dans activity.duckdb, jamais transmises. macOS uniquement."
   },
   {
     "tab": "settings",
@@ -729,7 +729,7 @@
     "tab": "settings",
     "key": "settings.logChatStore",
     "label": "Stockage de chat",
-    "desc": "Opérations SQLite de chat (sauvegarde, migration, ouverture)"
+    "desc": "Opérations DuckDB de chat (sauvegarde, migration, ouverture)"
   },
   {
     "tab": "settings",
