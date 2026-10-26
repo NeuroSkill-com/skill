@@ -64,8 +64,6 @@ const ui: Record<string, string> = {
   "tip.stillness": "Head movement stillness score (0–100). 100 = perfectly still.",
   "tip.nods": "Vertical head nods (pitch oscillations) detected.",
   "tip.shakes": "Horizontal head shakes (roll oscillations) detected.",
-  "tip.headache":
-    "Headache correlate — cortical hyperexcitability: elevated beta + suppressed alpha + high BAR. Changes in cortical excitability observed in headache states. Research indicator only.",
   "tip.migraine":
     "Migraine correlate — cortical spreading depression proxy: elevated delta + alpha suppression + hemispheric lateralisation. Delta increases and alpha suppresses during migraine. Research indicator only.",
   "tip.consciousness.lzc":

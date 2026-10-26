@@ -396,7 +396,7 @@ const settings: Record<string, string> = {
   "settings.logLlm": "LLM",
   "settings.logLlmDesc": "Motor de inferencia (carga de modelo, generación, llamadas a herramientas)",
   "settings.logChatStore": "Tienda de chat",
-  "settings.logChatStoreDesc": "Operaciones de Chat SQLite (guardar, migrar, abrir)",
+  "settings.logChatStoreDesc": "Operaciones de Chat DuckDB (guardar, migrar, abrir)",
   "settings.logHistory": "Historia",
   "settings.logHistoryDesc": "Carga de lista de sesiones y escaneo CSV",
   "settings.logHooks": "Ganchos",
@@ -501,10 +501,10 @@ const settings: Record<string, string> = {
 
   "settings.activityTracking": "Seguimiento de actividad",
   "settings.activityTrackingIntro":
-    "Todo esto es opcional y está desactivado de forma predeterminada (excepto teclado y ratón, que no requiere permisos). Aporta contexto a tus datos de EEG/concentración para que veas en qué estabas trabajando durante una caída de foco o un estado de flujo. Todo lo de abajo se registra solo en este ordenador, se escribe en activity.sqlite y nunca se envía a ningún servidor — ni a NeuroSkill, ni a nadie. Puedes desactivar cada opción en cualquier momento; los datos registrados permanecen en disco hasta que los borres.",
+    "Todo esto es opcional y está desactivado de forma predeterminada (excepto teclado y ratón, que no requiere permisos). Aporta contexto a tus datos de EEG/concentración para que veas en qué estabas trabajando durante una caída de foco o un estado de flujo. Todo lo de abajo se registra solo en este ordenador, se escribe en activity.duckdb y nunca se envía a ningún servidor — ni a NeuroSkill, ni a nadie. Puedes desactivar cada opción en cualquier momento; los datos registrados permanecen en disco hasta que los borres.",
   "settings.activeWindowToggle": "Seguimiento de ventana activa",
   "settings.activeWindowToggleDesc":
-    'Registra qué aplicación y ventana están en primer plano, además del título de la pestaña activa del navegador (Chrome, Safari, Firefox, Edge) y la ruta del archivo abierto en editores como VS Code. Por qué es útil: te permite correlacionar tu estado de concentración con lo que estabas haciendo realmente — "perdí el foco escribiendo este PR" en lugar de solo "perdí el foco a las 3 pm". Permiso necesario: macOS pedirá acceso de Accesibilidad / Automatización para cada navegador y editor consultado — es normal. Privacidad: los nombres de apps, títulos de ventana y rutas se almacenan localmente en activity.sqlite y nunca se cargan.',
+    'Registra qué aplicación y ventana están en primer plano, además del título de la pestaña activa del navegador (Chrome, Safari, Firefox, Edge) y la ruta del archivo abierto en editores como VS Code. Por qué es útil: te permite correlacionar tu estado de concentración con lo que estabas haciendo realmente — "perdí el foco escribiendo este PR" en lugar de solo "perdí el foco a las 3 pm". Permiso necesario: macOS pedirá acceso de Accesibilidad / Automatización para cada navegador y editor consultado — es normal. Privacidad: los nombres de apps, títulos de ventana y rutas se almacenan localmente en activity.duckdb y nunca se cargan.',
   "settings.activeWindowCurrent": "Ventana actual",
   "settings.activeWindowApp": "Aplicación",
   "settings.activeWindowPath": "Ruta",
@@ -514,7 +514,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "No se detectó ninguna ventana activa",
   "settings.inputActivityToggle": "Seguimiento de la actividad del teclado y el mouse",
   "settings.inputActivityToggleDesc":
-    'Registra cuándo se usaron por última vez el teclado o el ratón, segundo a segundo — nunca qué teclas, nunca posiciones del cursor, nunca contenido. Por qué es útil: distingue "foco profundo" de "lejos del teclado" para que tu puntuación de concentración EEG no se distorsione por las pausas. Permiso necesario: ninguno — usa una API de tiempo de inactividad incorporada en el sistema operativo, sin necesidad de Accesibilidad. Privacidad: solo se almacenan marcas de tiempo, localmente en activity.sqlite, nunca cargadas.',
+    'Registra cuándo se usaron por última vez el teclado o el ratón, segundo a segundo — nunca qué teclas, nunca posiciones del cursor, nunca contenido. Por qué es útil: distingue "foco profundo" de "lejos del teclado" para que tu puntuación de concentración EEG no se distorsione por las pausas. Permiso necesario: ninguno — usa una API de tiempo de inactividad incorporada en el sistema operativo, sin necesidad de Accesibilidad. Privacidad: solo se almacenan marcas de tiempo, localmente en activity.duckdb, nunca cargadas.',
   "settings.inputActivityKeyboard": "Último teclado",
   "settings.inputActivityMouse": "Último ratón",
   "settings.inputActivityNever": "nunca",
@@ -525,16 +525,16 @@ const settings: Record<string, string> = {
     "No se requieren permisos especiales: utiliza una API de tiempo de inactividad incorporada en el sistema operativo que funciona sin acceso de Accesibilidad.",
   "settings.fileActivityToggle": "Rastrear cambios de archivos",
   "settings.fileActivityToggleDesc":
-    'Vigila tus carpetas habituales de desarrollo / documentos (Documentos, Escritorio, Descargas, Projects, Developer, code, src) y registra eventos de creación / modificación / eliminación con marcas de tiempo y rutas. Por qué es útil: te muestra qué archivos guardaste o descargaste realmente durante un bloque de concentración y te permite buscar el historial por "el archivo que edité hacia las 3 pm". Permiso necesario: macOS puede pedir Acceso completo al disco para vigilar algunas carpetas. Privacidad: solo se almacenan rutas y marcas de tiempo de eventos — el contenido de los archivos nunca se lee ni se copia — localmente en activity.sqlite, nunca cargado.',
-  "settings.activityDb": "Almacenado en Activity.sqlite",
+    'Vigila tus carpetas habituales de desarrollo / documentos (Documentos, Escritorio, Descargas, Projects, Developer, code, src) y registra eventos de creación / modificación / eliminación con marcas de tiempo y rutas. Por qué es útil: te muestra qué archivos guardaste o descargaste realmente durante un bloque de concentración y te permite buscar el historial por "el archivo que edité hacia las 3 pm". Permiso necesario: macOS puede pedir Acceso completo al disco para vigilar algunas carpetas. Privacidad: solo se almacenan rutas y marcas de tiempo de eventos — el contenido de los archivos nunca se lee ni se copia — localmente en activity.duckdb, nunca cargado.',
+  "settings.activityDb": "Almacenado en Activity.duckdb",
   "settings.clipboardToggle": "Rastrear actividad del portapapeles",
   "settings.clipboardToggleDesc":
-    "Registra cuándo cambia el portapapeles — qué app copió, el tipo de contenido y su tamaño. El contenido del portapapeles nunca se lee ni se almacena. Por qué es útil: las ráfagas de copiar/pegar son una señal fuerte de cambio de contexto, y combinarlas con el EEG puede mostrar cuándo malabarear fuentes está rompiendo tu concentración. Permiso necesario: macOS pedirá acceso de Automatización para leer los metadatos del portapapeles. Privacidad: solo se almacenan metadatos, localmente en activity.sqlite, nunca cargados. Solo macOS.",
+    "Registra cuándo cambia el portapapeles — qué app copió, el tipo de contenido y su tamaño. El contenido del portapapeles nunca se lee ni se almacena. Por qué es útil: las ráfagas de copiar/pegar son una señal fuerte de cambio de contexto, y combinarlas con el EEG puede mostrar cuándo malabarear fuentes está rompiendo tu concentración. Permiso necesario: macOS pedirá acceso de Automatización para leer los metadatos del portapapeles. Privacidad: solo se almacenan metadatos, localmente en activity.duckdb, nunca cargados. Solo macOS.",
   "settings.screenshotsToggle": "Tomar capturas de pantalla periódicas",
   "settings.locationToggle": "Rastrear ubicación",
   "settings.calendarToggle": "Rastrear eventos del calendario",
   "settings.calendarToggleDesc":
-    "Lee los metadatos de tus eventos próximos y recientes del calendario (título, hora, duración, cantidad de asistentes) para que la app pueda correlacionar caídas de concentración con la densidad de reuniones. Por qué es útil: muestra si reuniones consecutivas están erosionando tus bloques de trabajo profundo. Permiso necesario: macOS mostrará un aviso de acceso al Calendario la primera vez que se consulte. Privacidad: los eventos se leen bajo demanda y solo se guardan recuentos agregados en activity.sqlite, nada se carga.",
+    "Lee los metadatos de tus eventos próximos y recientes del calendario (título, hora, duración, cantidad de asistentes) para que la app pueda correlacionar caídas de concentración con la densidad de reuniones. Por qué es útil: muestra si reuniones consecutivas están erosionando tus bloques de trabajo profundo. Permiso necesario: macOS mostrará un aviso de acceso al Calendario la primera vez que se consulte. Privacidad: los eventos se leen bajo demanda y solo se guardan recuentos agregados en activity.duckdb, nada se carga.",
   "settings.clipboardPermDenied": "Permiso de automatización no concedido.",
   "settings.clipboardPermAction": "Haz clic para abrir Configuración del Sistema y permitir el acceso al portapapeles.",
 

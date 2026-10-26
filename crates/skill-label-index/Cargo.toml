@@ -20,7 +20,6 @@ skill-constants = { path = "../skill-constants" }
 skill-commands  = { path = "../skill-commands" }
 skill-data      = { path = "../skill-data" }
 fast-hnsw  = "1.0.1"
-rusqlite = { workspace = true }
 serde      = { version = "1", features = ["derive"] }
 turbovec   = { version = "1.1.2", optional = true }
 

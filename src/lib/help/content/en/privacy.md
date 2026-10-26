@@ -4,13 +4,13 @@
 # Data Storage
 
 ## All data stays on your device
-Every piece of data {app} records — raw EEG samples (CSV), EEG embeddings (SQLite + HNSW index), text labels, calibration timestamps, logs, and settings — is stored locally in {dataDir}/. No data is uploaded to any cloud service, server, or third party.
+Every piece of data {app} records — raw EEG samples (CSV), EEG embeddings (DuckDB + HNSW index), text labels, calibration timestamps, logs, and settings — is stored locally in {dataDir}/. No data is uploaded to any cloud service, server, or third party.
 
 ## No user accounts
 {app} does not require sign-up, login, or any form of account creation. There are no user identifiers, tokens, or authentication credentials stored or transmitted.
 
 ## Data location
-All files are stored under {dataDir}/ on macOS and Linux. Each recording day gets its own YYYYMMDD subdirectory containing the EEG SQLite database and HNSW vector index. Labels are in {dataDir}/labels.sqlite. Logs are in {dataDir}/logs/. You can delete any of these files at any time.
+All files are stored under {dataDir}/ on macOS and Linux. Each recording day gets its own YYYYMMDD subdirectory containing the EEG DuckDB database and HNSW vector index. Labels are in {dataDir}/labels.duckdb. Logs are in {dataDir}/logs/. You can delete any of these files at any time.
 
 # Network Activity
 
@@ -51,13 +51,13 @@ The HNSW vector index used for similarity search is built and queried entirely o
 # Your Data, Your Control
 
 ## Access
-All your data is in {dataDir}/ in standard formats (CSV, SQLite, binary HNSW). You can read, copy, or process it with any tool.
+All your data is in {dataDir}/ in standard formats (CSV, DuckDB, binary HNSW). You can read, copy, or process it with any tool.
 
 ## Delete
 Delete any file or directory under {dataDir}/ at any time. There are no cloud backups to worry about. Uninstalling the app removes only the application binary — your data in {dataDir}/ is untouched unless you delete it.
 
 ## Export
-CSV recordings and SQLite databases are portable standard formats. Copy them to any machine or import into Python, R, MATLAB, or any analysis tool.
+CSV recordings and DuckDB databases are portable standard formats. Copy them to any machine or import into Python, R, MATLAB, or any analysis tool.
 
 ## Encrypt
 {app} does not encrypt data at rest. If you need disk-level encryption, use your operating system's full-disk encryption (FileVault on macOS, LUKS on Linux).
@@ -65,7 +65,7 @@ CSV recordings and SQLite databases are portable standard formats. Copy them to 
 # Activity Tracking
 
 ## Activity Tracking
-When enabled, NeuroSkill records which application is in the foreground and the last time the keyboard and mouse were used. This data stays entirely on your device in ~/.skill/activity.sqlite — it is never sent to any server, logged remotely, or included in any form of analytics. Active-window tracking captures: application name, executable path, window title, and the Unix timestamp at which that window became active. Keyboard and mouse tracking captures only two timestamps (last keyboard event, last mouse event) — never keystrokes, typed text, cursor coordinates, or click targets. Both features can be independently disabled in Settings → Activity Tracking; disabling a feature immediately stops collection. Existing rows are not deleted automatically, but you can remove them at any time by deleting activity.sqlite.
+When enabled, NeuroSkill records which application is in the foreground and the last time the keyboard and mouse were used. This data stays entirely on your device in ~/.skill/activity.duckdb — it is never sent to any server, logged remotely, or included in any form of analytics. Active-window tracking captures: application name, executable path, window title, and the Unix timestamp at which that window became active. Keyboard and mouse tracking captures only two timestamps (last keyboard event, last mouse event) — never keystrokes, typed text, cursor coordinates, or click targets. Both features can be independently disabled in Settings → Activity Tracking; disabling a feature immediately stops collection. Existing rows are not deleted automatically, but you can remove them at any time by deleting activity.duckdb.
 
 ## Accessibility Permission (macOS)
 On macOS, keyboard and mouse tracking requires the Accessibility permission because it installs a CGEventTap — a system-level hook that intercepts input events. Apple mandates this permission for any app that reads global input. The permission is requested only when the feature is enabled. If you decline or revoke it, the hook fails silently: the rest of the app continues normally and only the input-activity timestamps stay at zero. Active-window tracking (app name/path) does not require Accessibility — it uses AppleScript/osascript which operates within normal app entitlements.
@@ -88,4 +88,4 @@ One optional network request. Update checks, only when you explicitly trigger th
 Fully on-device. GPU inference, signal processing, and search all run locally.
 
 ## Activity tracking is local-only
-Activity tracking is local-only. Window focus and input timestamps are written to activity.sqlite on your device and never leave it.
+Activity tracking is local-only. Window focus and input timestamps are written to activity.duckdb on your device and never leave it.

@@ -18,6 +18,7 @@ rocm    = ["rlx-neutts/rocm"]
 gpu     = ["rlx-neutts/gpu"]
 
 [dependencies]
+bbtree = { workspace = true }
 anyhow      = { workspace = true }
 rlx-neutts  = { workspace = true, features = ["codec", "llama"] }
 hound       = "3"

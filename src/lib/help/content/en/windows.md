@@ -2,7 +2,7 @@
 {app} uses separate windows for specific tasks. Each can be opened from the tray context menu or via a global keyboard shortcut.
 
 ## 🏷  Label Window
-Opened via the tray menu, global shortcut, or the tag button on the main window. Type a free-text label to annotate the current EEG moment (e.g. "meditation", "focused reading"). The label is saved to {dataDir}/labels.sqlite with the exact timestamp range. Submit with Ctrl/⌘+Enter or click Submit. Press Escape to cancel.
+Opened via the tray menu, global shortcut, or the tag button on the main window. Type a free-text label to annotate the current EEG moment (e.g. "meditation", "focused reading"). The label is saved to {dataDir}/labels.duckdb with the exact timestamp range. Submit with Ctrl/⌘+Enter or click Submit. Press Escape to cancel.
 
 ## 🔍  Search Window
 The Search window has three modes — EEG Similarity, Text, and Interactive — each querying your recorded data in a different way.

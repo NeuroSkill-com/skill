@@ -56,7 +56,7 @@ onMount(async () => {
       timeseries = result.timeseries;
     }
   } catch (e1) {
-    // Try SQLite fallback — need start/end UTC from the path
+    // Try the day-store fallback — need start/end UTC from the path
     // Extract date from the csv path to make a rough query
   }
 

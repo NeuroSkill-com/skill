@@ -8,7 +8,7 @@
 //!
 //! ## Storage
 //!
-//! `~/.skill/hooks.sqlite` — a single flat SQLite database that records every
+//! `~/.skill/hooks.duckdb` — a single flat DuckDB database that records every
 //! hook fire.  Each row stores full JSON snapshots of the rule and the trigger
 //! context so the record remains meaningful even after the user changes or
 //! deletes the hook configuration.
@@ -17,11 +17,11 @@
 //!
 //! | column            | type    | notes |
 //! |-------------------|---------|-------|
-//! | `id`              | INTEGER | PRIMARY KEY AUTOINCREMENT |
-//! | `triggered_at_utc`| INTEGER | `YYYYMMDDHHmmss` UTC |
-//! | `hook_json`       | TEXT    | Full copy of `HookRule` at trigger time |
-//! | `trigger_json`    | TEXT    | `HookLastTrigger` + EEG distance details |
-//! | `payload_json`    | TEXT    | What was dispatched (command / WS payload) |
+//! | `id`              | BIGINT  | PRIMARY KEY, from `hook_events_id_seq` |
+//! | `triggered_at_utc`| BIGINT  | `YYYYMMDDHHmmss` UTC |
+//! | `hook_json`       | VARCHAR | Full copy of `HookRule` at trigger time |
+//! | `trigger_json`    | VARCHAR | `HookLastTrigger` + EEG distance details |
+//! | `payload_json`    | VARCHAR | What was dispatched (command / WS payload) |
 
 use std::path::{Path, PathBuf};
 
@@ -52,42 +52,36 @@ pub struct HookFireEntry<'a> {
 
 // ── Main store ────────────────────────────────────────────────────────────────
 
-/// Wrapper around the `hooks.sqlite` audit-log database.
-///
-/// The connection uses WAL mode so concurrent readers (the UI) never block
-/// the embed-worker thread that is writing.
+/// Wrapper around the `hooks.duckdb` audit-log database.
 pub struct HooksLog {
-    conn: rusqlite::Connection,
+    conn: crate::duck::Conn,
     _path: PathBuf,
 }
 
+const SCHEMA: crate::duck::StoreSchema<'static> = crate::duck::StoreSchema {
+    ddl: "
+        CREATE TABLE IF NOT EXISTS hook_events (
+            id                BIGINT  PRIMARY KEY DEFAULT nextval('hook_events_id_seq'),
+            triggered_at_utc  BIGINT  NOT NULL,
+            hook_json         VARCHAR NOT NULL,
+            trigger_json      VARCHAR NOT NULL,
+            payload_json      VARCHAR NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_hook_events_ts ON hook_events (triggered_at_utc);
+    ",
+    import_tables: &["hook_events"],
+    sequences: &[("hook_events_id_seq", "hook_events", "id")],
+};
+
 impl HooksLog {
-    /// Open (or create) `hooks.sqlite` inside `skill_dir`.
+    /// Open (or create) `hooks.duckdb` inside `skill_dir`.
     ///
     /// Returns `None` on failure so callers can continue without logging.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let path = skill_dir.join(skill_constants::HOOKS_LOG_FILE);
-        let conn = rusqlite::Connection::open(&path)
-            .map_err(|e| eprintln!("[hooks_log] open {}: {e}", path.display()))
+        let conn = crate::duck::open_store(&path, &SCHEMA)
+            .map_err(|e| eprintln!("[hooks_log] open {}: {e:#}", path.display()))
             .ok()?;
-
-        crate::util::init_wal_pragmas(&conn);
-
-        let ddl = "
-            CREATE TABLE IF NOT EXISTS hook_events (
-                id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                triggered_at_utc  INTEGER NOT NULL,
-                hook_json         TEXT    NOT NULL,
-                trigger_json      TEXT    NOT NULL,
-                payload_json      TEXT    NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_hook_events_ts
-                ON hook_events (triggered_at_utc DESC);
-        ";
-        conn.execute_batch(ddl)
-            .map_err(|e| eprintln!("[hooks_log] DDL: {e}"))
-            .ok()?;
-
         Some(Self { conn, _path: path })
     }
 
@@ -95,9 +89,9 @@ impl HooksLog {
     pub fn record(&self, entry: &HookFireEntry<'_>) {
         let r = self.conn.execute(
             "INSERT INTO hook_events
-             (triggered_at_utc, hook_json, trigger_json, payload_json)
-             VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![
+             (id, triggered_at_utc, hook_json, trigger_json, payload_json)
+             VALUES (nextval('hook_events_id_seq'), ?1, ?2, ?3, ?4)",
+            crate::duck::params![
                 entry.triggered_at_utc,
                 entry.hook_json,
                 entry.trigger_json,
@@ -124,7 +118,7 @@ impl HooksLog {
             }
         };
 
-        stmt.query_map(rusqlite::params![limit, offset], |row| {
+        stmt.query_map(crate::duck::params![limit, offset], |row| {
             Ok(HookLogRow {
                 id: row.get(0)?,
                 triggered_at_utc: row.get(1)?,

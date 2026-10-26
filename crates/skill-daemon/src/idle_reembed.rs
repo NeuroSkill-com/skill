@@ -365,17 +365,12 @@ fn count_missing_embeddings(skill_dir: &std::path::Path) -> i64 {
         if !path.is_dir() {
             continue;
         }
-        let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
         let n: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4",
+                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR octet_length(eeg_embedding) < 4",
                 [],
                 |r| r.get(0),
             )

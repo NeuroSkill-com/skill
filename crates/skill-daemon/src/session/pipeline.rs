@@ -21,24 +21,14 @@ use crate::embed::{EmbedWorkerHandle, EpochAccumulator};
 // ── Epoch metrics store ──────────────────────────────────────────────────────
 
 pub(crate) struct EpochStore {
-    conn: rusqlite::Connection,
+    conn: skill_data::duck::Conn,
 }
 
 impl EpochStore {
     pub(crate) fn open(day_dir: &Path) -> Option<Self> {
-        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
-        let conn = rusqlite::Connection::open(&db_path).ok()?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS embeddings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL,
-                device_id TEXT, device_name TEXT, hnsw_id INTEGER DEFAULT 0,
-                eeg_embedding BLOB, label TEXT, extra_embedding BLOB,
-                ppg_ambient REAL, ppg_infrared REAL, ppg_red REAL, metrics_json TEXT);",
-        )
-        .ok()?;
-        // Same additive migration as the day store — this opens the very same
-        // table, so both writers must agree on the canonical column.
-        skill_data::util::migrate_embeddings_unix_ms(&conn);
+        // The same day store the embed worker writes; schema and import are
+        // shared through skill_data::eeg_store (and so is the instance).
+        let conn = skill_data::eeg_store::open(day_dir).ok()?;
         Some(Self { conn })
     }
 
@@ -48,7 +38,7 @@ impl EpochStore {
         let _ = self.conn.execute(
             "INSERT INTO embeddings (timestamp, unix_ms, device_name, hnsw_id, eeg_embedding, metrics_json)
              VALUES (?1, ?2, ?3, 0, ?4, ?5)",
-            rusqlite::params![
+            skill_data::duck::params![
                 ts_ms,
                 skill_data::util::epoch_ts_to_unix_ms(ts_ms),
                 device_name,
@@ -427,7 +417,7 @@ mod tests {
     #[test]
     fn epoch_store_open_nonexistent_dir_returns_none() {
         // open should fail gracefully (return None) for an invalid path
-        // Actually rusqlite will create the file, so this should succeed for any writable path
+        // Opening creates the day store, so this succeeds for any writable path
         // Test with a valid tempdir instead
         let dir = tempfile::tempdir().unwrap();
         let store = EpochStore::open(dir.path());

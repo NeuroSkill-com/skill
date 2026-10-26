@@ -101,7 +101,7 @@ pub fn list_local_session_days(skill_dir: &Path, tz_offset_secs: i64) -> Vec<Loc
         .as_secs();
     let today = utc_to_local_date_key(now_secs, tz_offset_secs);
 
-    let mut seen = std::collections::BTreeSet::new();
+    let mut seen = bbtree::unsync::BBTreeSet::new();
     for dir in &utc_dirs {
         if dir.len() != 8 {
             continue;

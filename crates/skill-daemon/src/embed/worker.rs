@@ -283,10 +283,7 @@ impl HookMatcher {
             "cognitive" => m.cognitive_load >= 55.0 || m.engagement >= 60.0,
             "emotional" => m.stress_index >= 55.0 || m.mood <= 45.0 || m.relaxation <= 35.0,
             "physical" => {
-                m.drowsiness >= 55.0
-                    || m.headache_index >= 45.0
-                    || m.migraine_index >= 45.0
-                    || (m.hr > 0.0 && (m.hr >= 105.0 || m.hr <= 52.0))
+                m.drowsiness >= 55.0 || m.migraine_index >= 45.0 || (m.hr > 0.0 && (m.hr >= 105.0 || m.hr <= 52.0))
             }
             _ => true,
         }

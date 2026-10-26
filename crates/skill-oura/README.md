@@ -5,7 +5,7 @@ Oura Ring V2 Cloud API integration for NeuroSkill.
 Fetches sleep, activity, readiness, heart rate, SpO2, workouts, and mindfulness
 data from the [Oura V2 REST API](https://cloud.ouraring.com/v2/docs) and converts
 it into the unified `HealthSyncPayload` format so it flows through the same
-storage and query pipeline as Apple HealthKit data (`health.sqlite`).
+storage and query pipeline as Apple HealthKit data (`health.duckdb`).
 
 ## Supported data
 

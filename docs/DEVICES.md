@@ -101,7 +101,7 @@ rather than by name — the same mechanism Vital Neuro uses.
 ### Oura: cloud-free history sync
 
 **Settings → Devices → Device API → Sync from ring** drains the history the ring
-has stored and writes it to `health.sqlite`, incrementally — a cursor records
+has stored and writes it to `health.duckdb`, incrementally — a cursor records
 where the last sync stopped. The daemon command is `oura_ring_sync`
 (`{"reset": true}` re-reads everything the ring still holds).
 

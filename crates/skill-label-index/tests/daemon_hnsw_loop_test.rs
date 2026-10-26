@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! End-to-end test: create labels.sqlite → embed → insert into HNSW → search → rebuild.
+//! End-to-end test: create the label store → embed → insert into HNSW → search → rebuild.
 //!
 //! Validates the full lifecycle that the daemon drives:
 //! 1. Create a fresh `LabelIndexState`
-//! 2. Create `labels.sqlite` with the full schema
+//! 2. Create the label store (`labels.duckdb`) with the full schema
 //! 3. Insert labels with text embeddings (synthetic vectors)
 //! 4. Insert those into the HNSW index via `insert_label`
 //! 5. Search by text embedding → verify correct results
 //! 6. Rebuild from disk → verify indices survive
 //! 7. Persist to disk → reload → verify search still works
 
-use skill_constants::LABELS_FILE;
 use skill_label_index::{insert_label, rebuild, search_by_context_vec, search_by_text_vec, LabelIndexState};
 use std::path::Path;
 use tempfile::tempdir;
@@ -18,27 +17,9 @@ use tempfile::tempdir;
 const DIM: usize = 8;
 const HNSW_EF: usize = skill_constants::HNSW_EF_CONSTRUCTION;
 
-/// Create the `labels.sqlite` database with the full daemon schema.
-fn create_labels_db(skill_dir: &Path) -> rusqlite::Connection {
-    let db_path = skill_dir.join(LABELS_FILE);
-    let conn = rusqlite::Connection::open(&db_path).expect("open labels.sqlite");
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS labels (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            text              TEXT NOT NULL,
-            context           TEXT DEFAULT '',
-            eeg_start         INTEGER NOT NULL DEFAULT 0,
-            eeg_end           INTEGER NOT NULL DEFAULT 0,
-            wall_start        INTEGER NOT NULL DEFAULT 0,
-            wall_end          INTEGER NOT NULL DEFAULT 0,
-            created_at        INTEGER NOT NULL DEFAULT 0,
-            text_embedding    BLOB,
-            context_embedding BLOB,
-            embedding_model   TEXT
-        );",
-    )
-    .expect("create labels table");
-    conn
+/// Create the label store with the full daemon schema.
+fn create_labels_db(skill_dir: &Path) -> skill_data::duck::Conn {
+    skill_data::label_store::LabelStore::connect(skill_dir).expect("open label store")
 }
 
 fn f32_to_blob(v: &[f32]) -> Vec<u8> {
@@ -47,7 +28,7 @@ fn f32_to_blob(v: &[f32]) -> Vec<u8> {
 
 /// Insert a label row with text + context embeddings into the database.
 fn insert_label_row(
-    conn: &rusqlite::Connection,
+    conn: &skill_data::duck::Connection,
     text: &str,
     context: &str,
     text_emb: &[f32],
@@ -58,11 +39,12 @@ fn insert_label_row(
     let now = eeg_start;
     let text_blob = f32_to_blob(text_emb);
     let ctx_blob = f32_to_blob(ctx_emb);
-    conn.execute(
-        "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
+    conn.query_row(
+        "INSERT INTO labels (text, context, eeg_start, eeg_end, label_start, label_end,
                              created_at, text_embedding, context_embedding, embedding_model)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'test-model')",
-        rusqlite::params![
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'test-model')
+         RETURNING id",
+        skill_data::duck::params![
             text,
             context,
             eeg_start as i64,
@@ -73,9 +55,9 @@ fn insert_label_row(
             text_blob,
             ctx_blob,
         ],
+        |r| r.get(0),
     )
-    .expect("insert label row");
-    conn.last_insert_rowid()
+    .expect("insert label row")
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

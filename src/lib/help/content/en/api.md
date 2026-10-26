@@ -36,7 +36,7 @@ Compares two time ranges by returning aggregated band-power metrics (relative po
 ## sessions
 _(none)_
 
-Lists all embedding sessions discovered from the daily eeg.sqlite databases. Sessions are contiguous recording ranges (gap > 2 min = new session). Returns newest first.
+Lists all embedding sessions discovered from the daily eeg.duckdb databases. Sessions are contiguous recording ranges (gap > 2 min = new session). Returns newest first.
 
 ## sleep
 start_utc, end_utc (u64, required)

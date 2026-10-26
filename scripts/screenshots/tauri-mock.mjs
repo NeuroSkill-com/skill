@@ -139,7 +139,7 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
       meditation: 62, cognitive_load: 45, drowsiness: 15,
       blink_count: 180, blink_rate: 15,
       head_pitch: 5, head_roll: 2, stillness: 85, nod_count: 12, shake_count: 3,
-      headache_index: 12, migraine_index: 8,
+      migraine_index: 8,
       consciousness_lzc: 72, consciousness_wakefulness: 85, consciousness_integration: 68,
     }),
 

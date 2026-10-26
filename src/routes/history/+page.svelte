@@ -33,6 +33,7 @@ import {
   pad,
   setupHiDpiCanvas,
 } from "$lib/format";
+import BidsExportDialog from "$lib/history/BidsExportDialog.svelte";
 import HistoryCalendar from "$lib/history/HistoryCalendar.svelte";
 import HistoryStatsBar from "$lib/history/HistoryStatsBar.svelte";
 import {
@@ -111,6 +112,19 @@ let historyStats = $state<HistoryStatsData | null>(null);
 // ── Per-session UI state ────────────────────────────────────────────────
 let expanded = $state<Record<string, boolean>>({});
 let confirmDelete = $state<string | null>(null);
+
+// BIDS export dialog: opened for the current day, or for one session.
+let bidsOpen = $state(false);
+let bidsCsvPath = $state<string | null>(null);
+let bidsStart = $state(0);
+let bidsEnd = $state(0);
+function openBidsExport(session: SessionEntry | null) {
+  const { startSec, endSec } = dayBoundsFor(currentLocalKey ?? "");
+  bidsCsvPath = session?.csv_path ?? null;
+  bidsStart = session?.session_start_utc ?? startSec;
+  bidsEnd = session?.session_end_utc ?? (session ? Math.floor(Date.now() / 1000) : endSec);
+  bidsOpen = true;
+}
 let hoveredSession = $state<string | null>(null);
 /** Currently hovered label id - drives exact-match and proximity highlighting. */
 let hoveredLabelId = $state<number | null>(null);
@@ -167,7 +181,7 @@ let metricsCache = $state<Record<string, SessionMetrics | "loading" | "none">>({
 let tsCache = $state<Record<string, EpochRow[] | "loading">>({});
 /** GPS track per csv_path - "loading" while IPC is in flight; [] when no data. */
 let locationCache = $state<Record<string, GpsPoint[] | "loading">>({});
-/** HNSW+SQLite epoch count per csv_path. */
+/** HNSW + day-store epoch count per csv_path. */
 let embedCountCache = $state<Record<string, number | "loading">>({});
 /** File activity during each session — files worked on, focus sessions, meetings. */
 let activityCache = $state<Record<string, SessionFileActivity | "loading">>({});
@@ -349,7 +363,7 @@ async function loadMetricsBatch(csvPaths: string[]) {
         tsCache[p] = result.timeseries;
         writeMetricsCache(p, result);
       } else {
-        // Fallback: try SQLite-based loading for sessions without _metrics.csv
+        // Fallback: load from the day store for sessions without _metrics.csv
         void loadMetricsFallback(p);
       }
     }
@@ -358,7 +372,7 @@ async function loadMetricsBatch(csvPaths: string[]) {
   }
 }
 
-/** Fallback for a single session without _metrics.csv - queries SQLite. */
+/** Fallback for a single session without _metrics.csv - queries the day store. */
 async function loadMetricsFallback(csvPath: string) {
   const session = sessionRegistry.get(csvPath);
   if (!session?.session_start_utc || !session?.session_end_utc) {
@@ -1647,6 +1661,11 @@ useWindowTitle("window.title.history");
               <Spinner size="w-2.5 h-2.5" class="text-muted-foreground/40" />
             {/if}
             <Separator class="flex-1 bg-border dark:bg-white/[0.06]" />
+            {#if sessions.length > 0}
+              <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2" onclick={() => openBidsExport(null)}>
+                {t("history.bids.button")}
+              </Button>
+            {/if}
           </div>
 
           {#if dayCalendarEvents.length > 0}
@@ -2076,12 +2095,12 @@ useWindowTitle("window.title.history");
                       </div>
                     {/if}
 
-                    <!-- HNSW / SQLite embedding count -->
+                    <!-- HNSW / day-store embedding count -->
                     {#if embedCountCache[session.csv_path] !== undefined && embedCountCache[session.csv_path] !== "loading" && (embedCountCache[session.csv_path] as number) > 0}
                       <div class="flex items-center gap-1.5">
-                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">Embeddings</span>
+                        <span class="text-ui-2xs font-semibold tracking-widest uppercase text-muted-foreground/50">{t("history.embeddings")}</span>
                         <span class="text-ui-base font-mono tabular-nums text-foreground">{(embedCountCache[session.csv_path] as number).toLocaleString()}</span>
-                        <span class="text-ui-2xs text-muted-foreground/40">epochs in HNSW/SQLite</span>
+                        <span class="text-ui-2xs text-muted-foreground/40">{t("history.epochsIndexed")}</span>
                       </div>
                     {/if}
 
@@ -2261,6 +2280,10 @@ useWindowTitle("window.title.history");
                           {t("history.addLabel")}
                         </Button>
                         <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
+                                onclick={(e: MouseEvent) => { e.stopPropagation(); openBidsExport(session); }}>
+                          {t("history.bids.button")}
+                        </Button>
+                        <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_session_window", { csvPath: session.csv_path }); }}>
                           <IconExternalLink class="w-3 h-3 mr-1" />
                           {t("history.popOut")}
@@ -2362,3 +2385,15 @@ useWindowTitle("window.title.history");
   <DisclaimerFooter />
 </div>
 </main>
+
+{#if currentLocalKey}
+  {@const day = dayBoundsFor(currentLocalKey)}
+  <BidsExportDialog
+    bind:open={bidsOpen}
+    startUtc={bidsStart}
+    endUtc={bidsEnd}
+    dayStartUtc={day.startSec}
+    dayEndUtc={day.endSec}
+    csvPath={bidsCsvPath}
+  />
+{/if}

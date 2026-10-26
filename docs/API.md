@@ -470,7 +470,7 @@ The daemon allows all origins (`Access-Control-Allow-Origin: *`) for local devel
 - **UMAP**: 5 minutes (GPU computation can take 30+ seconds)
 - **LLM chat**: 5 minutes (generation can be slow on CPU)
 - **Parallel requests**: The daemon uses `tokio` async runtime — all endpoints are non-blocking. CPU-heavy work (search, UMAP, reembed) runs on `spawn_blocking` threads.
-- **SQLite**: Read-only connections for queries, 2-second busy timeout for writes. No global lock — concurrent reads across different day databases.
+- **DuckDB**: the daemon keeps one DuckDB instance per database file and hands out connections to it, so concurrent requests share the instance instead of contending for the file lock. Per-day EEG stores are opened on demand; idle ones beyond the 8 most recent are closed. DuckDB allows one writing process per file, so external tools must open a store only while the daemon is stopped.
 
 ---
 
@@ -478,7 +478,7 @@ The daemon allows all origins (`Access-Control-Allow-Origin: *`) for local devel
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Tauri App   │────▶│ skill-daemon │────▶│ SQLite (per-day)│
+│  Tauri App   │────▶│ skill-daemon │────▶│ DuckDB (per-day)│
 │  (WebView)   │◀────│  (HTTP/WS)   │◀────│  HNSW indices   │
 └──────────────┘     └──────────────┘     └─────────────────┘
        │                    │

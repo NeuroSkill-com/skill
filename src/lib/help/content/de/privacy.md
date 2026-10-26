@@ -4,7 +4,7 @@
 # Datenspeicherung
 
 ## Alle Daten bleiben auf Ihrem Gerät
-Alle von {app} aufgezeichneten Daten — rohe EEG-Samples (CSV), EEG-Embeddings (SQLite + HNSW-Index), Text-Labels, Kalibrierungszeitstempel, Logs und Einstellungen — werden lokal in {dataDir}/ gespeichert. Keine Daten werden an einen Cloud-Dienst, Server oder Drittanbieter hochgeladen.
+Alle von {app} aufgezeichneten Daten — rohe EEG-Samples (CSV), EEG-Embeddings (DuckDB + HNSW-Index), Text-Labels, Kalibrierungszeitstempel, Logs und Einstellungen — werden lokal in {dataDir}/ gespeichert. Keine Daten werden an einen Cloud-Dienst, Server oder Drittanbieter hochgeladen.
 
 ## Keine Benutzerkonten
 {app} erfordert keine Registrierung, Anmeldung oder Kontoerstellung.
@@ -51,13 +51,13 @@ Der HNSW-Vektor-Index wird vollständig auf Ihrem Gerät erstellt und abgefragt.
 # Ihre Daten, Ihre Kontrolle
 
 ## Zugriff
-Alle Ihre Daten sind in {dataDir}/ in Standardformaten (CSV, SQLite, binärer HNSW).
+Alle Ihre Daten sind in {dataDir}/ in Standardformaten (CSV, DuckDB, binärer HNSW).
 
 ## Löschen
 Löschen Sie jede Datei unter {dataDir}/ jederzeit. Keine Cloud-Backups.
 
 ## Exportieren
-CSV-Aufnahmen und SQLite-Datenbanken sind portable Standardformate.
+CSV-Aufnahmen und DuckDB-Datenbanken sind portable Standardformate.
 
 ## Verschlüsselung
 {app} verschlüsselt Daten nicht im Ruhezustand. Nutzen Sie die Festplattenverschlüsselung Ihres Betriebssystems.
@@ -65,7 +65,7 @@ CSV-Aufnahmen und SQLite-Datenbanken sind portable Standardformate.
 # Aktivitätsverfolgung
 
 ## Aktivitätsverfolgung
-Wenn aktiviert, zeichnet NeuroSkill auf, welche Anwendung im Vordergrund ist und wann Tastatur und Maus zuletzt benutzt wurden. Diese Daten verbleiben vollständig auf Ihrem Gerät in ~/.skill/activity.sqlite — sie werden niemals an einen Server gesendet, nicht remote protokolliert und nicht in Analysen einbezogen. Aktive-Fenster-Verfolgung erfasst: App-Name, ausführbarer Pfad, Fenstertitel und Unix-Zeitstempel. Tastatur- und Mausverfolgung erfasst nur zwei Zeitstempel — niemals Tastenanschläge, eingegebenen Text, Cursor-Koordinaten oder Klickziele. Beide Funktionen können in Einstellungen → Aktivitätsverfolgung unabhängig deaktiviert werden.
+Wenn aktiviert, zeichnet NeuroSkill auf, welche Anwendung im Vordergrund ist und wann Tastatur und Maus zuletzt benutzt wurden. Diese Daten verbleiben vollständig auf Ihrem Gerät in ~/.skill/activity.duckdb — sie werden niemals an einen Server gesendet, nicht remote protokolliert und nicht in Analysen einbezogen. Aktive-Fenster-Verfolgung erfasst: App-Name, ausführbarer Pfad, Fenstertitel und Unix-Zeitstempel. Tastatur- und Mausverfolgung erfasst nur zwei Zeitstempel — niemals Tastenanschläge, eingegebenen Text, Cursor-Koordinaten oder Klickziele. Beide Funktionen können in Einstellungen → Aktivitätsverfolgung unabhängig deaktiviert werden.
 
 ## Bedienungshilfen-Berechtigung (macOS)
 Unter macOS erfordert die Tastatur- und Mausverfolgung die Bedienungshilfen-Berechtigung, da sie einen CGEventTap installiert. Apple verlangt diese Berechtigung für jede App, die globale Eingaben liest. Ohne sie schlägt der Hook lautlos fehl: Die App funktioniert weiterhin normal, nur die Input-Zeitstempel bleiben bei null. Aktive-Fenster-Verfolgung verwendet osascript und benötigt keine Bedienungshilfen-Berechtigung.
@@ -88,4 +88,4 @@ Eine optionale Netzwerkanfrage. Update-Prüfungen nur auf Wunsch.
 Vollständig auf dem Gerät. GPU-Inferenz, Signalverarbeitung und Suche lokal.
 
 ## Activity tracking is local-only
-Aktivitätsverfolgung nur lokal. Fensterfokus und Input-Zeitstempel werden in activity.sqlite auf Ihrem Gerät gespeichert und verlassen es nie.
+Aktivitätsverfolgung nur lokal. Fensterfokus und Input-Zeitstempel werden in activity.duckdb auf Ihrem Gerät gespeichert und verlassen es nie.

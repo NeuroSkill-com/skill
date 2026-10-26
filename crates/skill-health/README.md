@@ -2,7 +2,7 @@
 
 Apple HealthKit data store for NeuroSkill.
 
-Stores data pushed from a companion iOS app over the HTTP/WS API into a local SQLite database (`health.sqlite`).
+Stores data pushed from a companion iOS app over the HTTP/WS API into a local DuckDB database (`health.duckdb`).
 
 ## Tables
 
@@ -56,7 +56,7 @@ Fixes are deduplicated by `(source_id, timestamp)` — the same sync payload can
 
 ## Dependencies
 
-- `rusqlite` (bundled SQLite)
+- `skill-db` (bundled DuckDB)
 - `serde` / `serde_json`
 
 Zero Tauri dependencies — pure Rust library.

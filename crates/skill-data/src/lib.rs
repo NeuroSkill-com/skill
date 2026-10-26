@@ -13,6 +13,7 @@
 //! - **gpu_stats** — GPU hardware info queries
 //! - **ppg_analysis** — PPG/heart-rate signal analysis
 //! - **dnd** — Do Not Disturb platform automation
+//! - **duck** — DuckDB instance registry + one-time SQLite import
 //! - **device** — BLE device types
 //! - **util** — shared utilities (MutexExt, date_dirs, UTC formatters, open_readonly)
 
@@ -21,7 +22,10 @@ pub mod activity_store;
 pub mod ansi;
 pub mod device;
 pub mod dnd;
+/// DuckDB foundation (instance registry, SQLite import) — see `skill-db`.
+pub use skill_db as duck;
 pub mod eeg_scores;
+pub mod eeg_store;
 pub mod error;
 pub mod gpu_stats;
 pub mod health_store;

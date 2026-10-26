@@ -11,14 +11,14 @@
 //!     │       load every eeg_embeddings.hnsw (read-only)
 //!     │
 //!     ├─ for each day that overlaps [start_utc, end_utc]:
-//!     │       query eeg.sqlite → (timestamp, hnsw_id, embedding BLOB)
+//!     │       query eeg.duckdb → (timestamp, hnsw_id, embedding BLOB)
 //!     │
 //!     ├─ for each query embedding:
 //!     │       search ALL loaded HNSW indices → Vec<(hnsw_id, timestamp, distance)>
 //!     │       keep top-k by distance
 //!     │
 //!     └─ for each neighbor:
-//!             lookup device info from the matching day's eeg.sqlite (by hnsw_id)
+//!             lookup device info from the matching day's eeg.duckdb (by hnsw_id)
 //!             lookup labels.sqlite WHERE eeg_start ≤ neighbor_unix ≤ eeg_end
 //! ```
 //!
@@ -29,10 +29,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
-use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use skill_data::duck::params;
 
-use skill_constants::{hnsw_index_file_for, HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
+use skill_constants::{hnsw_index_file_for, HNSW_INDEX_FILE, LABELS_FILE};
 
 pub mod graph;
 pub use graph::{dot_edge_label, dot_esc, dot_node_label, generate_dot, generate_svg, generate_svg_3d, SvgLabels};
@@ -97,9 +97,7 @@ pub struct NeighborMetrics {
     pub rel_beta: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rel_theta: Option<f64>,
-    // Headache / Migraine correlate indices
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub headache_index: Option<f64>,
+    // Migraine correlate index
     #[serde(skip_serializing_if = "Option::is_none")]
     pub migraine_index: Option<f64>,
     // Consciousness metrics
@@ -255,35 +253,41 @@ fn read_embeddings_in_range(db_path: &Path, start_utc: u64, end_utc: u64) -> Vec
     read_embeddings_in_range_filtered(db_path, start_utc, end_utc, None)
 }
 
+/// Connection to the day store whose file is `db_path` (`YYYYMMDD/eeg.duckdb`).
+fn open_day(db_path: &Path) -> Option<skill_data::duck::Conn> {
+    skill_data::eeg_store::open_existing(db_path.parent()?)
+}
+
+/// Connection to the label store whose file is `labels_db`.
+fn open_labels(labels_db: &Path) -> Option<skill_data::duck::Conn> {
+    skill_data::label_store::LabelStore::connect(labels_db.parent()?)
+}
+
 fn read_embeddings_in_range_filtered(
     db_path: &Path,
     start_utc: u64,
     end_utc: u64,
     device_filter: Option<&str>,
 ) -> Vec<RawEmb> {
-    let conn = match skill_data::util::open_readonly(db_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("[search] open {}: {e}", db_path.display());
-            return vec![];
-        }
+    let Some(conn) = open_day(db_path) else {
+        return vec![];
     };
 
     let r = skill_data::util::DualTimestampRange::from_unix_secs(start_utc, end_utc);
     let ts_where = skill_data::util::DualTimestampRange::WHERE_CLAUSE;
 
-    let (sql, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(dev) = device_filter {
+    let (sql, params): (String, Vec<Box<dyn skill_data::duck::ToSql>>) = if let Some(dev) = device_filter {
         (
             format!(
                 "SELECT hnsw_id, timestamp, eeg_embedding \
                  FROM embeddings \
                  WHERE ({ts_where}) \
-                   AND length(eeg_embedding) >= 4 \
+                   AND octet_length(eeg_embedding) >= 4 \
                    AND device_name = ?7 \
                  ORDER BY timestamp"
             ),
             vec![
-                Box::new(r.unix_ms_start) as Box<dyn rusqlite::types::ToSql>,
+                Box::new(r.unix_ms_start) as Box<dyn skill_data::duck::ToSql>,
                 Box::new(r.unix_ms_end),
                 Box::new(r.dt14_start),
                 Box::new(r.dt14_end),
@@ -298,11 +302,11 @@ fn read_embeddings_in_range_filtered(
                 "SELECT hnsw_id, timestamp, eeg_embedding \
                  FROM embeddings \
                  WHERE ({ts_where}) \
-                   AND length(eeg_embedding) >= 4 \
+                   AND octet_length(eeg_embedding) >= 4 \
                  ORDER BY timestamp"
             ),
             vec![
-                Box::new(r.unix_ms_start) as Box<dyn rusqlite::types::ToSql>,
+                Box::new(r.unix_ms_start) as Box<dyn skill_data::duck::ToSql>,
                 Box::new(r.unix_ms_end),
                 Box::new(r.dt14_start),
                 Box::new(r.dt14_end),
@@ -320,7 +324,7 @@ fn read_embeddings_in_range_filtered(
         }
     };
 
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn skill_data::duck::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     stmt.query_map(param_refs.as_slice(), |row| {
         let hnsw_id: i64 = row.get(0)?;
         let timestamp: i64 = row.get(1)?;
@@ -369,7 +373,7 @@ fn ts_ms_to_unix(ts: i64) -> u64 {
 /// Look up a row in `db_path` by its `YYYYMMDDHHmmss` timestamp.
 /// Returns `(hnsw_id, device_id, device_name)`.
 fn get_embedding_by_ts(db_path: &Path, timestamp: i64) -> (i64, Option<String>, Option<String>) {
-    let Ok(conn) = skill_data::util::open_readonly(db_path) else {
+    let Some(conn) = open_day(db_path) else {
         return (0, None, None);
     };
 
@@ -390,27 +394,26 @@ fn get_embedding_by_ts(db_path: &Path, timestamp: i64) -> (i64, Option<String>, 
 
 /// Fetch key EEG metrics for a row identified by its `YYYYMMDDHHmmss` timestamp.
 fn get_embedding_metrics_by_ts(db_path: &Path, timestamp: i64) -> Option<NeighborMetrics> {
-    let conn = skill_data::util::open_readonly(db_path).ok()?;
+    let conn = open_day(db_path)?;
 
     conn.query_row(
-        "SELECT json_extract(metrics_json, '$.relaxation_score'),
-                json_extract(metrics_json, '$.engagement_score'),
-                json_extract(metrics_json, '$.faa'),
-                json_extract(metrics_json, '$.tar'),
-                json_extract(metrics_json, '$.mood'),
-                json_extract(metrics_json, '$.meditation'),
-                json_extract(metrics_json, '$.cognitive_load'),
-                json_extract(metrics_json, '$.drowsiness'),
-                json_extract(metrics_json, '$.hr'),
-                json_extract(metrics_json, '$.snr'),
-                json_extract(metrics_json, '$.rel_alpha'),
-                json_extract(metrics_json, '$.rel_beta'),
-                json_extract(metrics_json, '$.rel_theta'),
-                json_extract(metrics_json, '$.headache_index'),
-                json_extract(metrics_json, '$.migraine_index'),
-                json_extract(metrics_json, '$.consciousness_lzc'),
-                json_extract(metrics_json, '$.consciousness_wakefulness'),
-                json_extract(metrics_json, '$.consciousness_integration')
+        "SELECT TRY_CAST(json_extract_string(metrics_json, '$.relaxation_score') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.engagement_score') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.faa') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.tar') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.mood') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.meditation') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.cognitive_load') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.drowsiness') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.hr') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.snr') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.rel_alpha') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.rel_beta') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.rel_theta') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.migraine_index') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.consciousness_lzc') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.consciousness_wakefulness') AS DOUBLE),
+                TRY_CAST(json_extract_string(metrics_json, '$.consciousness_integration') AS DOUBLE)
          FROM embeddings WHERE timestamp = ?1 LIMIT 1",
         params![timestamp],
         |row| {
@@ -429,20 +432,19 @@ fn get_embedding_metrics_by_ts(db_path: &Path, timestamp: i64) -> Option<Neighbo
                 rel_alpha: g(10),
                 rel_beta: g(11),
                 rel_theta: g(12),
-                headache_index: g(13),
-                migraine_index: g(14),
-                consciousness_lzc: g(15),
-                consciousness_wakefulness: g(16),
-                consciousness_integration: g(17),
+                migraine_index: g(13),
+                consciousness_lzc: g(14),
+                consciousness_wakefulness: g(15),
+                consciousness_integration: g(16),
             })
         },
     )
     .ok()
 }
 
-/// Fetch all labels from `labels.sqlite` whose EEG window contains `ts_unix`.
+/// Fetch all labels from the label store whose EEG window contains `ts_unix`.
 pub fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
-    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+    let Some(conn) = open_labels(labels_db) else {
         return vec![];
     };
 
@@ -509,8 +511,8 @@ pub fn search_embeddings_in_range_for(
     // Store index into `date_dirs` to avoid cloning String/PathBuf per embedding.
     let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
     for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
-        let db_path = dir.join(SQLITE_FILE);
-        if !db_path.exists() {
+        let db_path = skill_data::eeg_store::db_path(dir);
+        if !skill_data::eeg_store::exists(dir) {
             continue;
         }
         let embs = read_embeddings_in_range(&db_path, start_utc, end_utc);
@@ -592,11 +594,11 @@ pub fn search_embeddings_in_range_for(
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
         for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
             let neighbor_unix = ts_ms_to_unix(neighbor_ts);
-            let db_path = dir.join(SQLITE_FILE);
+            let db_path = skill_data::eeg_store::db_path(&dir);
 
-            let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
+            let (hnsw_id, device_id, device_name, metrics) = if skill_data::eeg_store::exists(&dir) {
                 // Always hydrate by timestamp to stay robust when a day index was
-                // rebuilt (internal HNSW ids can diverge from SQLite ids).
+                // rebuilt (internal HNSW ids can diverge from day-store ids).
                 let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
                 let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
                 let resolved_hid = if hid > 0 { hid as usize } else { candidate_hnsw_id };
@@ -605,7 +607,7 @@ pub fn search_embeddings_in_range_for(
                 (candidate_hnsw_id, None, None, None)
             };
 
-            let labels = if labels_db.exists() {
+            let labels = if skill_data::label_store::LabelStore::exists(skill_dir) {
                 get_labels_for(&labels_db, neighbor_unix)
             } else {
                 vec![]
@@ -711,8 +713,8 @@ pub fn stream_search_inner_for(
     // Store index into `date_dirs` to avoid cloning String/PathBuf per embedding.
     let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
     for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
-        let db_path = dir.join(SQLITE_FILE);
-        if !db_path.exists() {
+        let db_path = skill_data::eeg_store::db_path(dir);
+        if !skill_data::eeg_store::exists(dir) {
             continue;
         }
         let embs = read_embeddings_in_range_filtered(&db_path, start_utc, end_utc, device_filter);
@@ -770,11 +772,11 @@ pub fn stream_search_inner_for(
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
         for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
             let neighbor_unix = ts_ms_to_unix(neighbor_ts);
-            let db_path = dir.join(SQLITE_FILE);
+            let db_path = skill_data::eeg_store::db_path(&dir);
 
-            let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
+            let (hnsw_id, device_id, device_name, metrics) = if skill_data::eeg_store::exists(&dir) {
                 // Always hydrate by timestamp to stay robust when a day index was
-                // rebuilt (internal HNSW ids can diverge from SQLite ids).
+                // rebuilt (internal HNSW ids can diverge from day-store ids).
                 let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
                 let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
                 let resolved_hid = if hid > 0 { hid as usize } else { candidate_hnsw_id };
@@ -783,7 +785,7 @@ pub fn stream_search_inner_for(
                 (candidate_hnsw_id, None, None, None)
             };
 
-            let labels = if labels_db.exists() {
+            let labels = if skill_data::label_store::LabelStore::exists(skill_dir) {
                 get_labels_for(&labels_db, neighbor_unix)
             } else {
                 vec![]
@@ -1028,7 +1030,7 @@ pub struct InteractiveSearchResult {
 }
 
 pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<LabelEntry> {
-    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+    let Some(conn) = open_labels(labels_db) else {
         return vec![];
     };
 
@@ -1069,7 +1071,7 @@ pub fn get_labels_near_batch(labels_db: &Path, timestamps: &[u64], window_secs: 
     if timestamps.is_empty() {
         return vec![];
     }
-    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+    let Some(conn) = open_labels(labels_db) else {
         return vec![];
     };
     let lo = timestamps
@@ -1119,7 +1121,7 @@ pub fn get_labels_near_batch(labels_db: &Path, timestamps: &[u64], window_secs: 
 
 /// Fetch the `text_embedding` BLOB for one label (read-only, no metrics).
 pub fn get_found_label_embedding(labels_db: &Path, label_id: i64) -> Option<Vec<f32>> {
-    let conn = skill_data::util::open_readonly(labels_db).ok()?;
+    let conn = open_labels(labels_db)?;
     let blob: Option<Vec<u8>> = conn
         .query_row(
             "SELECT text_embedding FROM labels WHERE id = ?1",

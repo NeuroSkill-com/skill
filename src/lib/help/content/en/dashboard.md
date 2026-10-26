@@ -23,7 +23,7 @@ When connected, a REC indicator shows the filename of the CSV being written to {
 A live bar chart showing the relative power in each standard EEG frequency band: Delta (1–4 Hz), Theta (4–8 Hz), Alpha (8–13 Hz), Beta (13–30 Hz), and Gamma (30–50 Hz). Updated at ~4 Hz from a 512-sample Hann-windowed FFT. Each channel is shown separately.
 
 ## Frontal Alpha Asymmetry (FAA)
-A centre-anchored gauge showing the real-time Frontal Alpha Asymmetry index: ln(AF8 α) − ln(AF7 α). Positive values indicate greater right-frontal alpha power, which is associated with left-hemisphere approach motivation. Negative values indicate withdrawal tendency. The value is smoothed with an exponential moving average and typically ranges from −1 to +1. FAA is stored alongside every 5-second embedding epoch in eeg.sqlite.
+A centre-anchored gauge showing the real-time Frontal Alpha Asymmetry index: ln(AF8 α) − ln(AF7 α). Positive values indicate greater right-frontal alpha power, which is associated with left-hemisphere approach motivation. Negative values indicate withdrawal tendency. The value is smoothed with an exponential moving average and typically ranges from −1 to +1. FAA is stored alongside every 5-second embedding epoch in eeg.duckdb.
 
 ## EEG Waveforms
 A scrolling time-domain chart of the filtered EEG signal for all channels. Below each waveform is a spectrogram tape showing the frequency content over time. The chart displays the most recent ~4 seconds of data.

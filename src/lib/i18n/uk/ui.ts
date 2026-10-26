@@ -6,7 +6,6 @@
 // the Free Software Foundation, version 3 only.
 /** UK "ui" namespace translations. */
 const ui: Record<string, string> = {
-  "tip.headache": "Корелят головного болю — підвищене бета + пригнічена альфа. Лише дослідницький індикатор.",
   "tip.migraine":
     "Корелят мігрені — підвищена дельта + пригнічення альфа + латералізація. Лише дослідницький індикатор.",
   "tip.consciousness.lzc": "Проксі складності Лемпеля-Зіва — інформаційне багатство сигналу.",

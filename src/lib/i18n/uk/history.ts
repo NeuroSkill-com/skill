@@ -269,6 +269,39 @@ const history: Record<string, string> = {
 
   // ── Auto-synced from en/ (2026-03-28) ──
   "history.addLabel": "Додати мітку",
+
+  // BIDS export
+  "history.bids.title": "Експорт у BIDS",
+  "history.bids.button": "Експорт BIDS",
+  "history.bids.description": "Записати записи за проміжок часу як набір даних BIDS-EEG: ЕЕГ у BrainVision, мітки як події, PPG та IMU.",
+  "history.bids.from": "Від",
+  "history.bids.to": "До",
+  "history.bids.presetSession": "Цей сеанс",
+  "history.bids.presetDay": "Цей день",
+  "history.bids.presetWeek": "Останні 7 днів",
+  "history.bids.presetAll": "Усі записи",
+  "history.bids.onlySession": "Лише цей сеанс",
+  "history.bids.subject": "Суб’єкт",
+  "history.bids.task": "Завдання",
+  "history.bids.powerLine": "Частота мережі",
+  "history.bids.powerLineUnknown": "Невідомо",
+  "history.bids.includeEvents": "Мітки як події",
+  "history.bids.includePpg": "PPG (фізіологія)",
+  "history.bids.includeImu": "IMU (рух)",
+  "history.bids.rangeInvalid": "Кінець має бути пізніше за початок.",
+  "history.bids.exporting": "Експорт…",
+  "history.bids.progress": "Експорт запису {done} з {total}…",
+  "history.bids.preview": "Записів: {count}, приблизно {duration}",
+  "history.bids.previewNone": "У цьому проміжку немає записів.",
+  "history.bids.export": "Експортувати",
+  "history.bids.done": "Експортовано записів: {count}, {size}.",
+  "history.bids.valid": "Перевірку BIDS пройдено.",
+  "history.bids.issues": "Перевірка: помилок {errors}, попереджень {warnings}",
+  "history.bids.skipped": "Пропущено: {count}",
+  "history.bids.reveal": "Показати в теці",
+  "history.bids.failed": "Не вдалося експортувати",
+  "history.embeddings": "Ембедінги",
+  "history.epochsIndexed": "проіндексованих епох",
 };
 
 export default history;

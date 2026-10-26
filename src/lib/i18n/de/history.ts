@@ -269,6 +269,39 @@ const history: Record<string, string> = {
 
   // ── Auto-synced from en/ (2026-03-28) ──
   "history.addLabel": "Label hinzufügen",
+
+  // BIDS export
+  "history.bids.title": "Als BIDS exportieren",
+  "history.bids.button": "BIDS exportieren",
+  "history.bids.description": "Aufnahmen eines Zeitraums als BIDS-EEG-Datensatz schreiben: BrainVision-EEG, Labels als Ereignisse, PPG und IMU.",
+  "history.bids.from": "Von",
+  "history.bids.to": "Bis",
+  "history.bids.presetSession": "Diese Sitzung",
+  "history.bids.presetDay": "Dieser Tag",
+  "history.bids.presetWeek": "Letzte 7 Tage",
+  "history.bids.presetAll": "Alle Aufnahmen",
+  "history.bids.onlySession": "Nur diese Sitzung",
+  "history.bids.subject": "Proband",
+  "history.bids.task": "Aufgabe",
+  "history.bids.powerLine": "Netzfrequenz",
+  "history.bids.powerLineUnknown": "Unbekannt",
+  "history.bids.includeEvents": "Labels als Ereignisse",
+  "history.bids.includePpg": "PPG (Physio)",
+  "history.bids.includeImu": "IMU (Bewegung)",
+  "history.bids.rangeInvalid": "Das Ende muss nach dem Beginn liegen.",
+  "history.bids.exporting": "Exportiere…",
+  "history.bids.progress": "Exportiere Aufnahme {done} von {total}…",
+  "history.bids.preview": "{count} Aufnahme(n), etwa {duration}",
+  "history.bids.previewNone": "Keine Aufnahmen in diesem Zeitraum.",
+  "history.bids.export": "Exportieren",
+  "history.bids.done": "{count} Aufnahme(n) exportiert, {size}.",
+  "history.bids.valid": "BIDS-Validierung bestanden.",
+  "history.bids.issues": "Validierung: {errors} Fehler, {warnings} Warnung(en)",
+  "history.bids.skipped": "{count} übersprungen",
+  "history.bids.reveal": "Im Ordner zeigen",
+  "history.bids.failed": "Export fehlgeschlagen",
+  "history.embeddings": "Einbettungen",
+  "history.epochsIndexed": "indizierte Epochen",
 };
 
 export default history;

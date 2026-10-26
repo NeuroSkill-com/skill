@@ -49,6 +49,75 @@ pub fn router() -> Router<AppState> {
         .route("/history/stats", get(history_stats))
         .route("/history/find-session", post(find_session))
         .route("/history/daily-recording-mins", post(daily_recording_mins))
+        .route("/history/export/bids/preview", post(bids_export_preview))
+        .route("/history/export/bids", post(bids_export))
+}
+
+/// POST /history/export/bids/preview — recordings a BIDS export with these
+/// options would include (range clipping, no files written).
+async fn bids_export_preview(
+    State(state): State<AppState>,
+    Json(opts): Json<skill_bids::ExportOptions>,
+) -> Json<serde_json::Value> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let items = tokio::task::spawn_blocking(move || skill_bids::preview(&skill_dir, &opts))
+        .await
+        .unwrap_or_default();
+    Json(serde_json::json!({ "recordings": items }))
+}
+
+/// One export at a time: it is disk- and CPU-heavy and writes a whole tree.
+static BIDS_EXPORT_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// POST /history/export/bids — write a BIDS-EEG dataset for the requested
+/// range. Progress is broadcast as `bids-export-progress` events; the reply
+/// is the export summary (output folder, runs, skipped, validation).
+async fn bids_export(
+    State(state): State<AppState>,
+    Json(opts): Json<skill_bids::ExportOptions>,
+) -> Json<serde_json::Value> {
+    use std::sync::atomic::Ordering;
+    if BIDS_EXPORT_RUNNING.swap(true, Ordering::SeqCst) {
+        return Json(serde_json::json!({ "ok": false, "error": "an export is already running" }));
+    }
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let events_tx = state.events_tx.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let labels: Vec<skill_bids::LabelEvent> = skill_data::label_store::LabelStore::open(&skill_dir)
+            .map(|store| {
+                let from = opts.start_utc.map_or(0, |t| t.max(0.0) as u64);
+                let to = opts.end_utc.map_or(u64::MAX >> 1, |t| t.max(0.0).ceil() as u64);
+                store
+                    .query_range(from, to)
+                    .into_iter()
+                    .map(|l| skill_bids::LabelEvent {
+                        start_utc: l.eeg_start as f64,
+                        end_utc: l.eeg_end as f64,
+                        text: l.text,
+                        context: l.context,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        skill_bids::export(&skill_dir, &opts, &labels, &mut |p| {
+            let _ = events_tx.send(skill_daemon_common::EventEnvelope {
+                r#type: "bids-export-progress".into(),
+                ts_unix_ms: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+                correlation_id: None,
+                payload: serde_json::to_value(&p).unwrap_or_default(),
+            });
+        })
+    })
+    .await;
+    BIDS_EXPORT_RUNNING.store(false, Ordering::SeqCst);
+    match result {
+        Ok(Ok(summary)) => Json(serde_json::json!({ "ok": true, "summary": summary })),
+        Ok(Err(e)) => Json(serde_json::json!({ "ok": false, "error": format!("{e:#}") })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": format!("export task failed: {e}") })),
+    }
 }
 
 #[derive(Debug, Deserialize)]

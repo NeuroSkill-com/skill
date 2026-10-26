@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection};
+use skill_db::params;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -7,7 +7,7 @@ use super::store_types::*;
 use super::store_util::*;
 
 pub struct HealthStore {
-    conn: Mutex<Connection>,
+    conn: Mutex<skill_db::Conn>,
 }
 
 /// Upsert a batch of HealthKit samples (idempotent).
@@ -15,21 +15,13 @@ impl HealthStore {
     /// Open (or create) the health database inside `skill_dir`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let path = skill_dir.join(HEALTH_SQLITE);
-        let conn = match Connection::open(&path) {
-            Ok(c) => c,
+        match skill_db::open_store(&path, &SCHEMA) {
+            Ok(conn) => Some(Self { conn: Mutex::new(conn) }),
             Err(e) => {
-                eprintln!("[health] open {}: {e}", path.display());
-                return None;
+                eprintln!("[health] open {}: {e:#}", path.display());
+                None
             }
-        };
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
-            .ok()?;
-        conn.execute_batch(DDL).ok()?;
-        #[cfg(feature = "gps")]
-        if let Err(e) = conn.execute_batch(DDL_GPS) {
-            eprintln!("[health] GPS DDL failed — location data will not be stored: {e}");
         }
-        Some(Self { conn: Mutex::new(conn) })
     }
 
     /// Upsert a batch of HealthKit samples (idempotent).
@@ -69,11 +61,16 @@ impl HealthStore {
 
         if !payload.workouts.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
-                "INSERT OR REPLACE INTO workouts
+                "INSERT INTO workouts
                  (source_id, workout_type, start_utc, end_utc, duration_secs,
                   total_calories, active_calories, distance_meters,
                   avg_heart_rate, max_heart_rate, metadata, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ON CONFLICT (source_id, start_utc, end_utc, workout_type) DO UPDATE SET
+                    duration_secs = excluded.duration_secs, total_calories = excluded.total_calories,
+                    active_calories = excluded.active_calories, distance_meters = excluded.distance_meters,
+                    avg_heart_rate = excluded.avg_heart_rate, max_heart_rate = excluded.max_heart_rate,
+                    metadata = excluded.metadata, created_at = excluded.created_at",
             ) {
                 for w in &payload.workouts {
                     let meta = w
@@ -150,9 +147,12 @@ impl HealthStore {
 
         if !payload.metrics.is_empty() {
             if let Ok(mut stmt) = conn.prepare_cached(
-                "INSERT OR REPLACE INTO health_metrics
+                "INSERT INTO health_metrics
                  (source_id, metric_type, timestamp, value, unit, metadata, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT (source_id, metric_type, timestamp) DO UPDATE SET
+                    value = excluded.value, unit = excluded.unit,
+                    metadata = excluded.metadata, created_at = excluded.created_at",
             ) {
                 for m in &payload.metrics {
                     let meta = m

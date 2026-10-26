@@ -29,9 +29,9 @@ pub enum SessionError {
 /// Errors from the screenshot store.
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
-    /// SQLite error.
+    /// Database (DuckDB) error.
     #[error("database error: {0}")]
-    Db(#[from] rusqlite::Error),
+    Db(#[from] skill_db::Error),
 
     /// Serialization / deserialization error.
     #[error("serialization error: {0}")]

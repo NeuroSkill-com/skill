@@ -93,7 +93,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cognitiveLoad": "认知负荷",
   "dashboard.drowsiness": "困倦度",
   "dashboard.temperature": "温度（原始值）",
-  "dashboard.headache": "头痛",
   "dashboard.migraine": "偏头痛",
   "dashboard.consciousness": "意识水平",
   "dashboard.consciousness.lzc": "LZC",

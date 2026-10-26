@@ -1,69 +1,83 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! Persistent LLM chat history — `~/.skill/chats/chat_history.sqlite`.
+//! Persistent LLM chat history — `~/.skill/chats/chat_history.duckdb`.
 //!
 //! Schema
 //! ------
 //! ```text
 //! chat_sessions
-//!   id         INTEGER PRIMARY KEY AUTOINCREMENT
-//!   created_at INTEGER NOT NULL   -- unix milliseconds (UTC)
-//!   model_name TEXT    NOT NULL DEFAULT ''
+//!   id         BIGINT  PRIMARY KEY  -- chat_sessions_id_seq
+//!   created_at BIGINT  NOT NULL     -- unix milliseconds (UTC)
+//!   model_name VARCHAR NOT NULL DEFAULT ''
+//!   title      VARCHAR NOT NULL DEFAULT ''
+//!   archived   BIGINT  NOT NULL DEFAULT 0
+//!   params     VARCHAR NOT NULL DEFAULT ''  -- JSON generation params
 //!
 //! chat_messages
-//!   id         INTEGER PRIMARY KEY AUTOINCREMENT
-//!   session_id INTEGER NOT NULL REFERENCES chat_sessions(id)
+//!   id         BIGINT  PRIMARY KEY  -- chat_messages_id_seq
+//!   session_id BIGINT  NOT NULL     -- chat_sessions.id
 //!   role       TEXT    NOT NULL   -- 'user' | 'assistant'
 //!   content    TEXT    NOT NULL
 //!   thinking   TEXT              -- chain-of-thought (nullable)
-//!   created_at INTEGER NOT NULL   -- unix milliseconds (UTC)
+//!   created_at BIGINT  NOT NULL   -- unix milliseconds (UTC)
 //!
 //! chat_tool_calls
-//!   id           INTEGER PRIMARY KEY AUTOINCREMENT
-//!   message_id   INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE
+//!   id           BIGINT  PRIMARY KEY  -- chat_tool_calls_id_seq
+//!   message_id   BIGINT  NOT NULL     -- chat_messages.id
 //!   tool         TEXT    NOT NULL
 //!   status       TEXT    NOT NULL
 //!   detail       TEXT
 //!   tool_call_id TEXT
 //!   args         TEXT              -- JSON-encoded arguments
 //!   result       TEXT              -- JSON-encoded result
-//!   created_at   INTEGER NOT NULL   -- unix milliseconds (UTC)
+//!   created_at   BIGINT  NOT NULL   -- unix milliseconds (UTC)
 //! ```
 
-use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use skill_db::params;
 use std::path::Path;
 
-const DDL: &str = "
+const SCHEMA: skill_db::StoreSchema<'static> = skill_db::StoreSchema {
+    ddl: "
     CREATE TABLE IF NOT EXISTS chat_sessions (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        created_at  INTEGER NOT NULL,
-        model_name  TEXT    NOT NULL DEFAULT ''
+        id          BIGINT  PRIMARY KEY DEFAULT nextval('chat_sessions_id_seq'),
+        created_at  BIGINT  NOT NULL,
+        model_name  VARCHAR NOT NULL DEFAULT '',
+        title       VARCHAR NOT NULL DEFAULT '',
+        archived    BIGINT  NOT NULL DEFAULT 0,
+        params      VARCHAR NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS chat_messages (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id  INTEGER NOT NULL REFERENCES chat_sessions(id),
-        role        TEXT    NOT NULL,
-        content     TEXT    NOT NULL,
-        thinking    TEXT,
-        created_at  INTEGER NOT NULL
+        id          BIGINT  PRIMARY KEY DEFAULT nextval('chat_messages_id_seq'),
+        session_id  BIGINT  NOT NULL,
+        role        VARCHAR NOT NULL,
+        content     VARCHAR NOT NULL,
+        thinking    VARCHAR,
+        created_at  BIGINT  NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_chat_msg_session
         ON chat_messages (session_id);
     CREATE TABLE IF NOT EXISTS chat_tool_calls (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        message_id   INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
-        tool         TEXT    NOT NULL,
-        status       TEXT    NOT NULL,
-        detail       TEXT,
-        tool_call_id TEXT,
-        args         TEXT,
-        result       TEXT,
-        created_at   INTEGER NOT NULL
+        id           BIGINT  PRIMARY KEY DEFAULT nextval('chat_tool_calls_id_seq'),
+        message_id   BIGINT  NOT NULL,
+        tool         VARCHAR NOT NULL,
+        status       VARCHAR NOT NULL,
+        detail       VARCHAR,
+        tool_call_id VARCHAR,
+        args         VARCHAR,
+        result       VARCHAR,
+        created_at   BIGINT  NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tool_calls_message
         ON chat_tool_calls (message_id);
-";
+",
+    import_tables: &["chat_sessions", "chat_messages", "chat_tool_calls"],
+    sequences: &[
+        ("chat_sessions_id_seq", "chat_sessions", "id"),
+        ("chat_messages_id_seq", "chat_messages", "id"),
+        ("chat_tool_calls_id_seq", "chat_tool_calls", "id"),
+    ],
+};
 
 /// A single persisted tool call returned to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,18 +130,17 @@ pub struct SessionSummary {
     pub message_count: i64,
 }
 
-/// Thin wrapper around a rusqlite [`Connection`] for chat history I/O.
+/// Thin wrapper around a DuckDB [`Connection`] for chat history I/O.
 pub struct ChatStore {
-    conn: Connection,
+    conn: skill_db::Conn,
 }
 
 impl ChatStore {
     /// Open (or create) the chat history database inside `skill_dir/chats/`.
     /// Returns `None` on any error so callers can degrade gracefully.
     ///
-    /// If a legacy `chat_history.sqlite` exists directly in `skill_dir`
-    /// (pre-migration location) it is moved into the new `chats/` subdirectory
-    /// automatically.
+    /// A pre-DuckDB `chats/chat_history.sqlite` (or the even older
+    /// `skill_dir/chat_history.sqlite`) is imported once and kept as `.bak`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let chats_dir = skill_dir.join("chats");
         if let Err(e) = std::fs::create_dir_all(&chats_dir) {
@@ -135,48 +148,35 @@ impl ChatStore {
             return None;
         }
 
-        // Migrate legacy DB from skill_dir root into chats/ subdirectory.
-        let legacy_path = skill_dir.join("chat_history.sqlite");
-        let db_path = chats_dir.join("chat_history.sqlite");
-        if legacy_path.exists() && !db_path.exists() {
-            if let Err(e) = std::fs::rename(&legacy_path, &db_path) {
+        // Oldest layout: the SQLite file sat in skill_dir itself. Move it next
+        // to the new database so the one-time DuckDB import picks it up.
+        let db_path = chats_dir.join("chat_history.duckdb");
+        let legacy_root = skill_dir.join("chat_history.sqlite");
+        let legacy = skill_db::legacy_sqlite_path(&db_path);
+        if legacy_root.exists() && !legacy.exists() && !db_path.exists() {
+            if let Err(e) = std::fs::rename(&legacy_root, &legacy) {
                 llm_log!(
                     "chat_store",
                     "migration rename {} -> {} failed: {e}",
-                    legacy_path.display(),
-                    db_path.display()
+                    legacy_root.display(),
+                    legacy.display()
                 );
-                // Fall through — we'll create a fresh DB at the new path.
             } else {
-                // Also move WAL/SHM sidecar files if they exist.
                 for suffix in &["-wal", "-shm"] {
                     let src = skill_dir.join(format!("chat_history.sqlite{suffix}"));
                     let dst = chats_dir.join(format!("chat_history.sqlite{suffix}"));
                     let _ = std::fs::rename(&src, &dst);
                 }
-                llm_log!("chat_store", "migrated legacy DB to {}", db_path.display());
             }
         }
 
-        let conn = match Connection::open(&db_path) {
-            Ok(c) => c,
+        match skill_db::open_store(&db_path, &SCHEMA) {
+            Ok(conn) => Some(ChatStore { conn }),
             Err(e) => {
-                llm_log!("chat_store", "failed to open {}: {e}", db_path.display());
-                return None;
+                llm_log!("chat_store", "failed to open {}: {e:#}", db_path.display());
+                None
             }
-        };
-        if let Err(e) = conn.execute_batch(DDL) {
-            llm_log!("chat_store", "DDL error: {e}");
-            return None;
         }
-        // Migration: add title column if it doesn't exist yet (existing databases).
-        // Silently ignored if the column is already present.
-        let _ = conn.execute_batch("ALTER TABLE chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';");
-        // Migration: add archived column (0 = active, 1 = archived).
-        let _ = conn.execute_batch("ALTER TABLE chat_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;");
-        // Migration: add params column (JSON blob for per-session generation params).
-        let _ = conn.execute_batch("ALTER TABLE chat_sessions ADD COLUMN params TEXT NOT NULL DEFAULT '';");
-        Some(ChatStore { conn })
     }
 
     // ── Session list / rename / delete ────────────────────────────────────────
@@ -233,7 +233,7 @@ impl ChatStore {
     pub fn set_session_params(&mut self, id: i64, params_json: &str) {
         let _ = self.conn.execute(
             "UPDATE chat_sessions SET params = ?1 WHERE id = ?2",
-            rusqlite::params![params_json, id],
+            params![params_json, id],
         );
     }
 
@@ -244,8 +244,12 @@ impl ChatStore {
             .execute("UPDATE chat_sessions SET title = ?1 WHERE id = ?2", params![title, id]);
     }
 
-    /// Delete a session and all its messages.
+    /// Delete a session, its messages and their tool calls.
     pub fn delete_session(&mut self, id: i64) {
+        let _ = self.conn.execute(
+            "DELETE FROM chat_tool_calls WHERE message_id IN (SELECT id FROM chat_messages WHERE session_id = ?1)",
+            params![id],
+        );
         let _ = self
             .conn
             .execute("DELETE FROM chat_messages WHERE session_id = ?1", params![id]);
@@ -325,12 +329,12 @@ impl ChatStore {
     fn new_session_inner(&mut self, model_name: &str) -> i64 {
         let now = unix_ms();
         self.conn
-            .execute(
-                "INSERT INTO chat_sessions (created_at, model_name) VALUES (?1, ?2)",
+            .query_row(
+                "INSERT INTO chat_sessions (created_at, model_name) VALUES (?1, ?2) RETURNING id",
                 params![now, model_name],
+                |row| row.get(0),
             )
-            .ok();
-        self.conn.last_insert_rowid()
+            .unwrap_or(0)
     }
 
     /// Append a message to the given session.  Returns the new row id.
@@ -349,17 +353,17 @@ impl ChatStore {
         tool_calls: &[NewToolCall],
     ) -> i64 {
         let now = unix_ms();
-        let msg_id = match self.conn.execute(
+        let msg_id = match self.conn.query_row(
             "INSERT INTO chat_messages \
              (session_id, role, content, thinking, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+             VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id",
             params![session_id, role, content, thinking, now],
+            |row| row.get::<_, i64>(0),
         ) {
-            Ok(rows) => {
-                let id = self.conn.last_insert_rowid();
+            Ok(id) => {
                 llm_log!(
                     "chat_store",
-                    "save_message OK: session={session_id} role={role} rows={rows} id={id} content_len={}",
+                    "save_message OK: session={session_id} role={role} id={id} content_len={}",
                     content.len()
                 );
                 id
@@ -458,19 +462,13 @@ impl ChatStore {
             .unwrap_or_default();
 
         // Load tool calls for all messages in this session in one query.
-        let msg_ids: Vec<i64> = messages.iter().map(|m| m.id).collect();
-        if !msg_ids.is_empty() {
-            // Build a parameterised IN clause.
-            let placeholders: Vec<String> = (1..=msg_ids.len()).map(|i| format!("?{i}")).collect();
-            let sql = format!(
-                "SELECT id, message_id, tool, status, detail, tool_call_id, args, result, created_at \
-                 FROM chat_tool_calls WHERE message_id IN ({}) ORDER BY id ASC",
-                placeholders.join(", ")
-            );
-            if let Ok(mut tc_stmt) = self.conn.prepare(&sql) {
-                let params_vec: Vec<&dyn rusqlite::types::ToSql> =
-                    msg_ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
-                if let Ok(rows) = tc_stmt.query_map(params_vec.as_slice(), |row| {
+        if !messages.is_empty() {
+            let sql = "SELECT id, message_id, tool, status, detail, tool_call_id, args, result, created_at \
+                       FROM chat_tool_calls \
+                       WHERE message_id IN (SELECT id FROM chat_messages WHERE session_id = ?1) \
+                       ORDER BY id ASC";
+            if let Ok(mut tc_stmt) = self.conn.prepare(sql) {
+                if let Ok(rows) = tc_stmt.query_map(params![session_id], |row| {
                     let args_str: Option<String> = row.get(6)?;
                     let result_str: Option<String> = row.get(7)?;
                     Ok(StoredToolCall {

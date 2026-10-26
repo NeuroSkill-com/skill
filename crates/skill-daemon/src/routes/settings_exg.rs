@@ -189,17 +189,12 @@ pub(crate) fn run_batch_reembed_with_cancel(
     day_dirs.reverse(); // Most recent days first — users care about recent data.
 
     for day_dir in &day_dirs {
-        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        else {
+        let Some(conn) = skill_data::eeg_store::open_existing(day_dir) else {
             continue;
         };
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4",
+                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR octet_length(eeg_embedding) < 4",
                 [],
                 |r| r.get(0),
             )
@@ -256,8 +251,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
         skip_ch_counts.clear();
         consecutive_failures_by_ch.clear();
 
-        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
+        if !skill_data::eeg_store::exists(day_dir) {
             continue;
         }
 
@@ -274,15 +268,10 @@ pub(crate) fn run_batch_reembed_with_cancel(
             continue;
         }
 
-        // Open DB for writing.
-        let Ok(conn) = rusqlite::Connection::open(&db_path) else {
+        // Open the day store for writing.
+        let Some(conn) = skill_data::eeg_store::open_existing(day_dir) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=5000;");
-        let _ = conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp)",
-            [],
-        );
 
         // Pre-existing embedding byte-length (if any). Used to validate that
         // the loaded encoder still produces the same dim as what's already in
@@ -290,8 +279,8 @@ pub(crate) fn run_batch_reembed_with_cancel(
         // BLOBs and ruin cosine search.
         let existing_blob_len: Option<usize> = conn
             .query_row(
-                "SELECT length(eeg_embedding) FROM embeddings \
-                   WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
+                "SELECT octet_length(eeg_embedding) FROM embeddings \
+                   WHERE eeg_embedding IS NOT NULL AND octet_length(eeg_embedding) >= 4 \
                    LIMIT 1",
                 [],
                 |r| r.get::<_, i64>(0),
@@ -303,7 +292,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
 
         // Get timestamps of epochs that need embeddings.
         let mut stmt = conn.prepare(
-            "SELECT id, timestamp FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4 ORDER BY timestamp",
+            "SELECT id, timestamp FROM embeddings WHERE eeg_embedding IS NULL OR octet_length(eeg_embedding) < 4 ORDER BY timestamp",
         )?;
         let epochs_needed: Vec<(i64, i64)> = stmt
             .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?
@@ -432,7 +421,7 @@ pub(crate) fn run_batch_reembed_with_cancel(
                         }
                         let _ = conn.execute(
                             "UPDATE embeddings SET eeg_embedding = ?1 WHERE id = ?2",
-                            rusqlite::params![blob, row_id],
+                            skill_data::duck::params![blob, row_id],
                         );
                         if ms > 2000 {
                             tracing::warn!("[reembed] slow encode: {ms}ms for epoch {ts_ms}");
@@ -1144,12 +1133,7 @@ pub(crate) async fn estimate_reembed_impl(State(state): State<AppState>) -> Json
 
         for entry in &day_dirs {
             let path = entry.path();
-            let db_path = path.join(skill_constants::SQLITE_FILE);
-            if !db_path.exists() {
-                continue;
-            }
-            let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            else {
+            let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
                 continue;
             };
             let t: i64 = conn
@@ -1157,7 +1141,7 @@ pub(crate) async fn estimate_reembed_impl(State(state): State<AppState>) -> Json
                 .unwrap_or(0);
             let m: i64 = conn
                 .query_row(
-                    "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR length(eeg_embedding) < 4",
+                    "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NULL OR octet_length(eeg_embedding) < 4",
                     [],
                     |r| r.get(0),
                 )

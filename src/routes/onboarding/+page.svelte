@@ -1793,7 +1793,7 @@ useWindowTitle("window.title.onboarding");
           {t("onboarding.extensionsBody")}
         </p>
 
-        <!-- Same privacy callout as the permissions step — these all feed local activity.sqlite. -->
+        <!-- Same privacy callout as the permissions step — these all feed local activity.duckdb. -->
         <div class="w-full max-w-[360px] rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06]
                     px-3 py-2.5 flex items-start gap-2.5 text-left">
           <span class="text-base shrink-0 mt-0.5">🛡️</span>

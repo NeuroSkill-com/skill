@@ -84,14 +84,13 @@ pub(crate) async fn suggest_hook_keywords_impl(
     }
     let max_n = req.limit.unwrap_or(8).clamp(1, 20);
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
 
     let out = tokio::task::spawn_blocking(move || {
         let mut out = Vec::<serde_json::Value>::new();
-        if !labels_db.exists() {
+        if !skill_data::label_store::LabelStore::exists(&skill_dir) {
             return out;
         }
-        let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
+        let Some(conn) = skill_data::label_store::LabelStore::connect(&skill_dir) else {
             return out;
         };
         let Ok(mut stmt) = conn.prepare(
@@ -647,11 +646,7 @@ pub(crate) async fn activity_vscode_events_impl(
             .unwrap_or_default()
             .as_secs();
         // Open labels DB for auto-labeling EEG recordings.
-        let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
-        let labels_conn = rusqlite::Connection::open(&labels_db).ok();
-        if let Some(ref c) = labels_conn {
-            skill_data::util::init_wal_pragmas(c);
-        }
+        let labels_conn = skill_data::label_store::LabelStore::connect(&skill_dir);
 
         let mut count = 0u64;
         for event in &events {
@@ -1036,11 +1031,12 @@ pub(crate) async fn activity_vscode_events_impl(
                 let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let ctx_blob = ctx_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
-                let label_id = conn.execute(
-                    "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at, text_embedding, context_embedding, embedding_model)
-                     VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?4, ?5, ?6)",
-                    rusqlite::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
-                ).ok().map(|_| conn.last_insert_rowid());
+                let label_id: Option<i64> = conn.query_row(
+                    "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, label_start, label_end, created_at, text_embedding, context_embedding, embedding_model)
+                     VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?3, ?3, ?4, ?5, ?6) RETURNING id",
+                    skill_data::duck::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
+                    |r| r.get(0),
+                ).map_err(|e| tracing::warn!("auto-label insert failed: {e}")).ok();
                 // Incrementally insert into HNSW index for immediate searchability.
                 if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
                     let ce = ctx_emb.as_deref().unwrap_or(&[]);
@@ -1087,11 +1083,7 @@ pub(crate) async fn activity_browser_events_impl(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
-        let labels_conn = rusqlite::Connection::open(&labels_db).ok();
-        if let Some(ref c) = labels_conn {
-            skill_data::util::init_wal_pragmas(c);
-        }
+        let labels_conn = skill_data::label_store::LabelStore::connect(&skill_dir);
 
         let mut count = 0u64;
         for event in &events {
@@ -1299,11 +1291,12 @@ pub(crate) async fn activity_browser_events_impl(
                 let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let ctx_blob = ctx_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
                 let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
-                let label_id = conn.execute(
-                    "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at, text_embedding, context_embedding, embedding_model)
-                     VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?4, ?5, ?6)",
-                    rusqlite::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
-                ).ok().map(|_| conn.last_insert_rowid());
+                let label_id: Option<i64> = conn.query_row(
+                    "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, label_start, label_end, created_at, text_embedding, context_embedding, embedding_model)
+                     VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?3, ?3, ?4, ?5, ?6) RETURNING id",
+                    skill_data::duck::params![label, ctx, now as i64, text_blob, ctx_blob, model_name],
+                    |r| r.get(0),
+                ).map_err(|e| tracing::warn!("auto-label insert failed: {e}")).ok();
                 if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
                     let ce = ctx_emb.as_deref().unwrap_or(&[]);
                     skill_label_index::insert_label(&skill_dir, id, te, ce, now, now, &label_index);

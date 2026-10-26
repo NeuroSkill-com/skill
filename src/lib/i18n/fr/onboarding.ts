@@ -115,7 +115,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app} peut récupérer du contexte supplémentaire depuis votre éditeur, navigateur et terminal. Chaque intégration est indépendante : vous pouvez l'installer ou l'ignorer séparément, aucune n'est requise pour le fonctionnement EEG.",
   "onboarding.extensionsPrivacy":
-    "Même garantie de confidentialité que pour le reste : chaque extension communique avec le démon local via un port localhost, et ces données sont écrites dans activity.sqlite sur cet ordinateur. Rien n'est envoyé à NeuroSkill ni à qui que ce soit d'autre.",
+    "Même garantie de confidentialité que pour le reste : chaque extension communique avec le démon local via un port localhost, et ces données sont écrites dans activity.duckdb sur cet ordinateur. Rien n'est envoyé à NeuroSkill ni à qui que ce soit d'autre.",
   "onboarding.extensionsSkip":
     "Tout est facultatif. Vous pouvez installer, mettre à jour ou supprimer chacune de ces options plus tard dans Réglages → Extensions et Réglages → Terminal.",
   "onboarding.extensions.vscodeTitle": "Éditeur basé sur VS Code",
@@ -132,7 +132,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     '{app} peut enregistrer ce sur quoi vous travailliez afin de corréler vos données EEG/concentration avec le contexte réel — "j\'ai perdu le focus en écrivant cette PR" plutôt que simplement "j\'ai perdu le focus à 15 h". Désactivé par défaut et entièrement facultatif.',
   "onboarding.permissionsPrivacy":
-    "Tout reste sur cet ordinateur. L'activité enregistrée est écrite dans un fichier local activity.sqlite et n'est jamais envoyée à un serveur — ni à NeuroSkill, ni à personne. Vous pouvez désactiver chaque option à tout moment ; les données enregistrées restent sur le disque jusqu'à ce que vous les supprimiez.",
+    "Tout reste sur cet ordinateur. L'activité enregistrée est écrite dans un fichier local activity.duckdb et n'est jamais envoyée à un serveur — ni à NeuroSkill, ni à personne. Vous pouvez désactiver chaque option à tout moment ; les données enregistrées restent sur le disque jusqu'à ce que vous les supprimiez.",
   "onboarding.permissionsSkip":
     "Tout désactivé par défaut. Vous pouvez activer chacune de ces options plus tard dans Réglages → Suivi d'activité.",
   "onboarding.permissionsActiveWindowDesc":

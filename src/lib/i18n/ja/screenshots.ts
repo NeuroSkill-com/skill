@@ -83,7 +83,7 @@ const screenshots: Record<string, string> = {
   "screenshots.perfWindowCapture": "ウィンドウキャプチャ",
   "screenshots.perfOcr": "OCR抽出",
   "screenshots.perfResize": "リサイズ＋パディング",
-  "screenshots.perfSave": "保存＋SQLite",
+  "screenshots.perfSave": "保存＋DuckDB",
   "screenshots.perfIterTotal": "反復合計",
   "screenshots.perfVisionEmbed": "ビジョン埋め込み",
   "screenshots.perfTextEmbed": "テキスト埋め込み",

@@ -1,0 +1,15 @@
+### Refactor
+
+- **All local stores now use DuckDB instead of SQLite.** That covers labels, activity, screenshots, chat history, health, hooks audit log, validation (KSS/TLX/PVT), calibration profiles and the per-day EEG embedding stores. Files are now `*.duckdb`: `labels.duckdb`, `activity.duckdb`, `screenshots.duckdb`, `chats/chat_history.duckdb`, `health.duckdb`, `hooks.duckdb`, `validation.duckdb`, `calibrations.duckdb` and `YYYYMMDD/eeg.duckdb`.
+- **Upgrading imports your data once and keeps the originals.** On first open, each store copies its old `.sqlite` file (or `calibrations.db`) into the new database. SQLite's loosely typed values are coerced to the declared column types, row counts are verified, the import is recorded, and only then is the old file renamed to `.sqlite.bak`. Nothing is deleted. A failed import rolls back, leaves the SQLite file in place and is retried next start. The importer reads SQLite through `rusqlite`, so it works offline; DuckDB extension autoloading is off.
+- **New `skill-db` crate.** DuckDB locks a file per *instance*, so a second open of the same file fails even inside one process. `skill-db` therefore keeps one instance per file and hands out leased connections. Idle per-day instances beyond the 8 most recent are closed, while instances with live connections are never dropped, so a later open can't start a second instance on a locked file. Each instance is capped at 2 threads and 256 MB of buffer pool. The crate also owns the one-time importer and sequence re-seeding.
+- **`skill_data::eeg_store`** is now the only way to open a day's EEG store: schema, import, the `unix_ms` backfill, and `metric()` for typed reads from `metrics_json`. All readers use it: history, search, label index, UMAP, analysis, reembed, BIDS export.
+- Conversation and terminal-output search (previously SQLite FTS5) now matches when every query term appears (case-insensitive), newest first. FTS5 ranked by BM25. All `LIKE` searches are `ILIKE` to keep SQLite's case-insensitive matching.
+- Queries that relied on SQLite picking a "bare" column from the `MAX()` row now say so explicitly with `arg_max(col, time)` (latest project/language for a file, latest category for a domain or binary).
+- `scripts/verify_sqlite.sh` is replaced by `scripts/verify_day_store.sh` (DuckDB CLI). `scripts/health.mjs` counts `.duckdb` day stores.
+- DuckDB allows one writing process per file: quit the app before opening a `.duckdb` file with another tool.
+
+### Bugfixes
+
+- **Auto-labels from VS Code, browser and terminal events were not being saved on most installs.** The inserts named `wall_start`/`wall_end`. On label databases created by `LabelStore`, where `label_start` is `NOT NULL` without a default, every insert failed silently (`.ok()`). The labels table now carries both column pairs with defaults, and the auto-label paths and the `label` CLI command write through the label store. The `label` e2e check no longer needs its "stale labels.sqlite" skip.
+- Deleting a chat session now also deletes its tool calls. SQLite never enforced the `ON DELETE CASCADE` they relied on, because foreign keys were never enabled.

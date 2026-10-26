@@ -1060,10 +1060,15 @@ pub struct UserSettings {
     // ── Inference device preference ────────────────────────────────────────
     /// High-level inference device preference: `"gpu"` (default) or `"cpu"`.
     ///
-    /// When set to `"cpu"`, `llm.n_gpu_layers` is forced to 0 so the LLM
-    /// server runs entirely on CPU.  When set to `"gpu"` (the default), the
-    /// last-known `llm.n_gpu_layers` value (stored in `llm_gpu_layers_saved`)
-    /// is restored, defaulting to `u32::MAX` (all layers on GPU).
+    /// This is the switch that decides where inference runs, for both engines:
+    /// `"cpu"` sets `llm.rlx_device` to `"cpu"` (the rlx runtime picks one
+    /// device for the whole graph) and `llm.n_gpu_layers` to 0 (llama.cpp's
+    /// per-layer offload). `"gpu"` restores both from `llm_rlx_device_saved`
+    /// and `llm_gpu_layers_saved`.
+    ///
+    /// Both halves are needed because the two runtimes read different fields.
+    /// Writing only the layer count is what shipped a release running the
+    /// default model on CPU while every device setting said Metal.
     #[serde(default = "default_inference_device")]
     pub inference_device: String,
 
@@ -1072,6 +1077,14 @@ pub struct UserSettings {
     /// Default: `u32::MAX` (all layers on GPU).
     #[serde(default = "default_llm_gpu_layers_saved")]
     pub llm_gpu_layers_saved: u32,
+
+    /// Last user-configured `llm.rlx_device` value before the CPU override was
+    /// applied.  Restored when the user switches back to GPU mode. Empty means
+    /// "no saved choice" — restore the per-platform default instead, so a fresh
+    /// profile that has only ever toggled CPU→GPU still lands on Metal/auto
+    /// rather than on an empty string.
+    #[serde(default)]
+    pub llm_rlx_device_saved: String,
 
     /// Inference backend for EXG embeddings: `"auto"`, `"gpu"`, or `"cpu"`.
     ///
@@ -1385,6 +1398,7 @@ impl Default for UserSettings {
             lsl_idle_timeout_secs: default_lsl_idle_timeout_secs(),
             inference_device: default_inference_device(),
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
+            llm_rlx_device_saved: String::new(),
             exg_inference_device: default_exg_inference_device(),
             exg_auto_download_weights: false,
             reembed: ReembedConfig::default(),

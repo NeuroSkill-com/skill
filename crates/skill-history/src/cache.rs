@@ -86,18 +86,8 @@ pub fn get_day_metrics_batch(csv_paths: &[String], max_ts_points: usize) -> Hash
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SQLite-based metrics & time-series
+// Day-store (DuckDB) metrics & time-series
 // ═══════════════════════════════════════════════════════════════════════════════
-
-fn migrate_embeddings_schema(conn: &rusqlite::Connection) {
-    let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
-    // Index on timestamp — critical for range queries (WHERE timestamp >= ? AND timestamp <= ?).
-    // Without it every query does a full table scan on 100K+ rows.
-    let _ = conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp)",
-        [],
-    );
-}
 
 /// Return only subdirectories of `skill_dir` whose `YYYYMMDD` name overlaps
 /// the given UTC timestamp range.  Adds ±1 day of padding to account for
@@ -434,17 +424,9 @@ pub fn get_session_timeseries_filtered(
     let mut rows: Vec<EpochRow> = Vec::new();
 
     for path in dirs_for_range(skill_dir, start_utc, end_utc) {
-        let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        migrate_embeddings_schema(&conn);
 
         // Optional device filter clause.
         let dev_clause = if device_filter.is_some() {
@@ -458,7 +440,7 @@ pub fn get_session_timeseries_filtered(
         let count_sql = format!("SELECT COUNT(*) FROM embeddings WHERE {where_cl}{dev_clause}");
         let total_in_db: i64 = {
             let mut count_stmt = conn.prepare(&count_sql).unwrap_or_else(|_| unreachable!());
-            let params_base = rusqlite::params![
+            let params_base = skill_data::duck::params![
                 r.unix_ms_start,
                 r.unix_ms_end,
                 r.dt14_start,
@@ -469,7 +451,7 @@ pub fn get_session_timeseries_filtered(
             if let Some(dev) = device_filter {
                 count_stmt
                     .query_row(
-                        rusqlite::params![
+                        skill_data::duck::params![
                             r.unix_ms_start,
                             r.unix_ms_end,
                             r.dt14_start,
@@ -522,13 +504,13 @@ pub fn get_session_timeseries_filtered(
             continue;
         };
 
-        fn extract_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Option<String>)> {
+        fn extract_row(row: &skill_data::duck::Row<'_>) -> skill_data::duck::DbResult<(i64, Option<String>)> {
             Ok((row.get(0)?, row.get(1)?))
         }
 
         let iter = if let Some(dev) = device_filter {
             stmt.query_map(
-                rusqlite::params![
+                skill_data::duck::params![
                     r.unix_ms_start,
                     r.unix_ms_end,
                     r.dt14_start,
@@ -541,7 +523,7 @@ pub fn get_session_timeseries_filtered(
             )
         } else {
             stmt.query_map(
-                rusqlite::params![
+                skill_data::duck::params![
                     r.unix_ms_start,
                     r.unix_ms_end,
                     r.dt14_start,
@@ -581,17 +563,9 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
     let mut count = 0u64;
 
     for path in dirs_for_range(skill_dir, start_utc, end_utc) {
-        let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        migrate_embeddings_schema(&conn);
 
         let Ok(mut stmt) = conn.prepare(&format!(
             "SELECT metrics_json FROM embeddings WHERE ({}) AND metrics_json IS NOT NULL",
@@ -601,7 +575,7 @@ pub fn get_session_metrics(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Se
         };
 
         let rows = stmt.query_map(
-            rusqlite::params![
+            skill_data::duck::params![
                 r.unix_ms_start,
                 r.unix_ms_end,
                 r.dt14_start,
@@ -751,15 +725,9 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
     let mut raw: Vec<RawEpoch> = Vec::new();
 
     for path in dirs_for_range(skill_dir, start_utc, end_utc) {
-        let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         let Ok(mut stmt) = conn.prepare(&format!(
             "SELECT timestamp, metrics_json FROM embeddings WHERE {} ORDER BY timestamp",
             skill_data::util::DualTimestampRange::WHERE_CLAUSE
@@ -767,7 +735,7 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
             continue;
         };
         let rows = stmt.query_map(
-            rusqlite::params![
+            skill_data::duck::params![
                 r.unix_ms_start,
                 r.unix_ms_end,
                 r.dt14_start,
@@ -1254,7 +1222,7 @@ pub fn compute_status_history(
     let today_day = now_utc / 86400;
     let mut total_secs = 0u64;
     let mut longest_secs = 0u64;
-    let mut day_set = std::collections::BTreeSet::<u64>::new();
+    let mut day_set = bbtree::unsync::BBTreeSet::<u64>::new();
     let total_sessions = sessions_json.len();
     let mut total_epochs = 0u64;
 
@@ -1368,21 +1336,12 @@ pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
     day_dirs.sort();
 
     for day_dir in day_dirs {
-        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-
-        // Open DB first and check if there are any NULL metrics_json rows.
-        // This avoids loading CSVs when there is nothing to backfill.
-        let Ok(conn) = rusqlite::Connection::open(&db_path) else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&day_dir) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;");
-        migrate_embeddings_schema(&conn);
 
         // Find embeddings with NULL metrics_json.
-        let Ok(mut stmt) = conn.prepare("SELECT rowid, timestamp FROM embeddings WHERE metrics_json IS NULL") else {
+        let Ok(mut stmt) = conn.prepare("SELECT id, timestamp FROM embeddings WHERE metrics_json IS NULL") else {
             continue;
         };
         let rows: Vec<(i64, i64)> = stmt
@@ -1429,7 +1388,7 @@ pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
         }
         csv_epochs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        let Ok(mut update_stmt) = conn.prepare("UPDATE embeddings SET metrics_json = ?1 WHERE rowid = ?2") else {
+        let Ok(mut update_stmt) = conn.prepare("UPDATE embeddings SET metrics_json = ?1 WHERE id = ?2") else {
             continue;
         };
 
@@ -1455,7 +1414,7 @@ pub fn backfill_eeg_metrics(skill_dir: &Path) -> BackfillResult {
             }
 
             if let Some((_, json)) = best {
-                if update_stmt.execute(rusqlite::params![json, rowid]).is_ok() {
+                if update_stmt.execute(skill_data::duck::params![json, rowid]).is_ok() {
                     result.updated += 1;
                 } else {
                     result.skipped += 1;

@@ -42,7 +42,7 @@ The matching pipeline runs inside the daemon EEG embed-worker:
    - **Scenario gate** against current `EpochMetrics`. Examples:
      - `cognitive` → `cognitive_load ≥ 55` or `engagement ≥ 60`
      - `emotional` → `stress_index ≥ 55` or `mood ≤ 45` or `relaxation ≤ 35`
-     - `physical` → `drowsiness ≥ 55` or `headache_index ≥ 45` or elevated/low HR
+     - `physical` → `drowsiness ≥ 55` or `migraine_index ≥ 45` or elevated/low HR
    - Cosine distance between the live EEG embedding and each cached reference.
    - If best distance ≤ `distance_threshold` **and** ≥10 seconds since last fire:
      - **Fires**: WebSocket `"hook"` event, toast, runtime state, audit log.
@@ -51,7 +51,7 @@ The matching pipeline runs inside the daemon EEG embed-worker:
 
 ### 3. `HooksLog` — Audit Trail (`crates/skill-data/src/hooks_log.rs`)
 
-Every hook fire is persisted to `~/.skill/hooks.sqlite` with JSON snapshots of
+Every hook fire is persisted to `~/.skill/hooks.duckdb` with JSON snapshots of
 the rule, trigger context (label, distance), and dispatched payload — so history
 stays meaningful after config changes.
 

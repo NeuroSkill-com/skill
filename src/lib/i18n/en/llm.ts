@@ -18,7 +18,7 @@ const llm: Record<string, string> = {
   "model.embeddingsToday": "Embeddings today",
   "model.hnswIndex": "HNSW Index",
   "model.hnswRecoveredTitle": "HNSW recovered",
-  "model.hnswRecoveredMsg": "{n} embeddings restored from SQLite",
+  "model.hnswRecoveredMsg": "{n} embeddings restored from DuckDB",
   "model.takesEffectRestart": "takes effect on next day or restart",
   "model.connectivity": "Connectivity",
   "model.currently": "currently {n}",

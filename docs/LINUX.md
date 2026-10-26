@@ -144,10 +144,11 @@ command -v glslc || command -v glslangValidator
 Useful for diagnostics in this repo:
 
 ```bash
-sudo apt install -y sqlite3
+# DuckDB CLI — see https://duckdb.org/docs/installation
+curl https://install.duckdb.org | sh
 ```
 
-(`verify_sqlite.sh` uses `sqlite3`.)
+(`scripts/verify_day_store.sh` uses the `duckdb` CLI. Quit NeuroSkill first: DuckDB allows one writer per database.)
 
 ## 8) Build after prerequisites are installed
 

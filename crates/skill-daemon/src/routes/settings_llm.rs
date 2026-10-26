@@ -86,6 +86,14 @@ pub(crate) async fn set_inference_device(
     Json(req): Json<StringValueRequest>,
 ) -> Json<serde_json::Value> {
     let is_cpu = req.value == "cpu";
+    // Both runtimes have to be told, because they read different fields:
+    // llama.cpp offloads per layer (`n_gpu_layers`), rlx picks one device for
+    // the whole graph (`rlx_device`). Writing only the layer count left the rlx
+    // runtime on whatever `rlx_device` already said — which is how 0.1.0-rc.3
+    // shipped with the default model on CPU while every device setting read
+    // "metal". Saving the previous value of each mirrors the long-standing
+    // `llm_gpu_layers_saved` behaviour, so a trip through CPU and back does not
+    // quietly downgrade someone who had chosen `mlx` or `cuda`.
     let out = modify_settings_blocking(&state, move |s| {
         s.inference_device = if is_cpu { "cpu".into() } else { "gpu".into() };
         if is_cpu {
@@ -94,8 +102,22 @@ pub(crate) async fn set_inference_device(
                 s.llm_gpu_layers_saved = cur_layers;
             }
             s.llm.n_gpu_layers = 0;
+
+            if !s.llm.rlx_device.eq_ignore_ascii_case("cpu") {
+                s.llm_rlx_device_saved = std::mem::take(&mut s.llm.rlx_device);
+            }
+            s.llm.rlx_device = "cpu".into();
         } else {
             s.llm.n_gpu_layers = s.llm_gpu_layers_saved;
+
+            // An empty saved value means this profile has never had a device
+            // other than CPU recorded; fall back to the per-platform default
+            // rather than writing an empty string nobody can resolve.
+            s.llm.rlx_device = if s.llm_rlx_device_saved.is_empty() {
+                skill_llm::config::default_rlx_device_tag()
+            } else {
+                s.llm_rlx_device_saved.clone()
+            };
         }
         s.inference_device.clone()
     })
@@ -104,11 +126,9 @@ pub(crate) async fn set_inference_device(
     // Sync to in-memory llm_config so the next server start picks it up.
     #[cfg(feature = "llm")]
     if let Ok(mut cfg) = state.llm_config.lock() {
-        cfg.n_gpu_layers = if is_cpu {
-            0
-        } else {
-            load_user_settings(&state).llm_gpu_layers_saved
-        };
+        let s = load_user_settings(&state);
+        cfg.n_gpu_layers = if is_cpu { 0 } else { s.llm_gpu_layers_saved };
+        cfg.rlx_device = s.llm.rlx_device.clone();
     }
 
     // If the LLM server is already running, restart it so the device

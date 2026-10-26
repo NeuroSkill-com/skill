@@ -59,7 +59,6 @@ const ui: Record<string, string> = {
   "tip.stillness": "머리 움직임 정지 점수 (0–100). 100 = 완전히 정지.",
   "tip.nods": "감지된 수직 머리 끄덕임(피치 진동).",
   "tip.shakes": "감지된 수평 머리 흔들림(롤 진동).",
-  "tip.headache": "두통 상관 — 피질 과흥분성: 상승된 베타 + 억제된 알파 + 높은 BAR. 연구 지표입니다.",
   "tip.migraine": "편두통 상관 — 피질 확산 억제 프록시: 상승된 델타 + 알파 억제 + 반구 편측화. 연구 지표입니다.",
   "tip.consciousness.lzc":
     "Lempel-Ziv 복잡도 프록시 — 순열 엔트로피(순서 복잡도)와 Higuchi 프랙탈 차원(프랙탈 복잡도)으로 근사된 신호 정보 풍부성. 높을수록 더 복잡하고 정보가 풍부한 EEG.",

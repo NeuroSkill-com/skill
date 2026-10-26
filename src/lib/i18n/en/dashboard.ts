@@ -94,7 +94,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cognitiveLoad": "Cognitive Load",
   "dashboard.drowsiness": "Drowsiness",
   "dashboard.temperature": "Temp (raw)",
-  "dashboard.headache": "Headache",
   "dashboard.migraine": "Migraine",
   "dashboard.consciousness": "Consciousness",
   "dashboard.consciousness.lzc": "LZC",

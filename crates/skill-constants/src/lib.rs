@@ -621,11 +621,12 @@ pub const UMAP_CONFIG_FILE: &str = "umap_config.json";
 
 // ── Data files ────────────────────────────────────────────────────────────────
 
-/// SQLite database that stores user-authored labels (`~/.skill/labels.sqlite`).
-pub const LABELS_FILE: &str = "labels.sqlite";
+/// DuckDB database that stores user-authored labels (`~/.skill/labels.duckdb`).
+pub const LABELS_FILE: &str = "labels.duckdb";
 
-/// SQLite database for screenshot metadata and embedding blobs.
-pub const SCREENSHOTS_SQLITE: &str = "screenshots.sqlite";
+/// DuckDB database for screenshot metadata and embedding blobs. (The
+/// constant keeps its historical name; the file is `screenshots.duckdb`.)
+pub const SCREENSHOTS_SQLITE: &str = "screenshots.duckdb";
 
 /// Directory name under `~/.skill/` for captured screenshot images.
 pub const SCREENSHOTS_DIR: &str = "screenshots";
@@ -895,18 +896,19 @@ pub fn global_hnsw_file_for(backend: &str) -> String {
 /// Periodic save interval for the global HNSW index.
 pub const GLOBAL_HNSW_SAVE_EVERY: usize = 10;
 
-/// Per-day SQLite database filename.
-pub const SQLITE_FILE: &str = "eeg.sqlite";
+/// Per-day EEG embeddings database (DuckDB). The constant keeps its
+/// historical name; open it through `skill_data::eeg_store`.
+pub const SQLITE_FILE: &str = "eeg.duckdb";
 
-/// Activity tracking database filename.
-pub const ACTIVITY_FILE: &str = "activity.sqlite";
+/// Activity tracking database filename (DuckDB).
+pub const ACTIVITY_FILE: &str = "activity.duckdb";
 
-/// Hooks audit-log database filename.
-pub const HOOKS_LOG_FILE: &str = "hooks.sqlite";
+/// Hooks audit-log database filename (DuckDB).
+pub const HOOKS_LOG_FILE: &str = "hooks.duckdb";
 
-/// Validation / fatigue-research database filename — KSS, NASA-TLX, PVT
+/// Validation / fatigue-research database filename (DuckDB) — KSS, NASA-TLX, PVT
 /// responses plus the persistent validation config.
-pub const VALIDATION_FILE: &str = "validation.sqlite";
+pub const VALIDATION_FILE: &str = "validation.duckdb";
 
 // ── mDNS / Bonjour ────────────────────────────────────────────────────────────
 

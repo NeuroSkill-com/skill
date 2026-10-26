@@ -23,7 +23,7 @@
 //! All inference (the scheduler's `next_prompt` decision, EEG fatigue index)
 //! runs in caller code; this module is pure storage + small queries.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use crate::duck::{params, DbResult, OptionalExt};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
@@ -39,73 +39,82 @@ fn now_secs() -> i64 {
 
 // ── DDL ───────────────────────────────────────────────────────────────────────
 
-const DDL: &str = "
+const SCHEMA: crate::duck::StoreSchema<'static> = crate::duck::StoreSchema {
+    ddl: "
 -- Single-row config blob.  We keep it in JSON to make schema migrations
 -- (adding a new channel, a new field) painless: the Rust struct deserialises
 -- with serde defaults for any missing key.
 CREATE TABLE IF NOT EXISTS config (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
-    json        TEXT    NOT NULL,
-    updated_at  INTEGER NOT NULL
+    id          BIGINT  PRIMARY KEY CHECK (id = 1),
+    json        VARCHAR NOT NULL,
+    updated_at  BIGINT  NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS kss_responses (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    score       INTEGER NOT NULL CHECK (score BETWEEN 1 AND 9),
-    triggered_by TEXT   NOT NULL,    -- 'break_coach' | 'random' | 'manual'
-    surface     TEXT    NOT NULL,    -- 'vscode' | 'tauri' | 'browser'
-    in_flow     INTEGER NOT NULL DEFAULT 0,
-    focus_score REAL,                -- contemporaneous focus score, NULL if unknown
-    fatigue_idx REAL,                -- contemporaneous EEG fatigue index, NULL if no headset
-    answered_at INTEGER NOT NULL
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('kss_responses_id_seq'),
+    score       BIGINT  NOT NULL CHECK (score BETWEEN 1 AND 9),
+    triggered_by VARCHAR NOT NULL,    -- 'break_coach' | 'random' | 'manual'
+    surface     VARCHAR NOT NULL,    -- 'vscode' | 'tauri' | 'browser'
+    in_flow     BIGINT  NOT NULL DEFAULT 0,
+    focus_score DOUBLE,                -- contemporaneous focus score, NULL if unknown
+    fatigue_idx DOUBLE,                -- contemporaneous EEG fatigue index, NULL if no headset
+    answered_at BIGINT  NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_kss_at ON kss_responses (answered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kss_at ON kss_responses (answered_at);
 
 CREATE TABLE IF NOT EXISTS tlx_responses (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('tlx_responses_id_seq'),
     -- Six raw sub-scales, 0-100 each.
-    mental      INTEGER NOT NULL CHECK (mental      BETWEEN 0 AND 100),
-    physical    INTEGER NOT NULL CHECK (physical    BETWEEN 0 AND 100),
-    temporal    INTEGER NOT NULL CHECK (temporal    BETWEEN 0 AND 100),
-    performance INTEGER NOT NULL CHECK (performance BETWEEN 0 AND 100),
-    effort      INTEGER NOT NULL CHECK (effort      BETWEEN 0 AND 100),
-    frustration INTEGER NOT NULL CHECK (frustration BETWEEN 0 AND 100),
-    task_kind   TEXT    NOT NULL,    -- 'flow_block' | 'debug_session' | 'end_of_day' | 'manual'
-    task_duration_secs INTEGER,
-    surface     TEXT    NOT NULL,
-    answered_at INTEGER NOT NULL
+    mental      BIGINT  NOT NULL CHECK (mental      BETWEEN 0 AND 100),
+    physical    BIGINT  NOT NULL CHECK (physical    BETWEEN 0 AND 100),
+    temporal    BIGINT  NOT NULL CHECK (temporal    BETWEEN 0 AND 100),
+    performance BIGINT  NOT NULL CHECK (performance BETWEEN 0 AND 100),
+    effort      BIGINT  NOT NULL CHECK (effort      BETWEEN 0 AND 100),
+    frustration BIGINT  NOT NULL CHECK (frustration BETWEEN 0 AND 100),
+    task_kind   VARCHAR NOT NULL,    -- 'flow_block' | 'debug_session' | 'end_of_day' | 'manual'
+    task_duration_secs BIGINT,
+    surface     VARCHAR NOT NULL,
+    answered_at BIGINT  NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_tlx_at ON tlx_responses (answered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tlx_at ON tlx_responses (answered_at);
 
 CREATE TABLE IF NOT EXISTS pvt_runs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    duration_secs    INTEGER NOT NULL,    -- task length actually run
-    stimulus_count   INTEGER NOT NULL,
-    response_count   INTEGER NOT NULL,
-    mean_rt_ms       REAL    NOT NULL,
-    median_rt_ms     REAL    NOT NULL,
-    slowest10_rt_ms  REAL    NOT NULL,    -- mean of slowest 10% RTs (anticipation-resistant)
-    lapse_count      INTEGER NOT NULL,    -- RT > 500 ms
-    false_start_count INTEGER NOT NULL,   -- response without stimulus
-    fatigue_idx      REAL,                -- contemporaneous EEG fatigue index
-    started_at       INTEGER NOT NULL,
-    finished_at      INTEGER NOT NULL
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('pvt_runs_id_seq'),
+    duration_secs    BIGINT  NOT NULL,    -- task length actually run
+    stimulus_count   BIGINT  NOT NULL,
+    response_count   BIGINT  NOT NULL,
+    mean_rt_ms       DOUBLE  NOT NULL,
+    median_rt_ms     DOUBLE  NOT NULL,
+    slowest10_rt_ms  DOUBLE  NOT NULL,    -- mean of slowest 10% RTs (anticipation-resistant)
+    lapse_count      BIGINT  NOT NULL,    -- RT > 500 ms
+    false_start_count BIGINT  NOT NULL,   -- response without stimulus
+    fatigue_idx      DOUBLE,                -- contemporaneous EEG fatigue index
+    started_at       BIGINT  NOT NULL,
+    finished_at      BIGINT  NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_pvt_at ON pvt_runs (finished_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pvt_at ON pvt_runs (finished_at);
 
 CREATE TABLE IF NOT EXISTS prompt_log (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    channel     TEXT    NOT NULL,    -- 'kss' | 'tlx' | 'pvt'
-    triggered_by TEXT   NOT NULL,
-    fired_at    INTEGER NOT NULL,
-    surface     TEXT    NOT NULL DEFAULT '',  -- which client rendered the prompt
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('prompt_log_id_seq'),
+    channel     VARCHAR NOT NULL,    -- 'kss' | 'tlx' | 'pvt'
+    triggered_by VARCHAR NOT NULL,
+    fired_at    BIGINT  NOT NULL,
+    surface     VARCHAR NOT NULL DEFAULT '',  -- which client rendered the prompt
     -- One of: 'answered' | 'snoozed' | 'dismissed' | 'disabled_today' | 'disabled_perm'
-    outcome     TEXT,
-    outcome_at  INTEGER
+    outcome     VARCHAR,
+    outcome_at  BIGINT
 );
-CREATE INDEX IF NOT EXISTS idx_prompt_at      ON prompt_log (fired_at DESC);
-CREATE INDEX IF NOT EXISTS idx_prompt_channel ON prompt_log (channel, fired_at DESC);
-";
+CREATE INDEX IF NOT EXISTS idx_prompt_at      ON prompt_log (fired_at);
+CREATE INDEX IF NOT EXISTS idx_prompt_channel ON prompt_log (channel, fired_at);
+",
+    import_tables: &["config", "kss_responses", "tlx_responses", "pvt_runs", "prompt_log"],
+    sequences: &[
+        ("kss_responses_id_seq", "kss_responses", "id"),
+        ("tlx_responses_id_seq", "tlx_responses", "id"),
+        ("pvt_runs_id_seq", "pvt_runs", "id"),
+        ("prompt_log_id_seq", "prompt_log", "id"),
+    ],
+};
 
 // ── Persistent config ────────────────────────────────────────────────────────
 
@@ -278,26 +287,20 @@ pub struct PvtRecord {
 // ── Store ────────────────────────────────────────────────────────────────────
 
 pub struct ValidationStore {
-    conn: Mutex<Connection>,
+    conn: Mutex<crate::duck::Conn>,
 }
 
 impl ValidationStore {
-    /// Open or create the store at `~/.skill/validation.sqlite`.
+    /// Open or create the store at `~/.skill/validation.duckdb`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let path = skill_dir.join(skill_constants::VALIDATION_FILE);
-        let conn = match Connection::open(&path) {
-            Ok(c) => c,
+        match crate::duck::open_store(&path, &SCHEMA) {
+            Ok(conn) => Some(Self { conn: Mutex::new(conn) }),
             Err(e) => {
-                eprintln!("[validation] open {}: {e}", path.display());
-                return None;
+                eprintln!("[validation] open {}: {e:#}", path.display());
+                None
             }
-        };
-        crate::util::init_wal_pragmas(&conn);
-        if let Err(e) = conn.execute_batch(DDL) {
-            eprintln!("[validation] DDL failed: {e}");
-            return None;
         }
-        Some(Self { conn: Mutex::new(conn) })
     }
 
     // ── Config ───────────────────────────────────────────────────────────────
@@ -315,7 +318,7 @@ impl ValidationStore {
         }
     }
 
-    pub fn save_config(&self, cfg: &ValidationConfig) -> rusqlite::Result<()> {
+    pub fn save_config(&self, cfg: &ValidationConfig) -> DbResult<()> {
         let json = serde_json::to_string(cfg).unwrap_or_else(|_| "{}".into());
         let now = now_secs();
         let guard = self.conn.lock_or_recover();
@@ -329,13 +332,14 @@ impl ValidationStore {
 
     // ── Inserters ────────────────────────────────────────────────────────────
 
-    pub fn record_kss(&self, rec: &KssRecord) -> rusqlite::Result<i64> {
+    pub fn record_kss(&self, rec: &KssRecord) -> DbResult<i64> {
         let now = now_secs();
         let guard = self.conn.lock_or_recover();
-        guard.execute(
+        guard.query_row(
             "INSERT INTO kss_responses
-              (score, triggered_by, surface, in_flow, focus_score, fatigue_idx, answered_at)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+              (id, score, triggered_by, surface, in_flow, focus_score, fatigue_idx, answered_at)
+              VALUES (nextval('kss_responses_id_seq'), ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+              RETURNING id",
             params![
                 rec.score,
                 rec.triggered_by,
@@ -345,18 +349,19 @@ impl ValidationStore {
                 rec.fatigue_idx,
                 now,
             ],
-        )?;
-        Ok(guard.last_insert_rowid())
+            |r| r.get(0),
+        )
     }
 
-    pub fn record_tlx(&self, rec: &TlxRecord) -> rusqlite::Result<i64> {
+    pub fn record_tlx(&self, rec: &TlxRecord) -> DbResult<i64> {
         let now = now_secs();
         let guard = self.conn.lock_or_recover();
-        guard.execute(
+        guard.query_row(
             "INSERT INTO tlx_responses
-              (mental, physical, temporal, performance, effort, frustration,
+              (id, mental, physical, temporal, performance, effort, frustration,
                task_kind, task_duration_secs, surface, answered_at)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+              VALUES (nextval('tlx_responses_id_seq'), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+              RETURNING id",
             params![
                 rec.mental,
                 rec.physical,
@@ -369,18 +374,19 @@ impl ValidationStore {
                 rec.surface,
                 now,
             ],
-        )?;
-        Ok(guard.last_insert_rowid())
+            |r| r.get(0),
+        )
     }
 
-    pub fn record_pvt(&self, rec: &PvtRecord) -> rusqlite::Result<i64> {
+    pub fn record_pvt(&self, rec: &PvtRecord) -> DbResult<i64> {
         let guard = self.conn.lock_or_recover();
-        guard.execute(
+        guard.query_row(
             "INSERT INTO pvt_runs
-              (duration_secs, stimulus_count, response_count, mean_rt_ms, median_rt_ms,
+              (id, duration_secs, stimulus_count, response_count, mean_rt_ms, median_rt_ms,
                slowest10_rt_ms, lapse_count, false_start_count, fatigue_idx,
                started_at, finished_at)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+              VALUES (nextval('pvt_runs_id_seq'), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+              RETURNING id",
             params![
                 rec.duration_secs,
                 rec.stimulus_count,
@@ -394,23 +400,24 @@ impl ValidationStore {
                 rec.started_at,
                 rec.finished_at,
             ],
-        )?;
-        Ok(guard.last_insert_rowid())
+            |r| r.get(0),
+        )
     }
 
     // ── Prompt log (for the scheduler) ───────────────────────────────────────
 
-    pub fn log_prompt(&self, channel: &str, triggered_by: &str, surface: &str) -> rusqlite::Result<i64> {
+    pub fn log_prompt(&self, channel: &str, triggered_by: &str, surface: &str) -> DbResult<i64> {
         let now = now_secs();
         let guard = self.conn.lock_or_recover();
-        guard.execute(
-            "INSERT INTO prompt_log (channel, triggered_by, fired_at, surface) VALUES (?1, ?2, ?3, ?4)",
+        guard.query_row(
+            "INSERT INTO prompt_log (id, channel, triggered_by, fired_at, surface)
+             VALUES (nextval('prompt_log_id_seq'), ?1, ?2, ?3, ?4) RETURNING id",
             params![channel, triggered_by, now, surface],
-        )?;
-        Ok(guard.last_insert_rowid())
+            |r| r.get(0),
+        )
     }
 
-    pub fn close_prompt(&self, id: i64, outcome: &str) -> rusqlite::Result<()> {
+    pub fn close_prompt(&self, id: i64, outcome: &str) -> DbResult<()> {
         let now = now_secs();
         let guard = self.conn.lock_or_recover();
         guard.execute(

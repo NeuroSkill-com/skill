@@ -36,7 +36,7 @@ a_start_utc、a_end_utc、b_start_utc、b_end_utc（u64，必填）
 ## sessions
 _(无)_
 
-列出从每日 eeg.sqlite 数据库中发现的所有嵌入会话。会话是连续录制范围（间隔 > 2 分钟 = 新会话）。按最新优先返回。
+列出从每日 eeg.duckdb 数据库中发现的所有嵌入会话。会话是连续录制范围（间隔 > 2 分钟 = 新会话）。按最新优先返回。
 
 ## sleep
 start_utc、end_utc（u64，必填）

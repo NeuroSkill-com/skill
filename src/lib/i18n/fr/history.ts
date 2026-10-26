@@ -269,6 +269,39 @@ const history: Record<string, string> = {
 
   // ── Auto-synced from en/ (2026-03-28) ──
   "history.addLabel": "Ajouter une étiquette",
+
+  // BIDS export
+  "history.bids.title": "Exporter en BIDS",
+  "history.bids.button": "Exporter en BIDS",
+  "history.bids.description": "Enregistre les enregistrements d’une période sous forme de jeu de données BIDS-EEG : EEG BrainVision, étiquettes comme événements, PPG et IMU.",
+  "history.bids.from": "Du",
+  "history.bids.to": "Au",
+  "history.bids.presetSession": "Cette session",
+  "history.bids.presetDay": "Ce jour",
+  "history.bids.presetWeek": "7 derniers jours",
+  "history.bids.presetAll": "Tous les enregistrements",
+  "history.bids.onlySession": "Seulement cette session",
+  "history.bids.subject": "Sujet",
+  "history.bids.task": "Tâche",
+  "history.bids.powerLine": "Fréquence du secteur",
+  "history.bids.powerLineUnknown": "Inconnue",
+  "history.bids.includeEvents": "Étiquettes comme événements",
+  "history.bids.includePpg": "PPG (physiologique)",
+  "history.bids.includeImu": "IMU (mouvement)",
+  "history.bids.rangeInvalid": "La fin doit être postérieure au début.",
+  "history.bids.exporting": "Export en cours…",
+  "history.bids.progress": "Export de l’enregistrement {done} sur {total}…",
+  "history.bids.preview": "{count} enregistrement(s), environ {duration}",
+  "history.bids.previewNone": "Aucun enregistrement sur cette période.",
+  "history.bids.export": "Exporter",
+  "history.bids.done": "{count} enregistrement(s) exporté(s), {size}.",
+  "history.bids.valid": "Validation BIDS réussie.",
+  "history.bids.issues": "Validation : {errors} erreur(s), {warnings} avertissement(s)",
+  "history.bids.skipped": "{count} ignoré(s)",
+  "history.bids.reveal": "Afficher dans le dossier",
+  "history.bids.failed": "Échec de l’export",
+  "history.embeddings": "Plongements",
+  "history.epochsIndexed": "époques indexées",
 };
 
 export default history;

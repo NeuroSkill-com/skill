@@ -288,7 +288,7 @@ const helpRef: Record<string, string> = {
   "helpRef.title69": "EEG cuantitativo interictal en la migraña: un estudio controlado ciego",
   "helpRef.authors69": "Bjørk, M. H., Stovner, L. J., Engstrøm, M., Stjern, M., Hagen, K., Sand, T.",
   "helpRef.journal69": "El diario de dolor de cabeza y dolor, 10 (5), 331–339",
-  "helpRef.metrics69": "Índice de dolor de cabeza e índice de migraña: QEEG interictal en la migraña",
+  "helpRef.metrics69": "Índice de migraña: QEEG interictal en la migraña",
   "helpRef.title75":
     "Un índice de conciencia con base teórica, independiente del procesamiento sensorial y el comportamiento",
   "helpRef.authors75":

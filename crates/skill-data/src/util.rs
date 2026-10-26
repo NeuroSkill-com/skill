@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //! Shared utilities — MutexExt, UTC date/time formatters, date-directory
-//! scanning, read-only SQLite opener.
+//! scanning.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -10,21 +10,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // Re-export the canonical definition from `skill-constants`.
 pub use skill_constants::MutexExt;
-
-// ── Read-only SQLite opener ───────────────────────────────────────────────────
-
-/// Open a SQLite database in **read-only** mode with `SQLITE_OPEN_NO_MUTEX`.
-///
-/// Consolidates the repeated `Connection::open_with_flags(…, READ_ONLY | NO_MUTEX)`
-/// pattern used across many crates.
-pub fn open_readonly(path: &Path) -> Result<rusqlite::Connection, rusqlite::Error> {
-    let conn = rusqlite::Connection::open_with_flags(
-        path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    init_wal_pragmas(&conn);
-    Ok(conn)
-}
 
 // ── JSON config load / save ────────────────────────────────────────────────────
 
@@ -52,17 +37,6 @@ pub fn save_json<T: serde::Serialize>(path: &Path, val: &T) {
     }
 }
 
-// ── SQLite WAL pragmas ────────────────────────────────────────────────────────
-
-/// Apply the standard WAL + NORMAL-sync pragmas to a SQLite connection.
-///
-/// This consolidates the `PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`
-/// one-liner duplicated in `activity_store`, `screenshot_store`, `hooks_log`,
-/// and `eeg_embeddings`.
-pub fn init_wal_pragmas(conn: &rusqlite::Connection) {
-    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
-}
-
 /// Return the local timezone's UTC offset in seconds (e.g. -28800 for UTC-8).
 pub fn local_tz_offset_secs() -> i32 {
     chrono::Local::now().offset().local_minus_utc()
@@ -70,7 +44,7 @@ pub fn local_tz_offset_secs() -> i32 {
 
 // ── Blob ↔ f32 conversion ─────────────────────────────────────────────────────
 
-/// Deserialise a SQLite `BLOB` (little-endian packed `f32` values) into a `Vec<f32>`.
+/// Deserialise a `BLOB` (little-endian packed `f32` values) into a `Vec<f32>`.
 ///
 /// This replaces the per-4-byte `map(…)` pattern that was duplicated in
 /// skill-commands, skill-label-index, skill-router, and skill-data/screenshot_store.
@@ -81,7 +55,7 @@ pub fn blob_to_f32(blob: &[u8]) -> Vec<f32> {
     blob.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect()
 }
 
-/// Serialise a `&[f32]` slice into a `Vec<u8>` (little-endian) for SQLite storage.
+/// Serialise a `&[f32]` slice into a `Vec<u8>` (little-endian) for BLOB storage.
 #[inline]
 pub fn f32_to_blob(v: &[f32]) -> Vec<u8> {
     v.iter().flat_map(|f| f.to_le_bytes()).collect()
@@ -359,51 +333,6 @@ pub fn epoch_ts_to_unix_ms(ts: i64) -> i64 {
         14 => ts_to_unix(ts) as i64 * 1000,        // YYYYMMDDHHmmss
         _ => ts,                                   // already Unix milliseconds
     }
-}
-
-/// Give an `embeddings` table a canonical `unix_ms` column, backfilled from
-/// whichever of the three historical formats each row uses.
-///
-/// **Purely additive — `timestamp` is never rewritten.** Older builds of the
-/// app read `timestamp` directly and still expect the format they wrote, so
-/// normalising it in place would corrupt their view of the user's recordings.
-/// This is the "expand" half of expand/contract: new code can range-query the
-/// single canonical column, old code keeps working, and `timestamp` can only
-/// be retired once no old build remains.
-///
-/// Idempotent: adding the column is attempted every open and ignored once it
-/// exists, and only rows with a `NULL` `unix_ms` are backfilled — so a
-/// half-finished migration (crash, full disk) simply resumes.
-pub fn migrate_embeddings_unix_ms(conn: &rusqlite::Connection) -> usize {
-    // `ADD COLUMN` fails with "duplicate column name" once applied; that is the
-    // idempotency check, so the error is expected and ignored.
-    let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN unix_ms INTEGER", []);
-
-    let pending: Vec<(i64, i64)> = {
-        let Ok(mut stmt) = conn.prepare("SELECT id, timestamp FROM embeddings WHERE unix_ms IS NULL") else {
-            return 0;
-        };
-        let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))) else {
-            return 0;
-        };
-        rows.filter_map(std::result::Result::ok).collect()
-    };
-
-    if !pending.is_empty() {
-        // One transaction: a partial backfill is resumable, but thousands of
-        // individual commits on a day store is not worth the fsyncs.
-        let _ = conn.execute_batch("BEGIN");
-        for (id, ts) in &pending {
-            let _ = conn.execute(
-                "UPDATE embeddings SET unix_ms = ?1 WHERE id = ?2",
-                rusqlite::params![epoch_ts_to_unix_ms(*ts), id],
-            );
-        }
-        let _ = conn.execute_batch("COMMIT");
-    }
-
-    let _ = conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_embeddings_unix_ms ON embeddings(unix_ms);");
-    pending.len()
 }
 
 /// Convert `YYYYMMDDHHmmss` integer → Unix seconds (UTC).

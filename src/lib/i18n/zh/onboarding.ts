@@ -107,7 +107,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app} 可以从你的编辑器、浏览器和终端中获取额外的上下文。每个集成都是可独立安装或跳过的单独组件 — EEG 功能的运行不需要其中任何一个。",
   "onboarding.extensionsPrivacy":
-    "与其他所有内容相同的隐私保证：每个扩展通过 localhost 端口向本地守护进程报告，这些数据写入这台电脑上的 activity.sqlite。不会上传到 NeuroSkill 或其他任何人。",
+    "与其他所有内容相同的隐私保证：每个扩展通过 localhost 端口向本地守护进程报告，这些数据写入这台电脑上的 activity.duckdb。不会上传到 NeuroSkill 或其他任何人。",
   "onboarding.extensionsSkip": "全部可选。你可以稍后在 设置 → 扩展 和 设置 → 终端 中安装、更新或移除任何扩展。",
   "onboarding.extensions.vscodeTitle": "VS Code 系列编辑器",
   "onboarding.extensions.vscodeDesc":
@@ -123,7 +123,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     '{app} 可以记录你正在做什么，将 EEG／专注数据与实际上下文关联起来 — "我在写这个 PR 时分心了"，而不仅仅是"下午 3 点分心了"。默认关闭，完全可选。',
   "onboarding.permissionsPrivacy":
-    "所有内容都保留在这台电脑上。记录的活动写入本地 activity.sqlite 文件，从不发送到任何服务器 — 不发送到 NeuroSkill，也不发送到任何人。你可以随时关闭每一项；已记录的数据会保留在磁盘上，直到你删除它。",
+    "所有内容都保留在这台电脑上。记录的活动写入本地 activity.duckdb 文件，从不发送到任何服务器 — 不发送到 NeuroSkill，也不发送到任何人。你可以随时关闭每一项；已记录的数据会保留在磁盘上，直到你删除它。",
   "onboarding.permissionsSkip": "默认全部关闭。你可以稍后在 设置 → 活动跟踪 中启用任何选项。",
   "onboarding.permissionsActiveWindowDesc":
     "捕获前台应用、窗口标题、活动浏览器标签页和编辑器中打开的文件路径。macOS 会针对每个浏览器和编辑器请求辅助功能 / 自动化访问权限。",

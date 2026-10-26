@@ -2004,17 +2004,11 @@ fn extract_browser_title(app_name: &str, title: &str) -> Option<String> {
 
 /// Auto-label the EEG recording when significant activity events occur.
 fn auto_label_eeg(skill_dir: &std::path::Path, text: &str, context: &str) {
-    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
-    let conn = match rusqlite::Connection::open(&db_path) {
-        Ok(c) => c,
-        Err(_) => return,
+    let Some(store) = skill_data::label_store::LabelStore::open(skill_dir) else {
+        return;
     };
-    let now = unix_secs() as i64;
-    let _ = conn.execute(
-        "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
-         VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3)",
-        rusqlite::params![text, context, now],
-    );
+    let now = unix_secs();
+    let _ = store.insert(now, now, now, now, text, context, now);
 }
 
 /// Check if a file path matches any exclude pattern.

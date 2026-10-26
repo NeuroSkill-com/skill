@@ -440,8 +440,7 @@ pub struct LatestEpochMetrics {
     pub meditation: f64,
     pub cognitive_load: f64,
     pub drowsiness: f64,
-    // ── Headache / Migraine EEG correlate indices (0–100) ───────────────────
-    pub headache_index: f32,
+    // ── Migraine EEG correlate index (0–100) ────────────────────────────────
     pub migraine_index: f32,
     // ── Consciousness metrics (0–100) ─────────────────────────────────
     pub consciousness_lzc: f32,

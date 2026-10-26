@@ -6,8 +6,6 @@
 // the Free Software Foundation, version 3 only.
 /** FR "ui" namespace translations. */
 const ui: Record<string, string> = {
-  "tip.headache":
-    "Corrélat céphalée - hyperexcitabilité corticale: bêta élevé + alpha supprimé. Indicateur de recherche uniquement.",
   "tip.migraine":
     "Corrélat migraine - dépression corticale propagée: delta élevé + suppression alpha + latéralisation. Indicateur de recherche uniquement.",
   "tip.consciousness.lzc":

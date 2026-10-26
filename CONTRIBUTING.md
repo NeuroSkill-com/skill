@@ -63,7 +63,9 @@ for `llm-rlx` / `text-embeddings-rlx` features). Details:
 │   ├── skill-calendar/      # Calendar/meeting sync
 │   ├── skill-location/      # Location context
 │   ├── skill-autostart/     # OS-level autostart
-│   ├── skill-data/          # Data layer (SQLite, FTS5, embeddings)
+│   ├── skill-data/          # Data layer (DuckDB stores, embeddings)
+│   ├── skill-db/            # DuckDB instance registry + one-time SQLite import
+│   ├── skill-bids/          # BIDS-EEG export over a time range
 │   ├── skill-router/        # Request router
 │   ├── skill-jobs/          # Background job runner
 │   ├── skill-health/        # Health checks

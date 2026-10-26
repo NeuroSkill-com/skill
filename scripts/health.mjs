@@ -125,7 +125,9 @@ for (const day of dayDirs) {
     if (f.includes("_ppg.csv") || f.includes("_ppg.parquet")) fileCounts.ppg++;
     if (f.includes("_imu.csv") || f.includes("_imu.parquet")) fileCounts.imu++;
     if (f.startsWith("log_") && ext === ".txt") fileCounts.log++;
-    if (f.endsWith(".sqlite") || f.endsWith(".sqlite-wal") || f.endsWith(".sqlite-shm")) fileCounts.sqlite++;
+    // Day stores: eeg.duckdb, or a pre-DuckDB eeg.sqlite still awaiting import.
+    // (WAL side files and .sqlite.bak backups are not counted.)
+    if (f.endsWith(".duckdb") || f.endsWith(".sqlite")) fileCounts.sqlite++;
     if (f.endsWith(".hnsw")) fileCounts.hnsw++;
     if (f.endsWith("_metrics_cache.json")) fileCounts.metricsCache++;
     if (f.endsWith(".meta.jsonl")) fileCounts.metaJsonl++;
@@ -159,7 +161,7 @@ row("PPG files", String(totPpg));
 row("IMU files", String(totImu));
 row("Meta JSONL files", String(totMeta));
 row("Log files", String(totLogs));
-row("SQLite DBs (per-day)", String(totSqlite));
+row("Day stores (eeg.duckdb)", String(totSqlite));
 row("HNSW indices (per-day)", String(totHnsw));
 
 // ── Per-day detail ───────────────────────────────────────────────────────────

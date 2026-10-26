@@ -431,23 +431,17 @@ fn spawn_weekly_digest(state: AppState) {
 }
 
 /// Insert an auto-generated EEG label for significant activity state transitions.
-/// Labels are stored in `labels.sqlite` alongside manual labels, enabling
+/// Labels are stored in the label store alongside manual labels, enabling
 /// EEG search to find brain states correlated with coding events.
 fn auto_label(skill_dir: &std::path::Path, text: &str, context: &str) {
-    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
-    let conn = match rusqlite::Connection::open(&db_path) {
-        Ok(c) => c,
-        Err(_) => return,
+    let Some(store) = skill_data::label_store::LabelStore::open(skill_dir) else {
+        return;
     };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let _ = conn.execute(
-        "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
-         VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3)",
-        rusqlite::params![text, context, now as i64],
-    );
+    let _ = store.insert(now, now, now, now, text, context, now);
 }
 
 /// Fatigue monitor — checks every 15 minutes for declining focus trend.

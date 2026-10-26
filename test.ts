@@ -63,17 +63,17 @@
  *   1. Muse headband → BLE → raw EEG (4ch × 256Hz), PPG (64Hz), IMU (~50Hz)
  *   2. Every 5 seconds, a 5s EEG window (epoch) is fed to the ZUNA GPU encoder
  *      (WebGPU / wgpu) which produces a high-dimensional embedding vector.
- *   3. Embeddings are stored in per-day SQLite databases (YYYYMMDD/embeddings.sqlite).
+ *   3. Embeddings are stored in per-day DuckDB databases (YYYYMMDD/eeg.duckdb).
  *   4. Band powers, derived scores, sleep staging, and search indices are all
  *      computed from these embeddings and the raw spectral data.
  *
  * Storage layout:
  *   ~/.skill/data/
  *     ├── 20260224/
- *     │   └── embeddings.sqlite   — embedding vectors + per-epoch scores
+ *     │   └── eeg.duckdb          — embedding vectors + per-epoch scores
  *     ├── 20260223/
- *     │   └── embeddings.sqlite
- *     ├── labels.sqlite           — user text annotations (cross-day)
+ *     │   └── eeg.duckdb
+ *     ├── labels.duckdb           — user text annotations (cross-day)
  *     └── ...
  *
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -89,7 +89,7 @@
  * 7.  HOOKS_STATUS       — Proactive Hook rules + scenario + last-trigger metadata
  * 7b. HOOKS_GET/SET      — Full CRUD for hook rules via hooks_get / hooks_set
  * 8.  HOOKS_SUGGEST      — Suggest threshold from labels + EEG embedding distances
- * 9.  HOOKS_LOG          — Paginated hook trigger audit log from hooks.sqlite (includes scenario in hook_json)
+ * 9.  HOOKS_LOG          — Paginated hook trigger audit log from hooks.duckdb (includes scenario in hook_json)
  * 10. INTERACTIVE_SEARCH — Cross-modal 4-layer graph search (query → labels → EEG → found labels)
  * 11. SEARCH             — ANN similarity search across EEG embedding history
  * 9.  COMPARE            — Side-by-side metrics for two time ranges + UMAP enqueue
@@ -515,7 +515,7 @@ async function testStatus(): Promise<void> {
     console.log(`    ${CYAN}── embeddings ──${RESET}  ${DIM}ZUNA GPU encoder pipeline stats${RESET}`);
     info("Every 5s of clean EEG is passed through a WebGPU (wgpu) neural encoder.");
     info("The encoder produces a high-dimensional embedding vector — the 'neural fingerprint'");
-    info("of that 5-second brain moment. These embeddings are stored in daily SQLite DBs");
+    info("of that 5-second brain moment. These embeddings are stored in daily DuckDB stores");
     info("and used for similarity search, UMAP projection, and metric computation.");
     const e = r.embeddings || {};
     field("today",          e.today,          "embedding epochs computed today");
@@ -526,9 +526,9 @@ async function testStatus(): Promise<void> {
 
     // ── labels ──
     console.log(`    ${CYAN}── labels ──${RESET}  ${DIM}User-annotated EEG moments${RESET}`);
-    info("Labels are free-text annotations stored in labels.sqlite with a UTC timestamp.");
+    info("Labels are free-text annotations stored in labels.duckdb with a UTC timestamp.");
     info("They appear in search results and can be attached to UMAP points.");
-    field("total",          r.labels?.total,  "total labels stored in labels.sqlite");
+    field("total",          r.labels?.total,  "total labels stored in labels.duckdb");
 
     // ── calibration ──
     console.log(`    ${CYAN}── calibration ──${RESET}  ${DIM}Timed reference task for model baseline${RESET}`);
@@ -696,7 +696,7 @@ async function testStatus(): Promise<void> {
 async function testSessions(): Promise<any[]> {
   heading("sessions");
   info("Request: { command: 'sessions' }");
-  info("Scans all daily SQLite DBs and reconstructs recording sessions from contiguous epochs.");
+  info("Scans all daily DuckDB stores and reconstructs recording sessions from contiguous epochs.");
   info("A gap of >120s between epochs starts a new session.");
   info("Returns an array of session objects with day, start_utc, end_utc, n_epochs.");
   try {
@@ -915,7 +915,7 @@ async function testLabel(): Promise<void> {
   heading("label");
   info("Request: { command: 'label', text: '...' }");
   info("Creates a timestamped text annotation on the current EEG moment.");
-  info("Stored in labels.sqlite. Appears in search results and UMAP visualizations.");
+  info("Stored in labels.duckdb. Appears in search results and UMAP visualizations.");
   info("Also triggers a 'label-created' broadcast event to all connected clients.");
   try {
     const text = `test-label-${Date.now()}`;
@@ -923,7 +923,7 @@ async function testLabel(): Promise<void> {
     // Tunnel label handler may fail on DBs with newer schema (label_start column).
     // Use the REST endpoint (/v1/labels) for reliable label creation.
     r.ok ? ok(`label created: id=${r.label_id}`) : info(`tunnel label: ${r.error} (known schema mismatch — use REST)`);
-    field("label_id", r.label_id, "auto-incremented label ID in labels.sqlite");
+    field("label_id", r.label_id, "auto-incremented label ID in labels.duckdb");
   } catch (e: any) { fail(`label failed: ${e.message}`); }
 }
 
@@ -1447,7 +1447,7 @@ async function testSearchLabels(): Promise<void> {
     if (results.length > 0) {
       const hit = results[0];
       info("each result contains:");
-      field("  label_id",        hit.label_id,        "primary key in labels.sqlite");
+      field("  label_id",        hit.label_id,        "primary key in labels.duckdb");
       field("  text",            `"${hit.text}"`,     "label text string");
       field("  context",         hit.context ? `"${hit.context.slice(0, 40)}…"` : "\"\"", "label context (may be empty)");
       field("  distance",        hit.distance,        "cosine distance to query [0–1] (lower = closer)");
@@ -3134,7 +3134,7 @@ async function testScreenshotSearch(): Promise<void> {
   // ── search_screenshots — substring mode ───────────────────────────────────
   heading("search_screenshots — substring");
   info("Request: { command: 'search_screenshots', query: '...', mode: 'substring' }");
-  info("Uses SQLite LIKE search on OCR text (no embedding model required).");
+  info("Uses case-insensitive substring search on OCR text (no embedding model required).");
   try {
     const r = await send({ command: "search_screenshots", query: "test", k: 5, mode: "substring" });
     if (r.ok === false) {

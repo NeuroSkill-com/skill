@@ -11,7 +11,7 @@ Manages the full lifecycle of a local large language model: model catalog and do
 | Module | Description |
 |---|---|
 | `catalog` | `LlmCatalog` — JSON-backed model registry with HuggingFace download, cache validation, auto-selection, and mmproj pairing. `download_file()` handles resumable streaming downloads with progress. |
-| `chat_store` | `ChatStore` — SQLite-backed conversation persistence. Sessions, messages, and tool-call history with archive/unarchive support. |
+| `chat_store` | `ChatStore` — DuckDB-backed conversation persistence. Sessions, messages, and tool-call history with archive/unarchive support. |
 | `config` | `LlmConfig` — runtime configuration: model path, context size, GPU layers, temperature, top-p, etc. |
 | `engine` | Inference engine (directory module) with sub-modules for init, actor, generation, sampling, protocol, state, images, tools, think tracking, and logging |
 | `handlers` | HTTP/REST handlers for the `/v1/*` API: chat completions, text completions, embeddings, auth, and `router()` builder |
@@ -34,7 +34,7 @@ Manages the full lifecycle of a local large language model: model catalog and do
 |---|---|
 | `LlmCatalog` | Model registry with download state tracking |
 | `LlmModelEntry` | Single model: HF repo, filename, quant, size, download state |
-| `ChatStore` | SQLite conversation store |
+| `ChatStore` | DuckDB conversation store |
 | `StoredMessage` / `SessionSummary` | Chat persistence types |
 | `LlmConfig` | Inference parameters |
 
@@ -47,4 +47,4 @@ Manages the full lifecycle of a local large language model: model catalog and do
 - `rlx` / `rlx-models` (optional) — RLX inference backends
 - `axum` — HTTP router and WebSocket streaming
 - `tokio` / `async-stream` — async runtime and streaming
-- `rusqlite` — chat database
+- `skill-db` — chat database (DuckDB)

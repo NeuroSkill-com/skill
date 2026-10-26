@@ -4,7 +4,7 @@ WebSocket/HTTP command routing, UMAP projection, embedding loaders, and EEG metr
 
 ## Overview
 
-Bridges the Tauri frontend and the embedding/analysis backend. Loads daily embeddings from SQLite, runs GPU-accelerated parametric UMAP for 2-D projection with disk caching, analyses cluster structure, and provides standardized rounding for EEG metrics sent over the wire.
+Bridges the Tauri frontend and the embedding/analysis backend. Loads daily embeddings from the per-day DuckDB stores, runs GPU-accelerated parametric UMAP for 2-D projection with disk caching, analyses cluster structure, and provides standardized rounding for EEG metrics sent over the wire.
 
 ## Key functions
 
@@ -20,7 +20,7 @@ Bridges the Tauri frontend and the embedding/analysis backend. Loads daily embed
 
 | Function | Description |
 |---|---|
-| `load_embeddings_range(skill_dir, dates)` | Scan daily SQLite files for embedding vectors |
+| `load_embeddings_range(skill_dir, dates)` | Scan the per-day DuckDB stores for embedding vectors |
 | `load_labels_range(skill_dir, dates)` | Query label windows overlapping a date range |
 | `find_label_for_epoch(labels, epoch_utc)` | Match an epoch timestamp to its label |
 
@@ -49,6 +49,6 @@ Bridges the Tauri frontend and the embedding/analysis backend. Loads daily embed
 - `skill-constants`, `skill-commands`, `skill-settings` — constants, search, config
 - `fast-umap` — parametric UMAP implementation
 - `burn` / `burn-cubecl` / `cubecl` (wgpu) — GPU compute for UMAP
-- `rusqlite` — daily embedding databases
+- `skill-data::eeg_store` (DuckDB) — daily embedding databases
 - `crossbeam-channel` — concurrent message passing
 - `serde` / `serde_json` — serialization

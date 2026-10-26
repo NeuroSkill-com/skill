@@ -79,8 +79,7 @@ export interface BandSnapshot {
   drowsiness?: number;
   // Device telemetry
   temperature_raw?: number;
-  // Headache / migraine EEG correlate indices
-  headache_index?: number;
+  // Migraine EEG correlate index
   migraine_index?: number;
   // Consciousness metrics
   consciousness_lzc?: number;

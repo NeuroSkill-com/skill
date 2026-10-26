@@ -94,7 +94,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cognitiveLoad": "인지 부하",
   "dashboard.drowsiness": "졸림",
   "dashboard.temperature": "온도 (원시)",
-  "dashboard.headache": "두통",
   "dashboard.migraine": "편두통",
   "dashboard.consciousness": "의식",
   "dashboard.consciousness.lzc": "LZC",

@@ -35,5 +35,5 @@ All three indices are built from the same label database and kept in sync. The c
 
 - `skill-constants`, `skill-commands`, `skill-data` — constants, search helpers, label store
 - `fast-hnsw` — HNSW index implementation
-- `rusqlite` — label database access
+- `skill-data` (`label_store`, DuckDB) — label database access
 - `serde` — serialization

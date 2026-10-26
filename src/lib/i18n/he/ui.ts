@@ -23,7 +23,6 @@ const ui: Record<string, string> = {
   "downloads.status.failed": "נכשל",
   "downloads.status.cancelled": "בוטל",
 
-  "tip.headache": "מתאם כאב ראש — היפר-עצבנות קורטיקלית: בטא גבוה + אלפא מדוכא. אינדיקטור מחקרי בלבד.",
   "tip.migraine": "מתאם מיגרנה — דיכאון קורטיקלי מתפשט: דלתא גבוהה + דיכוי אלפא + לטרליזציה. אינדיקטור מחקרי בלבד.",
   "tip.consciousness.lzc": "פרוקסי מורכבות למפל-זיו — עושר מידע של האות דרך אנטרופיית תמורות + מימד פרקטל היגוצ׳י.",
   "tip.consciousness.wakefulness": "רמת ערנות — ישנוניות הפוכה ממוונת על ידי BAR ו-TAR.",

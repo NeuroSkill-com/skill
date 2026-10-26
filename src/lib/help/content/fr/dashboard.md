@@ -23,7 +23,7 @@ Un indicateur ENR affiche le nom du fichier CSV en cours d'écriture dans {dataD
 Un graphique en barres montrant la puissance relative dans chaque bande de fréquence EEG standard : Delta, Theta, Alpha, Beta et Gamma.
 
 ## Asymétrie Alpha Frontale (FAA)
-Une jauge ancrée au centre montrant l'index FAA en temps réel : ln(AF8 α) - ln(AF7 α). Les valeurs positives indiquent une puissance alpha fronto-droite plus élevée, associée à une motivation d'approche de l'hémisphère gauche. Les valeurs négatives indiquent une tendance au retrait. La valeur est lissée par une moyenne mobile exponentielle et varie typiquement de -1 à +1. La FAA est stockée avec chaque époque d'embedding de 5 secondes dans eeg.sqlite.
+Une jauge ancrée au centre montrant l'index FAA en temps réel : ln(AF8 α) - ln(AF7 α). Les valeurs positives indiquent une puissance alpha fronto-droite plus élevée, associée à une motivation d'approche de l'hémisphère gauche. Les valeurs négatives indiquent une tendance au retrait. La valeur est lissée par une moyenne mobile exponentielle et varie typiquement de -1 à +1. La FAA est stockée avec chaque époque d'embedding de 5 secondes dans eeg.duckdb.
 
 ## Ondes EEG
 Un graphique défilant du signal EEG filtré pour les quatre canaux. Sous chaque forme d'onde se trouve un spectrogramme.

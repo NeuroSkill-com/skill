@@ -11,7 +11,7 @@ gps = []
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-rusqlite = { workspace = true }
+skill-db = { path = "../skill-db" }
 
 [dev-dependencies]
 tempfile = "3"

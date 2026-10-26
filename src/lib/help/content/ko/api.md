@@ -36,7 +36,7 @@ a_start_utc, a_end_utc, b_start_utc, b_end_utc (u64, 필수)
 ## sessions
 _(없음)_
 
-일일 eeg.sqlite 데이터베이스에서 발견된 모든 임베딩 세션을 나열합니다. 세션은 연속적인 녹화 범위입니다(갭 > 2분 = 새 세션). 최신순으로 반환됩니다.
+일일 eeg.duckdb 데이터베이스에서 발견된 모든 임베딩 세션을 나열합니다. 세션은 연속적인 녹화 범위입니다(갭 > 2분 = 새 세션). 최신순으로 반환됩니다.
 
 ## sleep
 start_utc, end_utc (u64, 필수)

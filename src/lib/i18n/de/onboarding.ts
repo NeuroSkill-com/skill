@@ -118,7 +118,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app} kann zusätzlichen Kontext von deinem Editor, Browser und Terminal abrufen. Jede Integration ist ein eigenes Stück, das du unabhängig installieren oder überspringen kannst — keine ist für die EEG-Funktionen erforderlich.",
   "onboarding.extensionsPrivacy":
-    "Gleiche Datenschutz-Garantie wie bei allem anderen: jede Erweiterung meldet an den lokalen Daemon über einen localhost-Port, und diese Daten werden in activity.sqlite auf diesem Computer gespeichert. Nichts wird zu NeuroSkill oder anderen hochgeladen.",
+    "Gleiche Datenschutz-Garantie wie bei allem anderen: jede Erweiterung meldet an den lokalen Daemon über einen localhost-Port, und diese Daten werden in activity.duckdb auf diesem Computer gespeichert. Nichts wird zu NeuroSkill oder anderen hochgeladen.",
   "onboarding.extensionsSkip":
     "Alles optional. Du kannst diese später unter Einstellungen → Erweiterungen und Einstellungen → Terminal installieren, aktualisieren oder entfernen.",
   "onboarding.extensions.vscodeTitle": "VS Code-basierter Editor",
@@ -135,7 +135,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     '{app} kann aufzeichnen, woran du gearbeitet hast, um deine EEG-/Fokusdaten mit dem tatsächlichen Kontext zu korrelieren — "Ich habe beim Schreiben dieses PRs den Fokus verloren" statt nur "Ich habe um 15 Uhr den Fokus verloren". Standardmäßig deaktiviert und vollkommen optional.',
   "onboarding.permissionsPrivacy":
-    "Alles bleibt auf diesem Computer. Aufgezeichnete Aktivität wird in eine lokale activity.sqlite-Datei geschrieben und niemals an einen Server gesendet — weder an NeuroSkill noch an irgendjemand sonst. Du kannst jede Option jederzeit ausschalten; die aufgezeichneten Daten bleiben auf der Festplatte, bis du sie löschst.",
+    "Alles bleibt auf diesem Computer. Aufgezeichnete Aktivität wird in eine lokale activity.duckdb-Datei geschrieben und niemals an einen Server gesendet — weder an NeuroSkill noch an irgendjemand sonst. Du kannst jede Option jederzeit ausschalten; die aufgezeichneten Daten bleiben auf der Festplatte, bis du sie löschst.",
   "onboarding.permissionsSkip":
     "Standardmäßig alles aus. Du kannst jede Option später unter Einstellungen → Aktivitätsverfolgung aktivieren.",
   "onboarding.permissionsActiveWindowDesc":

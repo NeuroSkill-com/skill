@@ -23,7 +23,7 @@ Cuando está conectado, un indicador REC muestra el nombre del archivo CSV que s
 Un gráfico de barras en vivo que muestra la potencia relativa en cada banda de frecuencia de EEG estándar: Delta (1 a 4 Hz), Theta (4 a 8 Hz), Alfa (8 a 13 Hz), Beta (13 a 30 Hz) y Gamma (30 a 50 Hz). Actualizado a ~4 Hz desde una FFT con ventana Hann de 512 muestras. Cada canal se muestra por separado.
 
 ## Asimetría Alfa Frontal (FAA)
-Un medidor anclado en el centro que muestra el índice de asimetría frontal alfa en tiempo real: ln(AF8 α) − ln(AF7 α). Los valores positivos indican un mayor poder alfa frontal derecho, que se asocia con la motivación de aproximación del hemisferio izquierdo. Los valores negativos indican tendencia a la retirada. El valor se suaviza con una media móvil exponencial y normalmente oscila entre −1 y +1. FAA se almacena junto con cada época de incrustación de 5 segundos en eeg.sqlite.
+Un medidor anclado en el centro que muestra el índice de asimetría frontal alfa en tiempo real: ln(AF8 α) − ln(AF7 α). Los valores positivos indican un mayor poder alfa frontal derecho, que se asocia con la motivación de aproximación del hemisferio izquierdo. Los valores negativos indican tendencia a la retirada. El valor se suaviza con una media móvil exponencial y normalmente oscila entre −1 y +1. FAA se almacena junto con cada época de incrustación de 5 segundos en eeg.duckdb.
 
 ## Formas de onda EEG
 Un gráfico de desplazamiento en el dominio del tiempo de la señal EEG filtrada para todos los canales. Debajo de cada forma de onda hay una cinta de espectrograma que muestra el contenido de frecuencia a lo largo del tiempo. El gráfico muestra los ~4 segundos de datos más recientes.

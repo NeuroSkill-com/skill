@@ -86,7 +86,7 @@ const llm: Record<string, string> = {
   "model.embeddingsToday": "הטמעות היום",
   "model.hnswIndex": "אינדקס HNSW",
   "model.hnswRecoveredTitle": "HNSW שוחזר",
-  "model.hnswRecoveredMsg": "{n} אמבדינגים שוחזרו מ‑SQLite",
+  "model.hnswRecoveredMsg": "{n} אמבדינגים שוחזרו מ‑DuckDB",
   "model.takesEffectRestart": "ייכנס לתוקף ביום הבא או בהפעלה מחדש",
   "model.connectivity": "קישוריות",
   "model.currently": "נוכחי: {n}",

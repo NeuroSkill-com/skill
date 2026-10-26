@@ -451,8 +451,8 @@ fn convert_checkpoint_inner(
     );
 
     let decoder_prefixes = ["generator.", "fc_post_a."];
-    let mut st_map: std::collections::BTreeMap<String, Vec<u8>> = std::collections::BTreeMap::new();
-    let mut shapes_map: std::collections::BTreeMap<String, Vec<usize>> = std::collections::BTreeMap::new();
+    let mut st_map: bbtree::unsync::BBTreeMap<String, Vec<u8>> = bbtree::unsync::BBTreeMap::new();
+    let mut shapes_map: bbtree::unsync::BBTreeMap<String, Vec<usize>> = bbtree::unsync::BBTreeMap::new();
 
     for (name, meta) in &tensors {
         if !decoder_prefixes.iter().any(|p| name.starts_with(p)) {
@@ -558,8 +558,8 @@ impl Clone for TensorMeta {
     }
 }
 
-fn parse_pickle_metadata(pkl: &[u8]) -> Result<std::collections::BTreeMap<String, TensorMeta>> {
-    use std::collections::BTreeMap;
+fn parse_pickle_metadata(pkl: &[u8]) -> Result<bbtree::unsync::BBTreeMap<String, TensorMeta>> {
+    use bbtree::unsync::BBTreeMap;
 
     const MARK: u8 = b'(';
     const STOP: u8 = b'.';
@@ -641,9 +641,9 @@ fn parse_pickle_metadata(pkl: &[u8]) -> Result<std::collections::BTreeMap<String
 
     let mut stack: Vec<Val> = Vec::new();
     let mut mark_stack: Vec<usize> = Vec::new();
-    let mut memo: BTreeMap<u64, Val> = BTreeMap::new();
+    let mut memo: BBTreeMap<u64, Val> = BBTreeMap::new();
     let mut pos = 0usize;
-    let mut result: BTreeMap<String, TensorMeta> = BTreeMap::new();
+    let mut result: BBTreeMap<String, TensorMeta> = BBTreeMap::new();
 
     macro_rules! read_byte {
         () => {{
@@ -1015,7 +1015,7 @@ fn parse_pickle_metadata(pkl: &[u8]) -> Result<std::collections::BTreeMap<String
         }
     }
 
-    fn scan_val(val: &Val, out: &mut BTreeMap<String, TensorMeta>) {
+    fn scan_val(val: &Val, out: &mut BBTreeMap<String, TensorMeta>) {
         match val {
             Val::Dict(pairs) => {
                 for (k, v) in pairs {

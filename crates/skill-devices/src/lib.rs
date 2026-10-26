@@ -583,7 +583,6 @@ mod tests {
             pac_theta_gamma: 0.1,
             laterality_index: 0.05,
             echt: 0.5,
-            headache_index: 10.0,
             migraine_index: 5.0,
             consciousness_lzc: 50.0,
             consciousness_wakefulness: 70.0,

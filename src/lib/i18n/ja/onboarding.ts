@@ -113,7 +113,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app} はエディタ、ブラウザ、ターミナルから追加の文脈を取り込むことができます。各統合は独立してインストールまたはスキップできる別々のものです — EEG 機能の動作にはどれも必須ではありません。",
   "onboarding.extensionsPrivacy":
-    "他のすべてと同じプライバシー保証：各拡張機能は localhost ポート経由でローカルデーモンに報告し、そのデータはこのコンピューターの activity.sqlite に書き込まれます。NeuroSkill にも他の誰にも何もアップロードされません。",
+    "他のすべてと同じプライバシー保証：各拡張機能は localhost ポート経由でローカルデーモンに報告し、そのデータはこのコンピューターの activity.duckdb に書き込まれます。NeuroSkill にも他の誰にも何もアップロードされません。",
   "onboarding.extensionsSkip":
     "すべて任意です。後で 設定 → 拡張機能 と 設定 → ターミナル からいつでもインストール、更新、削除できます。",
   "onboarding.extensions.vscodeTitle": "VS Code 系エディタ",
@@ -130,7 +130,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     "{app} はあなたが何に取り組んでいたかを記録し、EEG／集中データを実際の文脈と関連付けることができます — 単に「午後 3 時に集中力が落ちた」ではなく「この PR を書いている時に集中力が落ちた」とわかります。デフォルトではオフで、完全に任意です。",
   "onboarding.permissionsPrivacy":
-    "すべてはこのコンピューター上に留まります。記録された活動はローカルの activity.sqlite ファイルに書き込まれ、いかなるサーバーにも送信されません — NeuroSkill にも、他のどこにも送られません。各オプションはいつでもオフにでき、記録されたデータは削除するまでディスクに残ります。",
+    "すべてはこのコンピューター上に留まります。記録された活動はローカルの activity.duckdb ファイルに書き込まれ、いかなるサーバーにも送信されません — NeuroSkill にも、他のどこにも送られません。各オプションはいつでもオフにでき、記録されたデータは削除するまでディスクに残ります。",
   "onboarding.permissionsSkip":
     "デフォルトではすべてオフです。後で 設定 → 活動トラッキング からいつでも有効化できます。",
   "onboarding.permissionsActiveWindowDesc":

@@ -399,6 +399,9 @@ pub struct AppState {
     pub inference_device: String,
     /// Last-saved `llm.n_gpu_layers` before a CPU override was applied.
     pub llm_gpu_layers_saved: u32,
+    /// Last-saved `llm.rlx_device` before a CPU override was applied. Empty
+    /// means "never recorded" — restore the per-platform default instead.
+    pub llm_rlx_device_saved: String,
     /// Inference device preference for EXG embeddings: `"gpu"` or `"cpu"`.
     pub exg_inference_device: String,
 
@@ -509,6 +512,7 @@ impl Default for AppState {
             location_enabled: false,
             inference_device: skill_settings::default_inference_device(),
             llm_gpu_layers_saved: skill_settings::default_llm_gpu_layers_saved(),
+            llm_rlx_device_saved: String::new(),
             exg_inference_device: skill_settings::default_exg_inference_device(),
             scanner_config: crate::settings::ScannerConfig::default(),
             neutts_config: NeuttsConfig::default(),

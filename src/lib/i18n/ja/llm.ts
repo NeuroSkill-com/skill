@@ -18,7 +18,7 @@ const llm: Record<string, string> = {
   "model.embeddingsToday": "今日の埋め込み",
   "model.hnswIndex": "HNSWインデックス",
   "model.hnswRecoveredTitle": "HNSW復旧済み",
-  "model.hnswRecoveredMsg": "SQLiteから{n}件の埋め込みが復元されました",
+  "model.hnswRecoveredMsg": "DuckDBから{n}件の埋め込みが復元されました",
   "model.takesEffectRestart": "次の日または再起動時に有効になります",
   "model.connectivity": "接続性",
   "model.currently": "現在 {n}",

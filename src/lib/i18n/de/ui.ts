@@ -6,8 +6,6 @@
 // the Free Software Foundation, version 3 only.
 /** DE "ui" namespace translations. */
 const ui: Record<string, string> = {
-  "tip.headache":
-    "Kopfschmerz-Korrelat - kortikale Hyperexzitabilität: erhöhtes Beta + unterdrücktes Alpha. Nur Forschungsindikator.",
   "tip.migraine":
     "Migräne-Korrelat - kortikale Ausbreitungsdepression: erhöhtes Delta + Alpha-Suppression + Lateralisierung. Nur Forschungsindikator.",
   "tip.consciousness.lzc":

@@ -379,8 +379,7 @@ let shakeCount = $state(0);
 let meditationScore = $state(0); // 0–100
 let cogLoadScore = $state(0); // 0–100
 let drowsinessScore = $state(0); // 0–100
-// Headache / Migraine EEG correlate indices (0–100)
-let headacheScore = $state(0);
+// Migraine EEG correlate index (0–100)
 let migraineScore = $state(0);
 // Consciousness metrics (0–100)
 let consciousnessLzc = $state(0);
@@ -486,9 +485,7 @@ function updateScores(snap: BandSnapshot) {
   if (snap.cognitive_load !== undefined) cogLoadScore = cogLoadScore + SCORE_TAU * (snap.cognitive_load - cogLoadScore);
   if (snap.drowsiness !== undefined)
     drowsinessScore = drowsinessScore + SCORE_TAU * (snap.drowsiness - drowsinessScore);
-  // Headache / Migraine EEG correlate indices
-  if (snap.headache_index !== undefined)
-    headacheScore = headacheScore + SCORE_TAU * (snap.headache_index - headacheScore);
+  // Migraine EEG correlate index
   if (snap.migraine_index !== undefined)
     migraineScore = migraineScore + SCORE_TAU * (snap.migraine_index - migraineScore);
   // Consciousness metrics
@@ -2453,7 +2450,7 @@ useWindowTitle("window.title.main");
               tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
               pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
               echt={echtScore}
-              headache={headacheScore} migraine={migraineScore}
+              migraine={migraineScore}
               showMu={status.has_central_electrodes} />
           </div>
 

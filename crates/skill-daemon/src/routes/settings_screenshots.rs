@@ -279,25 +279,7 @@ pub(crate) async fn get_screenshot_metrics(
             return (0u64, 0u64, 0u64, 0u64);
         };
         let summary = store.summary_counts();
-        let db_path = skill_dir.join(skill_constants::SCREENSHOTS_SQLITE);
-        let mut last_capture = 0u64;
-        let mut last_embed = 0u64;
-        if let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
-            last_capture = conn
-                .query_row("SELECT COALESCE(MAX(unix_ts), 0) FROM screenshots", [], |r| {
-                    r.get::<_, i64>(0)
-                })
-                .unwrap_or(0)
-                .max(0) as u64;
-            last_embed = conn
-                .query_row(
-                    "SELECT COALESCE(MAX(unix_ts), 0) FROM screenshots WHERE embedding IS NOT NULL",
-                    [],
-                    |r| r.get::<_, i64>(0),
-                )
-                .unwrap_or(0)
-                .max(0) as u64;
-        }
+        let (last_capture, last_embed) = store.last_capture_and_embed();
         (summary.total, summary.with_embedding, last_capture, last_embed)
     })
     .await

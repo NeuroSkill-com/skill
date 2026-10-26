@@ -111,7 +111,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app}는 편집기, 브라우저, 터미널에서 추가 컨텍스트를 가져올 수 있습니다. 각 통합은 독립적으로 설치하거나 건너뛸 수 있는 별도의 구성 요소입니다 — EEG 기능 작동에는 어느 것도 필요하지 않습니다.",
   "onboarding.extensionsPrivacy":
-    "다른 모든 것과 동일한 개인정보 보호 보장: 각 확장 프로그램은 localhost 포트를 통해 로컬 데몬에 보고하며, 그 데이터는 이 컴퓨터의 activity.sqlite에 기록됩니다. NeuroSkill이나 다른 어디에도 아무것도 업로드되지 않습니다.",
+    "다른 모든 것과 동일한 개인정보 보호 보장: 각 확장 프로그램은 localhost 포트를 통해 로컬 데몬에 보고하며, 그 데이터는 이 컴퓨터의 activity.duckdb에 기록됩니다. NeuroSkill이나 다른 어디에도 아무것도 업로드되지 않습니다.",
   "onboarding.extensionsSkip":
     "모두 선택 사항입니다. 나중에 설정 → 확장 프로그램 및 설정 → 터미널에서 언제든 설치, 업데이트 또는 제거할 수 있습니다.",
   "onboarding.extensions.vscodeTitle": "VS Code 계열 편집기",
@@ -128,7 +128,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     '{app}는 무엇에 작업하고 있었는지 기록하여 EEG/집중 데이터를 실제 맥락과 연결할 수 있습니다 — 단순히 "오후 3시에 집중력이 떨어졌다"가 아니라 "이 PR을 작성하다가 집중력을 잃었다"고 알 수 있습니다. 기본적으로 꺼져 있으며 완전히 선택 사항입니다.',
   "onboarding.permissionsPrivacy":
-    "모든 것이 이 컴퓨터에만 머무릅니다. 기록된 활동은 로컬 activity.sqlite 파일에 기록되며 어떤 서버에도 — NeuroSkill에도, 다른 누구에게도 — 전송되지 않습니다. 언제든 각 옵션을 끌 수 있으며, 기록된 데이터는 삭제할 때까지 디스크에 남아 있습니다.",
+    "모든 것이 이 컴퓨터에만 머무릅니다. 기록된 활동은 로컬 activity.duckdb 파일에 기록되며 어떤 서버에도 — NeuroSkill에도, 다른 누구에게도 — 전송되지 않습니다. 언제든 각 옵션을 끌 수 있으며, 기록된 데이터는 삭제할 때까지 디스크에 남아 있습니다.",
   "onboarding.permissionsSkip":
     "기본적으로 모두 꺼져 있습니다. 나중에 설정 → 활동 추적에서 언제든 활성화할 수 있습니다.",
   "onboarding.permissionsActiveWindowDesc":

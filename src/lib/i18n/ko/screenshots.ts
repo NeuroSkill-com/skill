@@ -78,7 +78,7 @@ const screenshots: Record<string, string> = {
   "screenshots.perfWindowCapture": "창 캡처",
   "screenshots.perfOcr": "OCR 추출",
   "screenshots.perfResize": "크기 조정 + 패딩",
-  "screenshots.perfSave": "저장 + SQLite",
+  "screenshots.perfSave": "저장 + DuckDB",
   "screenshots.perfIterTotal": "반복 합계",
   "screenshots.perfVisionEmbed": "비전 임베딩",
   "screenshots.perfTextEmbed": "텍스트 임베딩",

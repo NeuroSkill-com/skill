@@ -171,18 +171,14 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
         let mut total: i64 = 0;
         let mut total_embedded: i64 = 0;
         for dir_name in std::collections::HashSet::from([dir1, dir2]) {
-            let db = skill_dir.join(&dir_name).join("eeg.sqlite");
-            if !db.exists() {
-                continue;
-            }
-            if let Ok(conn) = rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
+            if let Some(conn) = skill_data::eeg_store::open_existing(&skill_dir.join(&dir_name)) {
                 let n: i64 = conn
                     .query_row(
                         &format!(
                             "SELECT COUNT(*) FROM embeddings WHERE {}",
                             skill_data::util::DualTimestampRange::WHERE_CLAUSE
                         ),
-                        rusqlite::params![
+                        skill_data::duck::params![
                             r.unix_ms_start,
                             r.unix_ms_end,
                             r.dt14_start,
@@ -197,10 +193,10 @@ async fn embedding_count(State(state): State<AppState>, Json(req): Json<TimeRang
                 let emb: i64 = conn
                     .query_row(
                         &format!(
-                            "SELECT COUNT(*) FROM embeddings WHERE ({}) AND length(eeg_embedding) >= 4",
+                            "SELECT COUNT(*) FROM embeddings WHERE ({}) AND octet_length(eeg_embedding) >= 4",
                             skill_data::util::DualTimestampRange::WHERE_CLAUSE
                         ),
-                        rusqlite::params![
+                        skill_data::duck::params![
                             r.unix_ms_start,
                             r.unix_ms_end,
                             r.dt14_start,

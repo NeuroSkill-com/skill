@@ -4,13 +4,13 @@
 # Almacenamiento de datos
 
 ## Todos los datos permanecen en su dispositivo
-Cada dato que {app} registra — muestras de EEG sin procesar (CSV), incrustaciones de EEG (SQLite + índice HNSW), etiquetas de texto, marcas de tiempo de calibración, registros y configuraciones — se almacena localmente en {dataDir}/. No se sube ningún dato a ningún servicio en la nube, servidor o tercero.
+Cada dato que {app} registra — muestras de EEG sin procesar (CSV), incrustaciones de EEG (DuckDB + índice HNSW), etiquetas de texto, marcas de tiempo de calibración, registros y configuraciones — se almacena localmente en {dataDir}/. No se sube ningún dato a ningún servicio en la nube, servidor o tercero.
 
 ## Sin cuentas de usuario
 {app} no requiere registro, inicio de sesión ni ninguna forma de creación de cuenta. No se almacenan ni transmiten identificadores de usuario, tokens ni credenciales de autenticación.
 
 ## Ubicación de datos
-Todos los archivos se almacenan en {dataDir}/ en macOS y Linux. Cada día de grabación tiene su propio subdirectorio AAAAMMDD que contiene la base de datos EEG SQLite y el índice vectorial HNSW. Las etiquetas están en {dataDir}/labels.sqlite. Los registros están en {dataDir}/logs/. Puede eliminar cualquiera de estos archivos en cualquier momento.
+Todos los archivos se almacenan en {dataDir}/ en macOS y Linux. Cada día de grabación tiene su propio subdirectorio AAAAMMDD que contiene la base de datos EEG DuckDB y el índice vectorial HNSW. Las etiquetas están en {dataDir}/labels.duckdb. Los registros están en {dataDir}/logs/. Puede eliminar cualquiera de estos archivos en cualquier momento.
 
 # Actividad de red
 
@@ -51,13 +51,13 @@ El índice de vectores HNSW utilizado para la búsqueda de similitudes se crea y
 # Tus datos, tu control
 
 ## Acceso
-Todos sus datos están en {dataDir}/ en formatos estándar (CSV, SQLite, binario HNSW). Puedes leerlo, copiarlo o procesarlo con cualquier herramienta.
+Todos sus datos están en {dataDir}/ en formatos estándar (CSV, DuckDB, binario HNSW). Puedes leerlo, copiarlo o procesarlo con cualquier herramienta.
 
 ## Borrar
 Elimine cualquier archivo o directorio en {dataDir}/ en cualquier momento. No hay que preocuparse por las copias de seguridad en la nube. La desinstalación de la aplicación elimina solo el binario de la aplicación: sus datos en {dataDir}/ no se modifican a menos que los elimine.
 
 ## Exportar
-Las grabaciones CSV y las bases de datos SQLite son formatos estándar portátiles. Cópielos a cualquier máquina o impórtelos a Python, R, MATLAB o cualquier herramienta de análisis.
+Las grabaciones CSV y las bases de datos DuckDB son formatos estándar portátiles. Cópielos a cualquier máquina o impórtelos a Python, R, MATLAB o cualquier herramienta de análisis.
 
 ## cifrar
 {app} no cifra datos en reposo. Si necesita cifrado a nivel de disco, utilice el cifrado de disco completo de su sistema operativo (FileVault en macOS, LUKS en Linux).
@@ -65,7 +65,7 @@ Las grabaciones CSV y las bases de datos SQLite son formatos estándar portátil
 # Seguimiento de actividad
 
 ## Seguimiento de actividad
-Cuando está habilitado, NeuroSkill registra qué aplicación está en primer plano y la última vez que se utilizaron el teclado y el mouse. Estos datos permanecen completamente en su dispositivo en ~/.skill/activity.sqlite; nunca se envían a ningún servidor, no se registran de forma remota ni se incluyen en ningún tipo de análisis. Capturas de seguimiento de ventanas activas: nombre de la aplicación, ruta ejecutable, título de la ventana y marca de tiempo de Unix en la que esa ventana se activó. El seguimiento del teclado y el mouse captura solo dos marcas de tiempo (último evento del teclado, último evento del mouse): nunca pulsaciones de teclas, texto escrito, coordenadas del cursor ni objetivos de clic. Ambas funciones se pueden desactivar de forma independiente en Configuración → Seguimiento de actividad; Al desactivar una función, se detiene inmediatamente la recopilación. Las filas existentes no se eliminan automáticamente, pero puedes eliminarlas en cualquier momento eliminando Activity.sqlite.
+Cuando está habilitado, NeuroSkill registra qué aplicación está en primer plano y la última vez que se utilizaron el teclado y el mouse. Estos datos permanecen completamente en su dispositivo en ~/.skill/activity.duckdb; nunca se envían a ningún servidor, no se registran de forma remota ni se incluyen en ningún tipo de análisis. Capturas de seguimiento de ventanas activas: nombre de la aplicación, ruta ejecutable, título de la ventana y marca de tiempo de Unix en la que esa ventana se activó. El seguimiento del teclado y el mouse captura solo dos marcas de tiempo (último evento del teclado, último evento del mouse): nunca pulsaciones de teclas, texto escrito, coordenadas del cursor ni objetivos de clic. Ambas funciones se pueden desactivar de forma independiente en Configuración → Seguimiento de actividad; Al desactivar una función, se detiene inmediatamente la recopilación. Las filas existentes no se eliminan automáticamente, pero puedes eliminarlas en cualquier momento eliminando Activity.duckdb.
 
 ## Permiso de accesibilidad (macOS)
 En macOS, el seguimiento del teclado y el mouse requiere el permiso de Accesibilidad porque instala un CGEventTap, un enlace a nivel del sistema que intercepta eventos de entrada. Apple exige este permiso para cualquier aplicación que lea entradas globales. El permiso se solicita solo cuando la función está habilitada. Si lo rechaza o lo revoca, el enlace falla silenciosamente: el resto de la aplicación continúa normalmente y solo las marcas de tiempo de actividad de entrada permanecen en cero. El seguimiento de ventana activa (nombre/ruta de la aplicación) no requiere Accesibilidad: utiliza AppleScript/osascript que funciona dentro de los derechos de aplicación normales.
@@ -88,4 +88,4 @@ Una solicitud de red opcional. Actualice las comprobaciones, solo cuando las act
 Totalmente en el dispositivo. La inferencia de GPU, el procesamiento de señales y la búsqueda se ejecutan localmente.
 
 ## Activity tracking is local-only
-El seguimiento de la actividad es solo local. El foco de la ventana y las marcas de tiempo de entrada se escriben en Activity.sqlite en su dispositivo y nunca lo abandonan.
+El seguimiento de la actividad es solo local. El foco de la ventana y las marcas de tiempo de entrada se escriben en Activity.duckdb en su dispositivo y nunca lo abandonan.

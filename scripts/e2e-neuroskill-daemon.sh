@@ -209,10 +209,6 @@ has "$OUT" '"ok":\s*true' && pass "session 0" || fail "session 0: $(echo "$OUT" 
 OUT=$(nsk_out label "e2e test label")
 if has "$OUT" '"ok":\s*true'; then
   pass "label"
-elif has "$OUT" "wall_start"; then
-  # Stale labels.sqlite created by older daemon — missing wall_start column.
-  # Not a CLI bug; the daemon needs a schema migration on this machine.
-  skip "label (stale labels.sqlite — needs migration: wall_start column)"
 else
   fail "label: $(echo "$OUT" | head -c 200)"
 fi

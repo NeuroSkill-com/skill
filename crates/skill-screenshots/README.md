@@ -4,7 +4,7 @@ Screenshot capture, vision embedding, OCR, and animated GIF recording for NeuroS
 
 ## Overview
 
-Periodically captures screenshots, embeds them with a vision model (Nomic Embed Vision v1.5, via `rlx` / rlx-models), optionally runs OCR (via `rlx-ocr` or Apple Vision on macOS), and stores everything in a SQLite + HNSW index for later semantic search. The worker runs on a dedicated thread and respects session-only gating, configurable intervals, and GPU/CPU preferences.
+Periodically captures screenshots, embeds them with a vision model (Nomic Embed Vision v1.5, via `rlx` / rlx-models), optionally runs OCR (via `rlx-ocr` or Apple Vision on macOS), and stores everything in a DuckDB + HNSW index for later semantic search. The worker runs on a dedicated thread and respects session-only gating, configurable intervals, and GPU/CPU preferences.
 
 When motion is detected between consecutive captures (scrolling, animation), the system automatically records an animated GIF burst alongside the still screenshot.
 
@@ -62,6 +62,6 @@ The GIF is saved alongside the WebP still. The middle frame of the burst is used
 - `image` — image decoding/resizing
 - `gif` — animated GIF encoding
 - `fast-hnsw` — HNSW index for vector search
-- `rusqlite` (via `skill-data`) — metadata storage
+- `skill-data` (DuckDB) — metadata storage
 - `crossbeam-channel` — worker communication
 - `chrono`, `ureq` — timestamps, model downloads

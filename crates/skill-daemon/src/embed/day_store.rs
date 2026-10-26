@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Per-day HNSW + SQLite store for EEG embeddings.
+//! Per-day HNSW + DuckDB store for EEG embeddings (`skill_data::eeg_store`).
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tracing::{error, info, warn};
 
-fn rebuild_hnsw_from_sqlite(
-    conn: &rusqlite::Connection,
+fn rebuild_hnsw_from_db(
+    conn: &skill_data::duck::Connection,
     hnsw_m: usize,
     hnsw_ef_construction: usize,
 ) -> fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64> {
@@ -22,7 +22,7 @@ fn rebuild_hnsw_from_sqlite(
     if let Ok(mut stmt) = conn.prepare(
         "SELECT timestamp, eeg_embedding
          FROM embeddings
-         WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4
+         WHERE eeg_embedding IS NOT NULL AND octet_length(eeg_embedding) >= 4
          ORDER BY id ASC",
     ) {
         if let Ok(rows) = stmt.query_map([], |row| {
@@ -45,13 +45,13 @@ fn rebuild_hnsw_from_sqlite(
         }
     }
 
-    info!(rebuilt, "rebuilt HNSW vectors from SQLite");
+    info!(rebuilt, "rebuilt HNSW vectors from the day store");
     idx
 }
 
-/// Per-day storage for embeddings (SQLite) + ANN index (HNSW).
+/// Per-day storage for embeddings (DuckDB) + ANN index (HNSW).
 pub(super) struct DayStore {
-    pub conn: rusqlite::Connection,
+    pub conn: skill_data::duck::Conn,
     pub hnsw: Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>,
     pub index_path: PathBuf,
     pub db_path: PathBuf,
@@ -63,7 +63,7 @@ pub(super) struct DayStore {
 impl DayStore {
     /// Open or create the day store for `date_dir` (e.g. `~/.skill/20260406/`).
     pub fn open(day_dir: &Path, hnsw_m: usize, hnsw_ef_construction: usize) -> Option<Self> {
-        let db_path = day_dir.join(skill_constants::SQLITE_FILE);
+        let db_path = skill_data::eeg_store::db_path(day_dir);
         let index_path = day_dir.join(skill_constants::HNSW_INDEX_FILE);
         let legacy_index_path = day_dir.join("exg_embeddings.hnsw");
 
@@ -89,34 +89,15 @@ impl DayStore {
             }
         }
 
-        let conn = rusqlite::Connection::open(&db_path).ok()?;
-        skill_data::util::init_wal_pragmas(&conn);
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS embeddings (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp       INTEGER NOT NULL,
-                device_id       TEXT,
-                device_name     TEXT,
-                hnsw_id         INTEGER DEFAULT 0,
-                eeg_embedding   BLOB,
-                label           TEXT,
-                extra_embedding BLOB,
-                ppg_ambient     REAL,
-                ppg_infrared    REAL,
-                ppg_red         REAL,
-                metrics_json    TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_embeddings_timestamp ON embeddings(timestamp);",
-        )
-        .ok()?;
-
-        // Give the table a canonical `unix_ms` alongside the legacy `timestamp`
-        // (which carries three historical formats). Additive and idempotent —
-        // `timestamp` is left as-is so older builds keep reading it.
-        let backfilled = skill_data::util::migrate_embeddings_unix_ms(&conn);
-        if backfilled > 0 {
-            info!(rows = backfilled, db = %db_path.display(), "backfilled canonical unix_ms timestamps");
-        }
+        // Schema, legacy `eeg.sqlite` import and `unix_ms` backfill live in
+        // skill_data::eeg_store, shared with every reader.
+        let conn = match skill_data::eeg_store::open(day_dir) {
+            Ok(c) => c,
+            Err(e) => {
+                error!(%e, db = %db_path.display(), "failed to open day store");
+                return None;
+            }
+        };
 
         // Load or create the HNSW index.
         let (hnsw, hnsw_len, hnsw_rebuilt, hnsw_rebuilt_count) = if index_path.exists() {
@@ -130,7 +111,7 @@ impl DayStore {
                     (Some(idx), len, false, 0)
                 }
                 Err(e) => {
-                    error!(path = %index_path.display(), %e, "failed to load HNSW index, rebuilding from SQLite");
+                    error!(path = %index_path.display(), %e, "failed to load HNSW index, rebuilding from the day store");
 
                     // Prevent re-logging the same failure on every startup by moving
                     // unreadable/corrupt files aside.
@@ -152,7 +133,7 @@ impl DayStore {
                         ),
                     }
 
-                    let idx = rebuild_hnsw_from_sqlite(&conn, hnsw_m, hnsw_ef_construction);
+                    let idx = rebuild_hnsw_from_db(&conn, hnsw_m, hnsw_ef_construction);
                     let rebuilt_len = idx.len();
                     if rebuilt_len > 0 {
                         if let Err(save_err) = idx.save(&index_path) {
@@ -185,7 +166,7 @@ impl DayStore {
         })
     }
 
-    /// Insert an embedding + metrics into SQLite and HNSW.
+    /// Insert an embedding + metrics into the day store and HNSW.
     /// Returns the HNSW id (zero-based).
     pub fn insert(
         &mut self,
@@ -209,12 +190,12 @@ impl DayStore {
             0
         };
 
-        // Insert into SQLite.
+        // Insert into the day store.
         let _ = self.conn.execute(
             "INSERT INTO embeddings
              (timestamp, unix_ms, device_id, device_name, hnsw_id, eeg_embedding, metrics_json)
              VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)",
-            rusqlite::params![
+            skill_data::duck::params![
                 timestamp_ms,
                 skill_data::util::epoch_ts_to_unix_ms(timestamp_ms),
                 device_name,
@@ -240,7 +221,7 @@ impl DayStore {
             "INSERT INTO embeddings
              (timestamp, unix_ms, device_id, device_name, hnsw_id, eeg_embedding, metrics_json)
              VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5)",
-            rusqlite::params![
+            skill_data::duck::params![
                 timestamp_ms,
                 skill_data::util::epoch_ts_to_unix_ms(timestamp_ms),
                 device_name,

@@ -1032,9 +1032,7 @@ async fn activity_shell_command(
         }
 
         // Auto-label for EEG
-        let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
-        if let Ok(conn) = rusqlite::Connection::open(&labels_db) {
-            skill_data::util::init_wal_pragmas(&conn);
+        if let Some(conn) = skill_data::label_store::LabelStore::connect(&skill_dir) {
             let label = if exit_code.is_none() {
                 let short = if command.len() > 40 { &command[..40] } else { command };
                 format!("running: {short}")
@@ -1050,11 +1048,12 @@ async fn activity_shell_command(
             let text_emb = embedder.embed_document(&label);
             let text_blob = text_emb.as_ref().map(|v| skill_data::util::f32_to_blob(v));
             let model_name = if text_blob.is_some() { Some("nomic-embed-text-v1.5") } else { None };
-            let label_id = conn.execute(
-                "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at, text_embedding, embedding_model)
-                 VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?4, ?5)",
-                rusqlite::params![label, cwd, now as i64, text_blob, model_name],
-            ).ok().map(|_| conn.last_insert_rowid());
+            let label_id: Option<i64> = conn.query_row(
+                "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, label_start, label_end, created_at, text_embedding, embedding_model)
+                 VALUES (?1, ?2, ?3, ?3, ?3, ?3, ?3, ?3, ?3, ?4, ?5) RETURNING id",
+                skill_data::duck::params![label, cwd, now as i64, text_blob, model_name],
+                |r| r.get(0),
+            ).map_err(|e| tracing::warn!("auto-label insert failed: {e}")).ok();
             if let (Some(id), Some(ref te)) = (label_id, &text_emb) {
                 skill_label_index::insert_label(&skill_dir, id, te, &[], now, now, &label_index);
             }
@@ -2092,15 +2091,10 @@ mod tests {
     #[tokio::test]
     async fn suggest_hook_keywords_finds_matching_labels() {
         let (td, st) = mk_state();
-        let db = td.path().join(skill_constants::LABELS_FILE);
-        let conn = rusqlite::Connection::open(db).unwrap();
-        conn.execute_batch("CREATE TABLE labels (text TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT 0);")
+        skill_data::label_store::LabelStore::open(td.path())
+            .unwrap()
+            .insert(0, 0, 0, 0, "Deep Focus", "", 1)
             .unwrap();
-        conn.execute(
-            "INSERT INTO labels (text, created_at) VALUES (?1, ?2)",
-            rusqlite::params!["Deep Focus", 1_i64],
-        )
-        .unwrap();
 
         let Json(items) = suggest_hook_keywords(
             State(st),

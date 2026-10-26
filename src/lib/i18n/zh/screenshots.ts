@@ -76,7 +76,7 @@ const screenshots: Record<string, string> = {
   "screenshots.perfWindowCapture": "窗口捕获",
   "screenshots.perfOcr": "OCR 提取",
   "screenshots.perfResize": "缩放 + 填充",
-  "screenshots.perfSave": "保存 + SQLite",
+  "screenshots.perfSave": "保存 + DuckDB",
   "screenshots.perfIterTotal": "迭代总计",
   "screenshots.perfVisionEmbed": "视觉嵌入",
   "screenshots.perfTextEmbed": "文本嵌入",

@@ -265,6 +265,39 @@ const history: Record<string, string> = {
 
   // ── Auto-synced from en/ (2026-03-28) ──
   "history.addLabel": "הוסף תווית",
+
+  // BIDS export
+  "history.bids.title": "ייצוא כ-BIDS",
+  "history.bids.button": "ייצוא BIDS",
+  "history.bids.description": "כתיבת ההקלטות בטווח זמן כמערך נתונים BIDS-EEG: EEG בפורמט BrainVision, תוויות כאירועים, PPG ו-IMU.",
+  "history.bids.from": "מ-",
+  "history.bids.to": "עד",
+  "history.bids.presetSession": "הסשן הזה",
+  "history.bids.presetDay": "היום הזה",
+  "history.bids.presetWeek": "7 הימים האחרונים",
+  "history.bids.presetAll": "כל ההקלטות",
+  "history.bids.onlySession": "רק הסשן הזה",
+  "history.bids.subject": "נבדק",
+  "history.bids.task": "משימה",
+  "history.bids.powerLine": "תדר רשת החשמל",
+  "history.bids.powerLineUnknown": "לא ידוע",
+  "history.bids.includeEvents": "תוויות כאירועים",
+  "history.bids.includePpg": "PPG (פיזיולוגי)",
+  "history.bids.includeImu": "IMU (תנועה)",
+  "history.bids.rangeInvalid": "הסיום חייב להיות אחרי ההתחלה.",
+  "history.bids.exporting": "מייצא…",
+  "history.bids.progress": "מייצא הקלטה {done} מתוך {total}…",
+  "history.bids.preview": "{count} הקלטות, כ-{duration}",
+  "history.bids.previewNone": "אין הקלטות בטווח הזה.",
+  "history.bids.export": "ייצוא",
+  "history.bids.done": "יוצאו {count} הקלטות, {size}.",
+  "history.bids.valid": "עבר אימות BIDS.",
+  "history.bids.issues": "אימות: {errors} שגיאות, {warnings} אזהרות",
+  "history.bids.skipped": "{count} דולגו",
+  "history.bids.reveal": "הצג בתיקייה",
+  "history.bids.failed": "הייצוא נכשל",
+  "history.embeddings": "הטמעות",
+  "history.epochsIndexed": "מקטעים מאונדקסים",
 };
 
 export default history;

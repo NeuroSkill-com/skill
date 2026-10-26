@@ -86,7 +86,7 @@ const screenshots: Record<string, string> = {
   "screenshots.perfWindowCapture": "captura de ventana",
   "screenshots.perfOcr": "extracción de OCR",
   "screenshots.perfResize": "Cambiar tamaño + pad",
-  "screenshots.perfSave": "Guardar + SQLite",
+  "screenshots.perfSave": "Guardar + DuckDB",
   "screenshots.perfIterTotal": "Total de iteraciones",
   "screenshots.perfVisionEmbed": "Incorporación de visión",
   "screenshots.perfTextEmbed": "Incrustación de texto",

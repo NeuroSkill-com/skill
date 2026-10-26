@@ -47,6 +47,29 @@ use tracing::info;
 use axum::http::Method;
 
 fn main() -> anyhow::Result<()> {
+    // `--version` / `--help` answer and exit, before tokio and before any of
+    // the work `daemon_main` does. Without this the daemon treated an unknown
+    // flag as "no flag" and booted the whole server — so `skill-daemon
+    // --version`, the obvious thing a release check or a support request
+    // reaches for, started a second daemon instead of printing a line.
+    // Matches `skill-tty`, which has always handled both.
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(first) = args.get(1).map(String::as_str) {
+            match first {
+                "--version" | "-V" | "version" => {
+                    println!("skill-daemon {}", env!("CARGO_PKG_VERSION"));
+                    return Ok(());
+                }
+                "--help" | "-h" | "help" => {
+                    print_help();
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+    }
+
     // Synchronous subcommand dispatch. The PTY shim must run *before* tokio
     // is initialised — it does its own blocking I/O and signal handling, and
     // tokio's thread pool would interfere.
@@ -67,6 +90,35 @@ fn main() -> anyhow::Result<()> {
         }
     }
     daemon_main()
+}
+
+/// Usage summary. Only the flags that are actually read are listed — the
+/// daemon is normally started by the app, not by hand.
+fn print_help() {
+    println!(
+        "skill-daemon {}\n\
+         \n\
+         The NeuroSkill background service: HTTP/WebSocket API, device sessions,\n\
+         LLM / ASR / TTS, screenshots and shell-history capture. Normally started\n\
+         by the NeuroSkill app rather than invoked directly.\n\
+         \n\
+         USAGE:\n\
+         \x20 skill-daemon [FLAGS]\n\
+         \x20 skill-daemon tty [ARGS...]   back-compat PTY shim; execs skill-tty\n\
+         \n\
+         FLAGS:\n\
+         \x20 --version, -V    print version and exit\n\
+         \x20 --help, -h       print this help and exit\n\
+         \x20 --uninstall      remove the OS service and every shell hook written\n\
+         \x20                  into the user's rc files, then exit\n\
+         \x20 --iroh-logs      enable verbose iroh transport logging\n\
+         \n\
+         ENVIRONMENT:\n\
+         \x20 SKILL_DAEMON_ADDR     address to bind (default 127.0.0.1:8765)\n\
+         \x20 SKILL_RESOURCE_DIR    app bundle resource dir; where the bundled TTS\n\
+         \x20                       weights are found when the app spawns us\n",
+        env!("CARGO_PKG_VERSION")
+    );
 }
 
 /// Try to exec the sibling `skill-tty` binary, otherwise run the legacy

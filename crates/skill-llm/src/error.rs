@@ -46,9 +46,9 @@ pub enum DownloadError {
 /// Errors from the chat store.
 #[derive(Debug, thiserror::Error)]
 pub enum ChatStoreError {
-    /// SQLite error.
+    /// Database (DuckDB) error.
     #[error("database error: {0}")]
-    Db(#[from] rusqlite::Error),
+    Db(#[from] skill_db::Error),
 
     /// Serialization error.
     #[error("serialization error: {0}")]

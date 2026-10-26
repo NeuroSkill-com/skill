@@ -23,7 +23,7 @@ Ein AUFN-Indikator zeigt den Dateinamen der CSV-Datei in {dataDir}/.
 Ein Live-Balkendiagramm der relativen Leistung in jedem EEG-Frequenzband: Delta, Theta, Alpha, Beta und Gamma.
 
 ## Frontale Alpha-Asymmetrie (FAA)
-Eine mittig verankerte Anzeige der Echtzeit-FAA: ln(AF8 α) − ln(AF7 α). Positive Werte zeigen stärkere rechts-frontale Alpha-Leistung an, was mit Annäherungsmotivation der linken Hemisphäre assoziiert wird. Negative Werte deuten auf Rückzugstendenz hin. Der Wert wird mit einem exponentiellen gleitenden Durchschnitt geglättet und liegt typischerweise zwischen −1 und +1. FAA wird zusammen mit jeder 5-Sekunden-Embedding-Epoche in eeg.sqlite gespeichert.
+Eine mittig verankerte Anzeige der Echtzeit-FAA: ln(AF8 α) − ln(AF7 α). Positive Werte zeigen stärkere rechts-frontale Alpha-Leistung an, was mit Annäherungsmotivation der linken Hemisphäre assoziiert wird. Negative Werte deuten auf Rückzugstendenz hin. Der Wert wird mit einem exponentiellen gleitenden Durchschnitt geglättet und liegt typischerweise zwischen −1 und +1. FAA wird zusammen mit jeder 5-Sekunden-Embedding-Epoche in eeg.duckdb gespeichert.
 
 ## EEG-Wellenformen
 Ein scrollendes Zeitbereichsdiagramm des gefilterten EEG-Signals für alle vier Kanäle mit Spektrogramm.

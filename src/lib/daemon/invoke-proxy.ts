@@ -84,6 +84,8 @@ const ROUTES: Record<string, [typeof G | typeof P, string]> = {
   get_history_stats: [G, "/v1/history/stats"],
   get_daily_recording_mins: [P, "/v1/history/daily-recording-mins"],
   find_session_for_timestamp: [P, "/v1/history/find-session"],
+  preview_bids_export: [P, "/v1/history/export/bids/preview"],
+  export_bids: [P, "/v1/history/export/bids"],
 
   // Analysis
   get_day_metrics_batch: [P, "/v1/analysis/day-metrics"],
@@ -257,10 +259,19 @@ const CHANNEL_ROUTES: Record<string, string> = {
   stream_search_embeddings: "/v1/search/eeg/stream",
 };
 
+const LONG_TIMEOUT_MS: Partial<Record<string, number>> = {
+  rebuild_screenshot_embeddings: 600_000,
+  benchmark_label_index: 120_000,
+  set_embedding_model: 120_000,
+  export_bids: 3_600_000,
+};
+
 // Commands that must never fall back to Tauri invoke() when daemon HTTP fails.
 // Fallback can produce confusing errors such as "Command start_llm_server not found"
 // even though the real issue is daemon connectivity/route failure.
 const DAEMON_ONLY_COMMANDS = new Set<string>([
+  "preview_bids_export",
+  "export_bids",
   "get_llm_server_status",
   "start_llm_server",
   "stop_llm_server",
@@ -517,20 +528,9 @@ export async function daemonInvoke<T>(cmd: string, args?: AnyArgs): Promise<T> {
   const route = ROUTES[cmd];
   if (route) {
     try {
-      // Screenshot rebuild / UMAP-class work can run minutes; default 10s is too short.
-      const longMs =
-        cmd === "rebuild_screenshot_embeddings"
-          ? 600_000
-          : cmd === "benchmark_label_index"
-            ? 120_000
-            : cmd === "set_embedding_model"
-              ? 120_000
-              : undefined;
-      return route[0] === "GET"
-        ? await daemonGet<T>(route[1])
-        : longMs !== undefined
-          ? await daemonPost<T>(route[1], args ?? {}, longMs)
-          : await daemonPost<T>(route[1], args ?? {});
+      const longMs = LONG_TIMEOUT_MS[cmd];
+      if (route[0] === "GET") return await daemonGet<T>(route[1]);
+      return longMs ? await daemonPost<T>(route[1], args ?? {}, longMs) : await daemonPost<T>(route[1], args ?? {});
     } catch (daemonErr) {
       if (DAEMON_ONLY_COMMANDS.has(cmd)) {
         throw daemonErr;

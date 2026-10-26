@@ -92,7 +92,7 @@ const settings: Record<string, string> = {
   "settings.logLlm": "LLM",
   "settings.logLlmDesc": "Inferenz-Engine (Modell laden, Generierung, Tool-Aufrufe)",
   "settings.logChatStore": "Chat-Speicher",
-  "settings.logChatStoreDesc": "Chat-SQLite-Operationen (Speichern, Migrieren, Öffnen)",
+  "settings.logChatStoreDesc": "Chat-DuckDB-Operationen (Speichern, Migrieren, Öffnen)",
   "settings.logHistory": "Verlauf",
   "settings.logHistoryDesc": "Sitzungsliste & CSV-Scan",
   "settings.logHooks": "Hooks",
@@ -231,10 +231,10 @@ const settings: Record<string, string> = {
 
   "settings.activityTracking": "Aktivitätsverfolgung",
   "settings.activityTrackingIntro":
-    "All das ist optional und standardmäßig deaktiviert (außer Tastatur & Maus, das keine Berechtigung benötigt). Es ergänzt deine EEG-/Fokusdaten um Kontext, sodass du sehen kannst, woran du gearbeitet hast, als die Konzentration nachließ oder du im Flow warst. Alles unten wird nur auf diesem Computer in activity.sqlite gespeichert und niemals an einen Server gesendet — weder an NeuroSkill noch an irgendjemand sonst. Du kannst jede Option jederzeit ausschalten; die aufgezeichneten Daten bleiben auf der Festplatte, bis du sie löschst.",
+    "All das ist optional und standardmäßig deaktiviert (außer Tastatur & Maus, das keine Berechtigung benötigt). Es ergänzt deine EEG-/Fokusdaten um Kontext, sodass du sehen kannst, woran du gearbeitet hast, als die Konzentration nachließ oder du im Flow warst. Alles unten wird nur auf diesem Computer in activity.duckdb gespeichert und niemals an einen Server gesendet — weder an NeuroSkill noch an irgendjemand sonst. Du kannst jede Option jederzeit ausschalten; die aufgezeichneten Daten bleiben auf der Festplatte, bis du sie löschst.",
   "settings.activeWindowToggle": "Aktives Fenster verfolgen",
   "settings.activeWindowToggleDesc":
-    'Erfasst, welche App und welches Fenster im Vordergrund sind, plus den aktiven Browser-Tab-Titel (Chrome, Safari, Firefox, Edge) und den geöffneten Dateipfad in Editoren wie VS Code. Nutzen: Du kannst deinen Fokuszustand mit dem korrelieren, was du tatsächlich getan hast — "Ich habe beim Schreiben dieses PRs den Fokus verloren" statt nur "Ich habe um 15 Uhr den Fokus verloren". Berechtigung: macOS fragt nach Bedienungshilfen-/Automatisierungszugriff für jeden abgefragten Browser und Editor — das ist normal. Datenschutz: App-Namen, Fenstertitel und Pfade werden lokal in activity.sqlite gespeichert und nie hochgeladen.',
+    'Erfasst, welche App und welches Fenster im Vordergrund sind, plus den aktiven Browser-Tab-Titel (Chrome, Safari, Firefox, Edge) und den geöffneten Dateipfad in Editoren wie VS Code. Nutzen: Du kannst deinen Fokuszustand mit dem korrelieren, was du tatsächlich getan hast — "Ich habe beim Schreiben dieses PRs den Fokus verloren" statt nur "Ich habe um 15 Uhr den Fokus verloren". Berechtigung: macOS fragt nach Bedienungshilfen-/Automatisierungszugriff für jeden abgefragten Browser und Editor — das ist normal. Datenschutz: App-Namen, Fenstertitel und Pfade werden lokal in activity.duckdb gespeichert und nie hochgeladen.',
   "settings.activeWindowCurrent": "Aktuelles Fenster",
   "settings.activeWindowApp": "App",
   "settings.activeWindowPath": "Pfad",
@@ -244,7 +244,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "Kein aktives Fenster erkannt",
   "settings.inputActivityToggle": "Tastatur- & Mausaktivität verfolgen",
   "settings.inputActivityToggleDesc":
-    'Erfasst sekundengenau, wann Tastatur oder Maus zuletzt benutzt wurden — niemals welche Tasten, niemals Cursorpositionen, niemals Inhalte. Nutzen: Unterscheidet "tiefer Fokus" von "weg vom Schreibtisch", damit dein EEG-Fokuswert nicht durch Pausen verfälscht wird. Berechtigung: keine — verwendet eine system-eigene Leerlaufzeit-API, die keinen Bedienungshilfen-Zugriff braucht. Datenschutz: nur Zeitstempel werden gespeichert, lokal in activity.sqlite, nie hochgeladen.',
+    'Erfasst sekundengenau, wann Tastatur oder Maus zuletzt benutzt wurden — niemals welche Tasten, niemals Cursorpositionen, niemals Inhalte. Nutzen: Unterscheidet "tiefer Fokus" von "weg vom Schreibtisch", damit dein EEG-Fokuswert nicht durch Pausen verfälscht wird. Berechtigung: keine — verwendet eine system-eigene Leerlaufzeit-API, die keinen Bedienungshilfen-Zugriff braucht. Datenschutz: nur Zeitstempel werden gespeichert, lokal in activity.duckdb, nie hochgeladen.',
   "settings.inputActivityKeyboard": "Letzte Tastatur",
   "settings.inputActivityMouse": "Letzte Maus",
   "settings.inputActivityNever": "nie",
@@ -254,16 +254,16 @@ const settings: Record<string, string> = {
     "Keine Sonderberechtigung nötig — verwendet eine system-eigene Leerlaufzeit-API, die ohne Bedienungshilfen-Zugriff funktioniert.",
   "settings.fileActivityToggle": "Dateiänderungen verfolgen",
   "settings.fileActivityToggleDesc":
-    'Beobachtet deine üblichen Entwicklungs-/Dokumentenordner (Dokumente, Schreibtisch, Downloads, Projects, Developer, code, src) und erfasst Erstellungs-/Änderungs-/Löschereignisse mit Zeitstempeln und Pfaden. Nutzen: Du siehst, welche Dateien du während einer Fokusphase tatsächlich gespeichert oder heruntergeladen hast und kannst die Historie nach „der Datei, die ich um 15 Uhr bearbeitet habe" durchsuchen. Berechtigung: macOS fragt eventuell nach „Vollständiger Festplattenzugriff" für bestimmte Ordner. Datenschutz: nur Pfade und Ereigniszeitstempel werden gespeichert — Dateiinhalte werden nie gelesen oder kopiert — lokal in activity.sqlite, nie hochgeladen.',
-  "settings.activityDb": "Gespeichert in activity.sqlite",
+    'Beobachtet deine üblichen Entwicklungs-/Dokumentenordner (Dokumente, Schreibtisch, Downloads, Projects, Developer, code, src) und erfasst Erstellungs-/Änderungs-/Löschereignisse mit Zeitstempeln und Pfaden. Nutzen: Du siehst, welche Dateien du während einer Fokusphase tatsächlich gespeichert oder heruntergeladen hast und kannst die Historie nach „der Datei, die ich um 15 Uhr bearbeitet habe" durchsuchen. Berechtigung: macOS fragt eventuell nach „Vollständiger Festplattenzugriff" für bestimmte Ordner. Datenschutz: nur Pfade und Ereigniszeitstempel werden gespeichert — Dateiinhalte werden nie gelesen oder kopiert — lokal in activity.duckdb, nie hochgeladen.',
+  "settings.activityDb": "Gespeichert in activity.duckdb",
   "settings.clipboardToggle": "Zwischenablage-Aktivität verfolgen",
   "settings.clipboardToggleDesc":
-    "Erfasst, wann sich die Zwischenablage ändert — welche App kopiert hat, Inhaltstyp und Größe. Der Inhalt selbst wird niemals gelesen oder gespeichert. Nutzen: Häufiges Kopieren/Einfügen ist ein starkes Signal für Kontextwechsel; in Kombination mit dem EEG erkennt man, wann das Jonglieren mit Quellen den Flow bricht. Berechtigung: macOS fragt nach Automatisierungszugriff, um die Zwischenablage-Metadaten zu lesen. Datenschutz: nur Metadaten werden gespeichert, lokal in activity.sqlite, nie hochgeladen. Nur macOS.",
+    "Erfasst, wann sich die Zwischenablage ändert — welche App kopiert hat, Inhaltstyp und Größe. Der Inhalt selbst wird niemals gelesen oder gespeichert. Nutzen: Häufiges Kopieren/Einfügen ist ein starkes Signal für Kontextwechsel; in Kombination mit dem EEG erkennt man, wann das Jonglieren mit Quellen den Flow bricht. Berechtigung: macOS fragt nach Automatisierungszugriff, um die Zwischenablage-Metadaten zu lesen. Datenschutz: nur Metadaten werden gespeichert, lokal in activity.duckdb, nie hochgeladen. Nur macOS.",
   "settings.screenshotsToggle": "Periodische Screenshots aufnehmen",
   "settings.locationToggle": "Standort verfolgen",
   "settings.calendarToggle": "Kalenderereignisse verfolgen",
   "settings.calendarToggleDesc":
-    "Liest die Metadaten deiner anstehenden und kürzlichen Kalenderereignisse (Titel, Zeit, Dauer, Teilnehmerzahl), damit die App Konzentrationseinbrüche mit Meeting-Dichte korrelieren kann. Nutzen: Zeigt, ob Back-to-Back-Meetings deine Deep-Work-Blöcke aushöhlen. Berechtigung: macOS zeigt beim ersten Zugriff einen Kalender-Berechtigungsdialog. Datenschutz: Ereignisse werden on-demand gelesen und nur Aggregat-Zahlen werden in activity.sqlite gespeichert, nichts wird hochgeladen.",
+    "Liest die Metadaten deiner anstehenden und kürzlichen Kalenderereignisse (Titel, Zeit, Dauer, Teilnehmerzahl), damit die App Konzentrationseinbrüche mit Meeting-Dichte korrelieren kann. Nutzen: Zeigt, ob Back-to-Back-Meetings deine Deep-Work-Blöcke aushöhlen. Berechtigung: macOS zeigt beim ersten Zugriff einen Kalender-Berechtigungsdialog. Datenschutz: Ereignisse werden on-demand gelesen und nur Aggregat-Zahlen werden in activity.duckdb gespeichert, nichts wird hochgeladen.",
   "settings.clipboardPermDenied": "Automatisierungsberechtigung nicht erteilt.",
   "settings.clipboardPermAction":
     "Klicken Sie, um die Systemeinstellungen zu öffnen und den Zugriff auf die Zwischenablage zu erlauben.",

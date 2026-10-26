@@ -58,8 +58,6 @@ const ui: Record<string, string> = {
   "tip.stillness": "头部运动静止评分（0–100）。100 = 完全静止。",
   "tip.nods": "检测到的垂直点头（俯仰振荡）。",
   "tip.shakes": "检测到的水平摇头（侧倾振荡）。",
-  "tip.headache":
-    "头痛相关指标 — 皮层过度兴奋性：Beta 升高 + Alpha 抑制 + 高 BAR。皮层兴奋性变化见于头痛状态。仅供研究参考。",
   "tip.migraine":
     "偏头痛相关指标 — 皮层扩散性抑制代理：Delta 升高 + Alpha 抑制 + 半球偏侧化。偏头痛期间 Delta 增加、Alpha 受抑制。仅供研究参考。",
   "tip.consciousness.lzc":

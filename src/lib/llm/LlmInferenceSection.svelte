@@ -158,6 +158,16 @@ const curlSnippet = $derived(
             {/each}
           </div>
         </div>
+        <!--
+          GPU layers is llama.cpp's per-layer offload count. RLX has no
+          per-layer offload — it picks one device for the whole graph — so this
+          control does nothing on that runtime, and showing it there was worse
+          than useless: choosing "CPU" wrote n_gpu_layers = 0, which used to
+          veto the device and pin RLX to CPU while the device setting still read
+          "metal". Where inference runs on RLX is the inference-device switch
+          and llm.rlx_device.
+        -->
+        {#if config.runtime === "llama_cpp"}
         <div class="flex flex-col gap-2 px-4 py-3.5">
           <div class="flex items-baseline justify-between">
             <span class="text-ui-lg font-semibold text-foreground">{t("llm.inference.gpuLayers")}</span>
@@ -178,6 +188,7 @@ const curlSnippet = $derived(
             {/each}
           </div>
         </div>
+        {/if}
 
         <div class="flex flex-col gap-2 px-4 py-3.5">
           <div class="flex items-baseline justify-between">

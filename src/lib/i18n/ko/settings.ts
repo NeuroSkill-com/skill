@@ -356,7 +356,7 @@ const settings: Record<string, string> = {
   "settings.logLlm": "LLM",
   "settings.logLlmDesc": "추론 엔진 (모델 로드, 생성, 도구 호출)",
   "settings.logChatStore": "채팅 저장소",
-  "settings.logChatStoreDesc": "채팅 SQLite 작업 (저장, 마이그레이션, 열기)",
+  "settings.logChatStoreDesc": "채팅 DuckDB 작업 (저장, 마이그레이션, 열기)",
   "settings.logHistory": "기록",
   "settings.logHistoryDesc": "세션 목록 로딩 & CSV 스캔",
   "settings.logHooks": "훅",
@@ -460,10 +460,10 @@ const settings: Record<string, string> = {
 
   "settings.activityTracking": "활동 추적",
   "settings.activityTrackingIntro":
-    "아래 항목은 모두 선택 사항이며 기본적으로 꺼져 있습니다(권한이 필요 없는 키보드 및 마우스 제외). EEG/집중 데이터에 맥락을 추가하여 집중력이 떨어지거나 몰입 상태일 때 무엇을 작업하고 있었는지 확인할 수 있습니다. 아래 모든 항목은 이 컴퓨터에만 기록되어 activity.sqlite에 저장되며 어떤 서버에도 — NeuroSkill에도, 다른 누구에게도 — 전송되지 않습니다. 언제든 각 항목을 끌 수 있으며, 기록된 데이터는 삭제할 때까지 디스크에 남아 있습니다.",
+    "아래 항목은 모두 선택 사항이며 기본적으로 꺼져 있습니다(권한이 필요 없는 키보드 및 마우스 제외). EEG/집중 데이터에 맥락을 추가하여 집중력이 떨어지거나 몰입 상태일 때 무엇을 작업하고 있었는지 확인할 수 있습니다. 아래 모든 항목은 이 컴퓨터에만 기록되어 activity.duckdb에 저장되며 어떤 서버에도 — NeuroSkill에도, 다른 누구에게도 — 전송되지 않습니다. 언제든 각 항목을 끌 수 있으며, 기록된 데이터는 삭제할 때까지 디스크에 남아 있습니다.",
   "settings.activeWindowToggle": "활성 창 추적",
   "settings.activeWindowToggleDesc":
-    '어떤 앱과 창이 포커스 중인지, 그리고 활성 브라우저 탭 제목(Chrome, Safari, Firefox, Edge)과 VS Code 같은 편집기에서 열린 파일 경로를 기록합니다. 유용한 이유: 집중 상태를 실제로 하던 일과 연결할 수 있습니다 — 단순히 "오후 3시에 집중력이 떨어졌다"가 아니라 "이 PR을 작성하다가 집중력을 잃었다"고 알 수 있습니다. 필요한 권한: macOS가 조회하는 각 브라우저와 편집기에 대해 손쉬운 사용 / 자동화 접근을 요청합니다 — 이는 정상입니다. 개인정보: 캡처된 앱 이름, 창 제목, 경로는 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.',
+    '어떤 앱과 창이 포커스 중인지, 그리고 활성 브라우저 탭 제목(Chrome, Safari, Firefox, Edge)과 VS Code 같은 편집기에서 열린 파일 경로를 기록합니다. 유용한 이유: 집중 상태를 실제로 하던 일과 연결할 수 있습니다 — 단순히 "오후 3시에 집중력이 떨어졌다"가 아니라 "이 PR을 작성하다가 집중력을 잃었다"고 알 수 있습니다. 필요한 권한: macOS가 조회하는 각 브라우저와 편집기에 대해 손쉬운 사용 / 자동화 접근을 요청합니다 — 이는 정상입니다. 개인정보: 캡처된 앱 이름, 창 제목, 경로는 activity.duckdb에 로컬로 저장되며 업로드되지 않습니다.',
   "settings.activeWindowCurrent": "현재 창",
   "settings.activeWindowApp": "앱",
   "settings.activeWindowPath": "경로",
@@ -473,7 +473,7 @@ const settings: Record<string, string> = {
   "settings.activeWindowNone": "활성 창이 감지되지 않음",
   "settings.inputActivityToggle": "키보드 & 마우스 활동 추적",
   "settings.inputActivityToggleDesc":
-    '키보드 또는 마우스가 마지막으로 사용된 시점을 초 단위로 기록합니다 — 어떤 키였는지, 커서 위치, 내용은 절대 기록하지 않습니다. 유용한 이유: "깊은 집중"과 "키보드에서 떨어진 상태"를 구분하여 EEG 집중 점수가 휴식 시간으로 인해 왜곡되지 않게 합니다. 필요한 권한: 없음 — 손쉬운 사용 접근 없이 작동하는 OS 내장 유휴 시간 API를 사용합니다. 개인정보: 타임스탬프만 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다.',
+    '키보드 또는 마우스가 마지막으로 사용된 시점을 초 단위로 기록합니다 — 어떤 키였는지, 커서 위치, 내용은 절대 기록하지 않습니다. 유용한 이유: "깊은 집중"과 "키보드에서 떨어진 상태"를 구분하여 EEG 집중 점수가 휴식 시간으로 인해 왜곡되지 않게 합니다. 필요한 권한: 없음 — 손쉬운 사용 접근 없이 작동하는 OS 내장 유휴 시간 API를 사용합니다. 개인정보: 타임스탬프만 activity.duckdb에 로컬로 저장되며 업로드되지 않습니다.',
   "settings.inputActivityKeyboard": "마지막 키보드",
   "settings.inputActivityMouse": "마지막 마우스",
   "settings.inputActivityNever": "없음",
@@ -483,16 +483,16 @@ const settings: Record<string, string> = {
     "특별한 권한이 필요 없음 — 손쉬운 사용 접근 없이 작동하는 내장 OS 유휴 시간 API를 사용합니다.",
   "settings.fileActivityToggle": "파일 변경 추적",
   "settings.fileActivityToggleDesc":
-    '자주 사용하는 개발/문서 폴더(Documents, Desktop, Downloads, Projects, Developer, code, src)를 감시하고 생성/수정/삭제 이벤트를 타임스탬프와 경로와 함께 기록합니다. 유용한 이유: 집중 블록 동안 실제로 저장하거나 다운로드한 파일이 무엇인지 보여주며, "오후 3시쯤 편집한 파일" 같은 방식으로 기록을 검색할 수 있습니다. 필요한 권한: macOS는 일부 폴더를 감시하기 위해 전체 디스크 접근을 요청할 수 있습니다. 개인정보: 경로와 이벤트 타임스탬프만 저장되며 — 파일 내용은 절대 읽거나 복사되지 않음 — activity.sqlite에 로컬로 저장되고 업로드되지 않습니다.',
-  "settings.activityDb": "activity.sqlite에 저장됨",
+    '자주 사용하는 개발/문서 폴더(Documents, Desktop, Downloads, Projects, Developer, code, src)를 감시하고 생성/수정/삭제 이벤트를 타임스탬프와 경로와 함께 기록합니다. 유용한 이유: 집중 블록 동안 실제로 저장하거나 다운로드한 파일이 무엇인지 보여주며, "오후 3시쯤 편집한 파일" 같은 방식으로 기록을 검색할 수 있습니다. 필요한 권한: macOS는 일부 폴더를 감시하기 위해 전체 디스크 접근을 요청할 수 있습니다. 개인정보: 경로와 이벤트 타임스탬프만 저장되며 — 파일 내용은 절대 읽거나 복사되지 않음 — activity.duckdb에 로컬로 저장되고 업로드되지 않습니다.',
+  "settings.activityDb": "activity.duckdb에 저장됨",
   "settings.clipboardToggle": "클립보드 활동 추적",
   "settings.clipboardToggleDesc":
-    "클립보드가 변경되는 시점을 기록합니다 — 어떤 앱이 복사했는지, 콘텐츠 유형과 크기. 클립보드 내용 자체는 절대 읽거나 저장하지 않습니다. 유용한 이유: 잦은 복사/붙여넣기는 컨텍스트 전환의 강한 신호이며, EEG와 결합하면 여러 출처를 오가는 것이 몰입을 깨뜨리는 시점을 보여줄 수 있습니다. 필요한 권한: macOS는 클립보드 메타데이터를 읽기 위해 자동화 접근을 요청합니다. 개인정보: 메타데이터만 activity.sqlite에 로컬로 저장되며 업로드되지 않습니다. macOS 전용.",
+    "클립보드가 변경되는 시점을 기록합니다 — 어떤 앱이 복사했는지, 콘텐츠 유형과 크기. 클립보드 내용 자체는 절대 읽거나 저장하지 않습니다. 유용한 이유: 잦은 복사/붙여넣기는 컨텍스트 전환의 강한 신호이며, EEG와 결합하면 여러 출처를 오가는 것이 몰입을 깨뜨리는 시점을 보여줄 수 있습니다. 필요한 권한: macOS는 클립보드 메타데이터를 읽기 위해 자동화 접근을 요청합니다. 개인정보: 메타데이터만 activity.duckdb에 로컬로 저장되며 업로드되지 않습니다. macOS 전용.",
   "settings.screenshotsToggle": "주기적으로 스크린샷 촬영",
   "settings.locationToggle": "위치 추적",
   "settings.calendarToggle": "캘린더 이벤트 추적",
   "settings.calendarToggleDesc":
-    "다가오는 캘린더 이벤트와 최근 이벤트의 메타데이터(제목, 시간, 지속 시간, 참석자 수)를 읽어 앱이 집중력 저하를 회의 밀도와 연관시킬 수 있도록 합니다. 유용한 이유: 연이은 회의가 깊은 작업 블록을 침식하는지 보여줍니다. 필요한 권한: macOS는 처음 조회할 때 캘린더 접근 프롬프트를 표시합니다. 개인정보: 이벤트는 요청 시 읽히고, 집계 카운트만 activity.sqlite에 저장되며 아무것도 업로드되지 않습니다.",
+    "다가오는 캘린더 이벤트와 최근 이벤트의 메타데이터(제목, 시간, 지속 시간, 참석자 수)를 읽어 앱이 집중력 저하를 회의 밀도와 연관시킬 수 있도록 합니다. 유용한 이유: 연이은 회의가 깊은 작업 블록을 침식하는지 보여줍니다. 필요한 권한: macOS는 처음 조회할 때 캘린더 접근 프롬프트를 표시합니다. 개인정보: 이벤트는 요청 시 읽히고, 집계 카운트만 activity.duckdb에 저장되며 아무것도 업로드되지 않습니다.",
   "settings.clipboardPermDenied": "자동화 권한이 부여되지 않았습니다.",
   "settings.clipboardPermAction": "클릭하여 시스템 설정을 열고 클립보드 접근을 허용하세요.",
 

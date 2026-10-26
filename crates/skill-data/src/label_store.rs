@@ -4,7 +4,7 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-//! Persistent label storage — `~/.skill/labels.sqlite`.
+//! Persistent label storage — `~/.skill/labels.duckdb`.
 //!
 //! Each row records the text the user typed together with two identical time
 //! windows (EEG and label-dialog open time are the same, because EEG is always
@@ -12,69 +12,78 @@
 //!
 //! * `eeg_start / eeg_end`     — unix-second range of EEG data that overlaps
 //!   with the labelling session.  Query the daily
-//!   `eeg.sqlite` embeddings table with
+//!   `eeg.duckdb` embeddings table with
 //!   `WHERE timestamp BETWEEN … AND …` to retrieve
 //!   all embeddings recorded during this label.
 //! * `label_start / label_end` — when the label window was opened and submitted
 //!   (identical to the EEG range above).
 //! * `created_at`              — insertion timestamp (unix seconds).
 
-use rusqlite::{params, Connection};
 use std::path::Path;
 
+use crate::duck::{params, Connection};
 use skill_constants::LABELS_FILE;
 
-const DDL: &str = "
-    CREATE TABLE IF NOT EXISTS labels (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        eeg_start   INTEGER NOT NULL,
-        eeg_end     INTEGER NOT NULL,
-        label_start INTEGER NOT NULL,
-        label_end   INTEGER NOT NULL,
-        text        TEXT    NOT NULL,
-        context     TEXT    NOT NULL DEFAULT '',
-        created_at  INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_labels_eeg_start ON labels (eeg_start);
-";
-
-/// Migration: add the `context` column to databases created before this field existed.
-/// SQLite returns an error if the column already exists — we silently ignore it.
-const MIGRATE_CONTEXT: &str = "ALTER TABLE labels ADD COLUMN context TEXT NOT NULL DEFAULT ''";
-
-/// Migration: add embedding BLOBs (nullable; populated asynchronously after insert).
-const MIGRATE_TEXT_EMBEDDING: &str = "ALTER TABLE labels ADD COLUMN text_embedding BLOB";
-const MIGRATE_CONTEXT_EMBEDDING: &str = "ALTER TABLE labels ADD COLUMN context_embedding BLOB";
-/// Migration: track which embedding model produced the stored vectors.
-/// NULL means the row has not been embedded yet (or was embedded before this
-/// column was added and needs re-embedding).
-const MIGRATE_EMBEDDING_MODEL: &str = "ALTER TABLE labels ADD COLUMN embedding_model TEXT";
+const SCHEMA: crate::duck::StoreSchema<'static> = crate::duck::StoreSchema {
+    ddl: "
+        CREATE TABLE IF NOT EXISTS labels (
+            id                BIGINT  PRIMARY KEY DEFAULT nextval('labels_id_seq'),
+            eeg_start         BIGINT  NOT NULL,
+            eeg_end           BIGINT  NOT NULL,
+            -- When the label dialog was opened / submitted. Older builds
+            -- wrote this pair as wall_start / wall_end (kept below so their
+            -- rows import intact); both pairs default to 0.
+            label_start       BIGINT  NOT NULL DEFAULT 0,
+            label_end         BIGINT  NOT NULL DEFAULT 0,
+            wall_start        BIGINT  NOT NULL DEFAULT 0,
+            wall_end          BIGINT  NOT NULL DEFAULT 0,
+            text              VARCHAR NOT NULL,
+            context           VARCHAR NOT NULL DEFAULT '',
+            created_at        BIGINT  NOT NULL,
+            -- Embeddings are populated asynchronously after insert;
+            -- embedding_model NULL = not embedded (or needs re-embedding).
+            text_embedding    BLOB,
+            context_embedding BLOB,
+            embedding_model   VARCHAR
+        );
+        CREATE INDEX IF NOT EXISTS idx_labels_eeg_start ON labels (eeg_start);
+    ",
+    import_tables: &["labels"],
+    sequences: &[("labels_id_seq", "labels", "id")],
+};
 
 pub struct LabelStore {
-    conn: Connection,
+    conn: crate::duck::Conn,
 }
 
 impl LabelStore {
     /// Open (or create) the label database inside `skill_dir`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let db_path = skill_dir.join(LABELS_FILE);
-        let conn = match Connection::open(&db_path) {
-            Ok(c) => c,
+        match crate::duck::open_store(&db_path, &SCHEMA) {
+            Ok(conn) => Some(Self { conn }),
             Err(e) => {
-                eprintln!("[labels] open {}: {e}", db_path.display());
-                return None;
+                eprintln!("[labels] open {}: {e:#}", db_path.display());
+                None
             }
-        };
-        if let Err(e) = conn.execute_batch(DDL) {
-            eprintln!("[labels] DDL: {e}");
-            return None;
         }
-        // Best-effort migrations — each fails silently if the column already exists.
-        let _ = conn.execute(MIGRATE_CONTEXT, []);
-        let _ = conn.execute(MIGRATE_TEXT_EMBEDDING, []);
-        let _ = conn.execute(MIGRATE_CONTEXT_EMBEDDING, []);
-        let _ = conn.execute(MIGRATE_EMBEDDING_MODEL, []);
-        Some(Self { conn })
+    }
+
+    /// A raw connection to the label database (schema set up, legacy
+    /// `labels.sqlite` imported), for callers that run their own SQL.
+    pub fn connect(skill_dir: &Path) -> Option<crate::duck::Conn> {
+        Self::open(skill_dir).map(|s| s.conn)
+    }
+
+    /// Whether `skill_dir` has a label database (current or legacy).
+    pub fn exists(skill_dir: &Path) -> bool {
+        let p = skill_dir.join(LABELS_FILE);
+        p.exists() || crate::duck::legacy_sqlite_path(&p).exists()
+    }
+
+    /// The underlying connection, for queries this type doesn't wrap.
+    pub fn conn(&self) -> &Connection {
+        &self.conn
     }
 
     /// Return the total number of labels in the database.
@@ -115,7 +124,7 @@ impl LabelStore {
         rows.filter_map(std::result::Result::ok).collect()
     }
 
-    /// Insert a label row.  Returns the new `rowid` on success.
+    /// Insert a label row.  Returns the new id on success.
     #[allow(clippy::too_many_arguments)]
     pub fn insert(
         &self,
@@ -127,10 +136,11 @@ impl LabelStore {
         context: &str,
         created_at: u64,
     ) -> Option<i64> {
-        let r = self.conn.execute(
+        let r = self.conn.query_row(
             "INSERT INTO labels
-             (eeg_start, eeg_end, label_start, label_end, text, context, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at)
+             VALUES (nextval('labels_id_seq'), ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             RETURNING id",
             params![
                 eeg_start as i64,
                 eeg_end as i64,
@@ -140,9 +150,10 @@ impl LabelStore {
                 context,
                 created_at as i64,
             ],
+            |row| row.get::<_, i64>(0),
         );
         match r {
-            Ok(_) => Some(self.conn.last_insert_rowid()),
+            Ok(id) => Some(id),
             Err(e) => {
                 eprintln!("[labels] insert: {e}");
                 None

@@ -11,7 +11,6 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use skill_constants::LABELS_FILE;
 use skill_daemon_common::ApiError;
 
 use crate::routes::settings_io::patch_user_settings_sync;
@@ -98,44 +97,10 @@ fn now_unix() -> f64 {
         .unwrap_or(0.0)
 }
 
-/// Open (or create) the canonical `labels.sqlite` with the full schema.
-fn open_labels_db(skill_dir: &std::path::Path) -> anyhow::Result<rusqlite::Connection> {
-    use anyhow::Context as _;
-    let db_path = skill_dir.join(LABELS_FILE);
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).context("create labels DB directory")?;
-    }
-    let conn = rusqlite::Connection::open(&db_path).context("open labels DB")?;
-    skill_data::util::init_wal_pragmas(&conn);
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS labels (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            text              TEXT NOT NULL,
-            context           TEXT DEFAULT '',
-            eeg_start         INTEGER NOT NULL DEFAULT 0,
-            eeg_end           INTEGER NOT NULL DEFAULT 0,
-            wall_start        INTEGER NOT NULL DEFAULT 0,
-            wall_end          INTEGER NOT NULL DEFAULT 0,
-            created_at        INTEGER NOT NULL DEFAULT 0,
-            text_embedding    BLOB,
-            context_embedding BLOB,
-            embedding_model   TEXT
-        );",
-    )
-    .context("create labels table")?;
-    // Migrate older databases that lack newer columns.
-    for col in &[
-        ("wall_start", "INTEGER NOT NULL DEFAULT 0"),
-        ("wall_end", "INTEGER NOT NULL DEFAULT 0"),
-        ("label_start", "INTEGER NOT NULL DEFAULT 0"),
-        ("label_end", "INTEGER NOT NULL DEFAULT 0"),
-        ("text_embedding", "BLOB"),
-        ("context_embedding", "BLOB"),
-        ("embedding_model", "TEXT"),
-    ] {
-        let _ = conn.execute_batch(&format!("ALTER TABLE labels ADD COLUMN {} {};", col.0, col.1));
-    }
-    Ok(conn)
+/// Open (or create) the canonical label store (`labels.duckdb`) — schema
+/// and the one-time `labels.sqlite` import live in `skill_data::label_store`.
+fn open_labels_db(skill_dir: &std::path::Path) -> anyhow::Result<skill_data::duck::Conn> {
+    skill_data::label_store::LabelStore::connect(skill_dir).ok_or_else(|| anyhow::anyhow!("open labels DB"))
 }
 
 fn f32_to_blob(v: &[f32]) -> Vec<u8> {
@@ -170,7 +135,7 @@ mod tests {
         let conn = open_labels_db(td.path()).expect("db open");
         let n: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='labels'",
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'labels'",
                 [],
                 |r| r.get(0),
             )
@@ -302,26 +267,28 @@ async fn create_label(
         let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
         let ctx_blob = ctx_emb.as_ref().map(|v| f32_to_blob(v));
 
-        conn.execute(
-            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
+        let id = conn
+            .query_row(
+                "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
                                  label_start, label_end,
                                  created_at, text_embedding, context_embedding, embedding_model)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?5, ?6, ?7, ?8, ?9, ?10)",
-            rusqlite::params![
-                req.text,
-                context,
-                eeg_start as i64,
-                eeg_end as i64,
-                now_secs as i64,
-                now_secs as i64,
-                now_secs as i64,
-                text_blob,
-                ctx_blob,
-                EMBED_MODEL_NAME,
-            ],
-        )
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let id = conn.last_insert_rowid();
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?5, ?6, ?7, ?8, ?9, ?10)
+             RETURNING id",
+                skill_data::duck::params![
+                    req.text,
+                    context,
+                    eeg_start as i64,
+                    eeg_end as i64,
+                    now_secs as i64,
+                    now_secs as i64,
+                    now_secs as i64,
+                    text_blob,
+                    ctx_blob,
+                    EMBED_MODEL_NAME,
+                ],
+                |r| r.get::<_, i64>(0),
+            )
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         // Insert into daemon-owned HNSW indices.
         // On dimension mismatch, insert_label auto-rebuilds the index so the
@@ -390,24 +357,26 @@ pub async fn submit_label_internal(state: &AppState, text: &str, eeg_start: u64,
         let _ctx_emb: Option<Vec<f32>> = None;
         let text_blob = text_emb.as_ref().map(|v| f32_to_blob(v));
 
-        conn.execute(
-            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
+        let id = conn
+            .query_row(
+                "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
                                  label_start, label_end,
                                  created_at, text_embedding, context_embedding, embedding_model)
-             VALUES (?1, '', ?2, ?3, ?4, ?5, ?4, ?5, ?6, ?7, NULL, ?8)",
-            rusqlite::params![
-                text,
-                eeg_start as i64,
-                eeg_end as i64,
-                now_secs as i64,
-                now_secs as i64,
-                now_unix(),
-                text_blob,
-                EMBED_MODEL_NAME,
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        let id = conn.last_insert_rowid();
+             VALUES (?1, '', ?2, ?3, ?4, ?5, ?4, ?5, ?6, ?7, NULL, ?8)
+             RETURNING id",
+                skill_data::duck::params![
+                    text,
+                    eeg_start as i64,
+                    eeg_end as i64,
+                    now_secs as i64,
+                    now_secs as i64,
+                    now_unix(),
+                    text_blob,
+                    EMBED_MODEL_NAME,
+                ],
+                |r| r.get::<_, i64>(0),
+            )
+            .map_err(|e| e.to_string())?;
 
         let text_emb_ref = text_emb.as_deref().unwrap_or(&[]);
         let _ = skill_label_index::insert_label(&skill_dir, id, text_emb_ref, &[], eeg_start, eeg_end, &label_index);
@@ -448,7 +417,7 @@ async fn update_label(
             "UPDATE labels SET text = ?1, context = ?2, text_embedding = ?3,
                     context_embedding = ?4, embedding_model = ?5
              WHERE id = ?6",
-            rusqlite::params![req.text, context, text_blob, ctx_blob, EMBED_MODEL_NAME, id],
+            skill_data::duck::params![req.text, context, text_blob, ctx_blob, EMBED_MODEL_NAME, id],
         )
         .map_err(|e| {
             (
@@ -496,7 +465,7 @@ async fn delete_label(
                 }),
             )
         })?;
-        conn.execute("DELETE FROM labels WHERE id = ?1", rusqlite::params![id])
+        conn.execute("DELETE FROM labels WHERE id = ?1", skill_data::duck::params![id])
             .map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -704,7 +673,7 @@ async fn label_embedding_status(State(state): State<AppState>) -> Json<serde_jso
         let stale: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM labels WHERE embedding_model IS NULL OR embedding_model != ?1",
-                rusqlite::params![EMBED_MODEL_NAME],
+                skill_data::duck::params![EMBED_MODEL_NAME],
                 |r| r.get(0),
             )
             .unwrap_or(0);
@@ -769,7 +738,7 @@ pub(crate) fn reembed_all_labels_blocking(
 
         conn.execute(
             "UPDATE labels SET text_embedding = ?1, context_embedding = ?2, embedding_model = ?3 WHERE id = ?4",
-            rusqlite::params![text_blob, ctx_blob, EMBED_MODEL_NAME, id],
+            skill_data::duck::params![text_blob, ctx_blob, EMBED_MODEL_NAME, id],
         )?;
 
         // Yield between batches to avoid saturating the CPU.

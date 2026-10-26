@@ -33,8 +33,8 @@ Pure library crate — **zero Tauri dependencies**. Thin IPC wrappers live in
 | `load_csv_metrics_cached(csv_path)` | Same as above but with `_metrics_cache.json` disk cache |
 | `get_day_metrics_batch(paths, max_points)` | Batch-load + downsample for multiple sessions |
 | `downsample_timeseries(ts, max)` | Reduce timeseries to ≤ `max` points (stride-based) |
-| `get_session_metrics(skill_dir, start, end)` | Aggregated metrics from SQLite embedding databases |
-| `get_session_timeseries(skill_dir, start, end)` | Per-epoch timeseries from SQLite |
+| `get_session_metrics(skill_dir, start, end)` | Aggregated metrics from the per-day DuckDB embedding stores |
+| `get_session_timeseries(skill_dir, start, end)` | Per-epoch timeseries from the per-day stores |
 
 ### Sleep staging
 

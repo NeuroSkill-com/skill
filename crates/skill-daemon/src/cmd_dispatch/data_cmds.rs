@@ -60,11 +60,8 @@ pub(super) async fn cmd_status(state: &AppState) -> Result<Value, String> {
         let mut count = 0u64;
         if let Ok(entries) = std::fs::read_dir(&skill_dir2) {
             for entry in entries.filter_map(Result::ok) {
-                let db = entry.path().join("eeg.sqlite");
-                if db.exists() {
-                    if let Ok(conn) =
-                        rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-                    {
+                {
+                    if let Some(conn) = skill_data::eeg_store::open_existing(&entry.path()) {
                         count += conn
                             .query_row("SELECT COUNT(*) FROM embeddings", [], |r| {
                                 r.get::<_, i64>(0).map(|v| v as u64)
@@ -171,26 +168,8 @@ pub(super) async fn cmd_label(state: &AppState, msg: &Value) -> Result<Value, St
     let label_start_utc = f64_field(msg, "label_start_utc");
     let skill_dir = skill_dir(state);
     let _label_index = state.label_index.clone();
-    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
-
     let result = tokio::task::spawn_blocking(move || {
-        let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS labels (
-                id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                text              TEXT NOT NULL,
-                context           TEXT DEFAULT '',
-                eeg_start         INTEGER NOT NULL DEFAULT 0,
-                eeg_end           INTEGER NOT NULL DEFAULT 0,
-                wall_start        INTEGER NOT NULL DEFAULT 0,
-                wall_end          INTEGER NOT NULL DEFAULT 0,
-                created_at        INTEGER NOT NULL DEFAULT 0,
-                text_embedding    BLOB,
-                context_embedding BLOB,
-                embedding_model   TEXT
-            );",
-        )
-        .map_err(|e| e.to_string())?;
+        let store = skill_data::label_store::LabelStore::open(&skill_dir).ok_or("label store unavailable")?;
         let now = label_start_utc.unwrap_or_else(|| {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -198,21 +177,17 @@ pub(super) async fn cmd_label(state: &AppState, msg: &Value) -> Result<Value, St
                 .unwrap_or(0.0)
         });
         let now_secs = now as u64;
-        conn.execute(
-            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![
-                text,
-                context,
-                now_secs as i64,
-                now_secs as i64,
-                now_secs as i64,
-                now_secs as i64,
-                now_secs as i64
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        let id = conn.last_insert_rowid();
+        let id = store
+            .insert(
+                now_secs,
+                now_secs,
+                now_secs,
+                now_secs,
+                &text,
+                context.as_deref().unwrap_or(""),
+                now_secs,
+            )
+            .ok_or("label insert failed")?;
 
         // Background-embed: the HNSW insert happens via the label route's
         // background path; for the cmd tunnel we do a simpler insert.
@@ -230,29 +205,24 @@ pub(super) async fn cmd_search_labels(state: &AppState, msg: &Value) -> Result<V
     let k = u64_field(msg, "k").unwrap_or(10) as usize;
     let mode = str_field(msg, "mode").unwrap_or_else(|| "text".into());
     let skill_dir = skill_dir(state);
-    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
-
     let results = tokio::task::spawn_blocking(move || {
-        if !db_path.exists() {
+        if !skill_data::label_store::LabelStore::exists(&skill_dir) {
             return Vec::new();
         }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(
-            &db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) else {
+        let Some(conn) = skill_data::label_store::LabelStore::connect(&skill_dir) else {
             return Vec::new();
         };
 
         let sql = match mode.as_str() {
-            "context" => "SELECT id, text, context, created_at FROM labels WHERE context LIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
-            "both" => "SELECT id, text, context, created_at FROM labels WHERE text LIKE '%' || ?1 || '%' OR context LIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
-            _ => "SELECT id, text, context, created_at FROM labels WHERE text LIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
+            "context" => "SELECT id, text, context, created_at FROM labels WHERE context ILIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
+            "both" => "SELECT id, text, context, created_at FROM labels WHERE text ILIKE '%' || ?1 || '%' OR context ILIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
+            _ => "SELECT id, text, context, created_at FROM labels WHERE text ILIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
         };
 
         let Ok(mut stmt) = conn.prepare(sql) else {
             return Vec::new();
         };
-        stmt.query_map(rusqlite::params![query, k as i64], |row| {
+        stmt.query_map(skill_data::duck::params![query, k as i64], |row| {
             Ok(json!({
                 "id": row.get::<_, i64>(0)?,
                 "text": row.get::<_, String>(1)?,
@@ -454,17 +424,13 @@ pub(super) async fn cmd_interactive_search(state: &AppState, msg: &Value) -> Res
 
     let result = tokio::task::spawn_blocking(move || {
         // Step 1: search labels
-        let db_path = skill_dir.join(skill_constants::LABELS_FILE);
         let mut label_results = Vec::new();
-        if db_path.exists() {
-            if let Ok(conn) = rusqlite::Connection::open_with_flags(
-                &db_path,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            ) {
+        if skill_data::label_store::LabelStore::exists(&skill_dir) {
+            if let Some(conn) = skill_data::label_store::LabelStore::connect(&skill_dir) {
                 if let Ok(mut stmt) = conn.prepare(
-                    "SELECT id, text, context, created_at FROM labels WHERE text LIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
+                    "SELECT id, text, context, created_at FROM labels WHERE text ILIKE '%' || ?1 || '%' ORDER BY created_at DESC LIMIT ?2",
                 ) {
-                    if let Ok(rows) = stmt.query_map(rusqlite::params![query, k_text as i64], |row| {
+                    if let Ok(rows) = stmt.query_map(skill_data::duck::params![query, k_text as i64], |row| {
                         Ok(json!({
                             "id": row.get::<_, i64>(0)?,
                             "text": row.get::<_, String>(1)?,
@@ -677,11 +643,7 @@ pub(super) async fn cmd_hooks_log(state: &AppState, msg: &Value) -> Result<Value
 pub(super) async fn cmd_list_calibrations(state: &AppState) -> Result<Value, String> {
     let skill_dir = skill_dir(state);
     let profiles = tokio::task::spawn_blocking(move || {
-        let db = skill_dir.join("calibrations.db");
-        if !db.exists() {
-            return Vec::new();
-        }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+        let Ok(conn) = open_calibrations(&skill_dir) else {
             return Vec::new();
         };
         let Ok(mut stmt) = conn.prepare("SELECT id, name, config, created_at FROM calibrations ORDER BY created_at DESC") else {
@@ -709,14 +671,13 @@ pub(super) async fn cmd_get_calibration(state: &AppState, msg: &Value) -> Result
     let skill_dir = skill_dir(state);
 
     let result = tokio::task::spawn_blocking(move || {
-        let db = skill_dir.join("calibrations.db");
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+        let Ok(conn) = open_calibrations(&skill_dir) else {
             return json!({ "error": "db not found" });
         };
         let row: Option<Value> = conn
             .query_row(
                 "SELECT id, name, config, created_at FROM calibrations WHERE id = ?1",
-                rusqlite::params![id],
+                skill_data::duck::params![id],
                 |row| {
                     Ok(json!({
                         "id": row.get::<_, String>(0)?,
@@ -741,12 +702,7 @@ pub(super) async fn cmd_create_calibration(state: &AppState, msg: &Value) -> Res
     let skill_dir = skill_dir(state);
 
     let result = tokio::task::spawn_blocking(move || {
-        let db = skill_dir.join("calibrations.db");
-        let conn = rusqlite::Connection::open(&db).map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS calibrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, config TEXT, created_at REAL NOT NULL);",
-        )
-        .map_err(|e| e.to_string())?;
+        let conn = open_calibrations(&skill_dir).map_err(|e| e.to_string())?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -754,7 +710,7 @@ pub(super) async fn cmd_create_calibration(state: &AppState, msg: &Value) -> Res
             .unwrap_or(0.0);
         conn.execute(
             "INSERT INTO calibrations (id, name, config, created_at) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![id, name, serde_json::to_string(&config).unwrap_or_default(), now],
+            skill_data::duck::params![id, name, serde_json::to_string(&config).unwrap_or_default(), now],
         )
         .map_err(|e| e.to_string())?;
         Ok::<_, String>(json!({ "id": id, "name": name }))
@@ -772,19 +728,18 @@ pub(super) async fn cmd_update_calibration(state: &AppState, msg: &Value) -> Res
     let skill_dir = skill_dir(state);
 
     tokio::task::spawn_blocking(move || {
-        let db = skill_dir.join("calibrations.db");
-        let conn = rusqlite::Connection::open(&db).map_err(|e| e.to_string())?;
+        let conn = open_calibrations(&skill_dir).map_err(|e| e.to_string())?;
         if let Some(n) = &name {
             conn.execute(
                 "UPDATE calibrations SET name = ?1 WHERE id = ?2",
-                rusqlite::params![n, id],
+                skill_data::duck::params![n, id],
             )
             .map_err(|e| e.to_string())?;
         }
         if let Some(c) = &config {
             conn.execute(
                 "UPDATE calibrations SET config = ?1 WHERE id = ?2",
-                rusqlite::params![serde_json::to_string(c).unwrap_or_default(), id],
+                skill_data::duck::params![serde_json::to_string(c).unwrap_or_default(), id],
             )
             .map_err(|e| e.to_string())?;
         }
@@ -801,9 +756,8 @@ pub(super) async fn cmd_delete_calibration(state: &AppState, msg: &Value) -> Res
     let skill_dir = skill_dir(state);
 
     tokio::task::spawn_blocking(move || {
-        let db = skill_dir.join("calibrations.db");
-        let conn = rusqlite::Connection::open(&db).map_err(|e| e.to_string())?;
-        conn.execute("DELETE FROM calibrations WHERE id = ?1", rusqlite::params![id])
+        let conn = open_calibrations(&skill_dir).map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM calibrations WHERE id = ?1", skill_data::duck::params![id])
             .map_err(|e| e.to_string())?;
         Ok::<_, String>(())
     })
@@ -906,4 +860,34 @@ mod tests {
         let result = cmd_search(&state, &msg).await;
         assert!(result.is_err());
     }
+}
+
+const CALIBRATIONS_SCHEMA: skill_data::duck::StoreSchema<'static> = skill_data::duck::StoreSchema {
+    ddl: "CREATE TABLE IF NOT EXISTS calibrations (
+              id         VARCHAR PRIMARY KEY,
+              name       VARCHAR NOT NULL,
+              config     VARCHAR,
+              created_at DOUBLE  NOT NULL
+          );",
+    import_tables: &["calibrations"],
+    sequences: &[],
+};
+
+/// The calibration-profile store, `calibrations.duckdb`. The pre-DuckDB file
+/// was `calibrations.db`; it is renamed to `calibrations.sqlite` so the
+/// standard one-time import picks it up.
+fn open_calibrations(skill_dir: &std::path::Path) -> anyhow::Result<skill_data::duck::Conn> {
+    let path = skill_dir.join("calibrations.duckdb");
+    let legacy_db = skill_dir.join("calibrations.db");
+    let legacy = skill_data::duck::legacy_sqlite_path(&path);
+    if legacy_db.exists() && !legacy.exists() && !path.exists() {
+        std::fs::rename(&legacy_db, &legacy)?;
+        for suffix in ["-wal", "-shm"] {
+            let src = skill_dir.join(format!("calibrations.db{suffix}"));
+            if src.exists() {
+                let _ = std::fs::rename(&src, skill_dir.join(format!("calibrations.sqlite{suffix}")));
+            }
+        }
+    }
+    skill_data::duck::open_store(&path, &CALIBRATIONS_SCHEMA)
 }

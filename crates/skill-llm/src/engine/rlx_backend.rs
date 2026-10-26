@@ -305,7 +305,9 @@ fn mlx_model_type(path: &Path) -> Option<String> {
 #[cfg(feature = "llm-model-discovery")]
 fn resolve_mlx_device(config: &LlmConfig) -> rlx::runtime::Device {
     use rlx::runtime::{device_ext::is_available, Device};
-    if config.n_gpu_layers == 0 || config.rlx_device.eq_ignore_ascii_case("cpu") {
+    // Device only — see `resolve_rlx_device` for why the layer count is not
+    // consulted here either.
+    if config.rlx_device.eq_ignore_ascii_case("cpu") {
         return Device::Cpu;
     }
     if is_available(Device::Mlx) {
@@ -540,10 +542,22 @@ fn looks_like_qwen35(path: &Path) -> bool {
 
 /// Resolve the rlx inference device from config.
 ///
-/// - `n_gpu_layers == 0` or `rlx_device == "cpu"` → CPU
+/// - `rlx_device == "cpu"` → CPU
 /// - Explicit accelerator tags try that device first; if unavailable they
 ///   fall back (notably **`cuda` → wgpu/`Gpu` → CPU**)
 /// - `"auto"` / unknown → best available: Metal → CUDA → MLX → wgpu → CPU
+///
+/// `llm.n_gpu_layers` deliberately does NOT appear here. It is llama.cpp's
+/// per-layer offload count, and rlx has no per-layer offload — it picks one
+/// device for the whole graph — so the only thing a layer count could do on
+/// this path was veto the device, which is what it used to do: a settings file
+/// carrying `n_gpu_layers: 0` pinned Qwen3.5 to CPU while `rlx_device` said
+/// `"metal"`, measured at 21.0 s against 11.8 s for the same prompt. That state
+/// is reachable from the UI's "GPU layers: CPU" button, which writes the layer
+/// count without touching `inference_device`, so nothing ever put it back.
+/// "Run on CPU" is now said once, through the device: `inference_device`
+/// (which [`set_inference_device`] maps onto `rlx_device`) or `rlx_device`
+/// itself.
 /// The context, in tokens, every runner must be built for.
 ///
 /// Families size their bucketed decode compile cache from this, and the rlx
@@ -585,7 +599,7 @@ fn auto_options(config: &LlmConfig, mmproj: Option<&Path>) -> rlx_models::run::A
 fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
     use rlx::runtime::{device_ext::is_available, Device};
 
-    if config.n_gpu_layers == 0 || config.rlx_device.eq_ignore_ascii_case("cpu") {
+    if config.rlx_device.eq_ignore_ascii_case("cpu") {
         return Device::Cpu;
     }
 
@@ -1844,15 +1858,40 @@ mod device_tests {
         assert_eq!(resolve_rlx_device(&cfg), Device::Cpu);
     }
 
+    /// A layer count must not veto a named accelerator. This is the regression
+    /// that shipped in 0.1.0-rc.3: `inference_device` said `"gpu"` and
+    /// `rlx_device` said `"metal"`, but a stale `n_gpu_layers: 0` left over
+    /// from the "GPU layers: CPU" button pinned the whole engine to CPU.
     #[test]
-    fn zero_gpu_layers_forces_cpu() {
-        // GPU offload disabled → CPU regardless of the requested device string.
+    fn zero_gpu_layers_does_not_veto_an_explicit_accelerator() {
         let cfg = LlmConfig {
             rlx_device: "metal".into(),
             n_gpu_layers: 0,
             ..LlmConfig::default()
         };
-        assert_eq!(resolve_rlx_device(&cfg), Device::Cpu);
+        assert_ne!(
+            resolve_rlx_device(&cfg),
+            Device::Cpu,
+            "an explicitly requested accelerator wins over the llama.cpp layer count"
+        );
+    }
+
+    /// …and it must not veto `auto` either: "use the GPU when there is one"
+    /// is the default, and only the device setting can turn that off.
+    #[test]
+    fn zero_gpu_layers_does_not_veto_auto() {
+        let cfg = LlmConfig {
+            rlx_device: "auto".into(),
+            n_gpu_layers: 0,
+            ..LlmConfig::default()
+        };
+        let with_zero = resolve_rlx_device(&cfg);
+        let with_all = resolve_rlx_device(&LlmConfig {
+            rlx_device: "auto".into(),
+            n_gpu_layers: u32::MAX,
+            ..LlmConfig::default()
+        });
+        assert_eq!(with_zero, with_all, "the layer count changes nothing on this path");
     }
 
     #[test]

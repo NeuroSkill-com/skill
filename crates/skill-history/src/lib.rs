@@ -753,7 +753,7 @@ fn collapse_adjacent_chunks(sorted_desc: Vec<SessionEntry>) -> Vec<SessionEntry>
     out
 }
 
-/// Compute average SNR (dB) from the embeddings SQLite for sessions that
+/// Compute average SNR (dB) from the day's embeddings store for sessions that
 /// lack `avg_snr_db` in their sidecar.  Only issues queries when there are
 /// sessions to backfill, and only one connection per day directory.
 fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
@@ -763,39 +763,17 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         return;
     }
 
-    let db_path = day_dir.join(skill_constants::SQLITE_FILE);
-    if !db_path.exists() {
-        return;
-    }
-
-    // Try read-only first (fast, no write-locking).  If the metrics_json
-    // column doesn't exist (very old database), the prepare will fail.
-    // In that case, run the migration via a read-write connection and
-    // return early (all values will be NULL after migration anyway).
-    let flags_ro = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, flags_ro) else {
+    let Some(conn) = skill_data::eeg_store::open_existing(day_dir) else {
         return;
     };
-    let _ = conn.execute_batch("PRAGMA busy_timeout=1000;");
 
     let query = format!(
-        "SELECT AVG(json_extract(metrics_json, '$.snr'))
+        "SELECT AVG(TRY_CAST(json_extract_string(metrics_json, '$.snr') AS DOUBLE))
          FROM embeddings
          WHERE ({})
-           AND json_extract(metrics_json, '$.snr') IS NOT NULL",
+           AND TRY_CAST(json_extract_string(metrics_json, '$.snr') AS DOUBLE) IS NOT NULL",
         skill_data::util::DualTimestampRange::WHERE_CLAUSE
     );
-
-    // If prepare fails the column is missing — migrate and bail.
-    let needs_migration = conn.prepare(&query).is_err();
-    if needs_migration {
-        drop(conn);
-        let flags_rw = rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
-        if let Ok(rw) = rusqlite::Connection::open_with_flags(&db_path, flags_rw) {
-            let _ = rw.execute("ALTER TABLE embeddings ADD COLUMN metrics_json TEXT", []);
-        }
-        return;
-    }
 
     let Ok(mut stmt) = conn.prepare(&query) else {
         return;
@@ -810,7 +788,7 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
         };
         let r = skill_data::util::DualTimestampRange::from_unix_secs(s, e);
         if let Ok(avg) = stmt.query_row(
-            rusqlite::params![
+            skill_data::duck::params![
                 r.unix_ms_start,
                 r.unix_ms_end,
                 r.dt14_start,
@@ -1002,17 +980,9 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
         if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) {
             continue;
         }
-        let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(
-            &db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ) else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") else {
             continue;
         };

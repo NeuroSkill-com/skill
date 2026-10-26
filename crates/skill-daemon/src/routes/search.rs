@@ -318,7 +318,7 @@ async fn search_eeg_stream(
 async fn list_search_devices(State(state): State<AppState>) -> Json<serde_json::Value> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let devices = tokio::task::spawn_blocking(move || {
-        let mut names = std::collections::BTreeSet::new();
+        let mut names = bbtree::unsync::BBTreeSet::new();
         let Ok(entries) = std::fs::read_dir(&skill_dir) else {
             return Vec::new();
         };
@@ -332,14 +332,7 @@ async fn list_search_devices(State(state): State<AppState>) -> Json<serde_json::
             if s.len() != 8 || !s.starts_with("20") {
                 continue;
             }
-            let db = p.join(skill_constants::SQLITE_FILE);
-            if !db.exists() {
-                continue;
-            }
-            if let Ok(conn) = rusqlite::Connection::open_with_flags(
-                &db,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            ) {
+            if let Some(conn) = skill_data::eeg_store::open_existing(&p) {
                 let mut stmt = conn
                     .prepare("SELECT DISTINCT device_name FROM embeddings WHERE device_name IS NOT NULL AND device_name != ''")
                     .ok();
@@ -480,12 +473,7 @@ fn count_epoch_coverage(skill_dir: &std::path::Path) -> (i64, i64) {
         if !path.is_dir() {
             continue;
         }
-        let db_path = path.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
         let t: i64 = conn
@@ -493,7 +481,7 @@ fn count_epoch_coverage(skill_dir: &std::path::Path) -> (i64, i64) {
             .unwrap_or(0);
         let m: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4",
+                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NOT NULL AND octet_length(eeg_embedding) >= 4",
                 [],
                 |r| r.get(0),
             )
@@ -696,7 +684,6 @@ fn interactive_search_impl(
             rel_alpha: if ep.ra != 0.0 { Some(ep.ra) } else { None },
             rel_beta: if ep.rb != 0.0 { Some(ep.rb) } else { None },
             rel_theta: if ep.rt != 0.0 { Some(ep.rt) } else { None },
-            headache_index: None,
             migraine_index: None,
             consciousness_lzc: None,
             consciousness_wakefulness: None,
@@ -894,7 +881,6 @@ fn interactive_search_impl(
                                 rel_alpha: if csv_row.ra != 0.0 { Some(csv_row.ra) } else { None },
                                 rel_beta: if csv_row.rb != 0.0 { Some(csv_row.rb) } else { None },
                                 rel_theta: if csv_row.rt != 0.0 { Some(csv_row.rt) } else { None },
-                                headache_index: None,
                                 migraine_index: None,
                                 consciousness_lzc: None,
                                 consciousness_wakefulness: None,
@@ -1489,7 +1475,8 @@ mod tests {
     fn interactive_search_with_labels_detects_stale_when_empty_results() {
         let td = TempDir::new().unwrap();
         // Create a labels DB with one label that has no embedding
-        let labels_db = td.path().join(skill_constants::LABELS_FILE);
+        // A pre-DuckDB labels.sqlite: the store imports it on first open.
+        let labels_db = td.path().join("labels.sqlite");
         {
             let conn = rusqlite::Connection::open(&labels_db).unwrap();
             conn.execute_batch(

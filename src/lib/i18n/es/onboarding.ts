@@ -122,7 +122,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app} puede obtener contexto adicional de tu editor, navegador y terminal. Cada integración es independiente: puedes instalarla u omitirla por separado, ninguna es obligatoria para que funcionen las funciones de EEG.",
   "onboarding.extensionsPrivacy":
-    "Misma garantía de privacidad que el resto: cada extensión informa al daemon local por un puerto localhost, y esos datos se escriben en activity.sqlite en este ordenador. Nada se envía a NeuroSkill ni a nadie más.",
+    "Misma garantía de privacidad que el resto: cada extensión informa al daemon local por un puerto localhost, y esos datos se escriben en activity.duckdb en este ordenador. Nada se envía a NeuroSkill ni a nadie más.",
   "onboarding.extensionsSkip":
     "Todo es opcional. Puedes instalar, actualizar o eliminar cualquiera de estas más tarde en Ajustes → Extensiones y Ajustes → Terminal.",
   "onboarding.extensions.vscodeTitle": "Editor basado en VS Code",
@@ -139,7 +139,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     '{app} puede registrar en qué estabas trabajando para correlacionar tus datos de EEG/concentración con el contexto real — "perdí el foco escribiendo este PR" en vez de solo "perdí el foco a las 3 pm". Está desactivado por defecto y es totalmente opcional.',
   "onboarding.permissionsPrivacy":
-    "Todo permanece en este ordenador. La actividad registrada se escribe en un archivo local activity.sqlite y nunca se envía a ningún servidor — ni a NeuroSkill, ni a nadie. Puedes desactivar cada opción en cualquier momento; los datos registrados permanecen en disco hasta que los borres.",
+    "Todo permanece en este ordenador. La actividad registrada se escribe en un archivo local activity.duckdb y nunca se envía a ningún servidor — ni a NeuroSkill, ni a nadie. Puedes desactivar cada opción en cualquier momento; los datos registrados permanecen en disco hasta que los borres.",
   "onboarding.permissionsSkip":
     "Todo desactivado por defecto. Puedes activar cualquiera de estos más tarde en Ajustes → Seguimiento de actividad.",
   "onboarding.permissionsActiveWindowDesc":

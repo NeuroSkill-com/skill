@@ -278,7 +278,7 @@ const helpRef: Record<string, string> = {
   "helpRef.title69": "Interictal quantitative EEG in migraine: a blinded controlled study",
   "helpRef.authors69": "Bjørk, M. H., Stovner, L. J., Engstrøm, M., Stjern, M., Hagen, K., Sand, T.",
   "helpRef.journal69": "The Journal of Headache and Pain, 10(5), 331–339",
-  "helpRef.metrics69": "头痛指数与偏头痛指数 ——发作间期定量脑电在偏头痛中的应用",
+  "helpRef.metrics69": "偏头痛指数 ——发作间期定量脑电在偏头痛中的应用",
   "helpRef.title75": "A Theoretically Based Index of Consciousness Independent of Sensory Processing and Behavior",
   "helpRef.authors75":
     "Casali, A. G., Gosseries, O., Rosanova, M., Boly, M., Sarasso, S., Casali, K. R., Casarotto, S., Bruno, M.-A., Laureys, S., Tononi, G., Massimini, M.",

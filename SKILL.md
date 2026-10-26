@@ -53,7 +53,7 @@ automation pipeline.
    - [PPG / Heart Rate Variability](#ppg--heart-rate-variability)
    - [Motion & Artifacts](#motion--artifacts)
    - [Sleep Stages](#sleep-stages)
-   - [Headache & Migraine EEG Correlates](#headache--migraine-eeg-correlates)
+   - [Migraine EEG Correlate](#migraine-eeg-correlate)
    - [Consciousness Metrics](#consciousness-metrics)
 10. [Use-Case Recipes](#use-case-recipes)
    - [Focus & Productivity](#focus--productivity)
@@ -1211,7 +1211,7 @@ EEG stream → 5 s epoch → embedding vector → cosine distance to hook refere
                                               scenario gate passes?
                                                        ↓
                                        broadcast { event: "hook", payload: {...} }
-                                              + audit log in hooks.sqlite
+                                              + audit log in hooks.duckdb
                                               + OS toast notification
 ```
 
@@ -1231,7 +1231,7 @@ EEG stream → 5 s epoch → embedding vector → cosine distance to hook refere
    - `any` — always passes
    - `cognitive` — requires elevated theta/beta ratio or cognitive load ≥ 55
    - `emotional` — requires stress index ≥ 55, mood ≤ 45, or relaxation ≤ 35
-   - `physical` — requires drowsiness ≥ 55, headache/migraine index ≥ 45, or extreme HR
+   - `physical` — requires drowsiness ≥ 55, migraine index ≥ 45, or extreme HR
 
 4. **Cooldown** — A hook cannot fire more than once every 10 seconds (prevents
    rapid-fire spam when the brain state is sustained).
@@ -1240,7 +1240,7 @@ EEG stream → 5 s epoch → embedding vector → cosine distance to hook refere
    over WebSocket to **all connected clients**.  This is the same broadcast mechanism
    used for EEG, scores, and label events — any WebSocket listener receives it.
 
-6. **Audit log** — Every trigger is persisted to `hooks.sqlite` for later review
+6. **Audit log** — Every trigger is persisted to `hooks.duckdb` for later review
    via `hooks log`.
 
 **Why this matters for the CLI:**
@@ -2449,7 +2449,7 @@ curl -s -X POST http://127.0.0.1:8375/ \
 ### `health`
 
 Query and manage Apple HealthKit data synced from the iOS companion app.
-Data is stored in `~/.skill/health.sqlite` and covers sleep analysis, workouts,
+Data is stored in `~/.skill/health.duckdb` and covers sleep analysis, workouts,
 heart rate, step counts, mindfulness sessions, arbitrary scalar health metrics,
 and GPS location fixes recorded by CoreLocation.
 
@@ -2664,7 +2664,7 @@ Sync:
 ### `oura`
 
 Sync data from the Oura Ring V2 Cloud API and store it in the unified health database.
-Data flows through the same `health.sqlite` pipeline as Apple HealthKit — query with
+Data flows through the same `health.duckdb` pipeline as Apple HealthKit — query with
 `health` commands after syncing.
 
 | Subcommand | Description |
@@ -2928,8 +2928,8 @@ node cli.ts llm chat "Summarize my session" --json   # JSON output: {text, token
 **Chat persistence:**
 
 All conversations initiated via WebSocket (`llm_chat`) and HTTP (`POST /llm/chat`)
-are **automatically persisted** to the same SQLite chat store used by the Chat window UI
-(`~/.skill/chats/chat_history.sqlite`).  This means:
+are **automatically persisted** to the same DuckDB chat store used by the Chat window UI
+(`~/.skill/chats/chat_history.duckdb`).  This means:
 
 - WebSocket / HTTP chats appear in the Chat window sidebar and can be reviewed later.
 - The server returns a `session_id` that you can pass in subsequent requests to continue
@@ -3055,7 +3055,7 @@ curl -s -X POST http://127.0.0.1:8375/ \
 curl -s http://127.0.0.1:8375/llm/logs | jq '.logs[-10:]'
 
 # ── POST /llm/chat — non-streaming chat with optional image upload ────────────
-# All conversations are persisted to chat_history.sqlite (same store as the Chat window).
+# All conversations are persisted to chat_history.duckdb (same store as the Chat window).
 # A session_id is returned in the response; pass it in subsequent requests to continue
 # the same conversation.
 
@@ -3926,13 +3926,12 @@ Used in `sleep` and `status.sleep`.
 
 ---
 
-### Headache & Migraine EEG Correlates
+### Migraine EEG Correlate
 
-Surfaced in the EEG Indices panel.  All 0–100.  **Research use only — not diagnostic.**
+Surfaced in the EEG Indices panel.  0–100.  **Research use only — not diagnostic.**
 
 | Index | Mechanism | Reference |
 |---|---|---|
-| `headache_index` | Cortical hyperexcitability (elevated beta, suppressed alpha) | Bjørk et al. (2009) |
 | `migraine_index` | Delta elevation + alpha suppression + hemispheric lateralisation | Bjørk et al. (2009) |
 
 ---

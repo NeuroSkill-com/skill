@@ -203,8 +203,12 @@ jobs:
       # ── Create DMG (background, README, CHANGELOG, LICENSE) ────────────────
       #
       # Uses sindresorhus/create-dmg via scripts/create-macos-dmg.sh which:
+      #   • Notarizes and staples the .app FIRST, so the copy that ends up
+      #     inside the image carries its own ticket (it did not until
+      #     0.1.0-rc.3 — the app was stapled after appdmg had already copied it)
       #   • Creates DMG with composed icon, Retina background, SLA
-      #   • Notarizes with Apple (staples both DMG and .app)
+      #   • Notarizes and staples the DMG itself — two submissions, one per
+      #     artifact, which is what Apple's flow expects
       - name: Install DMG dependencies
         run: |
           # npm@latest no longer runs dependency install scripts by default, so

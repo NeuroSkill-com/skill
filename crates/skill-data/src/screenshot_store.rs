@@ -4,13 +4,13 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-//! Persistent screenshot store — `~/.skill/screenshots.sqlite`.
+//! Persistent screenshot store — `~/.skill/screenshots.duckdb`.
 //!
 //! Each row records a captured window screenshot together with its vision
 //! embedding (if available), the model that produced it, and active-window
 //! context at capture time.
 
-use rusqlite::{params, Connection};
+use crate::duck::params;
 use serde::Serialize;
 use std::path::Path;
 use std::sync::Mutex;
@@ -19,60 +19,59 @@ use crate::util::MutexExt;
 
 // ── DDL ───────────────────────────────────────────────────────────────────────
 
-const DDL: &str = "
+const SCHEMA: crate::duck::StoreSchema<'static> = crate::duck::StoreSchema {
+    ddl: "
 CREATE TABLE IF NOT EXISTS screenshots (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              BIGINT  PRIMARY KEY DEFAULT nextval('screenshots_id_seq'),
 
     -- Temporal keys
-    timestamp       INTEGER NOT NULL,     -- YYYYMMDDHHmmss UTC
-    unix_ts         INTEGER NOT NULL,     -- unix seconds
+    timestamp       BIGINT  NOT NULL,     -- YYYYMMDDHHmmss UTC
+    unix_ts         BIGINT  NOT NULL,     -- unix seconds
 
     -- File reference
-    filename        TEXT    NOT NULL,     -- relative: \"20260315/20260315143025.webp\"
-    width           INTEGER NOT NULL,
-    height          INTEGER NOT NULL,
-    file_size       INTEGER NOT NULL,     -- bytes on disk
+    filename        VARCHAR NOT NULL,     -- relative: \"20260315/20260315143025.webp\"
+    width           BIGINT  NOT NULL,
+    height          BIGINT  NOT NULL,
+    file_size       BIGINT  NOT NULL,     -- bytes on disk
 
     -- Embedding
-    hnsw_id         INTEGER,              -- row in screenshots.hnsw (NULL if not embedded)
+    hnsw_id         BIGINT,               -- row in screenshots.hnsw (NULL if not embedded)
     embedding       BLOB,                 -- f32 LE × dim (NULL if model unavailable)
-    embedding_dim   INTEGER NOT NULL DEFAULT 0,
+    embedding_dim   BIGINT  NOT NULL DEFAULT 0,
 
     -- Model provenance
-    model_backend   TEXT NOT NULL DEFAULT '',
-    model_id        TEXT NOT NULL DEFAULT '',
-    image_size      INTEGER NOT NULL DEFAULT 0,
-    quality         INTEGER NOT NULL DEFAULT 0,
+    model_backend   VARCHAR NOT NULL DEFAULT '',
+    model_id        VARCHAR NOT NULL DEFAULT '',
+    image_size      BIGINT  NOT NULL DEFAULT 0,
+    quality         BIGINT  NOT NULL DEFAULT 0,
 
     -- Active-window context
-    app_name        TEXT NOT NULL DEFAULT '',
-    window_title    TEXT NOT NULL DEFAULT '',
+    app_name        VARCHAR NOT NULL DEFAULT '',
+    window_title    VARCHAR NOT NULL DEFAULT '',
 
     -- OCR
-    ocr_text        TEXT NOT NULL DEFAULT '',       -- extracted text (full)
+    ocr_text        VARCHAR NOT NULL DEFAULT '',    -- extracted text (full)
     ocr_embedding   BLOB,                           -- text embedding (f32 LE × dim)
-    ocr_embedding_dim INTEGER NOT NULL DEFAULT 0,
-    ocr_hnsw_id     INTEGER                         -- row in screenshots_ocr.hnsw
+    ocr_embedding_dim BIGINT NOT NULL DEFAULT 0,
+    ocr_hnsw_id     BIGINT,                         -- row in screenshots_ocr.hnsw
+
+    -- Animated GIF of motion around the capture (empty if none)
+    gif_filename    VARCHAR NOT NULL DEFAULT '',
+    -- 'auto' (periodic), 'llm_chat', 'phone_upload', 'user_screenshot', 'clipboard_image'
+    source          VARCHAR NOT NULL DEFAULT 'auto',
+    -- LLM chat session that produced a chat image
+    chat_session_id BIGINT,
+    -- User caption / chat prompt (also the original path for imports)
+    caption         VARCHAR NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_ss_ts       ON screenshots (timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_ss_unix     ON screenshots (unix_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_ss_ts       ON screenshots (timestamp);
+CREATE INDEX IF NOT EXISTS idx_ss_unix     ON screenshots (unix_ts);
 CREATE INDEX IF NOT EXISTS idx_ss_model    ON screenshots (model_backend, model_id);
-";
-
-// ── Migrations ────────────────────────────────────────────────────────────────
-
-const MIGRATE_OCR_TEXT: &str = "ALTER TABLE screenshots ADD COLUMN ocr_text TEXT NOT NULL DEFAULT ''";
-const MIGRATE_OCR_EMBEDDING: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embedding BLOB";
-const MIGRATE_OCR_DIM: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
-const MIGRATE_OCR_HNSW: &str = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
-const MIGRATE_GIF_FILENAME: &str = "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
-/// Migration: add source tag to distinguish automatic screenshots from chat images.
-const MIGRATE_SOURCE: &str = "ALTER TABLE screenshots ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'";
-/// Migration: link chat images back to the LLM chat session that produced them.
-const MIGRATE_CHAT_SESSION_ID: &str = "ALTER TABLE screenshots ADD COLUMN chat_session_id INTEGER";
-/// Migration: optional user-provided caption / prompt text for chat images.
-const MIGRATE_CAPTION: &str = "ALTER TABLE screenshots ADD COLUMN caption TEXT NOT NULL DEFAULT ''";
+",
+    import_tables: &["screenshots"],
+    sequences: &[("screenshots_id_seq", "screenshots", "id")],
+};
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -203,40 +202,20 @@ pub struct BackfillRow {
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 pub struct ScreenshotStore {
-    conn: Mutex<Connection>,
+    conn: Mutex<crate::duck::Conn>,
 }
 
 impl ScreenshotStore {
     /// Open (or create) the screenshot database inside `skill_dir`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let db_path = skill_dir.join(skill_constants::SCREENSHOTS_SQLITE);
-        let conn = match Connection::open(&db_path) {
-            Ok(c) => c,
+        match crate::duck::open_store(&db_path, &SCHEMA) {
+            Ok(conn) => Some(Self { conn: Mutex::new(conn) }),
             Err(e) => {
-                eprintln!("[screenshot_store] open error: {e}");
-                return None;
+                eprintln!("[screenshot_store] open error: {e:#}");
+                None
             }
-        };
-        crate::util::init_wal_pragmas(&conn);
-        if let Err(e) = conn.execute_batch(DDL) {
-            eprintln!("[screenshot_store] DDL error: {e}");
-            return None;
         }
-        // Run OCR migrations (silently ignore "duplicate column" errors
-        // on databases that already have these columns).
-        for sql in [
-            MIGRATE_OCR_TEXT,
-            MIGRATE_OCR_EMBEDDING,
-            MIGRATE_OCR_DIM,
-            MIGRATE_OCR_HNSW,
-            MIGRATE_GIF_FILENAME,
-            MIGRATE_SOURCE,
-            MIGRATE_CHAT_SESSION_ID,
-            MIGRATE_CAPTION,
-        ] {
-            let _ = conn.execute(sql, []);
-        }
-        Some(Self { conn: Mutex::new(conn) })
     }
 
     /// Insert a new screenshot record.
@@ -244,15 +223,17 @@ impl ScreenshotStore {
         let conn = self.conn.lock_or_recover();
         let emb_blob: Option<Vec<u8>> = row.embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
         let ocr_blob: Option<Vec<u8>> = row.ocr_embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
-        conn.execute(
+        conn.query_row(
             "INSERT INTO screenshots (
-                timestamp, unix_ts, filename, width, height, file_size,
+                id, timestamp, unix_ts, filename, width, height, file_size,
                 hnsw_id, embedding, embedding_dim,
                 model_backend, model_id, image_size, quality,
                 app_name, window_title,
                 ocr_text, ocr_embedding, ocr_embedding_dim, ocr_hnsw_id,
                 source, chat_session_id, caption
-            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
+            ) VALUES (nextval('screenshots_id_seq'),
+                      ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+            RETURNING id",
             params![
                 row.timestamp,
                 row.unix_ts as i64,
@@ -277,9 +258,10 @@ impl ScreenshotStore {
                 row.chat_session_id,
                 row.caption,
             ],
+            |r| r.get(0),
         )
-        .ok()?;
-        Some(conn.last_insert_rowid())
+        .map_err(|e| eprintln!("[screenshot_store] insert: {e}"))
+        .ok()
     }
 
     /// Count screenshots that have embeddings (any model).
@@ -495,14 +477,14 @@ impl ScreenshotStore {
         );
     }
 
-    /// Search screenshots by OCR text (LIKE query).
+    /// Search screenshots by OCR text (case-insensitive substring).
     pub fn search_by_ocr_text(&self, query: &str, limit: usize) -> Vec<ScreenshotResult> {
         let conn = self.conn.lock_or_recover();
         let pattern = format!("%{query}%");
         let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots
-             WHERE ocr_text LIKE ?1
+             WHERE ocr_text ILIKE ?1
              ORDER BY unix_ts DESC
              LIMIT ?2",
         ) else {
@@ -749,6 +731,20 @@ impl ScreenshotStore {
             with_ocr,
             with_ocr_embedding,
         }
+    }
+
+    /// Unix time of the newest capture and of the newest embedded capture
+    /// (0 when there are none).
+    pub fn last_capture_and_embed(&self) -> (u64, u64) {
+        let conn = self.conn.lock_or_recover();
+        conn.query_row(
+            "SELECT COALESCE(MAX(unix_ts), 0),
+                    COALESCE(MAX(CASE WHEN embedding IS NOT NULL THEN unix_ts END), 0)
+             FROM screenshots",
+            [],
+            |r| Ok((r.get::<_, i64>(0)?.max(0) as u64, r.get::<_, i64>(1)?.max(0) as u64)),
+        )
+        .unwrap_or((0, 0))
     }
 
     /// Return the top `limit` most frequently screenshotted apps,

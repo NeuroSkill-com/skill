@@ -125,7 +125,7 @@ const onboarding: Record<string, string> = {
   "onboarding.extensionsBody":
     "{app} can pull in extra context from your editor, browser, and terminal. Each integration is a separate piece you can install or skip independently — none are required for the EEG features to work.",
   "onboarding.extensionsPrivacy":
-    "Same privacy guarantee as everything else: every extension reports to the local daemon over a localhost port, and that data is written to activity.sqlite on this computer. Nothing is uploaded to NeuroSkill or anyone else.",
+    "Same privacy guarantee as everything else: every extension reports to the local daemon over a localhost port, and that data is written to activity.duckdb on this computer. Nothing is uploaded to NeuroSkill or anyone else.",
   "onboarding.extensionsSkip":
     "All optional. You can install, update, or remove any of these later in Settings → Extensions and Settings → Terminal.",
   "onboarding.extensions.vscodeTitle": "VS Code-family editor",
@@ -142,7 +142,7 @@ const onboarding: Record<string, string> = {
   "onboarding.permissionsBody":
     '{app} can record what you were working on so it can correlate your EEG/focus data with the actual context — "I lost focus while writing this PR" rather than just "I lost focus at 3 pm." These are off by default and entirely optional.',
   "onboarding.permissionsPrivacy":
-    "Everything stays on this computer. Recorded activity is written to a local activity.sqlite file and is never sent to any server — not to NeuroSkill, not to anyone. You can turn each option off at any time and the recorded data stays on disk until you delete it.",
+    "Everything stays on this computer. Recorded activity is written to a local activity.duckdb file and is never sent to any server — not to NeuroSkill, not to anyone. You can turn each option off at any time and the recorded data stays on disk until you delete it.",
   "onboarding.permissionsSkip":
     "All off by default. You can enable any of these later in Settings → Activity Tracking.",
   "onboarding.permissionsActiveWindowDesc":

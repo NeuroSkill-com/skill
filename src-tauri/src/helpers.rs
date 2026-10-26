@@ -286,6 +286,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     data.location_enabled = s.location_enabled;
     data.inference_device = s.inference_device.clone();
     data.llm_gpu_layers_saved = s.llm_gpu_layers_saved;
+    data.llm_rlx_device_saved = s.llm_rlx_device_saved.clone();
     data.exg_inference_device = s.exg_inference_device.clone();
 
     // Input tracking

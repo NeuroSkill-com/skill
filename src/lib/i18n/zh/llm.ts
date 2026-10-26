@@ -18,7 +18,7 @@ const llm: Record<string, string> = {
   "model.embeddingsToday": "今日嵌入数",
   "model.hnswIndex": "HNSW 索引",
   "model.hnswRecoveredTitle": "HNSW 已恢复",
-  "model.hnswRecoveredMsg": "已从 SQLite 恢复 {n} 个嵌入",
+  "model.hnswRecoveredMsg": "已从 DuckDB 恢复 {n} 个嵌入",
   "model.takesEffectRestart": "次日或重启后生效",
   "model.connectivity": "连通性",
   "model.currently": "当前 {n}",

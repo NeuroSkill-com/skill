@@ -77,8 +77,6 @@ const ui: Record<string, string> = {
   "tip.stillness": "Puntuación de quietud del movimiento de la cabeza (0-100). 100 = perfectamente quieto.",
   "tip.nods": "Se detectaron movimientos verticales de cabeza (oscilaciones de tono).",
   "tip.shakes": "Se detectaron sacudidas horizontales de la cabeza (oscilaciones de balanceo).",
-  "tip.headache":
-    "Correlación del dolor de cabeza: hiperexcitabilidad cortical: beta elevada + alfa suprimida + BAR alto. Cambios en la excitabilidad cortical observados en estados de dolor de cabeza. Solo indicador de investigación.",
   "tip.migraine":
     "Correlación de migraña: proxy de depresión cortical extendida: delta elevado + supresión alfa + lateralización hemisférica. Delta aumenta y alfa se suprime durante la migraña. Solo indicador de investigación.",
   "tip.consciousness.lzc":

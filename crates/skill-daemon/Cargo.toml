@@ -137,6 +137,7 @@ name = "skill-daemon"
 path = "src/main.rs"
 
 [dependencies]
+bbtree = { workspace = true }
 anyhow     = { workspace = true }
 thiserror  = { workspace = true }
 glob = "0.3"
@@ -154,7 +155,6 @@ dirs = "6"
 rand = "0.10"
 regex = "1"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
-rusqlite = { workspace = true }
 fast-hnsw = { version = "1.0.1" }
 ndarray   = { version = "0.17", optional = true }
 serde = { workspace = true }
@@ -179,6 +179,7 @@ skill-daemon-state  = { path = "../skill-daemon-state" }
 skill-lsl           = { path = "../skill-lsl" }
 skill-devices       = { path = "../skill-devices" }
 skill-data          = { path = "../skill-data", features = ["parquet"] }
+skill-bids          = { path = "../skill-bids", features = ["parquet"] }
 skill-settings      = { path = "../skill-settings" }
 skill-constants     = { path = "../skill-constants" }
 skill-history       = { path = "../skill-history", features = ["parquet"] }
@@ -220,6 +221,8 @@ sysinfo              = "0.38"
 [build-dependencies]
 
 [dev-dependencies]
+# Search tests write legacy *.sqlite fixtures to exercise the one-time import.
+rusqlite = { workspace = true }
 tempfile             = "3"
 mendi                = { version = "0.0.3", features = ["simulate"] }
 mw75                 = { version = "0.0.8" }

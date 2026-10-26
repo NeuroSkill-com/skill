@@ -4,7 +4,7 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-//! Persistent activity store — `~/.skill/activity.sqlite`.
+//! Persistent activity store — `~/.skill/activity.duckdb`.
 //!
 //! Three tables live in this database:
 //!
@@ -24,7 +24,7 @@
 //! All writes come from background threads, so the connection is wrapped in a
 //! `Mutex`.
 
-use rusqlite::{params, Connection};
+use crate::duck::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
@@ -41,96 +41,96 @@ fn now_secs() -> u64 {
 
 // ── DDL ───────────────────────────────────────────────────────────────────────
 
-const DDL: &str = "
+const SCHEMA: crate::duck::StoreSchema<'static> = crate::duck::StoreSchema {
+    ddl: "
 CREATE TABLE IF NOT EXISTS active_windows (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_name      TEXT    NOT NULL,
-    app_path      TEXT    NOT NULL DEFAULT '',
-    window_title  TEXT    NOT NULL DEFAULT '',
-    activated_at  INTEGER NOT NULL,
+    id            BIGINT  PRIMARY KEY DEFAULT nextval('active_windows_id_seq'),
+    app_name      VARCHAR    NOT NULL,
+    app_path      VARCHAR    NOT NULL DEFAULT '',
+    window_title  VARCHAR    NOT NULL DEFAULT '',
+    activated_at  BIGINT  NOT NULL,
     browser_title TEXT,
-    monitor_id    INTEGER
+    monitor_id    BIGINT 
 );
-CREATE INDEX IF NOT EXISTS idx_aw_activated ON active_windows (activated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aw_activated ON active_windows (activated_at);
 
 -- Windows visible on secondary monitors at the time the primary window changed.
 CREATE TABLE IF NOT EXISTS secondary_windows (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    primary_id    INTEGER NOT NULL,
-    app_name      TEXT    NOT NULL,
-    window_title  TEXT    NOT NULL DEFAULT '',
-    monitor_id    INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (primary_id) REFERENCES active_windows(id)
+    id            BIGINT  PRIMARY KEY DEFAULT nextval('secondary_windows_id_seq'),
+    primary_id    BIGINT  NOT NULL,
+    app_name      VARCHAR    NOT NULL,
+    window_title  VARCHAR    NOT NULL DEFAULT '',
+    monitor_id    BIGINT  NOT NULL DEFAULT 1   -- primary_id → active_windows.id
 );
 
 CREATE TABLE IF NOT EXISTS input_activity (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    last_keyboard INTEGER,           -- unix seconds; NULL = no keyboard this period
-    last_mouse    INTEGER,           -- unix seconds; NULL = no mouse this period
-    sampled_at    INTEGER NOT NULL   -- when this row was written
+    id            BIGINT  PRIMARY KEY DEFAULT nextval('input_activity_id_seq'),
+    last_keyboard BIGINT ,           -- unix seconds; NULL = no keyboard this period
+    last_mouse    BIGINT ,           -- unix seconds; NULL = no mouse this period
+    sampled_at    BIGINT  NOT NULL   -- when this row was written
 );
-CREATE INDEX IF NOT EXISTS idx_ia_sampled ON input_activity (sampled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ia_sampled ON input_activity (sampled_at);
 
 -- Per-minute event-count buckets used for activity charts.
 -- minute_ts is the Unix timestamp of the start of the minute (ts - ts % 60).
 -- Rows are upserted: counts accumulate across multiple flush cycles that fall
 -- within the same calendar minute.
 CREATE TABLE IF NOT EXISTS input_buckets (
-    minute_ts   INTEGER NOT NULL PRIMARY KEY,
-    key_count   INTEGER NOT NULL DEFAULT 0,
-    mouse_count INTEGER NOT NULL DEFAULT 0
+    minute_ts   BIGINT  NOT NULL PRIMARY KEY,
+    key_count   BIGINT  NOT NULL DEFAULT 0,
+    mouse_count BIGINT  NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ib_minute ON input_buckets (minute_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_ib_minute ON input_buckets (minute_ts);
 
 -- File interactions: which files the user worked with, attributed to the
 -- frontmost application.  One row per (file_path, app_name) transition —
 -- de-duplicated by the poller so repeated focus on the same file produces
 -- a single row until the user switches away and back.
 CREATE TABLE IF NOT EXISTS file_interactions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    file_path     TEXT    NOT NULL,
-    app_name      TEXT    NOT NULL DEFAULT '',
-    project       TEXT    NOT NULL DEFAULT '',
-    language      TEXT    NOT NULL DEFAULT '',
-    category      TEXT    NOT NULL DEFAULT '',
-    git_branch    TEXT    NOT NULL DEFAULT '',
-    seen_at       INTEGER NOT NULL,
-    duration_secs INTEGER,
-    was_modified  INTEGER NOT NULL DEFAULT 0,
-    size_delta    INTEGER NOT NULL DEFAULT 0,
-    lines_added   INTEGER NOT NULL DEFAULT 0,
-    lines_removed INTEGER NOT NULL DEFAULT 0,
-    words_delta   INTEGER NOT NULL DEFAULT 0,
-    eeg_focus     REAL,
-    eeg_mood      REAL,
-    undo_count    INTEGER NOT NULL DEFAULT 0
+    id            BIGINT  PRIMARY KEY DEFAULT nextval('file_interactions_id_seq'),
+    file_path     VARCHAR    NOT NULL,
+    app_name      VARCHAR    NOT NULL DEFAULT '',
+    project       VARCHAR    NOT NULL DEFAULT '',
+    language      VARCHAR    NOT NULL DEFAULT '',
+    category      VARCHAR    NOT NULL DEFAULT '',
+    git_branch    VARCHAR    NOT NULL DEFAULT '',
+    seen_at       BIGINT  NOT NULL,
+    duration_secs BIGINT ,
+    was_modified  BIGINT  NOT NULL DEFAULT 0,
+    size_delta    BIGINT  NOT NULL DEFAULT 0,
+    lines_added   BIGINT  NOT NULL DEFAULT 0,
+    lines_removed BIGINT  NOT NULL DEFAULT 0,
+    words_delta   BIGINT  NOT NULL DEFAULT 0,
+    eeg_focus     DOUBLE,
+    eeg_mood      DOUBLE,
+    undo_count    BIGINT  NOT NULL DEFAULT 0
 );
 
 -- Focus sessions — contiguous file-interaction clusters split by idle gaps.
 CREATE TABLE IF NOT EXISTS focus_sessions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    start_at    INTEGER NOT NULL,
-    end_at      INTEGER NOT NULL,
-    project     TEXT    NOT NULL DEFAULT '',
-    file_count  INTEGER NOT NULL DEFAULT 0,
-    edit_count  INTEGER NOT NULL DEFAULT 0,
-    total_lines_added   INTEGER NOT NULL DEFAULT 0,
-    total_lines_removed INTEGER NOT NULL DEFAULT 0,
-    avg_eeg_focus REAL,
-    avg_eeg_mood  REAL
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('focus_sessions_id_seq'),
+    start_at    BIGINT  NOT NULL,
+    end_at      BIGINT  NOT NULL,
+    project     VARCHAR    NOT NULL DEFAULT '',
+    file_count  BIGINT  NOT NULL DEFAULT 0,
+    edit_count  BIGINT  NOT NULL DEFAULT 0,
+    total_lines_added   BIGINT  NOT NULL DEFAULT 0,
+    total_lines_removed BIGINT  NOT NULL DEFAULT 0,
+    avg_eeg_focus DOUBLE,
+    avg_eeg_mood  DOUBLE
 );
-CREATE INDEX IF NOT EXISTS idx_fs_start ON focus_sessions (start_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fs_start ON focus_sessions (start_at);
 
 -- Build/test outcomes observed in terminal window titles.
 CREATE TABLE IF NOT EXISTS build_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    command     TEXT    NOT NULL,
-    outcome     TEXT    NOT NULL DEFAULT '',
-    project     TEXT    NOT NULL DEFAULT '',
-    detected_at INTEGER NOT NULL
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('build_events_id_seq'),
+    command     VARCHAR    NOT NULL,
+    outcome     VARCHAR    NOT NULL DEFAULT '',
+    project     VARCHAR    NOT NULL DEFAULT '',
+    detected_at BIGINT  NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_be_detected ON build_events (detected_at DESC);
-CREATE INDEX IF NOT EXISTS idx_fi_seen ON file_interactions (seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_be_detected ON build_events (detected_at);
+CREATE INDEX IF NOT EXISTS idx_fi_seen ON file_interactions (seen_at);
 CREATE INDEX IF NOT EXISTS idx_fi_path ON file_interactions (file_path);
 CREATE INDEX IF NOT EXISTS idx_fi_project ON file_interactions (project);
 CREATE INDEX IF NOT EXISTS idx_fi_language ON file_interactions (language);
@@ -141,74 +141,74 @@ CREATE INDEX IF NOT EXISTS idx_fi_seen_project ON file_interactions (seen_at, pr
 -- Per-5-second edit chunks within a file interaction.
 -- Gives a granular timeline of when edits happened during a focus session.
 CREATE TABLE IF NOT EXISTS file_edit_chunks (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    interaction_id INTEGER NOT NULL,
-    chunk_at       INTEGER NOT NULL,
-    lines_added    INTEGER NOT NULL DEFAULT 0,
-    lines_removed  INTEGER NOT NULL DEFAULT 0,
-    size_delta     INTEGER NOT NULL DEFAULT 0,
-    undo_estimate  INTEGER NOT NULL DEFAULT 0
+    id             BIGINT  PRIMARY KEY DEFAULT nextval('file_edit_chunks_id_seq'),
+    interaction_id BIGINT  NOT NULL,
+    chunk_at       BIGINT  NOT NULL,
+    lines_added    BIGINT  NOT NULL DEFAULT 0,
+    lines_removed  BIGINT  NOT NULL DEFAULT 0,
+    size_delta     BIGINT  NOT NULL DEFAULT 0,
+    undo_estimate  BIGINT  NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_fec_interaction ON file_edit_chunks (interaction_id);
-CREATE INDEX IF NOT EXISTS idx_fec_chunk ON file_edit_chunks (chunk_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fec_chunk ON file_edit_chunks (chunk_at);
 
 -- Meeting/call events detected from window titles (Zoom, Teams, Slack, etc.).
 CREATE TABLE IF NOT EXISTS meeting_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform    TEXT    NOT NULL,
-    title       TEXT    NOT NULL DEFAULT '',
-    app_name    TEXT    NOT NULL DEFAULT '',
-    start_at    INTEGER NOT NULL,
-    end_at      INTEGER
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('meeting_events_id_seq'),
+    platform    VARCHAR    NOT NULL,
+    title       VARCHAR    NOT NULL DEFAULT '',
+    app_name    VARCHAR    NOT NULL DEFAULT '',
+    start_at    BIGINT  NOT NULL,
+    end_at      BIGINT 
 );
-CREATE INDEX IF NOT EXISTS idx_me_start ON meeting_events (start_at DESC);
+CREATE INDEX IF NOT EXISTS idx_me_start ON meeting_events (start_at);
 
 -- Clipboard change events (metadata only — content is never stored).
 CREATE TABLE IF NOT EXISTS clipboard_events (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_app   TEXT    NOT NULL DEFAULT '',
-    content_type TEXT    NOT NULL DEFAULT 'text',
-    content_size INTEGER NOT NULL DEFAULT 0,
-    copied_at    INTEGER NOT NULL
+    id           BIGINT  PRIMARY KEY DEFAULT nextval('clipboard_events_id_seq'),
+    source_app   VARCHAR    NOT NULL DEFAULT '',
+    content_type VARCHAR    NOT NULL DEFAULT 'text',
+    content_size BIGINT  NOT NULL DEFAULT 0,
+    copied_at    BIGINT  NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_ce_copied ON clipboard_events (copied_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ce_copied ON clipboard_events (copied_at);
 
 -- AI code suggestion and chat events.
 CREATE TABLE IF NOT EXISTS ai_events (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type   TEXT    NOT NULL,
-    source       TEXT    NOT NULL DEFAULT '',
-    file_path    TEXT    NOT NULL DEFAULT '',
-    language     TEXT    NOT NULL DEFAULT '',
-    at           INTEGER NOT NULL,
-    eeg_focus    REAL,
-    eeg_mood     REAL
+    id           BIGINT  PRIMARY KEY DEFAULT nextval('ai_events_id_seq'),
+    event_type   VARCHAR    NOT NULL,
+    source       VARCHAR    NOT NULL DEFAULT '',
+    file_path    VARCHAR    NOT NULL DEFAULT '',
+    language     VARCHAR    NOT NULL DEFAULT '',
+    \"at\"           BIGINT  NOT NULL,
+    eeg_focus    DOUBLE,
+    eeg_mood     DOUBLE
 );
-CREATE INDEX IF NOT EXISTS idx_ai_at ON ai_events (at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_at ON ai_events (\"at\");
 
 -- Terminal shell commands with EEG correlation.
 CREATE TABLE IF NOT EXISTS terminal_commands (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    terminal_name TEXT    NOT NULL DEFAULT '',
-    shell_type    TEXT    NOT NULL DEFAULT '',
-    command       TEXT    NOT NULL,
-    binary        TEXT    NOT NULL DEFAULT '',
-    args          TEXT    NOT NULL DEFAULT '',
-    cwd           TEXT    NOT NULL DEFAULT '',
-    exit_code     INTEGER,
-    started_at    INTEGER NOT NULL,
-    ended_at      INTEGER,
-    duration_secs INTEGER,
-    category      TEXT    NOT NULL DEFAULT 'other',
-    project       TEXT    NOT NULL DEFAULT '',
-    eeg_focus     REAL,
-    eeg_focus_end REAL,
-    eeg_mood      REAL,
-    session_id    TEXT
+    id            BIGINT  PRIMARY KEY DEFAULT nextval('terminal_commands_id_seq'),
+    terminal_name VARCHAR    NOT NULL DEFAULT '',
+    shell_type    VARCHAR    NOT NULL DEFAULT '',
+    command       VARCHAR    NOT NULL,
+    \"binary\"        VARCHAR    NOT NULL DEFAULT '',
+    args          VARCHAR    NOT NULL DEFAULT '',
+    cwd           VARCHAR    NOT NULL DEFAULT '',
+    exit_code     BIGINT ,
+    started_at    BIGINT  NOT NULL,
+    ended_at      BIGINT ,
+    duration_secs BIGINT ,
+    category      VARCHAR    NOT NULL DEFAULT 'other',
+    project       VARCHAR    NOT NULL DEFAULT '',
+    eeg_focus     DOUBLE,
+    eeg_focus_end DOUBLE,
+    eeg_mood      DOUBLE,
+    session_id    VARCHAR
 );
-CREATE INDEX IF NOT EXISTS idx_tc_started ON terminal_commands (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tc_started ON terminal_commands (started_at);
 CREATE INDEX IF NOT EXISTS idx_tc_category ON terminal_commands (category);
-CREATE INDEX IF NOT EXISTS idx_tc_binary ON terminal_commands (binary);
+CREATE INDEX IF NOT EXISTS idx_tc_binary ON terminal_commands (\"binary\");
 CREATE INDEX IF NOT EXISTS idx_tc_session ON terminal_commands (session_id);
 
 -- Terminal session: one row per shell instance from launch to exit. The
@@ -217,345 +217,293 @@ CREATE INDEX IF NOT EXISTS idx_tc_session ON terminal_commands (session_id);
 -- hooks tag every command back to it. Aggregates are recomputed lazily on
 -- read so we never have to rewrite this row on every command.
 CREATE TABLE IF NOT EXISTS terminal_sessions (
-    id            TEXT    PRIMARY KEY,
-    started_at    INTEGER NOT NULL,
-    ended_at      INTEGER,
-    shell         TEXT    NOT NULL DEFAULT '',
-    terminal_name TEXT    NOT NULL DEFAULT '',
-    pid           INTEGER,
-    initial_cwd   TEXT    NOT NULL DEFAULT ''
+    id            VARCHAR    PRIMARY KEY,
+    started_at    BIGINT  NOT NULL,
+    ended_at      BIGINT ,
+    shell         VARCHAR    NOT NULL DEFAULT '',
+    terminal_name VARCHAR    NOT NULL DEFAULT '',
+    pid           BIGINT ,
+    initial_cwd   VARCHAR    NOT NULL DEFAULT '',
+    -- zstd-compressed stripped text of the whole session, for sessions
+    -- without per-command timing (legacy .log.zst / missing .idx sidecar)
+    session_text_zstd BLOB,
+    session_text_size BIGINT 
 );
-CREATE INDEX IF NOT EXISTS idx_ts_started ON terminal_sessions (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ts_started ON terminal_sessions (started_at);
 
 -- Per-command terminal output. The session finalizer slices each PTY log by
 -- (started_at, ended_at) using a timing sidecar, ANSI-strips the result,
 -- zstd-compresses the raw bytes for full-fidelity replay, and stores the
--- stripped text for FTS / future embedding. JOIN on command_id ties this
+-- stripped text for search / future embedding. JOIN on command_id ties this
 -- back to the multi-modal context (EEG, browser, edits, screenshots).
 CREATE TABLE IF NOT EXISTS terminal_outputs (
-    command_id     INTEGER PRIMARY KEY REFERENCES terminal_commands(id) ON DELETE CASCADE,
-    time_start_us  INTEGER NOT NULL,
-    time_end_us    INTEGER NOT NULL,
+    command_id     BIGINT  PRIMARY KEY,   -- terminal_commands.id
+    time_start_us  BIGINT  NOT NULL,
+    time_end_us    BIGINT  NOT NULL,
     raw_zstd       BLOB,            -- zstd-compressed raw PTY bytes (NULL = stripped only)
-    raw_size       INTEGER NOT NULL DEFAULT 0,
-    stripped_text  TEXT    NOT NULL DEFAULT '',
+    raw_size       BIGINT  NOT NULL DEFAULT 0,
+    stripped_text  VARCHAR    NOT NULL DEFAULT '',
     embedding      BLOB             -- int8-quantised vector, populated lazily by the embed worker
 );
 CREATE INDEX IF NOT EXISTS idx_to_time ON terminal_outputs (time_start_us);
 
--- FTS5 over stripped_text. content='terminal_outputs' is a contentless index
--- so we don't double-store the text; keep the index in sync via triggers.
-CREATE VIRTUAL TABLE IF NOT EXISTS terminal_outputs_fts USING fts5(
-    stripped_text,
-    content='terminal_outputs',
-    content_rowid='command_id',
-    tokenize='porter unicode61'
-);
-CREATE TRIGGER IF NOT EXISTS terminal_outputs_ai AFTER INSERT ON terminal_outputs BEGIN
-    INSERT INTO terminal_outputs_fts(rowid, stripped_text) VALUES (new.command_id, new.stripped_text);
-END;
-CREATE TRIGGER IF NOT EXISTS terminal_outputs_ad AFTER DELETE ON terminal_outputs BEGIN
-    INSERT INTO terminal_outputs_fts(terminal_outputs_fts, rowid, stripped_text) VALUES('delete', old.command_id, old.stripped_text);
-END;
-CREATE TRIGGER IF NOT EXISTS terminal_outputs_au AFTER UPDATE ON terminal_outputs BEGIN
-    INSERT INTO terminal_outputs_fts(terminal_outputs_fts, rowid, stripped_text) VALUES('delete', old.command_id, old.stripped_text);
-    INSERT INTO terminal_outputs_fts(rowid, stripped_text) VALUES (new.command_id, new.stripped_text);
-END;
-
 -- Dev loops: edit → build/test → result cycles.
 CREATE TABLE IF NOT EXISTS dev_loops (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at       INTEGER NOT NULL,
-    ended_at         INTEGER,
-    loop_type        TEXT    NOT NULL DEFAULT '',
-    project          TEXT    NOT NULL DEFAULT '',
-    iteration_count  INTEGER NOT NULL DEFAULT 1,
-    pass_count       INTEGER NOT NULL DEFAULT 0,
-    fail_count       INTEGER NOT NULL DEFAULT 0,
-    avg_cycle_secs   REAL,
-    avg_focus        REAL,
-    focus_start      REAL,
-    focus_end        REAL,
-    focus_trend      TEXT    NOT NULL DEFAULT 'stable',
-    files_touched    INTEGER NOT NULL DEFAULT 0
+    id               BIGINT  PRIMARY KEY DEFAULT nextval('dev_loops_id_seq'),
+    started_at       BIGINT  NOT NULL,
+    ended_at         BIGINT ,
+    loop_type        VARCHAR    NOT NULL DEFAULT '',
+    project          VARCHAR    NOT NULL DEFAULT '',
+    iteration_count  BIGINT  NOT NULL DEFAULT 1,
+    pass_count       BIGINT  NOT NULL DEFAULT 0,
+    fail_count       BIGINT  NOT NULL DEFAULT 0,
+    avg_cycle_secs   DOUBLE,
+    avg_focus        DOUBLE,
+    focus_start      DOUBLE,
+    focus_end        DOUBLE,
+    focus_trend      VARCHAR    NOT NULL DEFAULT 'stable',
+    files_touched    BIGINT  NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_dl_started ON dev_loops (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dl_started ON dev_loops (started_at);
 
 -- Zone switches: editor / terminal / panel transitions.
 CREATE TABLE IF NOT EXISTS zone_switches (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    zone      TEXT    NOT NULL,
-    from_zone TEXT    NOT NULL DEFAULT '',
-    at        INTEGER NOT NULL,
-    eeg_focus REAL
+    id        BIGINT  PRIMARY KEY DEFAULT nextval('zone_switches_id_seq'),
+    zone      VARCHAR    NOT NULL,
+    from_zone VARCHAR    NOT NULL DEFAULT '',
+    \"at\"        BIGINT  NOT NULL,
+    eeg_focus DOUBLE
 );
-CREATE INDEX IF NOT EXISTS idx_zs_at ON zone_switches (at DESC);
+CREATE INDEX IF NOT EXISTS idx_zs_at ON zone_switches (\"at\");
 
 -- Layout snapshots (periodic).
 CREATE TABLE IF NOT EXISTS layout_snapshots (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    sampled_at       INTEGER NOT NULL,
-    editor_groups    INTEGER NOT NULL DEFAULT 1,
-    visible_editors  INTEGER NOT NULL DEFAULT 1,
-    open_tabs        INTEGER NOT NULL DEFAULT 0,
-    terminals        INTEGER NOT NULL DEFAULT 0
+    id               BIGINT  PRIMARY KEY DEFAULT nextval('layout_snapshots_id_seq'),
+    sampled_at       BIGINT  NOT NULL,
+    editor_groups    BIGINT  NOT NULL DEFAULT 1,
+    visible_editors  BIGINT  NOT NULL DEFAULT 1,
+    open_tabs        BIGINT  NOT NULL DEFAULT 0,
+    terminals        BIGINT  NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ls_sampled ON layout_snapshots (sampled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ls_sampled ON layout_snapshots (sampled_at);
 
 -- EEG time-series: periodic snapshots of all brain metrics.
 -- Events correlate by joining on nearest timestamp — no fixed EEG columns needed.
 -- JSON metrics column is extensible: add new metrics without schema changes.
 -- Example: {\"focus\":72,\"mood\":45,\"alpha\":0.3,\"beta\":0.5,\"theta\":0.2,\"hrv\":65,\"stress\":0.4}
 CREATE TABLE IF NOT EXISTS eeg_timeseries (
-    ts      INTEGER PRIMARY KEY,
-    metrics TEXT    NOT NULL DEFAULT '{}'
+    ts      BIGINT  PRIMARY KEY,
+    metrics VARCHAR    NOT NULL DEFAULT '{}'
 );
 
 -- Generic embedding store: decouple embeddings from specific tables.
 -- Can re-embed with different models, store multiple vectors per item,
 -- and query across all source types.
 CREATE TABLE IF NOT EXISTS embeddings (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_type TEXT    NOT NULL,
-    source_id   INTEGER NOT NULL,
-    source_text TEXT    NOT NULL DEFAULT '',
-    model       TEXT    NOT NULL,
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('embeddings_id_seq'),
+    source_type VARCHAR    NOT NULL,
+    source_id   BIGINT  NOT NULL,
+    source_text VARCHAR    NOT NULL DEFAULT '',
+    model       VARCHAR    NOT NULL,
     vector      BLOB    NOT NULL,
-    created_at  INTEGER NOT NULL
+    created_at  BIGINT  NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_emb_source ON embeddings (source_type, source_id);
 CREATE INDEX IF NOT EXISTS idx_emb_model ON embeddings (model);
-CREATE INDEX IF NOT EXISTS idx_emb_created ON embeddings (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_emb_created ON embeddings (created_at);
 
 -- Conversation messages from AI coding assistants (claude, pi, etc.).
 -- Stores full text for all roles (user, assistant, tool) for searchability.
 CREATE TABLE IF NOT EXISTS conversations (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    app       TEXT    NOT NULL DEFAULT '',
-    role      TEXT    NOT NULL DEFAULT '',
-    text      TEXT    NOT NULL,
-    cwd       TEXT    NOT NULL DEFAULT '',
-    at        INTEGER NOT NULL,
-    session   TEXT    NOT NULL DEFAULT '',
-    eeg_focus REAL,
-    eeg_mood  REAL
+    id        BIGINT  PRIMARY KEY DEFAULT nextval('conversations_id_seq'),
+    app       VARCHAR    NOT NULL DEFAULT '',
+    role      VARCHAR    NOT NULL DEFAULT '',
+    text      VARCHAR    NOT NULL,
+    cwd       VARCHAR    NOT NULL DEFAULT '',
+    \"at\"        BIGINT  NOT NULL,
+    session   VARCHAR    NOT NULL DEFAULT '',
+    eeg_focus DOUBLE,
+    eeg_mood  DOUBLE
 );
-CREATE INDEX IF NOT EXISTS idx_conv_at ON conversations (at DESC);
+CREATE INDEX IF NOT EXISTS idx_conv_at ON conversations (\"at\");
 CREATE INDEX IF NOT EXISTS idx_conv_app ON conversations (app);
 CREATE INDEX IF NOT EXISTS idx_conv_role ON conversations (role);
 
 -- Browser activity events from Chrome/Firefox/Safari extensions.
 CREATE TABLE IF NOT EXISTS browser_activities (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type        TEXT    NOT NULL,
-    url               TEXT    NOT NULL DEFAULT '',
-    domain            TEXT    NOT NULL DEFAULT '',
-    title             TEXT    NOT NULL DEFAULT '',
-    tab_id            INTEGER,
-    browser_name      TEXT    NOT NULL DEFAULT '',
-    scroll_depth      REAL,
-    reading_time_secs INTEGER,
-    active_time_secs  INTEGER,
-    idle_time_secs    INTEGER,
-    typing_detected   INTEGER NOT NULL DEFAULT 0,
-    media_playing     INTEGER NOT NULL DEFAULT 0,
-    search_query      TEXT    NOT NULL DEFAULT '',
-    tab_count         INTEGER,
-    devtools_open     INTEGER NOT NULL DEFAULT 0,
-    category          TEXT    NOT NULL DEFAULT '',
-    content_type      TEXT    NOT NULL DEFAULT '',
-    referrer_domain   TEXT    NOT NULL DEFAULT '',
-    nav_type          TEXT    NOT NULL DEFAULT '',
-    click_target      TEXT    NOT NULL DEFAULT '',
-    click_count       INTEGER,
-    mouse_distance    INTEGER,
-    mouse_idle_secs   INTEGER,
-    has_video         INTEGER NOT NULL DEFAULT 0,
-    has_audio         INTEGER NOT NULL DEFAULT 0,
-    image_count       INTEGER,
-    word_count        INTEGER,
-    form_count        INTEGER,
-    video_watched_secs INTEGER,
-    video_playback_rate REAL,
-    copy_length       INTEGER,
-    paste_length      INTEGER,
-    scroll_speed      INTEGER,
-    scroll_direction  TEXT    NOT NULL DEFAULT '',
-    scroll_reversals  INTEGER,
-    llm_provider      TEXT    NOT NULL DEFAULT '',
-    llm_turn_count    INTEGER,
-    email_mode        TEXT    NOT NULL DEFAULT '',
-    email_count       INTEGER,
-    revisit_count     INTEGER,
-    domain_visit_count INTEGER,
-    visible_text      TEXT    NOT NULL DEFAULT '',
-    heading           TEXT    NOT NULL DEFAULT '',
-    page_title        TEXT    NOT NULL DEFAULT '',
-    download_type     TEXT    NOT NULL DEFAULT '',
-    at                INTEGER NOT NULL,
-    eeg_focus         REAL,
-    eeg_mood          REAL
+    id                BIGINT  PRIMARY KEY DEFAULT nextval('browser_activities_id_seq'),
+    event_type        VARCHAR    NOT NULL,
+    url               VARCHAR    NOT NULL DEFAULT '',
+    domain            VARCHAR    NOT NULL DEFAULT '',
+    title             VARCHAR    NOT NULL DEFAULT '',
+    tab_id            BIGINT ,
+    browser_name      VARCHAR    NOT NULL DEFAULT '',
+    scroll_depth      DOUBLE,
+    reading_time_secs BIGINT ,
+    active_time_secs  BIGINT ,
+    idle_time_secs    BIGINT ,
+    typing_detected   BIGINT  NOT NULL DEFAULT 0,
+    media_playing     BIGINT  NOT NULL DEFAULT 0,
+    search_query      VARCHAR    NOT NULL DEFAULT '',
+    tab_count         BIGINT ,
+    devtools_open     BIGINT  NOT NULL DEFAULT 0,
+    category          VARCHAR    NOT NULL DEFAULT '',
+    content_type      VARCHAR    NOT NULL DEFAULT '',
+    referrer_domain   VARCHAR    NOT NULL DEFAULT '',
+    nav_type          VARCHAR    NOT NULL DEFAULT '',
+    click_target      VARCHAR    NOT NULL DEFAULT '',
+    click_count       BIGINT ,
+    mouse_distance    BIGINT ,
+    mouse_idle_secs   BIGINT ,
+    has_video         BIGINT  NOT NULL DEFAULT 0,
+    has_audio         BIGINT  NOT NULL DEFAULT 0,
+    image_count       BIGINT ,
+    word_count        BIGINT ,
+    form_count        BIGINT ,
+    video_watched_secs BIGINT ,
+    video_playback_rate DOUBLE,
+    copy_length       BIGINT ,
+    paste_length      BIGINT ,
+    scroll_speed      BIGINT ,
+    scroll_direction  VARCHAR    NOT NULL DEFAULT '',
+    scroll_reversals  BIGINT ,
+    llm_provider      VARCHAR    NOT NULL DEFAULT '',
+    llm_turn_count    BIGINT ,
+    email_mode        VARCHAR    NOT NULL DEFAULT '',
+    email_count       BIGINT ,
+    revisit_count     BIGINT ,
+    domain_visit_count BIGINT ,
+    visible_text      VARCHAR    NOT NULL DEFAULT '',
+    heading           VARCHAR    NOT NULL DEFAULT '',
+    page_title        VARCHAR    NOT NULL DEFAULT '',
+    download_type     VARCHAR    NOT NULL DEFAULT '',
+    \"at\"                BIGINT  NOT NULL,
+    eeg_focus         DOUBLE,
+    eeg_mood          DOUBLE
 );
-CREATE INDEX IF NOT EXISTS idx_ba_at ON browser_activities (at DESC);
+CREATE INDEX IF NOT EXISTS idx_ba_at ON browser_activities (\"at\");
 CREATE INDEX IF NOT EXISTS idx_ba_domain ON browser_activities (domain);
 CREATE INDEX IF NOT EXISTS idx_ba_category ON browser_activities (category);
 CREATE INDEX IF NOT EXISTS idx_ba_event ON browser_activities (event_type);
 CREATE INDEX IF NOT EXISTS idx_ba_content ON browser_activities (content_type);
 
 CREATE TABLE IF NOT EXISTS user_screenshot_events (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    screenshot_id INTEGER NOT NULL,
-    captured_at   INTEGER NOT NULL,
-    app_name      TEXT    NOT NULL DEFAULT '',
-    window_title  TEXT    NOT NULL DEFAULT '',
-    original_path TEXT    NOT NULL DEFAULT '',
-    ocr_preview   TEXT    NOT NULL DEFAULT '',
-    eeg_focus     REAL,
-    eeg_mood      REAL
+    id            BIGINT  PRIMARY KEY DEFAULT nextval('user_screenshot_events_id_seq'),
+    screenshot_id BIGINT  NOT NULL,
+    captured_at   BIGINT  NOT NULL,
+    app_name      VARCHAR    NOT NULL DEFAULT '',
+    window_title  VARCHAR    NOT NULL DEFAULT '',
+    original_path VARCHAR    NOT NULL DEFAULT '',
+    ocr_preview   VARCHAR    NOT NULL DEFAULT '',
+    eeg_focus     DOUBLE,
+    eeg_mood      DOUBLE
 );
-CREATE INDEX IF NOT EXISTS idx_use_captured ON user_screenshot_events (captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_use_captured ON user_screenshot_events (captured_at);
 
 -- User feedback on brain state predictions (yay/nay).
 -- Accumulates over time for statistical weight adjustment.
 CREATE TABLE IF NOT EXISTS brain_feedback (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    insight     TEXT    NOT NULL,
-    correct     INTEGER NOT NULL,
-    score       REAL,
-    eeg_focus   REAL,
-    eeg_mood    REAL,
-    context     TEXT    NOT NULL DEFAULT '',
-    at          INTEGER NOT NULL
+    id          BIGINT  PRIMARY KEY DEFAULT nextval('brain_feedback_id_seq'),
+    insight     VARCHAR    NOT NULL,
+    correct     BIGINT  NOT NULL,
+    score       DOUBLE,
+    eeg_focus   DOUBLE,
+    eeg_mood    DOUBLE,
+    context     VARCHAR    NOT NULL DEFAULT '',
+    \"at\"          BIGINT  NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_bf_insight ON brain_feedback (insight);
-CREATE INDEX IF NOT EXISTS idx_bf_at ON brain_feedback (at DESC);
-";
+CREATE INDEX IF NOT EXISTS idx_bf_at ON brain_feedback (\"at\");
+",
+    import_tables: &[
+        "active_windows",
+        "secondary_windows",
+        "input_activity",
+        "input_buckets",
+        "file_interactions",
+        "focus_sessions",
+        "build_events",
+        "file_edit_chunks",
+        "meeting_events",
+        "clipboard_events",
+        "ai_events",
+        "terminal_commands",
+        "terminal_sessions",
+        "terminal_outputs",
+        "dev_loops",
+        "zone_switches",
+        "layout_snapshots",
+        "eeg_timeseries",
+        "embeddings",
+        "conversations",
+        "browser_activities",
+        "user_screenshot_events",
+        "brain_feedback",
+    ],
+    sequences: &[
+        ("active_windows_id_seq", "active_windows", "id"),
+        ("secondary_windows_id_seq", "secondary_windows", "id"),
+        ("input_activity_id_seq", "input_activity", "id"),
+        ("file_interactions_id_seq", "file_interactions", "id"),
+        ("focus_sessions_id_seq", "focus_sessions", "id"),
+        ("build_events_id_seq", "build_events", "id"),
+        ("file_edit_chunks_id_seq", "file_edit_chunks", "id"),
+        ("meeting_events_id_seq", "meeting_events", "id"),
+        ("clipboard_events_id_seq", "clipboard_events", "id"),
+        ("ai_events_id_seq", "ai_events", "id"),
+        ("terminal_commands_id_seq", "terminal_commands", "id"),
+        ("dev_loops_id_seq", "dev_loops", "id"),
+        ("zone_switches_id_seq", "zone_switches", "id"),
+        ("layout_snapshots_id_seq", "layout_snapshots", "id"),
+        ("embeddings_id_seq", "embeddings", "id"),
+        ("conversations_id_seq", "conversations", "id"),
+        ("browser_activities_id_seq", "browser_activities", "id"),
+        ("user_screenshot_events_id_seq", "user_screenshot_events", "id"),
+        ("brain_feedback_id_seq", "brain_feedback", "id"),
+    ],
+};
+
+/// `ILIKE` patterns for each term of a search query. Quotes and FTS-style
+/// operators (`AND`, `OR`, `NOT`, `*`, `-`) are dropped; `%`/`_` in a term
+/// are matched literally.
+fn search_terms(query: &str) -> Vec<String> {
+    query
+        .split(|c: char| c.is_whitespace() || matches!(c, '"' | '(' | ')'))
+        .map(|t| t.trim_matches(|c: char| matches!(c, '*' | '-' | '+' | '^' | ':')))
+        .filter(|t| !t.is_empty() && !matches!(*t, "AND" | "OR" | "NOT" | "NEAR"))
+        .map(|t| format!("%{}%", t.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")))
+        .collect()
+}
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 pub struct ActivityStore {
-    conn: Mutex<Connection>,
+    conn: Mutex<crate::duck::Conn>,
 }
 
 impl ActivityStore {
     /// Open (or create) the activity database inside `skill_dir`.
-    /// Returns `None` only when SQLite cannot open the file at all.
+    /// Returns `None` only when the database cannot be opened at all.
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let path = skill_dir.join(skill_constants::ACTIVITY_FILE);
-        let conn = match Connection::open(&path) {
-            Ok(c) => c,
+        match crate::duck::open_store(&path, &SCHEMA) {
+            Ok(conn) => Some(Self { conn: Mutex::new(conn) }),
             Err(e) => {
-                eprintln!("[activity] open {}: {e}", path.display());
-                return None;
+                eprintln!("[activity] open {}: {e:#}", path.display());
+                None
             }
-        };
-        crate::util::init_wal_pragmas(&conn);
-        // Schema migrations BEFORE DDL — add columns that may be missing from
-        // older databases so the DDL (which uses CREATE TABLE IF NOT EXISTS)
-        // succeeds. Each ALTER is idempotent: "duplicate column" errors ignored.
-        for alter in [
-            // active_windows
-            "ALTER TABLE active_windows ADD COLUMN browser_title TEXT",
-            "ALTER TABLE active_windows ADD COLUMN monitor_id INTEGER",
-            // file_interactions — columns added across multiple releases
-            "ALTER TABLE file_interactions ADD COLUMN project TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE file_interactions ADD COLUMN language TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE file_interactions ADD COLUMN category TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE file_interactions ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE file_interactions ADD COLUMN duration_secs INTEGER",
-            "ALTER TABLE file_interactions ADD COLUMN was_modified INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE file_interactions ADD COLUMN size_delta INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE file_interactions ADD COLUMN lines_added INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE file_interactions ADD COLUMN lines_removed INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE file_interactions ADD COLUMN words_delta INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE file_interactions ADD COLUMN eeg_focus REAL",
-            "ALTER TABLE file_interactions ADD COLUMN eeg_mood REAL",
-            "ALTER TABLE file_interactions ADD COLUMN undo_count INTEGER NOT NULL DEFAULT 0",
-            // file_edit_chunks
-            "ALTER TABLE file_edit_chunks ADD COLUMN undo_estimate INTEGER NOT NULL DEFAULT 0",
-            // focus_sessions
-            "ALTER TABLE focus_sessions ADD COLUMN project TEXT NOT NULL DEFAULT ''",
-            // terminal_commands — binary/args extraction
-            "ALTER TABLE terminal_commands ADD COLUMN binary TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE terminal_commands ADD COLUMN args TEXT NOT NULL DEFAULT ''",
-            // terminal_commands — session linkage. NULL for legacy rows and
-            // any shell that wasn't started under the PTY shim.
-            "ALTER TABLE terminal_commands ADD COLUMN session_id TEXT",
-            // terminal_sessions — full-session stripped text for sessions
-            // that lack per-command timing (legacy .log.zst, or any case
-            // where the .idx sidecar is unavailable). zstd-compressed.
-            "ALTER TABLE terminal_sessions ADD COLUMN session_text_zstd BLOB",
-            "ALTER TABLE terminal_sessions ADD COLUMN session_text_size INTEGER",
-            // conversations — EEG columns
-            "ALTER TABLE conversations ADD COLUMN eeg_focus REAL",
-            "ALTER TABLE conversations ADD COLUMN eeg_mood REAL",
-            // browser_activities — expanded tracking columns
-            "ALTER TABLE browser_activities ADD COLUMN active_time_secs INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN idle_time_secs INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN content_type TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN nav_type TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN click_target TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN click_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN mouse_distance INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN mouse_idle_secs INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN has_video INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE browser_activities ADD COLUMN has_audio INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE browser_activities ADD COLUMN image_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN word_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN form_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN video_watched_secs INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN video_playback_rate REAL",
-            "ALTER TABLE browser_activities ADD COLUMN copy_length INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN paste_length INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN scroll_speed INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN scroll_direction TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN scroll_reversals INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN llm_provider TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN llm_turn_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN email_mode TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN email_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN revisit_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN domain_visit_count INTEGER",
-            "ALTER TABLE browser_activities ADD COLUMN visible_text TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN heading TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN page_title TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE browser_activities ADD COLUMN download_type TEXT NOT NULL DEFAULT ''",
-        ] {
-            let _ = conn.execute_batch(alter);
         }
-        if let Err(e) = conn.execute_batch(DDL) {
-            eprintln!("[activity] DDL: {e}");
-            return None;
-        }
-        // FTS5 virtual table for full-text search on conversations.
-        let _ = conn.execute_batch(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
-                text, app, role, content=conversations, content_rowid=id
-            );",
-        );
-        Some(Self { conn: Mutex::new(conn) })
     }
 
-    /// Open an existing activity database for read-only queries.
-    /// Skips schema migrations and DDL — use only when the database has already
-    /// been initialised by a prior `open()` call (e.g. from the activity worker).
+    /// Open an existing activity database for read-only queries. `None` if
+    /// it has never been created. (DuckDB shares one instance per file, so
+    /// this is a regular connection; the name records the caller's intent.)
     pub fn open_readonly(skill_dir: &Path) -> Option<Self> {
         let path = skill_dir.join(skill_constants::ACTIVITY_FILE);
-        if !path.exists() {
+        if !path.exists() && !crate::duck::legacy_sqlite_path(&path).exists() {
             return None;
         }
-        let conn = match Connection::open_with_flags(
-            &path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("[activity] open_readonly {}: {e}", path.display());
-                return None;
-            }
-        };
-        crate::util::init_wal_pragmas(&conn);
-        Some(Self { conn: Mutex::new(conn) })
+        Self::open(skill_dir)
     }
 
     // ── Writers ───────────────────────────────────────────────────────────────
@@ -564,9 +512,10 @@ impl ActivityStore {
     /// Returns the row id of the newly inserted row.
     pub fn insert_active_window(&self, info: &ActiveWindowInfo) -> Option<i64> {
         let c = self.conn.lock_or_recover();
-        match c.execute(
+        match c.query_row(
             "INSERT INTO active_windows (app_name, app_path, window_title, activated_at, browser_title, monitor_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             RETURNING id",
             params![
                 &info.app_name,
                 &info.app_path,
@@ -575,8 +524,9 @@ impl ActivityStore {
                 &info.browser_title,
                 info.monitor_id.map(|m| m as i64),
             ],
+            |r| r.get::<_, i64>(0),
         ) {
-            Ok(_) => Some(c.last_insert_rowid()),
+            Ok(id) => Some(id),
             Err(e) => {
                 eprintln!("[activity] insert_active_window: {e}");
                 None
@@ -761,10 +711,11 @@ impl ActivityStore {
         eeg_mood: Option<f32>,
     ) -> Option<i64> {
         let c = self.conn.lock_or_recover();
-        match c.execute(
+        match c.query_row(
             "INSERT INTO file_interactions
              (file_path, app_name, project, language, category, git_branch, seen_at, eeg_focus, eeg_mood)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             RETURNING id",
             params![
                 file_path,
                 app_name,
@@ -776,8 +727,9 @@ impl ActivityStore {
                 eeg_focus,
                 eeg_mood,
             ],
+            |r| r.get::<_, i64>(0),
         ) {
-            Ok(_) => Some(c.last_insert_rowid()),
+            Ok(id) => Some(id),
             Err(e) => {
                 eprintln!("[activity] insert_file_interaction: {e}");
                 None
@@ -863,7 +815,7 @@ impl ActivityStore {
                 return vec![];
             }
         };
-        let params: Vec<&dyn rusqlite::types::ToSql> = p.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let params: Vec<&dyn crate::duck::ToSql> = p.iter().map(|v| v as &dyn crate::duck::ToSql).collect();
         stmt.query_map(params.as_slice(), |row| {
             Ok(LanguageBreakdownRow {
                 language: row.get(0)?,
@@ -882,7 +834,7 @@ impl ActivityStore {
         Self::context_switch_rate_q(&c, from_ts, to_ts)
     }
 
-    fn context_switch_rate_q(c: &rusqlite::Connection, from_ts: u64, to_ts: u64) -> f64 {
+    fn context_switch_rate_q(c: &Connection, from_ts: u64, to_ts: u64) -> f64 {
         let count: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM file_interactions WHERE seen_at >= ?1 AND seen_at <= ?2",
@@ -936,7 +888,7 @@ impl ActivityStore {
         Self::daily_summary_q(&c, day_start)
     }
 
-    fn daily_summary_q(c: &rusqlite::Connection, day_start: u64) -> DailySummaryRow {
+    fn daily_summary_q(c: &Connection, day_start: u64) -> DailySummaryRow {
         let day_end = day_start + 86400;
         c.query_row(
             "SELECT COUNT(*) AS interactions,
@@ -1127,7 +1079,7 @@ impl ActivityStore {
         let browser_events: u64 = {
             let c2 = self.conn.lock_or_recover();
             c2.query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE at >= ?1 AND at < ?2",
+                "SELECT COUNT(*) FROM browser_activities WHERE \"at\" >= ?1 AND \"at\" < ?2",
                 params![week_start as i64, week_end as i64],
                 |row| row.get::<_, i64>(0),
             )
@@ -1136,14 +1088,14 @@ impl ActivityStore {
         let browser_total_reading_secs: u64 = {
             let c2 = self.conn.lock_or_recover();
             c2.query_row(
-                "SELECT COALESCE(SUM(reading_time_secs), 0) FROM browser_activities WHERE at >= ?1 AND at < ?2 AND reading_time_secs IS NOT NULL",
+                "SELECT COALESCE(SUM(reading_time_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND \"at\" < ?2 AND reading_time_secs IS NOT NULL",
                 params![week_start as i64, week_end as i64], |row| row.get::<_,i64>(0),
             ).unwrap_or(0) as u64
         };
         let browser_video_watched_secs: u64 = {
             let c2 = self.conn.lock_or_recover();
             c2.query_row(
-                "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE at >= ?1 AND at < ?2 AND video_watched_secs IS NOT NULL",
+                "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND \"at\" < ?2 AND video_watched_secs IS NOT NULL",
                 params![week_start as i64, week_end as i64], |row| row.get::<_,i64>(0),
             ).unwrap_or(0) as u64
         };
@@ -1195,7 +1147,7 @@ impl ActivityStore {
             .saturating_sub(threshold_days as u64 * 86400);
         let mut stmt = match c.prepare_cached(
             "SELECT file_path, MAX(seen_at) AS last_seen, SUM(was_modified) AS total_edits,
-                    project, language
+                    arg_max(project, seen_at) AS project, arg_max(language, seen_at) AS language
              FROM file_interactions
              WHERE seen_at >= ?1
              GROUP BY file_path
@@ -1285,7 +1237,7 @@ impl ActivityStore {
         let tab_switches: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM browser_activities
-             WHERE event_type = 'tab_switch' AND at >= ?1",
+             WHERE event_type = 'tab_switch' AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -1293,7 +1245,7 @@ impl ActivityStore {
         let social_events: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM browser_activities
-             WHERE category IN ('social', 'media') AND at >= ?1",
+             WHERE category IN ('social', 'media') AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -1519,7 +1471,8 @@ impl ActivityStore {
     pub fn undo_struggle(&self, since: u64, undo_threshold: u64) -> Vec<StruggleRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT file_path, language, project, SUM(undo_count) AS total_undos,
+            "SELECT file_path, arg_max(language, seen_at) AS language, arg_max(project, seen_at) AS project,
+                    SUM(undo_count) AS total_undos,
                     AVG(eeg_focus) AS avg_focus, COALESCE(SUM(lines_added + lines_removed), 0) AS churn,
                     COALESCE(SUM(duration_secs), 0) AS total_secs
              FROM file_interactions WHERE seen_at >= ?1 AND undo_count > 0
@@ -1748,7 +1701,7 @@ impl ActivityStore {
     ) {
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO ai_events (event_type, source, file_path, language, at, eeg_focus, eeg_mood)
+            "INSERT INTO ai_events (event_type, source, file_path, language, \"at\", eeg_focus, eeg_mood)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![event_type, source, file_path, language, at as i64, eeg_focus, eeg_mood],
         );
@@ -1757,8 +1710,8 @@ impl ActivityStore {
     pub fn get_recent_ai_events(&self, limit: u32) -> Vec<AiEventRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, event_type, source, file_path, language, at, eeg_focus, eeg_mood
-             FROM ai_events ORDER BY at DESC LIMIT ?1",
+            "SELECT id, event_type, source, file_path, language, \"at\", eeg_focus, eeg_mood
+             FROM ai_events ORDER BY \"at\" DESC LIMIT ?1",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -1811,14 +1764,14 @@ impl ActivityStore {
             .unwrap_or(0) as u64;
         let has_debug: bool = c
             .query_row(
-                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND command LIKE '%debug%'",
+                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND command ILIKE '%debug%'",
                 params![since as i64],
                 |row| Ok(row.get::<_, i64>(0).unwrap_or(0) > 0),
             )
             .unwrap_or(false);
         let has_test: bool = c
             .query_row(
-                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND (command LIKE '%test%' OR command LIKE '%jest%' OR command LIKE '%pytest%')",
+                "SELECT COUNT(*) FROM build_events WHERE detected_at >= ?1 AND (command ILIKE '%test%' OR command ILIKE '%jest%' OR command ILIKE '%pytest%')",
                 params![since as i64],
                 |row| Ok(row.get::<_, i64>(0).unwrap_or(0) > 0),
             )
@@ -1996,14 +1949,14 @@ impl ActivityStore {
             let c = self.conn.lock_or_recover();
             let refs = c
                 .query_row(
-                    "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'search_pattern' AND at >= ?1",
+                    "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'search_pattern' AND \"at\" >= ?1",
                     params![since as i64],
                     |row| row.get::<_, i64>(0),
                 )
                 .unwrap_or(0) as u64;
             let revs = c
                 .query_row(
-                    "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND at >= ?1",
+                    "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND \"at\" >= ?1",
                     params![since as i64],
                     |row| row.get::<_, i64>(0),
                 )
@@ -2208,8 +2161,8 @@ impl ActivityStore {
                 SELECT 'meeting', platform, title, start_at, NULL
                 FROM meeting_events WHERE start_at >= ?1 AND start_at <= ?2
                 UNION ALL
-                SELECT 'ai', event_type, source, at, eeg_focus
-                FROM ai_events WHERE at >= ?1 AND at <= ?2
+                SELECT 'ai', event_type, source, \"at\", eeg_focus
+                FROM ai_events WHERE \"at\" >= ?1 AND \"at\" <= ?2
                 UNION ALL
                 SELECT 'clipboard', source_app, content_type, copied_at, NULL
                 FROM clipboard_events WHERE copied_at >= ?1 AND copied_at <= ?2
@@ -2298,7 +2251,7 @@ impl ActivityStore {
                 return vec![];
             }
         };
-        let params: Vec<&dyn rusqlite::types::ToSql> = p.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let params: Vec<&dyn crate::duck::ToSql> = p.iter().map(|v| v as &dyn crate::duck::ToSql).collect();
         stmt.query_map(params.as_slice(), |row| {
             Ok(FocusSessionRow {
                 id: row.get(0)?,
@@ -2458,9 +2411,9 @@ impl ActivityStore {
         let binary = parts.next().unwrap_or("").trim();
         let args = parts.next().unwrap_or("").trim();
         let c = self.conn.lock_or_recover();
-        let _ = c.execute(
-            "INSERT INTO terminal_commands (terminal_name, command, binary, args, cwd, started_at, category, eeg_focus, eeg_mood, session_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        c.query_row(
+            "INSERT INTO terminal_commands (terminal_name, command, \"binary\", args, cwd, started_at, category, eeg_focus, eeg_mood, session_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) RETURNING id",
             params![
                 terminal_name,
                 command,
@@ -2473,8 +2426,9 @@ impl ActivityStore {
                 eeg_mood,
                 session_id
             ],
-        );
-        c.last_insert_rowid()
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
     }
 
     /// Lazy-create a `terminal_sessions` row on first sight. Subsequent calls
@@ -2589,12 +2543,12 @@ impl ActivityStore {
                     COUNT(tc.id) AS cmd_count,
                     AVG(tc.eeg_focus) AS avg_focus,
                     AVG(tc.eeg_mood)  AS avg_mood,
-                    CASE WHEN s.session_text_zstd IS NOT NULL AND length(s.session_text_zstd) > 0
+                    CASE WHEN s.session_text_zstd IS NOT NULL AND octet_length(s.session_text_zstd) > 0
                          THEN 1 ELSE 0 END AS has_text
              FROM terminal_sessions s
              LEFT JOIN terminal_commands tc ON tc.session_id = s.id
              WHERE s.started_at >= ?1
-             GROUP BY s.id
+             GROUP BY s.id, s.started_at, s.ended_at, s.shell, s.initial_cwd, s.session_text_zstd
              ORDER BY s.started_at DESC
              LIMIT ?2",
         ) {
@@ -2755,7 +2709,7 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
             "SELECT command_id, embedding FROM terminal_outputs
-             WHERE embedding IS NOT NULL AND length(embedding) > 0",
+             WHERE embedding IS NOT NULL AND octet_length(embedding) > 0",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -2765,20 +2719,24 @@ impl ActivityStore {
             .unwrap_or_default()
     }
 
-    /// Full-text search over stripped terminal output. Returns command_ids
-    /// (joined back to `terminal_commands` and other modalities by caller).
+    /// Search stripped terminal output: every term of `query` must appear
+    /// (case-insensitive), newest first. Returns command_ids (joined back to
+    /// `terminal_commands` and other modalities by caller).
     pub fn search_terminal_outputs(&self, query: &str, limit: u32) -> Vec<i64> {
+        let terms = search_terms(query);
+        if terms.is_empty() {
+            return vec![];
+        }
+        let filter = vec!["stripped_text ILIKE ?"; terms.len()].join(" AND ");
+        let sql = format!(
+            "SELECT command_id FROM terminal_outputs WHERE {filter} ORDER BY time_start_us DESC LIMIT {}",
+            limit
+        );
         let c = self.conn.lock_or_recover();
-        let mut stmt = match c.prepare_cached(
-            "SELECT rowid FROM terminal_outputs_fts
-             WHERE terminal_outputs_fts MATCH ?1
-             ORDER BY rank
-             LIMIT ?2",
-        ) {
-            Ok(s) => s,
-            Err(_) => return vec![],
+        let Ok(mut stmt) = c.prepare(&sql) else {
+            return vec![];
         };
-        stmt.query_map(params![query, limit as i64], |row| row.get::<_, i64>(0))
+        stmt.query_map(crate::duck::params_from_iter(terms.iter()), |row| row.get::<_, i64>(0))
             .map(|rows| rows.filter_map(|r| r.ok()).collect())
             .unwrap_or_default()
     }
@@ -2808,7 +2766,7 @@ impl ActivityStore {
     pub fn insert_zone_switch(&self, zone: &str, from_zone: &str, at: u64, eeg_focus: Option<f64>) {
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO zone_switches (zone, from_zone, at, eeg_focus) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO zone_switches (zone, from_zone, \"at\", eeg_focus) VALUES (?1, ?2, ?3, ?4)",
             params![zone, from_zone, at as i64, eeg_focus],
         );
     }
@@ -2854,7 +2812,7 @@ impl ActivityStore {
                  email_mode, email_count,
                  revisit_count, domain_visit_count,
                  visible_text, heading, page_title, download_type,
-                 at, eeg_focus, eeg_mood)
+                 \"at\", eeg_focus, eeg_mood)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48)",
             params![
                 s("type"),
@@ -2916,8 +2874,8 @@ impl ActivityStore {
             "SELECT id, event_type, url, domain, title, tab_id, browser_name,
                     scroll_depth, reading_time_secs, typing_detected, media_playing,
                     search_query, tab_count, devtools_open, category, referrer_domain,
-                    at, eeg_focus, eeg_mood
-             FROM browser_activities WHERE at >= ?1 ORDER BY at DESC LIMIT ?2",
+                    \"at\", eeg_focus, eeg_mood
+             FROM browser_activities WHERE \"at\" >= ?1 ORDER BY \"at\" DESC LIMIT ?2",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -2955,7 +2913,7 @@ impl ActivityStore {
         let mut stmt = match c.prepare_cached(
             "SELECT domain, category, COUNT(*) as cnt
              FROM browser_activities
-             WHERE at >= ?1 AND domain != ''
+             WHERE \"at\" >= ?1 AND domain != ''
              GROUP BY domain, category
              ORDER BY cnt DESC
              LIMIT 50",
@@ -2980,7 +2938,7 @@ impl ActivityStore {
         let count: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM browser_activities
-                 WHERE event_type = 'tab_switch' AND at >= ?1 AND at <= ?2",
+                 WHERE event_type = 'tab_switch' AND \"at\" >= ?1 AND \"at\" <= ?2",
                 params![start as i64, end as i64],
                 |row| row.get(0),
             )
@@ -2999,14 +2957,14 @@ impl ActivityStore {
     pub fn browser_focus_by_domain(&self, since: u64, limit: u32) -> Vec<BrowserDomainFocusRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT domain, category, content_type,
+            "SELECT domain, arg_max(category, \"at\") AS category, arg_max(content_type, \"at\") AS content_type,
                     COUNT(*) as events,
                     AVG(eeg_focus) as avg_focus,
                     SUM(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE 0 END) as total_reading_secs,
                     AVG(CASE WHEN scroll_depth > 0 THEN scroll_depth ELSE NULL END) as avg_scroll_depth,
                     SUM(CASE WHEN event_type = 'tab_switch' THEN 1 ELSE 0 END) as visits
              FROM browser_activities
-             WHERE at >= ?1 AND domain != '' AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND domain != '' AND eeg_focus IS NOT NULL
              GROUP BY domain
              HAVING events >= 3
              ORDER BY avg_focus DESC
@@ -3040,7 +2998,7 @@ impl ActivityStore {
 
         let tab_switches: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'tab_switch' AND at >= ?1",
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'tab_switch' AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3048,19 +3006,19 @@ impl ActivityStore {
 
         let social_events: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE category IN ('social', 'media') AND at >= ?1",
+                "SELECT COUNT(*) FROM browser_activities WHERE category IN ('social', 'media') AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
             .unwrap_or(0);
 
         let productive_events: i64 = c.query_row(
-            "SELECT COUNT(*) FROM browser_activities WHERE category IN ('development', 'reference', 'code') AND at >= ?1",
+            "SELECT COUNT(*) FROM browser_activities WHERE category IN ('development', 'reference', 'code') AND \"at\" >= ?1",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let idle_secs: i64 = c.query_row(
-            "SELECT COALESCE(SUM(idle_time_secs), 0) FROM browser_activities WHERE at >= ?1 AND idle_time_secs IS NOT NULL",
+            "SELECT COALESCE(SUM(idle_time_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND idle_time_secs IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
@@ -3113,7 +3071,7 @@ impl ActivityStore {
                     AVG(eeg_focus) as avg_focus,
                     SUM(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE 0 END) as total_secs
              FROM browser_activities
-             WHERE at >= ?1 AND content_type != ''
+             WHERE \"at\" >= ?1 AND content_type != ''
              GROUP BY content_type
              ORDER BY total_secs DESC",
         ) {
@@ -3136,12 +3094,12 @@ impl ActivityStore {
     pub fn browser_llm_usage(&self, since: u64) -> Vec<BrowserLlmUsageRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT domain, content_type,
+            "SELECT domain, arg_max(content_type, \"at\") AS content_type,
                     COUNT(*) as interactions,
                     AVG(eeg_focus) as avg_focus,
-                    MAX(CAST(json_extract(title, '$.llm_turn_count') AS INTEGER)) as max_turns
+                    MAX(TRY_CAST(json_extract_string(CASE WHEN json_valid(title) THEN title END, '$.llm_turn_count') AS BIGINT)) as max_turns
              FROM browser_activities
-             WHERE at >= ?1 AND event_type = 'llm_interaction'
+             WHERE \"at\" >= ?1 AND event_type = 'llm_interaction'
              GROUP BY domain
              ORDER BY interactions DESC",
         ) {
@@ -3165,25 +3123,25 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
 
         let total_searches: i64 = c.query_row(
-            "SELECT COUNT(*) FROM browser_activities WHERE event_type IN ('search_query', 'search_pattern') AND at >= ?1",
+            "SELECT COUNT(*) FROM browser_activities WHERE event_type IN ('search_query', 'search_pattern') AND \"at\" >= ?1",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let refinements: i64 = c.query_row(
-            "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'search_pattern' AND search_query != '' AND at >= ?1",
+            "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'search_pattern' AND search_query != '' AND \"at\" >= ?1",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let revisits: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND at >= ?1",
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
             .unwrap_or(0);
 
         let avg_focus: Option<f64> = c.query_row(
-            "SELECT AVG(eeg_focus) FROM browser_activities WHERE event_type IN ('search_query', 'search_pattern') AND at >= ?1 AND eeg_focus IS NOT NULL",
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE event_type IN ('search_query', 'search_pattern') AND \"at\" >= ?1 AND eeg_focus IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(None);
 
@@ -3208,14 +3166,14 @@ impl ActivityStore {
     pub fn browser_learning_efficiency(&self, since: u64) -> Vec<BrowserLearningRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT domain, content_type,
+            "SELECT domain, arg_max(content_type, \"at\") AS content_type,
                     AVG(eeg_focus) as avg_focus,
                     AVG(CASE WHEN scroll_depth > 0 THEN scroll_depth ELSE NULL END) as avg_depth,
                     AVG(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE NULL END) as avg_read_secs,
                     COUNT(DISTINCT url) as pages,
                     SUM(CASE WHEN event_type = 'revisit' THEN 1 ELSE 0 END) as revisits
              FROM browser_activities
-             WHERE at >= ?1 AND domain != '' AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND domain != '' AND eeg_focus IS NOT NULL
                    AND event_type IN ('reading_time', 'page_profile', 'revisit')
              GROUP BY domain
              HAVING pages >= 2
@@ -3252,12 +3210,12 @@ impl ActivityStore {
     pub fn browser_optimal_research_hours(&self, since: u64, tz_offset: i32) -> BrowserOptimalHours {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT ((at + ?2) % 86400) / 3600 as hour,
+            "SELECT ((\"at\" + ?2) % 86400) / 3600 as hour,
                     AVG(eeg_focus) as avg_focus,
                     COUNT(*) as events,
                     SUM(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE 0 END) as total_read
              FROM browser_activities
-             WHERE at >= ?1 AND eeg_focus IS NOT NULL AND domain != ''
+             WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL AND domain != ''
              GROUP BY hour
              ORDER BY avg_focus DESC",
         ) {
@@ -3305,7 +3263,7 @@ impl ActivityStore {
                     AVG(eeg_focus) as avg_focus,
                     AVG(CASE WHEN reading_time_secs > 0 THEN reading_time_secs ELSE NULL END) as avg_session_secs
              FROM browser_activities
-             WHERE at >= ?1 AND event_type = 'llm_interaction'
+             WHERE \"at\" >= ?1 AND event_type = 'llm_interaction'
              GROUP BY domain
              ORDER BY avg_focus DESC",
         ) {
@@ -3331,18 +3289,18 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
 
         let idle: i64 = c.query_row(
-            "SELECT COALESCE(SUM(idle_time_secs), 0) FROM browser_activities WHERE at >= ?1 AND idle_time_secs IS NOT NULL",
+            "SELECT COALESCE(SUM(idle_time_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND idle_time_secs IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let mouse_idle: i64 = c.query_row(
-            "SELECT COALESCE(MAX(mouse_idle_secs), 0) FROM browser_activities WHERE at >= ?1 AND mouse_idle_secs IS NOT NULL",
+            "SELECT COALESCE(MAX(mouse_idle_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND mouse_idle_secs IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let revisits: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND at >= ?1",
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'revisit' AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3350,7 +3308,7 @@ impl ActivityStore {
 
         let avg_focus: f64 = c
             .query_row(
-                "SELECT COALESCE(AVG(eeg_focus), 50) FROM browser_activities WHERE at >= ?1 AND eeg_focus IS NOT NULL",
+                "SELECT COALESCE(AVG(eeg_focus), 50) FROM browser_activities WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3382,9 +3340,9 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
             "SELECT domain, title,
-                    reading_time_secs, scroll_depth, eeg_focus, at
+                    reading_time_secs, scroll_depth, eeg_focus, \"at\"
              FROM browser_activities
-             WHERE at >= ?1 AND event_type = 'reading_time'
+             WHERE \"at\" >= ?1 AND event_type = 'reading_time'
                    AND reading_time_secs >= 300 AND scroll_depth >= 0.6
              ORDER BY eeg_focus DESC NULLS LAST
              LIMIT 20",
@@ -3410,17 +3368,17 @@ impl ActivityStore {
     pub fn browser_video_roi(&self, since: u64) -> BrowserVideoRoi {
         let c = self.conn.lock_or_recover();
         let total_watched: i64 = c.query_row(
-            "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE at >= ?1 AND video_watched_secs > 0",
+            "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND video_watched_secs > 0",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let focused_watched: i64 = c.query_row(
-            "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE at >= ?1 AND video_watched_secs > 0 AND eeg_focus > 60",
+            "SELECT COALESCE(SUM(video_watched_secs), 0) FROM browser_activities WHERE \"at\" >= ?1 AND video_watched_secs > 0 AND eeg_focus > 60",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
 
         let avg_focus: Option<f64> = c.query_row(
-            "SELECT AVG(eeg_focus) FROM browser_activities WHERE at >= ?1 AND has_video = 1 AND eeg_focus IS NOT NULL",
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE \"at\" >= ?1 AND has_video = 1 AND eeg_focus IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(None);
 
@@ -3440,16 +3398,16 @@ impl ActivityStore {
     pub fn browser_email_impact(&self, since: u64) -> BrowserEmailImpact {
         let c = self.conn.lock_or_recover();
         let email_focus: Option<f64> = c.query_row(
-            "SELECT AVG(eeg_focus) FROM browser_activities WHERE at >= ?1 AND event_type = 'email_activity' AND eeg_focus IS NOT NULL",
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE \"at\" >= ?1 AND event_type = 'email_activity' AND eeg_focus IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(None);
         let non_email_focus: Option<f64> = c.query_row(
-            "SELECT AVG(eeg_focus) FROM browser_activities WHERE at >= ?1 AND event_type != 'email_activity' AND eeg_focus IS NOT NULL AND domain != ''",
+            "SELECT AVG(eeg_focus) FROM browser_activities WHERE \"at\" >= ?1 AND event_type != 'email_activity' AND eeg_focus IS NOT NULL AND domain != ''",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(None);
         let email_events: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE at >= ?1 AND event_type = 'email_activity'",
+                "SELECT COUNT(*) FROM browser_activities WHERE \"at\" >= ?1 AND event_type = 'email_activity'",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3476,7 +3434,7 @@ impl ActivityStore {
                     AVG(eeg_focus) as avg_focus,
                     COUNT(*) as samples
              FROM browser_activities
-             WHERE at >= ?1 AND tab_count IS NOT NULL AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND tab_count IS NOT NULL AND eeg_focus IS NOT NULL
              GROUP BY tab_count
              ORDER BY tab_count",
         ) {
@@ -3497,12 +3455,12 @@ impl ActivityStore {
     /// Weekend vs weekday brain: compare focus patterns.
     pub fn browser_weekday_vs_weekend(&self, since: u64) -> BrowserWeekdayComparison {
         let c = self.conn.lock_or_recover();
-        // SQLite: strftime('%w', ts, 'unixepoch') gives 0=Sun, 6=Sat
+        // dayofweek() gives 0=Sun … 6=Sat, on the UTC timestamp
         let weekday_focus: Option<f64> = c
             .query_row(
                 "SELECT AVG(eeg_focus) FROM browser_activities
-             WHERE at >= ?1 AND eeg_focus IS NOT NULL
-                   AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) BETWEEN 1 AND 5",
+             WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL
+                   AND dayofweek(make_timestamp(\"at\" * 1000000)) BETWEEN 1 AND 5",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3510,8 +3468,8 @@ impl ActivityStore {
         let weekend_focus: Option<f64> = c
             .query_row(
                 "SELECT AVG(eeg_focus) FROM browser_activities
-             WHERE at >= ?1 AND eeg_focus IS NOT NULL
-                   AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) IN (0, 6)",
+             WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL
+                   AND dayofweek(make_timestamp(\"at\" * 1000000)) IN (0, 6)",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3519,7 +3477,7 @@ impl ActivityStore {
         let weekday_events: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM browser_activities
-             WHERE at >= ?1 AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) BETWEEN 1 AND 5",
+             WHERE \"at\" >= ?1 AND dayofweek(make_timestamp(\"at\" * 1000000)) BETWEEN 1 AND 5",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3527,7 +3485,7 @@ impl ActivityStore {
         let weekend_events: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM browser_activities
-             WHERE at >= ?1 AND CAST(strftime('%w', at, 'unixepoch') AS INTEGER) IN (0, 6)",
+             WHERE \"at\" >= ?1 AND dayofweek(make_timestamp(\"at\" * 1000000)) IN (0, 6)",
                 params![since as i64],
                 |row| row.get(0),
             )
@@ -3549,12 +3507,12 @@ impl ActivityStore {
     pub fn browser_night_owl_analysis(&self, since: u64, tz_offset: i32) -> Vec<BrowserHourFocusRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT ((at + ?2) % 86400) / 3600 as hour,
+            "SELECT ((\"at\" + ?2) % 86400) / 3600 as hour,
                     AVG(eeg_focus) as avg_focus,
                     COUNT(*) as events,
                     AVG(CASE WHEN scroll_depth > 0 THEN scroll_depth ELSE NULL END) as avg_depth
              FROM browser_activities
-             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL
              GROUP BY hour
              ORDER BY hour",
         ) {
@@ -3578,27 +3536,27 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
         let copies: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'clipboard_copy' AND at >= ?1",
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'clipboard_copy' AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
             .unwrap_or(0);
         let pastes: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'clipboard_paste' AND at >= ?1",
+                "SELECT COUNT(*) FROM browser_activities WHERE event_type = 'clipboard_paste' AND \"at\" >= ?1",
                 params![since as i64],
                 |row| row.get(0),
             )
             .unwrap_or(0);
         let avg_paste_len: Option<f64> = c.query_row(
-            "SELECT AVG(paste_length) FROM browser_activities WHERE event_type = 'clipboard_paste' AND at >= ?1 AND paste_length IS NOT NULL",
+            "SELECT AVG(paste_length) FROM browser_activities WHERE event_type = 'clipboard_paste' AND \"at\" >= ?1 AND paste_length IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(None);
 
         // Top domains for copy activity
         let mut stmt = match c.prepare_cached(
             "SELECT domain, COUNT(*) as cnt FROM browser_activities
-             WHERE event_type IN ('clipboard_copy', 'clipboard_paste') AND at >= ?1 AND domain != ''
+             WHERE event_type IN ('clipboard_copy', 'clipboard_paste') AND \"at\" >= ?1 AND domain != ''
              GROUP BY domain ORDER BY cnt DESC LIMIT 5",
         ) {
             Ok(s) => s,
@@ -3659,11 +3617,11 @@ impl ActivityStore {
         let c = self.conn.lock_or_recover();
         // Count browser→code switches via zone_switches
         let switches: i64 = c.query_row(
-            "SELECT COUNT(*) FROM zone_switches WHERE at >= ?1 AND (zone LIKE 'browser%' OR from_zone LIKE 'browser%')",
+            "SELECT COUNT(*) FROM zone_switches WHERE \"at\" >= ?1 AND (zone ILIKE 'browser%' OR from_zone ILIKE 'browser%')",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(0);
         let avg_focus_at_switch: Option<f64> = c.query_row(
-            "SELECT AVG(eeg_focus) FROM zone_switches WHERE at >= ?1 AND (zone LIKE 'browser%' OR from_zone LIKE 'browser%') AND eeg_focus IS NOT NULL",
+            "SELECT AVG(eeg_focus) FROM zone_switches WHERE \"at\" >= ?1 AND (zone ILIKE 'browser%' OR from_zone ILIKE 'browser%') AND eeg_focus IS NOT NULL",
             params![since as i64], |row| row.get(0),
         ).unwrap_or(None);
 
@@ -3688,7 +3646,7 @@ impl ActivityStore {
     ) {
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO brain_feedback (insight, correct, score, eeg_focus, eeg_mood, context, at)
+            "INSERT INTO brain_feedback (insight, correct, score, eeg_focus, eeg_mood, context, \"at\")
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 insight,
@@ -3761,8 +3719,8 @@ impl ActivityStore {
     pub fn brain_feedback_recent(&self, limit: u32) -> Vec<BrainFeedbackRow> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT id, insight, correct, score, eeg_focus, context, at
-             FROM brain_feedback ORDER BY at DESC LIMIT ?1",
+            "SELECT id, insight, correct, score, eeg_focus, context, \"at\"
+             FROM brain_feedback ORDER BY \"at\" DESC LIMIT ?1",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -3963,7 +3921,7 @@ impl ActivityStore {
             "SELECT from_zone, zone, COUNT(*) as switches,
                     AVG(eeg_focus) as avg_focus_at_switch
              FROM zone_switches
-             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL
              GROUP BY from_zone, zone
              ORDER BY switches DESC",
         ) {
@@ -4071,7 +4029,7 @@ impl ActivityStore {
             let binary = parts.next().unwrap_or("").trim();
             let args = parts.next().unwrap_or("").trim();
             let _ = c.execute(
-                "UPDATE terminal_commands SET category = ?1, binary = ?2, args = ?3 WHERE id = ?4",
+                "UPDATE terminal_commands SET category = ?1, \"binary\" = ?2, args = ?3 WHERE id = ?4",
                 params![category, binary, args, id],
             );
             count += 1;
@@ -4083,9 +4041,9 @@ impl ActivityStore {
     pub fn binary_usage_stats(&self, since: u64, limit: u32) -> Vec<(String, String, i64)> {
         let c = self.conn.lock_or_recover();
         let mut stmt = match c.prepare_cached(
-            "SELECT binary, category, COUNT(*) as n FROM terminal_commands
-             WHERE started_at >= ?1 AND binary != ''
-             GROUP BY binary ORDER BY n DESC LIMIT ?2",
+            "SELECT \"binary\", arg_max(category, started_at) AS category, COUNT(*) as n FROM terminal_commands
+             WHERE started_at >= ?1 AND \"binary\" != ''
+             GROUP BY \"binary\" ORDER BY n DESC LIMIT ?2",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -4163,7 +4121,7 @@ impl ActivityStore {
         let rows: Vec<(String, String, f64)> = c
             .prepare_cached(
                 "SELECT from_zone, zone, AVG(eeg_focus) FROM zone_switches
-             WHERE at >= ?1 AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL
              GROUP BY from_zone, zone",
             )
             .ok()
@@ -4187,7 +4145,7 @@ impl ActivityStore {
         let rows: Vec<(String, f64, i64)> = c
             .prepare_cached(
                 "SELECT app, AVG(eeg_focus), COUNT(*) FROM conversations
-             WHERE at >= ?1 AND role = 'user' AND eeg_focus IS NOT NULL
+             WHERE \"at\" >= ?1 AND role = 'user' AND eeg_focus IS NOT NULL
              GROUP BY app",
             )
             .ok()
@@ -4320,7 +4278,7 @@ impl ActivityStore {
         let lifecycle: Vec<(String, i64)> = c
             .prepare(
                 "SELECT event_type, COUNT(*) FROM ai_events
-                 WHERE at >= ?1 AND event_type IN (
+                 WHERE \"at\" >= ?1 AND event_type IN (
                      'suggestion_accepted', 'ai_code_refined', 'ai_code_undone', 'ai_code_deleted'
                  ) GROUP BY event_type",
             )
@@ -4366,8 +4324,8 @@ impl ActivityStore {
         // ── Dimension 2: AI Dependency Trend (daily ratio over 30 days) ──
         let daily_trend: Vec<serde_json::Value> = c
             .prepare(
-                "SELECT (at / 86400) * 86400 AS day_ts, COUNT(*) AS ai_events
-                 FROM ai_events WHERE at >= ?1
+                "SELECT (\"at\" / 86400) * 86400 AS day_ts, COUNT(*) AS ai_events
+                 FROM ai_events WHERE \"at\" >= ?1
                  AND event_type IN ('suggestion_accepted', 'ai_code_refined')
                  GROUP BY day_ts ORDER BY day_ts",
             )
@@ -4387,7 +4345,7 @@ impl ActivityStore {
                 "SELECT
                     SUM(CASE WHEN source = 'active' THEN 1 ELSE 0 END),
                     SUM(CASE WHEN source = 'passive' THEN 1 ELSE 0 END)
-                 FROM ai_events WHERE at >= ?1 AND event_type = 'ai_invocation'",
+                 FROM ai_events WHERE \"at\" >= ?1 AND event_type = 'ai_invocation'",
                 params![since as i64],
                 |r| Ok((r.get::<_, i64>(0).unwrap_or(0), r.get::<_, i64>(1).unwrap_or(0))),
             )
@@ -4400,7 +4358,7 @@ impl ActivityStore {
                     SUM(CASE WHEN event_type = 'suggestion_accepted' THEN 1 ELSE 0 END) AS accepted,
                     SUM(CASE WHEN event_type IN ('ai_code_undone', 'ai_code_deleted') THEN 1 ELSE 0 END) AS rejected,
                     AVG(eeg_focus) AS avg_focus
-                 FROM ai_events WHERE at >= ?1 AND language != ''
+                 FROM ai_events WHERE \"at\" >= ?1 AND language != ''
                  GROUP BY language HAVING COUNT(*) >= 2
                  ORDER BY accepted DESC LIMIT 10",
             )
@@ -4423,7 +4381,7 @@ impl ActivityStore {
                 "SELECT COUNT(DISTINCT session) AS sessions,
                         COUNT(*) AS total_messages,
                         AVG(CASE WHEN role = 'user' THEN eeg_focus END) AS avg_focus_during
-                 FROM conversations WHERE at >= ?1 AND session != ''",
+                 FROM conversations WHERE \"at\" >= ?1 AND session != ''",
                 params![since as i64],
                 |r| {
                     Ok(serde_json::json!({
@@ -4439,7 +4397,7 @@ impl ActivityStore {
         let ai_focus: Option<f64> = c
             .query_row(
                 "SELECT AVG(eeg_focus) FROM ai_events
-                 WHERE at >= ?1 AND eeg_focus IS NOT NULL
+                 WHERE \"at\" >= ?1 AND eeg_focus IS NOT NULL
                  AND event_type IN ('suggestion_accepted', 'ai_code_refined')",
                 params![since as i64],
                 |r| r.get(0),
@@ -4464,9 +4422,9 @@ impl ActivityStore {
         // Undo rate on AI events vs overall.
         let ai_undo_rate: f64 = c
             .query_row(
-                "SELECT CAST(SUM(CASE WHEN event_type = 'ai_code_undone' THEN 1 ELSE 0 END) AS REAL) /
+                "SELECT CAST(SUM(CASE WHEN event_type = 'ai_code_undone' THEN 1 ELSE 0 END) AS DOUBLE) /
                         NULLIF(SUM(CASE WHEN event_type = 'suggestion_accepted' THEN 1 ELSE 0 END), 0)
-                 FROM ai_events WHERE at >= ?1",
+                 FROM ai_events WHERE \"at\" >= ?1",
                 params![since as i64],
                 |r| r.get::<_, Option<f64>>(0),
             )
@@ -4681,12 +4639,13 @@ impl ActivityStore {
         created_at: u64,
     ) -> i64 {
         let c = self.conn.lock_or_recover();
-        let _ = c.execute(
+        c.query_row(
             "INSERT INTO embeddings (source_type, source_id, source_text, model, vector, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id",
             params![source_type, source_id, source_text, model, vector, created_at as i64],
-        );
-        c.last_insert_rowid()
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
     }
 
     /// Get embeddings for a source item (may have multiple models).
@@ -4741,7 +4700,7 @@ impl ActivityStore {
 
     // ── Conversations ─────────────────────────────────────────────────────
 
-    /// Insert a conversation message and update the FTS index.
+    /// Insert a conversation message.
     #[allow(clippy::too_many_arguments)]
     pub fn insert_conversation(
         &self,
@@ -4756,31 +4715,30 @@ impl ActivityStore {
     ) {
         let c = self.conn.lock_or_recover();
         let _ = c.execute(
-            "INSERT INTO conversations (app, role, text, cwd, at, session, eeg_focus, eeg_mood) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO conversations (app, role, text, cwd, \"at\", session, eeg_focus, eeg_mood) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![app, role, text, cwd, at as i64, session, eeg_focus, eeg_mood],
-        );
-        // Keep FTS in sync
-        let id = c.last_insert_rowid();
-        let _ = c.execute(
-            "INSERT INTO conversations_fts (rowid, text, app, role) VALUES (?1, ?2, ?3, ?4)",
-            params![id, text, app, role],
         );
     }
 
-    /// Full-text search on conversations.
+    /// Term search on conversations: every term of `query` must appear in
+    /// the text, app or role (case-insensitive), newest first.
     pub fn search_conversations_fts(&self, query: &str, limit: u32) -> Vec<ConversationRow> {
+        let terms = search_terms(query);
+        if terms.is_empty() {
+            return vec![];
+        }
+        let filter = vec!["(text ILIKE ? OR app ILIKE ? OR role ILIKE ?)"; terms.len()].join(" AND ");
+        let sql = format!(
+            "SELECT id, app, role, text, cwd, \"at\", session, eeg_focus FROM conversations
+             WHERE {filter} ORDER BY \"at\" DESC LIMIT {}",
+            limit
+        );
+        let binds: Vec<&String> = terms.iter().flat_map(|t| [t, t, t]).collect();
         let c = self.conn.lock_or_recover();
-        let mut stmt = match c.prepare_cached(
-            "SELECT c.id, c.app, c.role, c.text, c.cwd, c.at, c.session, c.eeg_focus
-             FROM conversations_fts f
-             JOIN conversations c ON c.id = f.rowid
-             WHERE conversations_fts MATCH ?1
-             ORDER BY c.at DESC LIMIT ?2",
-        ) {
-            Ok(s) => s,
-            Err(_) => return vec![],
+        let Ok(mut stmt) = c.prepare(&sql) else {
+            return vec![];
         };
-        stmt.query_map(params![query, limit as i64], |row| {
+        stmt.query_map(crate::duck::params_from_iter(binds), |row| {
             Ok(ConversationRow {
                 id: row.get(0)?,
                 app: row.get(1)?,
@@ -4806,48 +4764,48 @@ impl ActivityStore {
         limit: u32,
     ) -> Vec<ConversationRow> {
         let c = self.conn.lock_or_recover();
+        // Bind exactly the placeholders present: DuckDB rejects unused ones.
         let mut sql =
-            "SELECT id, app, role, text, cwd, at, session, eeg_focus FROM conversations WHERE at >= ?1 AND at <= ?2"
+            "SELECT id, app, role, text, cwd, \"at\", session, eeg_focus FROM conversations WHERE \"at\" >= ? AND \"at\" <= ?"
                 .to_string();
-        if app.is_some() {
-            sql += " AND app = ?3";
+        let mut binds: Vec<crate::duck::Value> = vec![(since as i64).into(), (until as i64).into()];
+        if let Some(a) = app {
+            sql += " AND app = ?";
+            binds.push(a.to_string().into());
         }
-        if role.is_some() {
-            sql += " AND role = ?4";
+        if let Some(r) = role {
+            sql += " AND role = ?";
+            binds.push(r.to_string().into());
         }
-        sql += " ORDER BY at DESC LIMIT ?5";
+        sql += " ORDER BY \"at\" DESC LIMIT ?";
+        binds.push((limit as i64).into());
         let mut stmt = match c.prepare_cached(&sql) {
             Ok(s) => s,
             Err(_) => return vec![],
         };
-        let app_val = app.unwrap_or("");
-        let role_val = role.unwrap_or("");
-        stmt.query_map(
-            params![since as i64, until as i64, app_val, role_val, limit as i64],
-            |row| {
-                Ok(ConversationRow {
-                    id: row.get(0)?,
-                    app: row.get(1)?,
-                    role: row.get(2)?,
-                    text: row.get(3)?,
-                    cwd: row.get(4)?,
-                    at: row.get::<_, i64>(5)? as u64,
-                    session: row.get(6)?,
-                    eeg_focus: row.get(7).ok(),
-                })
-            },
-        )
+        stmt.query_map(crate::duck::params_from_iter(binds), |row| {
+            Ok(ConversationRow {
+                id: row.get(0)?,
+                app: row.get(1)?,
+                role: row.get(2)?,
+                text: row.get(3)?,
+                cwd: row.get(4)?,
+                at: row.get::<_, i64>(5)? as u64,
+                session: row.get(6)?,
+                eeg_focus: row.get(7).ok(),
+            })
+        })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
 
-    /// Fuzzy search: LIKE-based substring matching.
+    /// Fuzzy search: case-insensitive substring matching.
     pub fn search_conversations_fuzzy(&self, query: &str, limit: u32) -> Vec<ConversationRow> {
         let c = self.conn.lock_or_recover();
         let pattern = format!("%{query}%");
         let mut stmt = match c.prepare_cached(
-            "SELECT id, app, role, text, cwd, at, session, eeg_focus FROM conversations
-             WHERE text LIKE ?1 ORDER BY at DESC LIMIT ?2",
+            "SELECT id, app, role, text, cwd, \"at\", session, eeg_focus FROM conversations
+             WHERE text ILIKE ?1 ORDER BY \"at\" DESC LIMIT ?2",
         ) {
             Ok(s) => s,
             Err(_) => return vec![],
@@ -4898,11 +4856,13 @@ impl ActivityStore {
     /// Start a meeting event. Returns the row id.
     pub fn insert_meeting_start(&self, platform: &str, title: &str, app_name: &str, start_at: u64) -> Option<i64> {
         let c = self.conn.lock_or_recover();
-        match c.execute(
-            "INSERT INTO meeting_events (platform, title, app_name, start_at) VALUES (?1, ?2, ?3, ?4)",
+        match c.query_row(
+            "INSERT INTO meeting_events (platform, title, app_name, start_at) VALUES (?1, ?2, ?3, ?4)
+             RETURNING id",
             params![platform, title, app_name, start_at as i64],
+            |r| r.get::<_, i64>(0),
         ) {
-            Ok(_) => Some(c.last_insert_rowid()),
+            Ok(id) => Some(id),
             Err(e) => {
                 eprintln!("[activity] insert_meeting_start: {e}");
                 None
@@ -5069,7 +5029,7 @@ impl ActivityStore {
         Self::get_focus_sessions_in_range_q(&c, from_ts, to_ts)
     }
 
-    fn get_focus_sessions_in_range_q(c: &rusqlite::Connection, from_ts: u64, to_ts: u64) -> Vec<FocusSessionRow> {
+    fn get_focus_sessions_in_range_q(c: &Connection, from_ts: u64, to_ts: u64) -> Vec<FocusSessionRow> {
         let mut stmt = match c.prepare_cached(
             "SELECT id, start_at, end_at, project, file_count, edit_count,
                     total_lines_added, total_lines_removed, avg_eeg_focus, avg_eeg_mood
@@ -5250,14 +5210,14 @@ impl ActivityStore {
     /// Delete AI events older than `cutoff`.
     pub fn prune_ai_events(&self, cutoff: u64) -> u64 {
         let c = self.conn.lock_or_recover();
-        c.execute("DELETE FROM ai_events WHERE at < ?1", params![cutoff as i64])
+        c.execute("DELETE FROM ai_events WHERE \"at\" < ?1", params![cutoff as i64])
             .unwrap_or(0) as u64
     }
 
     /// Delete zone switch records older than `cutoff`.
     pub fn prune_zone_switches(&self, cutoff: u64) -> u64 {
         let c = self.conn.lock_or_recover();
-        c.execute("DELETE FROM zone_switches WHERE at < ?1", params![cutoff as i64])
+        c.execute("DELETE FROM zone_switches WHERE \"at\" < ?1", params![cutoff as i64])
             .unwrap_or(0) as u64
     }
 
@@ -5271,11 +5231,12 @@ impl ActivityStore {
         .unwrap_or(0) as u64
     }
 
-    /// Run SQLite's `PRAGMA optimize` to update query planner statistics.
+    /// Checkpoint the WAL into the database file (the DuckDB counterpart of
+    /// the periodic `PRAGMA optimize` this used to run).
     /// Lightweight — safe to call after pruning.
     pub fn optimize(&self) {
         let c = self.conn.lock_or_recover();
-        let _ = c.execute_batch("PRAGMA optimize;");
+        let _ = c.execute_batch("CHECKPOINT;");
     }
 
     /// Return secondary windows associated with a primary window ID.
@@ -5333,7 +5294,7 @@ impl ActivityStore {
                 return vec![];
             }
         };
-        let params: Vec<&dyn rusqlite::types::ToSql> = p.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let params: Vec<&dyn crate::duck::ToSql> = p.iter().map(|v| v as &dyn crate::duck::ToSql).collect();
         stmt.query_map(params.as_slice(), |row| {
             Ok(FileInteractionRow {
                 id: row.get(0)?,
@@ -5390,7 +5351,7 @@ impl ActivityStore {
                 return vec![];
             }
         };
-        let params: Vec<&dyn rusqlite::types::ToSql> = p.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let params: Vec<&dyn crate::duck::ToSql> = p.iter().map(|v| v as &dyn crate::duck::ToSql).collect();
         stmt.query_map(params.as_slice(), |row| {
             Ok(FileUsageRow {
                 file_path: row.get(0)?,
@@ -5432,7 +5393,7 @@ impl ActivityStore {
                 return vec![];
             }
         };
-        let params: Vec<&dyn rusqlite::types::ToSql> = p.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let params: Vec<&dyn crate::duck::ToSql> = p.iter().map(|v| v as &dyn crate::duck::ToSql).collect();
         stmt.query_map(params.as_slice(), |row| {
             Ok(ProjectUsageRow {
                 project: row.get(0)?,

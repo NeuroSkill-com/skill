@@ -15,7 +15,7 @@ skill-oura      = { path = "../skill-oura" }
 skill-gpu       = { path = "../skill-gpu" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { workspace = true }
+skill-db = { path = "../skill-db" }
 csv         = "1"
 parquet     = { version = "58", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
 arrow-array = { version = "58", optional = true }
@@ -35,6 +35,8 @@ grayscale = "0.0.1"
 
 [dev-dependencies]
 tempfile = "3"
+# Tests write legacy *.sqlite fixtures to exercise the one-time import.
+rusqlite = { workspace = true }
 
 [lints]
 workspace = true

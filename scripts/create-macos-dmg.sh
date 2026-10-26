@@ -287,6 +287,42 @@ if [[ ! -f "$VOL_ICNS" ]]; then
   VOL_ICNS="$TAURI_DIR/icons/icon.icns"
 fi
 
+# ── Notarize + staple the .app, BEFORE it goes into the DMG ───────────────
+# Order matters and used to be wrong. Stapling the .app after appdmg has
+# already copied it in leaves the *inside* of the DMG unstapled: the shipped
+# 0.1.0-rc.3 DMG validated fine itself, while `stapler validate` on the app it
+# contained said "does not have a ticket stapled to it". Gatekeeper still
+# admitted it by looking the notarization up online, so this only bites a first
+# launch on a machine with no network — but that is a real install, and the
+# ticket costs one extra submission to avoid.
+#
+# notarytool takes an archive, not a bundle directory, so the .app is zipped
+# with `ditto` (which preserves the bundle's symlinks and xattrs; `zip` does
+# not) purely to have something submittable. The DMG built below then contains
+# an already-stapled .app, and the DMG gets its own ticket further down.
+NOTARIZE_READY=0
+if [[ "${SKIP_NOTARIZE:-0}" != "1" ]] \
+   && [[ -n "${APPLE_ID:-}" ]] \
+   && [[ -n "${APPLE_PASSWORD:-}" ]] \
+   && [[ -n "${APPLE_TEAM_ID:-}" ]]; then
+  NOTARIZE_READY=1
+fi
+
+if [[ "$NOTARIZE_READY" == "1" ]]; then
+  APP_ZIP="$(mktemp -d)/$PRODUCT_NAME.zip"
+  echo "  Submitting .app for notarization …"
+  ditto -c -k --keepParent "$APP_DIR" "$APP_ZIP"
+  xcrun notarytool submit "$APP_ZIP" \
+    --apple-id  "$APPLE_ID" \
+    --password  "$APPLE_PASSWORD" \
+    --team-id   "$APPLE_TEAM_ID" \
+    --wait --timeout 1800
+  rm -f "$APP_ZIP"
+  xcrun stapler staple "$APP_DIR"
+  xcrun stapler validate "$APP_DIR"
+  echo "  ✓ .app notarized and stapled"
+fi
+
 # ── Prepare output directory ──────────────────────────────────────────────
 DMG_DIR="$BUNDLE_DIR/dmg"
 mkdir -p "$DMG_DIR"
@@ -418,20 +454,21 @@ else
   echo "  ✓ DMG ad-hoc signed"
 fi
 
-# ── Notarize (optional) ──────────────────────────────────────────────────
-if [[ "${SKIP_NOTARIZE:-0}" != "1" ]] \
-   && [[ -n "${APPLE_ID:-}" ]] \
-   && [[ -n "${APPLE_PASSWORD:-}" ]] \
-   && [[ -n "${APPLE_TEAM_ID:-}" ]]; then
-  echo "  Submitting to Apple for notarization …"
+# ── Notarize the DMG ─────────────────────────────────────────────────────
+# The .app inside it is already notarized and stapled (above); this ticket is
+# for the disk image itself, which is what the user actually downloads. Both
+# are needed: the DMG's ticket clears the download, the .app's ticket travels
+# with it to /Applications.
+if [[ "$NOTARIZE_READY" == "1" ]]; then
+  echo "  Submitting DMG to Apple for notarization …"
   xcrun notarytool submit "$DMG_OUT" \
     --apple-id  "$APPLE_ID" \
     --password  "$APPLE_PASSWORD" \
     --team-id   "$APPLE_TEAM_ID" \
     --wait --timeout 1800
   xcrun stapler staple "$DMG_OUT"
-  xcrun stapler staple "$APP_DIR"
-  echo "  ✓ Notarized and stapled"
+  xcrun stapler validate "$DMG_OUT"
+  echo "  ✓ DMG notarized and stapled"
 else
   echo "  ⊘ Skipping notarization (set APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID to enable)"
 fi

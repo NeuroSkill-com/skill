@@ -42,5 +42,5 @@ Core search and visualization engine for NeuroSkill's embedding space. Provides 
 
 - `skill-constants` — shared constants (HNSW params, file names)
 - `fast-hnsw` — HNSW approximate nearest-neighbour search
-- `rusqlite` — label database access
+- `skill-data` (`label_store`, DuckDB) — label database access
 - `serde` / `serde_json` — serialization

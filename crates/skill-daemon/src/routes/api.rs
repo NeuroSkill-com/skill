@@ -109,34 +109,17 @@ async fn api_create_label(
 ) -> Json<serde_json::Value> {
     let text = req.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let db_path = skill_dir.join(skill_constants::LABELS_FILE);
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0) as i64;
-    let result = rusqlite::Connection::open(&db_path).and_then(|conn| {
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS labels (
-                id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                text              TEXT NOT NULL,
-                context           TEXT DEFAULT '',
-                eeg_start         INTEGER NOT NULL DEFAULT 0,
-                eeg_end           INTEGER NOT NULL DEFAULT 0,
-                wall_start        INTEGER NOT NULL DEFAULT 0,
-                wall_end          INTEGER NOT NULL DEFAULT 0,
-                created_at        INTEGER NOT NULL DEFAULT 0,
-                text_embedding    BLOB,
-                context_embedding BLOB,
-                embedding_model   TEXT
-            );",
-        )?;
-        conn.execute(
-            "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end, created_at)
-             VALUES (?1, '', ?2, ?2, ?2, ?2, ?2)",
-            rusqlite::params![text, now_secs],
-        )?;
-        Ok(conn.last_insert_rowid())
-    });
+        .unwrap_or(0);
+    let result = skill_data::label_store::LabelStore::open(&skill_dir)
+        .ok_or("label store unavailable")
+        .and_then(|store| {
+            store
+                .insert(now_secs, now_secs, now_secs, now_secs, &text, "", now_secs)
+                .ok_or("label insert failed")
+        });
     match result {
         Ok(id) => Json(serde_json::json!({ "command": "label", "ok": true, "label_id": id })),
         Err(e) => Json(serde_json::json!({ "command": "label", "ok": false, "error": e.to_string() })),
@@ -220,8 +203,7 @@ mod tests {
         assert_eq!(v["ok"], true);
         assert!(v["label_id"].as_i64().unwrap_or(0) > 0);
 
-        let db = td.path().join(skill_constants::LABELS_FILE);
-        let conn = rusqlite::Connection::open(db).unwrap();
+        let conn = skill_data::label_store::LabelStore::connect(td.path()).unwrap();
         let n: i64 = conn
             .query_row("SELECT COUNT(*) FROM labels WHERE text='focus marker'", [], |r| {
                 r.get(0)

@@ -210,11 +210,9 @@ pub struct BandSnapshot {
     /// from causal-Morlet instantaneous phase.  [Schreglmann et al. 2021]
     pub echt: f32,
 
-    // ── Headache / Migraine EEG correlate indices (0–100) ───────────────────
-    // Research biomarkers derived from published literature.
-    // NOT clinical diagnostic tools — for informational/research purposes only.
-    /// Headache correlate — cortical hyperexcitability: high beta + suppressed alpha + high BAR.
-    pub headache_index: f32,
+    // ── Migraine EEG correlate index (0–100) ────────────────────────────────
+    // Research biomarker derived from published literature.
+    // NOT a clinical diagnostic tool — for informational/research purposes only.
     /// Migraine correlate — cortical spreading depression proxy: elevated delta + alpha
     /// suppression + hemispheric lateralisation.
     pub migraine_index: f32,
@@ -872,7 +870,6 @@ impl BandAnalyzer {
         // ── Consciousness Indices ─────────────────────────────
         // Mean relative band powers across channels (used throughout below)
         let mean_rel_alpha = ch_powers.iter().map(|c| c.rel_alpha).sum::<f32>() / safe_nch;
-        let mean_rel_beta = ch_powers.iter().map(|c| c.rel_beta).sum::<f32>() / safe_nch;
         let _mean_rel_theta = ch_powers.iter().map(|c| c.rel_theta).sum::<f32>() / safe_nch;
         let mean_rel_delta = ch_powers.iter().map(|c| c.rel_delta).sum::<f32>() / safe_nch;
         let _mean_rel_gamma = ch_powers.iter().map(|c| c.rel_gamma).sum::<f32>() / safe_nch;
@@ -898,19 +895,11 @@ impl BandAnalyzer {
             / safe_nch;
         let _mean_engagement = 100.0_f32 / (1.0 + (-2.0 * (mean_eng_raw - 0.8)).exp());
 
-        // ── Headache ──────────────────────────────────────────────────────────
-        // Cortical hyperexcitability: elevated beta + suppressed alpha + high BAR.
-        // Headache states show increased excitability and altered alpha generation.
-        //
-        let headache_index =
-            (0.35 * c01(mean_rel_beta * 5.0) + 0.35 * (1.0 - c01(mean_rel_alpha * 4.0)) + 0.30 * c01(bar / 2.5))
-                * 100.0;
-
         // ── Migraine ──────────────────────────────────────────────────────────
         // Cortical spreading depression proxy: elevated delta + alpha suppression
         // + hemispheric lateralisation.  Delta increases and alpha suppresses
         // during migraine attacks and in the interictal period.
-        // Uses the same validated source as headache (interictal QEEG in migraine).
+        // Source: interictal QEEG in migraine.
         //
         let migraine_index = (0.40 * c01(mean_rel_delta * 6.0)
             + 0.35 * (1.0 - c01(mean_rel_alpha * 4.0))
@@ -995,7 +984,6 @@ impl BandAnalyzer {
             pac_theta_gamma,
             laterality_index,
             echt,
-            headache_index,
             migraine_index,
             consciousness_lzc,
             consciousness_wakefulness,

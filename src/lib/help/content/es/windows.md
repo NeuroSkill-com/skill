@@ -2,7 +2,7 @@
 {app} usa ventanas separadas para tareas específicas. Cada uno se puede abrir desde el menú contextual de la bandeja o mediante un atajo de teclado global.
 
 ## 🏷 Ventana de etiqueta
-Se abre a través del menú de la bandeja, el acceso directo global o el botón de etiqueta en la ventana principal. Escriba una etiqueta de texto libre para anotar el momento actual del EEG (por ejemplo, "meditación", "lectura enfocada"). La etiqueta se guarda en {dataDir}/labels.sqlite con el rango de marca de tiempo exacto. Envíe con Ctrl/⌘+Entrar o haga clic en Enviar. Presione Escape para cancelar.
+Se abre a través del menú de la bandeja, el acceso directo global o el botón de etiqueta en la ventana principal. Escriba una etiqueta de texto libre para anotar el momento actual del EEG (por ejemplo, "meditación", "lectura enfocada"). La etiqueta se guarda en {dataDir}/labels.duckdb con el rango de marca de tiempo exacto. Envíe con Ctrl/⌘+Entrar o haga clic en Enviar. Presione Escape para cancelar.
 
 ## 🔍 Ventana de búsqueda
 La ventana de búsqueda tiene tres modos: similitud de EEG, texto e interactivo, cada uno de los cuales consulta los datos registrados de una manera diferente.

@@ -23,6 +23,7 @@ text-embeddings-rlx-rocm  = ["text-embeddings-rlx", "rlx?/rocm", "rlx-models?/ro
 text-embeddings-rlx-wgpu  = ["text-embeddings-rlx", "rlx?/gpu", "rlx-models?/gpu"]
 
 [dependencies]
+bbtree = { workspace = true }
 # For the skill-retrieval eval bin: ranking + prompt-mode rendering.
 skill-skills = { path = "../skill-skills" }
 anyhow     = { workspace = true }

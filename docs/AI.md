@@ -119,7 +119,7 @@ Text embeddings are used for semantic search over labels, OCR text, and contextu
 
 | Component | Model | Runtime | Notes |
 |-----------|-------|---------|-------|
-| Label text & context embeddings | `nomic-embed-text-v1.5` | rlx (`nomic-ai/nomic-embed-text-v1.5`) | Stored in `labels.sqlite`; indexed via HNSW (`label_text_index.hnsw`, `label_context_index.hnsw`) |
+| Label text & context embeddings | `nomic-embed-text-v1.5` | rlx (`nomic-ai/nomic-embed-text-v1.5`) | Stored in `labels.duckdb`; indexed via HNSW (`label_text_index.hnsw`, `label_context_index.hnsw`) |
 | OCR text embeddings | `nomic-embed-text-v1.5` | rlx | Reuses the same shared embedder instance as labels; indexed via `screenshots_ocr.hnsw` |
 
 The text embedder runs on the RLX runtime (CPU by default, GPU via the `text-embeddings-rlx-*` features). The model is fixed to `nomic-embed-text-v1.5`, which shares an aligned space with `nomic-embed-vision-v1.5` so image and text queries land in the same vector space.

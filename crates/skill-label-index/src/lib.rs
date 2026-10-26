@@ -16,7 +16,7 @@
 //!
 //! * **EEG index** (`label_eeg_index.hnsw`): one node per label whose EEG
 //!   time window (`eeg_start … eeg_end`) overlaps with at least one recorded
-//!   epoch in the daily `eeg.sqlite` files.  The vector is the *mean-pooled*
+//!   epoch in the daily `eeg.duckdb` stores.  The vector is the *mean-pooled*
 //!   EEG embedding across all epochs in that window (zuna-rs space).
 //!
 //!   Query with: an EEG embedding from the current session or from history.
@@ -40,14 +40,13 @@ extern crate accelerate_src;
 use std::{path::Path, sync::Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex, Builder};
-use rusqlite::params;
 use serde::Serialize;
+use skill_data::duck::params;
 
 use skill_commands::NeighborMetrics;
 use skill_constants::{
     HNSW_EF_CONSTRUCTION, HNSW_M, LABELS_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_CONTEXT_TURBOVEC_INDEX_FILE,
     LABEL_EEG_INDEX_FILE, LABEL_EEG_TURBOVEC_INDEX_FILE, LABEL_TEXT_INDEX_FILE, LABEL_TEXT_TURBOVEC_INDEX_FILE,
-    SQLITE_FILE,
 };
 use skill_data::util::MutexExt;
 
@@ -416,7 +415,7 @@ pub struct RebuildStats {
 // Shared blob→f32 helper from skill-data; also removes the date_dirs wrapper.
 use skill_data::util::blob_to_f32;
 
-/// Fetch EEG embeddings from every `eeg.sqlite` whose date overlaps
+/// Fetch EEG embeddings from every day store whose date overlaps
 /// `[eeg_start, eeg_end]` (unix seconds) and return their component-wise mean.
 /// Returns `None` if no epochs exist in that window.
 pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Option<Vec<f32>> {
@@ -435,13 +434,12 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
     let mut count = 0usize;
 
     for (_date, dir) in skill_data::util::date_dirs(skill_dir) {
-        // ── 1. Try SQLite embeddings first ───────────────────────────────
-        let db_path = dir.join(SQLITE_FILE);
-        if db_path.exists() {
-            if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
+        // ── 1. Try the day store's embeddings first ──────────────────────
+        {
+            if let Some(conn) = skill_data::eeg_store::open_existing(&dir) {
                 if let Ok(mut stmt) = conn.prepare(&format!(
                     "SELECT eeg_embedding FROM embeddings \
-                         WHERE eeg_embedding IS NOT NULL AND length(eeg_embedding) >= 4 \
+                         WHERE eeg_embedding IS NOT NULL AND octet_length(eeg_embedding) >= 4 \
                            AND ({})",
                     skill_data::util::DualTimestampRange::WHERE_CLAUSE
                 )) {
@@ -545,28 +543,24 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
     let mut count = 0u64;
 
     for (_date, dir) in skill_data::util::date_dirs(skill_dir) {
-        let db_path = dir.join(SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = skill_data::util::open_readonly(&db_path) else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&dir) else {
             continue;
         };
 
         let Ok(mut stmt) = conn.prepare(&format!(
-            "SELECT json_extract(metrics_json, '$.relaxation_score'),
-                    json_extract(metrics_json, '$.engagement_score'),
-                    json_extract(metrics_json, '$.faa'),
-                    json_extract(metrics_json, '$.tar'),
-                    json_extract(metrics_json, '$.mood'),
-                    json_extract(metrics_json, '$.meditation'),
-                    json_extract(metrics_json, '$.cognitive_load'),
-                    json_extract(metrics_json, '$.drowsiness'),
-                    json_extract(metrics_json, '$.hr'),
-                    json_extract(metrics_json, '$.snr'),
-                    json_extract(metrics_json, '$.rel_alpha'),
-                    json_extract(metrics_json, '$.rel_beta'),
-                    json_extract(metrics_json, '$.rel_theta')
+            "SELECT TRY_CAST(json_extract_string(metrics_json, '$.relaxation_score') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.engagement_score') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.faa') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.tar') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.mood') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.meditation') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.cognitive_load') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.drowsiness') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.hr') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.snr') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.rel_alpha') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.rel_beta') AS DOUBLE),
+                    TRY_CAST(json_extract_string(metrics_json, '$.rel_theta') AS DOUBLE)
              FROM embeddings WHERE {}",
             skill_data::util::DualTimestampRange::WHERE_CLAUSE
         )) else {
@@ -626,7 +620,6 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
         // indices and consciousness metrics are not aggregated
         // in the label-context query (they require per-epoch data from the
         // embeddings table, not the label store). Set to None here.
-        headache_index: None,
         migraine_index: None,
         consciousness_lzc: None,
         consciousness_wakefulness: None,
@@ -648,8 +641,20 @@ struct LabelRow {
     context_embedding: Option<Vec<f32>>,
 }
 
+/// Connection to the label database that `labels_db` names.
+fn open_labels(labels_db: &Path) -> Option<skill_data::duck::Conn> {
+    skill_data::label_store::LabelStore::connect(labels_db.parent()?)
+}
+
+/// Whether the label database `labels_db` names exists (current or legacy).
+fn labels_exist(labels_db: &Path) -> bool {
+    labels_db
+        .parent()
+        .is_some_and(skill_data::label_store::LabelStore::exists)
+}
+
 fn read_label_rows(labels_db: &Path) -> Vec<LabelRow> {
-    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+    let Some(conn) = open_labels(labels_db) else {
         return vec![];
     };
 
@@ -683,7 +688,7 @@ fn read_label_rows(labels_db: &Path) -> Vec<LabelRow> {
 }
 
 fn fetch_label_by_id(labels_db: &Path, label_id: i64) -> Option<LabelRow> {
-    let conn = skill_data::util::open_readonly(labels_db).ok()?;
+    let conn = open_labels(labels_db)?;
     conn.query_row(
         "SELECT id, text, context, eeg_start, eeg_end, created_at,
                 embedding_model, text_embedding, context_embedding
@@ -821,7 +826,7 @@ fn save_turbovec(idx: &TurboIndex, path: &Path, tag: &str) {
 #[cfg(feature = "turboquant-index")]
 fn refresh_turbovec_counts_from_db(skill_dir: &Path, state: &LabelIndexState) {
     let labels_db = skill_dir.join(LABELS_FILE);
-    if !labels_db.exists() {
+    if !labels_exist(&labels_db) {
         *state.turbovec_counts.lock_or_recover() = BackendCounts {
             text_nodes: 0,
             context_nodes: 0,
@@ -929,7 +934,7 @@ fn try_insert_turbovec(
 /// The EEG index is rebuilt only for labels whose time window has EEG data.
 pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
     let labels_db = skill_dir.join(LABELS_FILE);
-    if !labels_db.exists() {
+    if !labels_exist(&labels_db) {
         return RebuildStats {
             text_nodes: 0,
             eeg_nodes: 0,
@@ -1565,21 +1570,8 @@ mod tests {
         assert_eq!(mem.total_bytes, 7680);
     }
 
-    fn create_labels_db(dir: &std::path::Path) -> rusqlite::Connection {
-        let db_path = dir.join(LABELS_FILE);
-        let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS labels (
-                id INTEGER PRIMARY KEY,
-                eeg_start INTEGER, eeg_end INTEGER,
-                wall_start INTEGER, wall_end INTEGER,
-                text TEXT, context TEXT, created_at INTEGER,
-                text_embedding BLOB, context_embedding BLOB,
-                embedding_model TEXT
-            );",
-        )
-        .unwrap();
-        conn
+    fn create_labels_db(dir: &std::path::Path) -> skill_data::duck::Conn {
+        skill_data::label_store::LabelStore::connect(dir).unwrap()
     }
 
     #[test]
@@ -1604,7 +1596,7 @@ mod tests {
         // Create labels.sqlite for hydration
         let conn = create_labels_db(dir.path());
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at)
              VALUES (42, 100, 200, 100, 200, 'test label', '', 1000)",
             [],
         )
@@ -1649,7 +1641,7 @@ mod tests {
         // Create labels DB
         let conn = create_labels_db(dir.path());
         conn.execute_batch(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at) VALUES
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at) VALUES
              (1, 100, 200, 100, 200, 'alpha', '', 1000),
              (2, 200, 300, 200, 300, 'beta', '', 2000),
              (3, 300, 400, 300, 400, 'gamma', '', 3000);",
@@ -1681,7 +1673,7 @@ mod tests {
 
         let conn = create_labels_db(dir.path());
         conn.execute_batch(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at) VALUES
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at) VALUES
              (1, 0, 0, 0, 0, 'a', '', 1),
              (2, 0, 0, 0, 0, 'b', '', 2);",
         )
@@ -1692,7 +1684,7 @@ mod tests {
         // Store 4-dim embedding in DB and insert into index
         conn.execute(
             "UPDATE labels SET text_embedding = ?1, embedding_model = 'a' WHERE id = 1",
-            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
         )
         .unwrap();
         let r1 = insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 0, 0, &state);
@@ -1701,7 +1693,7 @@ mod tests {
         // Store 8-dim embedding in DB and try to insert — triggers rebuild
         conn.execute(
             "UPDATE labels SET text_embedding = ?1, embedding_model = 'b' WHERE id = 2",
-            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
         )
         .unwrap();
         let r2 = insert_label(
@@ -1730,7 +1722,7 @@ mod tests {
 
         let conn = create_labels_db(dir.path());
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at)
              VALUES (1, 0, 0, 0, 0, 'test', '', 1)",
             [],
         )
@@ -1776,19 +1768,19 @@ mod tests {
 
         // Insert 3 labels: 2 with 4-dim, 1 with 8-dim embeddings
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, embedding_model)
              VALUES (1, 0, 0, 0, 0, 'a', '', 1, ?1, 'model-a')",
-            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
         ).unwrap();
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, embedding_model)
              VALUES (2, 0, 0, 0, 0, 'b', '', 2, ?1, 'model-a')",
-            rusqlite::params![to_blob(&[0.0, 1.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[0.0, 1.0, 0.0, 0.0])],
         ).unwrap();
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, embedding_model)
              VALUES (3, 0, 0, 0, 0, 'c', '', 3, ?1, 'model-b')",
-            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
         ).unwrap();
 
         let state = LabelIndexState::new();
@@ -1820,14 +1812,14 @@ mod tests {
 
         // All labels start with 4-dim
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, embedding_model)
              VALUES (1, 0, 0, 0, 0, 'x', '', 1, ?1, 'old')",
-            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[1.0, 0.0, 0.0, 0.0])],
         ).unwrap();
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, embedding_model)
              VALUES (2, 0, 0, 0, 0, 'y', '', 2, ?1, 'old')",
-            rusqlite::params![to_blob(&[0.0, 1.0, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[0.0, 1.0, 0.0, 0.0])],
         ).unwrap();
 
         let state = LabelIndexState::new();
@@ -1837,12 +1829,12 @@ mod tests {
         // Simulate reembed: update all labels to 8-dim
         conn.execute(
             "UPDATE labels SET text_embedding = ?1, embedding_model = 'new' WHERE id = 1",
-            rusqlite::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0])],
+            skill_data::duck::params![to_blob(&[1.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0])],
         )
         .unwrap();
         conn.execute(
             "UPDATE labels SET text_embedding = ?1, embedding_model = 'new' WHERE id = 2",
-            rusqlite::params![to_blob(&[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5])],
+            skill_data::duck::params![to_blob(&[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5])],
         )
         .unwrap();
 
@@ -1906,7 +1898,7 @@ mod tests {
 
         let conn = create_labels_db(dir.path());
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at)
              VALUES (1, 0, 0, 0, 0, 't', 'c', 1)",
             [],
         )
@@ -1952,7 +1944,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let conn = create_labels_db(dir.path());
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at)
              VALUES (1, 0, 0, 0, 0, 'no embedding', '', 1)",
             [],
         )
@@ -1975,15 +1967,15 @@ mod tests {
         let ctx_b = [0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0];
 
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, context_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, context_embedding, embedding_model)
              VALUES (1, 0, 0, 0, 0, 'alpha', 'ctx alpha', 1, ?1, ?2, 'model')",
-            rusqlite::params![to_blob(&emb_a), to_blob(&ctx_a)],
+            skill_data::duck::params![to_blob(&emb_a), to_blob(&ctx_a)],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at, text_embedding, context_embedding, embedding_model)
+            "INSERT INTO labels (id, eeg_start, eeg_end, label_start, label_end, text, context, created_at, text_embedding, context_embedding, embedding_model)
              VALUES (2, 0, 0, 0, 0, 'beta', 'ctx beta', 2, ?1, ?2, 'model')",
-            rusqlite::params![to_blob(&emb_b), to_blob(&ctx_b)],
+            skill_data::duck::params![to_blob(&emb_b), to_blob(&ctx_b)],
         )
         .unwrap();
 

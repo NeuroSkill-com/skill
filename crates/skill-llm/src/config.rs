@@ -245,7 +245,7 @@ pub struct LlmConfig {
     /// RLX device tag: `"auto"`, `"cpu"`, `"metal"`, `"mlx"`, `"gpu"`, `"cuda"`,
     /// etc. On Windows/Linux, `"auto"` (the default) prefers CUDA when a
     /// driver is present, then wgpu, then CPU.
-    #[serde(default = "default_rlx_device")]
+    #[serde(default = "default_rlx_device_tag")]
     pub rlx_device: String,
 
     /// RLX Qwen3 prefill/decode bucket length.
@@ -313,7 +313,13 @@ fn default_cache_type_k() -> String {
 fn default_cache_type_v() -> String {
     "f16".into()
 }
-fn default_rlx_device() -> String {
+/// The per-platform default value of [`LlmConfig::rlx_device`].
+///
+/// Public because it is also the restore target when the inference-device
+/// switch comes back from CPU and the profile has no previously-saved device:
+/// the daemon needs the same answer this module's serde default would give,
+/// not a second copy of the rule.
+pub fn default_rlx_device_tag() -> String {
     if cfg!(target_os = "macos") {
         "metal".into()
     } else {
@@ -362,7 +368,7 @@ impl Default for LlmConfig {
             mtp_draft_count: 0,
             mtp_n_rs_seq: 0,
             mtp_capable: false,
-            rlx_device: default_rlx_device(),
+            rlx_device: default_rlx_device_tag(),
             rlx_max_seq: default_rlx_max_seq(),
             // None = keep the prefill graph as wide as the decode context, the
             // behaviour before this knob existed.

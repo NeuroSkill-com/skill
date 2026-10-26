@@ -13,8 +13,6 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use skill_constants::{LABELS_FILE, SQLITE_FILE};
-
 #[cfg(feature = "accel")]
 mod umap_device;
 
@@ -134,14 +132,9 @@ pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> 
         if !path.is_dir() {
             continue;
         }
-        let db_path = path.join(SQLITE_FILE);
-        if !db_path.exists() {
-            continue;
-        }
-        let Ok(conn) = skill_data::util::open_readonly(&db_path) else {
+        let Some(conn) = skill_data::eeg_store::open_existing(&path) else {
             continue;
         };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         let Ok(mut stmt) = conn.prepare(&format!(
             "SELECT timestamp, eeg_embedding FROM embeddings
              WHERE ({ts_where}) ORDER BY timestamp"
@@ -150,7 +143,7 @@ pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> 
         };
 
         let rows = stmt.query_map(
-            rusqlite::params![
+            skill_data::duck::params![
                 r.unix_ms_start,
                 r.unix_ms_end,
                 r.dt14_start,
@@ -175,18 +168,16 @@ pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> 
     out
 }
 
-/// Load all labels from `labels.sqlite` whose EEG window overlaps [start, end].
+/// Load all labels whose EEG window overlaps [start, end].
 /// Returns Vec<(eeg_start_unix, eeg_end_unix, text)>.
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub fn load_labels_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, u64, String)> {
-    let labels_db = skill_dir.join(LABELS_FILE);
-    if !labels_db.exists() {
+    if !skill_data::label_store::LabelStore::exists(skill_dir) {
         return vec![];
     }
-    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
+    let Some(conn) = skill_data::label_store::LabelStore::connect(skill_dir) else {
         return vec![];
     };
-    let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
     let Ok(mut stmt) = conn.prepare(
         "SELECT eeg_start, eeg_end, text FROM labels
          WHERE eeg_end >= ?1 AND eeg_start <= ?2
@@ -194,7 +185,7 @@ pub fn load_labels_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<
     ) else {
         return vec![];
     };
-    stmt.query_map(rusqlite::params![start_utc as i64, end_utc as i64], |row| {
+    stmt.query_map(skill_data::duck::params![start_utc as i64, end_utc as i64], |row| {
         Ok((
             row.get::<_, i64>(0)? as u64,
             row.get::<_, i64>(1)? as u64,

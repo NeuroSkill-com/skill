@@ -783,23 +783,7 @@ fn seed_umap_skill_dir(n_a: usize, n_b: usize) -> Result<(PathBuf, u64, u64, u64
     let day_dir = skill_dir.join("20260303");
     std::fs::create_dir_all(&day_dir).map_err(|e| format!("mkdir: {e}"))?;
 
-    let db_path = day_dir.join("eeg.sqlite");
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| format!("sqlite open: {e}"))?;
-    conn.execute_batch(
-        "CREATE TABLE embeddings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp INTEGER NOT NULL,
-            device_id TEXT,
-            device_name TEXT,
-            hnsw_id INTEGER NOT NULL,
-            eeg_embedding BLOB NOT NULL,
-            label TEXT,
-            extra_embedding BLOB,
-            metrics_json TEXT
-        );
-        CREATE INDEX idx_timestamp ON embeddings (timestamp);",
-    )
-    .map_err(|e| format!("create table: {e}"))?;
+    let conn = skill_data::eeg_store::open(&day_dir).map_err(|e| format!("day store open: {e:#}"))?;
 
     let a_start_ms: i64 = 1_700_000_000_000;
     let b_start_ms: i64 = a_start_ms + (n_a as i64) * 250 + 60_000;
@@ -825,7 +809,7 @@ fn seed_umap_skill_dir(n_a: usize, n_b: usize) -> Result<(PathBuf, u64, u64, u64
                 .collect();
             let blob: Vec<u8> = emb.iter().flat_map(|v| v.to_le_bytes()).collect();
             insert
-                .execute(rusqlite::params![ts, i as i64, blob])
+                .execute(skill_data::duck::params![ts, i as i64, blob])
                 .map_err(|e| format!("insert: {e}"))?;
         }
         Ok(())
@@ -833,7 +817,7 @@ fn seed_umap_skill_dir(n_a: usize, n_b: usize) -> Result<(PathBuf, u64, u64, u64
     write_epochs(a_start_ms, n_a, 1.0)?;
     write_epochs(b_start_ms, n_b, -1.0)?;
     drop(insert);
-    conn.close().map_err(|(_, e)| format!("sqlite close: {e}"))?;
+    drop(conn);
 
     Ok((
         skill_dir,

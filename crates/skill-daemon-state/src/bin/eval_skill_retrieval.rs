@@ -273,13 +273,13 @@ fn main() {
             names.sort();
             sets.push(names);
         }
-        let unique: std::collections::BTreeSet<&Vec<String>> = sets.iter().collect();
+        let unique: bbtree::unsync::BBTreeSet<&Vec<String>> = sets.iter().collect();
         let repeats = sets.len() - unique.len();
 
         // How much of a selected block two consecutive queries share.
         let mut shared = 0usize;
         for w in sets.windows(2) {
-            let a: std::collections::BTreeSet<&String> = w[0].iter().collect();
+            let a: bbtree::unsync::BBTreeSet<&String> = w[0].iter().collect();
             shared += w[1].iter().filter(|n| a.contains(n)).count();
         }
         let mean_shared = shared as f64 / (sets.len().saturating_sub(1).max(1)) as f64;

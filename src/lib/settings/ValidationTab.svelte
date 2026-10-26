@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!--
   Validation & Research settings tab.
 
-  All persistent state lives in the daemon at ~/.skill/validation.sqlite.
+  All persistent state lives in the daemon at ~/.skill/validation.duckdb.
   This component is a thin reader/writer over the /v1/validation/* HTTP
   endpoints.  Each toggle PATCHes one field; the daemon validates and
   persists.  Documented in extensions/vscode/README.md "Validation roadmap".
