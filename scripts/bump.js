@@ -880,7 +880,7 @@ function generateFragmentFromGitLog(currentVersion) {
     execSync(`mkdir -p ${UNRELEASED_DIR}`);
   }
   writeText(join(UNRELEASED_DIR, "auto-git-log.md"), fragment);
-  console.log(`[bump] Generated changelog fragment with ${bullets.length} entries from git log`);
+  console.log(`[bump] Generated changelog fragment with ${Math.max(bulletCount, 1)} entries from git log`);
 }
 
 // ── main (async) ─────────────────────────────────────────────────────────────
