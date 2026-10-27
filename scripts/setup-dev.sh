@@ -12,7 +12,6 @@
 #
 #   macOS:
 #     - protobuf        (protoc compiler for gRPC / protobuf codegen)
-#     - binutils        (GNU ar — avoids "illegal option -- D" warnings)
 #     - sccache         (compilation cache, ~50% faster clean rebuilds)
 #
 #   Linux:
@@ -126,7 +125,6 @@ if [[ "$OS" == "Darwin" ]]; then
     fi
   done <<'DEPS'
 protobuf|protoc|Protocol Buffers compiler (protoc)
-binutils|/opt/homebrew/opt/binutils/bin/gar|GNU ar (fixes 'illegal option -- D' warnings)
 sccache|sccache|Compilation cache (~50% faster clean rebuilds)
 DEPS
 
@@ -147,28 +145,13 @@ DEPS
     fi
   fi
 
-  # ── Verify .envrc / AR setup ───────────────────────────────────────────────
+  # ── Verify AR ──────────────────────────────────────────────────────────────
 
   echo ""
-  GAR="$(brew --prefix binutils 2>/dev/null)/bin/gar"
-  if [[ -x "$GAR" ]]; then
-    if [[ "${AR:-}" == *gar* || "${AR:-}" == *llvm-ar* ]]; then
-      ok "AR env var is set correctly: ${AR}"
-    else
-      warn "AR env var is not set in this shell"
-      if command_exists direnv; then
-        info "Run 'direnv allow' to activate .envrc (sets AR automatically)"
-      else
-        info "Tip: install direnv to auto-set AR and other env vars:"
-        echo "    brew install direnv"
-        echo '    # Add to ~/.zshrc:  eval "$(direnv hook zsh)"'
-        echo "    direnv allow"
-        echo ""
-        info "Or add to your shell profile:"
-        echo "    export AR=$GAR"
-      fi
-      echo ""
-    fi
+  if [[ "${AR:-}" == *gar ]]; then
+    warn "AR points at GNU ar (${AR}); DuckDB fails to link with it on macOS"
+    info "Remove 'export AR=...gar' from your shell profile (Apple's ar is fine)"
+    echo ""
   fi
 
 # ── Linux dependencies ────────────────────────────────────────────────────────

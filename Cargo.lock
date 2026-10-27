@@ -5679,8 +5679,6 @@ dependencies = [
 [[package]]
 name = "libduckdb-sys"
 version = "1.20000.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac1dcdcfde48e11bbd46112ed3b0423acd8c644413b3891e7be8104edce7fdda"
 dependencies = [
  "cc",
  "flate2",

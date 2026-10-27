@@ -1,0 +1,186 @@
+use crate::{is_compiler, link_windows_system_libs, win_target, write_bindings};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
+
+#[derive(serde::Deserialize)]
+struct Sources {
+    cpp_files: HashSet<String>,
+    include_dirs: HashSet<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct Manifest {
+    base: Sources,
+    extensions: HashMap<String, Sources>,
+}
+
+fn add_extension(
+    manifest: &Manifest,
+    extension: &str,
+    cpp_files: &mut HashSet<String>,
+    include_dirs: &mut HashSet<String>,
+) {
+    let sources = manifest.extensions.get(extension).unwrap_or_else(|| {
+        let mut available = manifest.extensions.keys().cloned().collect::<Vec<_>>();
+        available.sort();
+        panic!(
+            "extension `{extension}` is missing from duckdb manifest; available extensions: {}",
+            available.join(", ")
+        );
+    });
+    cpp_files.extend(sources.cpp_files.clone());
+    include_dirs.extend(sources.include_dirs.clone());
+}
+
+fn extension_enabled(extension: &str) -> bool {
+    // Review build_bundled_cmake::enabled_extensions when changing this gate;
+    // the backend mechanisms and supported extension sets intentionally differ.
+    extension == "core_functions"
+        || (extension == "parquet" && cfg!(feature = "parquet"))
+        || (extension == "json" && cfg!(feature = "json"))
+}
+
+fn untar_archive(out_dir: &str) {
+    let path = "duckdb.tar.gz";
+
+    let tar_gz = std::fs::File::open(path).expect("archive file");
+    let tar = flate2::read::GzDecoder::new(tar_gz);
+    let mut archive = tar::Archive::new(tar);
+    // These archives are generated for reproducibility, not source mtimes.
+    // Skipping mtime restoration also avoids Windows SetFileTime failures on
+    // filesystems such as FAT32, which cannot represent Unix epoch mtimes.
+    archive.set_preserve_mtime(false);
+    archive.unpack(out_dir).expect("archive");
+}
+
+const STATIC_EXTENSION_AUTOREGISTER: &str = "duckdb/extension/loader/static_extension_autoregister.cpp";
+
+fn build_static_extension_autoregister(out_dir: &str) {
+    let lib_name = "duckdb_static_extension_autoregister";
+    // The upstream file has no global symbols, which makes ranlib warn about an empty table of contents.
+    let wrapper = Path::new(out_dir).join("static_extension_autoregister_rs.cpp");
+    std::fs::write(
+        &wrapper,
+        "#include \"static_extension_autoregister.cpp\"\nextern \"C\" int duckdb_rs_static_extension_autoregister = 1;\n",
+    )
+    .expect("writing static extension autoregister wrapper");
+    let source_dir = Path::new(out_dir).join(STATIC_EXTENSION_AUTOREGISTER);
+    cc::Build::new()
+        .cpp(true)
+        .file(&wrapper)
+        .include(source_dir.parent().expect("autoregister source directory"))
+        .warnings(false)
+        .cargo_metadata(false)
+        .compile(lib_name);
+    println!("cargo:rustc-link-search=native={out_dir}");
+    // skill patch: `-bundle` so rustc hands the linker this cc-built archive
+    // instead of repacking it into the rlib. On macOS the repacked copy's
+    // member is not 8-byte aligned and ld64 rejects it under -force_load.
+    println!("cargo:rustc-link-lib=static:+whole-archive,-bundle={lib_name}");
+}
+
+pub fn main(out_dir: &str) {
+    untar_archive(out_dir);
+
+    let include_path = Path::new(out_dir).join("duckdb/src/include");
+    write_bindings(&include_path, out_dir);
+
+    // Publish the include directory so downstream crates that compile
+    // their own C/C++ code (e.g. extension shims that #include
+    // "duckdb.hpp") can pick it up from `DEP_DUCKDB_INCLUDE` without
+    // having to glob the target tree. Requires `links = "duckdb"` in
+    // the package manifest.
+    println!("cargo:include={}", include_path.display());
+
+    let manifest_file = std::fs::File::open(format!("{out_dir}/duckdb/manifest.json")).expect("manifest file");
+    let manifest: Manifest = serde_json::from_reader(manifest_file).expect("reading manifest file");
+
+    let mut cpp_files = HashSet::new();
+    let mut include_dirs = HashSet::new();
+    let mut extensions = manifest
+        .extensions
+        .keys()
+        .filter(|name| extension_enabled(name))
+        .cloned()
+        .collect::<Vec<String>>();
+    extensions.sort();
+
+    cpp_files.extend(manifest.base.cpp_files.clone());
+    include_dirs.extend(manifest.base.include_dirs.iter().cloned());
+
+    let mut cfg = cc::Build::new();
+
+    for extension in &extensions {
+        add_extension(&manifest, extension, &mut cpp_files, &mut include_dirs);
+        cfg.define(
+            &format!("DUCKDB_EXTENSION_{}_LINKED", extension.to_uppercase()),
+            Some("1"),
+        );
+    }
+    cfg.define("DUCKDB_EXTENSION_AUTOINSTALL_DEFAULT", "1");
+    cfg.define("DUCKDB_EXTENSION_AUTOLOAD_DEFAULT", "1");
+
+    println!("cargo:rerun-if-changed=duckdb.tar.gz");
+
+    // Inside libduckdb.a nothing references the autoregister object, so the linker would drop it
+    // and linked extensions would never register. Link it whole-archive, before libduckdb.
+    if cpp_files.remove(STATIC_EXTENSION_AUTOREGISTER) {
+        build_static_extension_autoregister(out_dir);
+    }
+
+    cfg.include("duckdb");
+    cfg.includes(include_dirs.iter().map(|dir| format!("{out_dir}/duckdb/{dir}")));
+
+    let mut cpp_files_vec: Vec<String> = cpp_files.into_iter().collect();
+    cpp_files_vec.sort();
+    for f in cpp_files_vec.into_iter().map(|file| format!("{out_dir}/{file}")) {
+        cfg.file(f);
+    }
+
+    // DuckDB 2.0 requires C++17 (mirrors CMAKE_CXX_STANDARD in duckdb-sources/CMakeLists.txt).
+    cfg.cpp(true)
+        .flag_if_supported("-std=c++17")
+        .flag_if_supported("/std:c++17")
+        .flag_if_supported("/utf-8")
+        .flag_if_supported("/bigobj")
+        .warnings(false)
+        .flag_if_supported("-w");
+
+    // Enable C++ exceptions on MSVC: without /EHsc, exception handling is off, the
+    // C API's try/catch blocks are inert, and a thrown exception (e.g. invalid-UTF-8
+    // CSV read) aborts with STATUS_STACK_BUFFER_OVERRUN (#774). Hard flag, not
+    // flag_if_supported, so a spurious probe miss can't silently drop it. gcc/clang
+    // enable exceptions by default and reject /EHsc, so gate on MSVC. Mirrors
+    // build_bundled_cmake.rs.
+    if win_target() && is_compiler("msvc") {
+        cfg.flag("/EHsc");
+    }
+
+    let is_debug = match std::env::var("DEBUG") {
+        Ok(v) => v != "false" && v != "0",
+        Err(_) => false,
+    };
+    // Mirror DuckDB's CMake build types: Debug defines DEBUG (enables D_ASSERT
+    // and the debug-only verification paths), Release defines NDEBUG. DuckDB's
+    // sources assume exactly one of the two is set.
+    if is_debug {
+        cfg.define("DEBUG", None);
+    } else {
+        cfg.define("NDEBUG", None);
+    }
+
+    if win_target() {
+        cfg.define("DUCKDB_BUILD_LIBRARY", None);
+    }
+    cfg.compile("duckdb");
+
+    // `cc` does not link DuckDB's Windows system libs automatically (e.g. unresolved
+    // `RmStartSession` from the Restart Manager). See link_windows_system_libs.
+    if win_target() {
+        link_windows_system_libs();
+    }
+
+    println!("cargo:lib_dir={out_dir}");
+}

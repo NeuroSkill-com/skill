@@ -145,13 +145,12 @@ runs:
       shell: bash
       run: npm ci
 
-    - name: Install protoc + GNU ar (macOS)
+    - name: Install protoc (macOS)
       if: inputs.macos-tools == 'true'
       shell: bash
-      run: |
-        brew install protobuf binutils
-        # Use GNU ar to suppress "illegal option -- D" from Apple's system ar
-        echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
+      # Keep Apple's ar: GNU ar (binutils `gar`) writes archive members that
+      # ld64 rejects as "not 8-byte aligned" when force-loaded (DuckDB).
+      run: brew install protobuf
 
     - name: Install protoc (Windows)
       if: inputs.windows-protoc == 'true'

@@ -147,6 +147,14 @@ gpu-allocator    = { path = "patches/gpu-allocator-0.28.0" }
 # The vendored copy differs from crates.io only in that version bump; see the
 # patch's Cargo.toml. Drop it when upstream ships a reqwest 0.12 release.
 oura-api         = { path = "patches/oura-api-0.1.2" }
+# libduckdb-sys 1.20000.0: links its static-extension autoregister archive
+# `+whole-archive`, which rustc bundles into the rlib and repacks at the final
+# link. On macOS that repacked archive's member is not 8-byte aligned and ld64
+# refuses it ("not 8-byte aligned", v0.1.0-rc.4 release). The vendored copy only
+# adds `-bundle` to that one link-lib line, so the cc-built archive is used as is.
+# It must be built with Apple ar, not GNU ar (gar misaligns it the same way).
+# Drop when upstream ships the fix.
+libduckdb-sys    = { path = "patches/libduckdb-sys-1.20000.0" }
 # Minimal [patch] set that keeps crates.io out of the lock (verified): rlx-models
 # still declares `version = "^0.2.x"` registry deps on the runtime stack, and
 # third-party crates (tribev2, …) pull registry `rlx-models-*`. Dropping any of

@@ -1,0 +1,587 @@
+use crate::{is_compiler, link_windows_system_libs, win_target, write_bindings};
+use std::{
+    collections::BTreeSet,
+    env::{self, VarError},
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+struct Generator {
+    name: Option<String>,
+    out_dir: PathBuf,
+    make_program: Option<String>,
+}
+
+pub fn main(out_dir: &str) {
+    let source_dir = Path::new("duckdb-sources");
+    let cmake_lists = source_dir.join("CMakeLists.txt");
+    if !cmake_lists.exists() {
+        panic!(
+            "`bundled-cmake` requires a duckdb-rs checkout with DuckDB sources at {}",
+            cmake_lists.display()
+        );
+    }
+
+    println!("cargo:rerun-if-changed={}", source_dir.display());
+    println!("cargo:rerun-if-env-changed=DUCKDB_EXTENSION_CONFIGS");
+    println!("cargo:rerun-if-env-changed=DUCKDB_CMAKE_BUILD_TYPE");
+    println!("cargo:rerun-if-env-changed=DUCKDB_DISABLE_UNITY");
+    println!("cargo:rerun-if-env-changed=DUCKDB_DISABLE_JEMALLOC");
+    println!("cargo:rerun-if-env-changed=DUCKDB_DISABLE_EXTENSION_LOAD");
+    println!("cargo:rerun-if-env-changed=DISABLE_EXTENSION_LOAD");
+    println!("cargo:rerun-if-env-changed=CMAKE_BUILD_TYPE");
+    println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
+    println!("cargo:rerun-if-env-changed=CMAKE_C_COMPILER_LAUNCHER");
+    println!("cargo:rerun-if-env-changed=CMAKE_CXX_COMPILER_LAUNCHER");
+    println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
+
+    let include_path = source_dir.join("src/include").canonicalize().unwrap();
+    write_bindings(&include_path, out_dir);
+
+    // Publish the include directory so downstream crates that compile
+    // their own C/C++ code can read it from `DEP_DUCKDB_INCLUDE`.
+    // See the matching emission in build_bundled_cc.rs.
+    println!("cargo:include={}", include_path.display());
+
+    if let Some(configs) = env_var("DUCKDB_EXTENSION_CONFIGS") {
+        if !configs.trim().is_empty() {
+            panic!(
+                "DUCKDB_EXTENSION_CONFIGS is not yet supported by bundled-cmake because additional static extension libraries are not auto-linked"
+            );
+        }
+    }
+
+    let cmake_build_type = cmake_build_type();
+    let generator = select_generator(out_dir);
+    let mut config = cmake::Config::new(source_dir);
+    config.out_dir(&generator.out_dir);
+    if let Some(generator_name) = generator.name.as_deref() {
+        config.generator(generator_name);
+    }
+    if let Some(make_program) = generator.make_program.as_deref() {
+        config.define("CMAKE_MAKE_PROGRAM", make_program);
+    }
+    configure_macos_deployment_target(&mut config);
+    config
+        .profile(&cmake_build_type)
+        .define("BUILD_UNITTESTS", "0")
+        .define("BUILD_SHELL", "0")
+        .define("CMAKE_INSTALL_LIBDIR", "lib")
+        .define("CMAKE_C_FLAGS_INIT", init_flags())
+        .define("CMAKE_CXX_FLAGS_INIT", init_flags());
+
+    // Re-enable C++ exceptions on MSVC. The cmake crate makes its `cxxflag`s the
+    // source of -DCMAKE_CXX_FLAGS, replacing CMake's default (which includes /EHsc),
+    // so exception handling ends up effectively off: a thrown exception (e.g.
+    // invalid-UTF-8 CSV read) then aborts with STATUS_STACK_BUFFER_OVERRUN (#774).
+    //
+    // Don't `config.define("CMAKE_CXX_FLAGS", ..)` here: it overrides the cxxflag
+    // above and silently drops /EHsc, reintroducing #774.
+    // Mirrors build_bundled_cc.rs; gcc/clang enable exceptions by default.
+    if win_target() && is_compiler("msvc") {
+        config.cxxflag("/EHsc");
+        // CMake's default `/DWIN32 /D_WINDOWS` is dropped the same way; the TPC-H dbgen
+        // sources need `WIN32` to include <process.h> before their own macros.
+        for flag in ["/DWIN32", "/D_WINDOWS"] {
+            config.cflag(flag).cxxflag(flag);
+        }
+    }
+
+    // Unity builds (DuckDB's default) combine .cpp files into fewer translation
+    // units and compile significantly faster. Allow opting out for debugging.
+    // Always set explicitly so the CMake cache doesn't keep a stale value.
+    let disable_unity = env_flag("DUCKDB_DISABLE_UNITY");
+    config.define("DISABLE_UNITY", if disable_unity { "1" } else { "0" });
+
+    // Always set explicitly so the CMake cache does not keep a stale value when
+    // the environment variable changes between builds.
+    let disable_extension_load = env_flag_aliases(&["DUCKDB_DISABLE_EXTENSION_LOAD", "DISABLE_EXTENSION_LOAD"]);
+    config.define("DISABLE_EXTENSION_LOAD", if disable_extension_load { "1" } else { "0" });
+
+    // Forward compiler launcher for sccache/ccache integration.
+    for var in ["CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"] {
+        if let Some(launcher) = env_var(var) {
+            config.define(var, &launcher);
+        }
+    }
+
+    #[cfg(feature = "httpfs")]
+    configure_httpfs_dependencies(&mut config);
+
+    let enabled_extensions = enabled_extensions();
+    if !enabled_extensions.is_empty() {
+        config.define("BUILD_EXTENSIONS", enabled_extensions.join(";"));
+    }
+    // DuckDB's base extension config always builds json and icu; skip them unless requested.
+    let skipped_extensions: Vec<&str> = ["json", "icu"]
+        .into_iter()
+        .filter(|ext| !enabled_extensions.contains(ext))
+        .collect();
+    config.define("SKIP_EXTENSIONS", skipped_extensions.join(";"));
+
+    // Always set explicitly so old CMake caches do not keep stale allocator
+    // state. By default this enables jemalloc on DuckDB's supported 64-bit,
+    // non-musl Linux targets and remains a no-op elsewhere. The env var is an
+    // escape hatch back to DuckDB's standard allocator.
+    let disable_jemalloc = env_flag("DUCKDB_DISABLE_JEMALLOC");
+    config.define("ENABLE_JEMALLOC", if disable_jemalloc { "OFF" } else { "ON" });
+
+    // Windows MAX_PATH caveat: this build emits very deep object paths (Ninja ignores
+    // CMAKE_OBJECT_PATH_MAX), and since DuckDB 2.0 the unity build includes each
+    // source by a path relative to the build directory (`#include "../../.../src/x.cpp"`),
+    // which MSVC measures unnormalized. A deep OUT_DIR therefore fails with
+    // `C1083: Cannot open compiler generated file: ''` or `C1083: Cannot open include
+    // file: '../../..'`. The build script can't move OUT_DIR — shorten the path (short
+    // CARGO_TARGET_DIR such as `D:/t`, drop `--target`, or check out nearer the drive
+    // root), or set DUCKDB_DISABLE_UNITY=1 to compile each file individually.
+    let dst = config.build();
+    let lib_dir = dst.join("lib");
+    validate_extension_libraries(&lib_dir, &cmake_build_type, &enabled_extensions);
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    // Emit in dependents-before-dependencies order for single-pass linkers:
+    // loader → extensions → duckdb_static (which satisfies all core symbols).
+    let mut linked_extensions = vec!["core_functions"];
+    linked_extensions.extend(enabled_extensions.iter().copied());
+    build_static_extension_loader(source_dir, out_dir, &linked_extensions);
+    link_static_library(&lib_dir, &cmake_build_type, "core_functions_extension");
+    for extension in enabled_extensions {
+        link_static_library(&lib_dir, &cmake_build_type, &format!("{extension}_extension"));
+    }
+    link_static_library(&lib_dir, &cmake_build_type, "duckdb_static");
+    link_system_libs();
+    #[cfg(feature = "httpfs")]
+    emit_httpfs_link_metadata();
+    println!("cargo:lib_dir={}", lib_dir.display());
+}
+
+#[cfg(feature = "httpfs")]
+fn configure_httpfs_dependencies(config: &mut cmake::Config) {
+    if win_target() {
+        panic!("bundled-cmake httpfs is currently supported only on Linux and macOS");
+    }
+
+    // Only OpenSSL needs a hint (Homebrew keeps it keg-only). Do not hint curl:
+    // FindCURL locates the sysroot curl itself, and a pkg-config prefix may point
+    // at a different SDK than the compiler, breaking libc++ header ordering.
+    let openssl_prefix = pkg_config::get_variable("openssl", "prefix")
+        .unwrap_or_else(|err| panic!("bundled-cmake httpfs requires openssl through pkg-config: {err}"));
+    config.define("OPENSSL_ROOT_DIR", openssl_prefix);
+}
+
+#[cfg(feature = "httpfs")]
+fn emit_httpfs_link_metadata() {
+    for name in ["libcurl", "openssl"] {
+        pkg_config::Config::new()
+            .probe(name)
+            .unwrap_or_else(|err| panic!("bundled-cmake httpfs requires {name} through pkg-config: {err}"));
+    }
+    // HTTPFS's OpenSSL client reads the macOS certificate store. Mirror its
+    // CMake framework dependencies, which static archives do not carry over.
+    if env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "macos") {
+        println!("cargo:rustc-link-lib=framework=CoreFoundation");
+        println!("cargo:rustc-link-lib=framework=Security");
+    }
+}
+
+fn cmake_build_type() -> String {
+    for var in ["DUCKDB_CMAKE_BUILD_TYPE", "CMAKE_BUILD_TYPE"] {
+        if let Some(value) = env_var(var).filter(|v| !v.trim().is_empty()) {
+            let value = validate_cmake_build_type(&value);
+            cargo_warning(&format!("bundled-cmake build type: {value} (from {var})"));
+            return value;
+        }
+    }
+    cargo_warning("bundled-cmake build type: Release (default)");
+    "Release".to_owned()
+}
+
+fn validate_cmake_build_type(value: &str) -> String {
+    match value {
+        "Debug" | "Release" | "RelWithDebInfo" | "MinSizeRel" => value.to_owned(),
+        _ => {
+            panic!("unsupported CMake build type `{value}`; expected one of Debug, Release, RelWithDebInfo, MinSizeRel")
+        }
+    }
+}
+
+fn select_generator(out_dir: &str) -> Generator {
+    let out_dir = PathBuf::from(out_dir);
+    if let Some(generator) = env_var("CMAKE_GENERATOR").filter(|value| !value.trim().is_empty()) {
+        let needs_ninja = generator.contains("Ninja");
+        let (make_program, probe_error) = if needs_ninja {
+            find_program(&["ninja", "ninja-build"])
+        } else {
+            (None, None)
+        };
+        if needs_ninja && make_program.is_none() {
+            let suffix = probe_error
+                .map(|error| format!(" (probe error: {error})"))
+                .unwrap_or_default();
+            panic!(
+                "CMAKE_GENERATOR={generator} requires `ninja` or `ninja-build` on PATH, but neither was found{suffix}"
+            );
+        }
+        cargo_warning(&format!("bundled-cmake generator: {generator} (from CMAKE_GENERATOR)"));
+        return Generator {
+            out_dir: out_dir.join(format!("cmake-{}", sanitize_path_component(&generator))),
+            name: Some(generator),
+            make_program,
+        };
+    }
+
+    let (ninja_program, probe_error) = find_program(&["ninja", "ninja-build"]);
+    if let Some(ninja) = ninja_program {
+        cargo_warning(&format!("bundled-cmake generator: Ninja (autodetected via {ninja})"));
+        Generator {
+            out_dir: out_dir.join("cmake-ninja"),
+            name: Some("Ninja".to_string()),
+            make_program: Some(ninja),
+        }
+    } else {
+        if let Some(probe_error) = probe_error {
+            cargo_warning(&format!(
+                "failed to probe for bundled-cmake generator detection (`ninja`/`ninja-build`): {probe_error}"
+            ));
+        }
+        cargo_warning("bundled-cmake generator: default CMake generator (ninja not detected)");
+        Generator {
+            out_dir: out_dir.join("cmake-default"),
+            name: None,
+            make_program: None,
+        }
+    }
+}
+
+fn init_flags() -> &'static str {
+    if win_target() && is_compiler("msvc") {
+        "/w"
+    } else {
+        "-w"
+    }
+}
+
+fn configure_macos_deployment_target(config: &mut cmake::Config) {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+
+    let target_arch_env =
+        env::var("CARGO_CFG_TARGET_ARCH").expect("Cargo should set CARGO_CFG_TARGET_ARCH for macOS builds");
+    let target_arch = match target_arch_env.as_str() {
+        "aarch64" => "arm64",
+        "x86_64" => "x86_64",
+        other => {
+            panic!("bundled-cmake: unsupported macOS CARGO_CFG_TARGET_ARCH `{other}`; expected `aarch64` or `x86_64`")
+        }
+    };
+
+    let deployment_target = env_var("MACOSX_DEPLOYMENT_TARGET")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "11.0".to_string());
+    cargo_warning(&format!(
+        "bundled-cmake macOS deployment target: {deployment_target} ({target_arch})"
+    ));
+    config.define("CMAKE_OSX_DEPLOYMENT_TARGET", &deployment_target);
+    config.define("CMAKE_OSX_ARCHITECTURES", target_arch);
+}
+
+fn find_program(candidates: &[&str]) -> (Option<String>, Option<which::Error>) {
+    let mut last_error = None;
+    for candidate in candidates {
+        match which::which(candidate) {
+            Ok(path) => return (Some(path.display().to_string()), None),
+            Err(which::Error::CannotFindBinaryPath) => {}
+            Err(err) => {
+                last_error = Some(err);
+            }
+        }
+    }
+    (None, last_error)
+}
+
+fn env_var(name: &str) -> Option<String> {
+    match env::var(name) {
+        Ok(value) => Some(value),
+        Err(VarError::NotPresent) => None,
+        Err(VarError::NotUnicode(_)) => {
+            panic!("bundled-cmake expects a valid UTF-8 value for environment variable `{name}`")
+        }
+    }
+}
+
+fn parse_env_flag(name: &str) -> Option<bool> {
+    match env_var(name).as_deref() {
+        Some("1" | "true" | "on" | "yes") => Some(true),
+        Some("0" | "false" | "off" | "no") => Some(false),
+        Some(other) => {
+            cargo_warning(&format!(
+                "Ignoring unsupported {name} value {other:?}; expected true/false or 1/0, yes/no, on/off"
+            ));
+            None
+        }
+        None => None,
+    }
+}
+
+fn env_flag(name: &str) -> bool {
+    parse_env_flag(name).unwrap_or(false)
+}
+
+fn env_flag_aliases(names: &[&str]) -> bool {
+    let mut values = Vec::new();
+    for name in names {
+        if let Some(value) = parse_env_flag(name) {
+            values.push((*name, value));
+        }
+    }
+    let Some((selected_name, selected_value)) = values.first().copied() else {
+        return false;
+    };
+    if values.iter().any(|(_, value)| *value != selected_value) {
+        let sources = values
+            .iter()
+            .map(|(name, value)| format!("{name}={}", if *value { 1 } else { 0 }))
+            .collect::<Vec<_>>()
+            .join(", ");
+        cargo_warning(&format!(
+            "Conflicting values for equivalent environment variables ({sources}); using {selected_name}"
+        ));
+    }
+    selected_value
+}
+
+fn sanitize_path_component(input: &str) -> String {
+    input
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn validate_extension_libraries(lib_dir: &Path, cmake_build_type: &str, enabled_extensions: &[&str]) {
+    // Missing extensions are already caught by link_static_library's panic;
+    // this check only guards against CMake producing extensions we did not
+    // ask for (e.g. upstream extension-config drift).
+    let actual = list_static_extension_libraries(lib_dir, cmake_build_type).unwrap_or_else(|err| {
+        panic!(
+            "failed to inspect bundled-cmake extension libraries in {}: {err}",
+            lib_dir.display()
+        )
+    });
+    let mut expected: BTreeSet<String> = enabled_extensions
+        .iter()
+        .map(|ext| format!("{ext}_extension"))
+        .collect();
+    // CMake always builds this base extension through extension_config.cmake.
+    expected.insert("core_functions_extension".to_string());
+
+    let unexpected: Vec<String> = actual.difference(&expected).cloned().collect();
+    if !unexpected.is_empty() {
+        panic!(
+            "bundled-cmake produced unexpected static extension libraries: {}",
+            unexpected.join(", ")
+        );
+    }
+}
+
+/// Renders `extension/loader/static_extension_loader.c.in` for `extensions`, mirroring
+/// `duckdb_write_static_extension_loader` in `extension/extension_build_tools.cmake`.
+fn render_static_extension_loader(template: &str, extensions: &[&str]) -> String {
+    let declarations = extensions
+        .iter()
+        .map(|ext| format!("int32_t duckdb_extension_{ext}_describe(duckdb_extension_descriptor *descriptor);"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let registrations = extensions
+        .iter()
+        .map(|ext| {
+            format!("\tif (duckdb_register_static_extension(duckdb_extension_{ext}_describe) != 0) {{\n\t\tresult = 1;\n\t}}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    template
+        .replace("@LINK_EXTENSION_LIST@", &extensions.join(" "))
+        .replace("@DESCRIBE_DECLARATIONS@", &declarations)
+        .replace("@DESCRIBE_REGISTRATIONS@", &registrations)
+}
+
+/// Builds the loader that registers `extensions` before `main`. CMake only generates it for executables
+/// and the shared library, not for `duckdb_static`.
+fn build_static_extension_loader(source_dir: &Path, out_dir: &str, extensions: &[&str]) {
+    let loader_dir = source_dir.join("extension/loader");
+    let template_path = loader_dir.join("static_extension_loader.c.in");
+    let autoregister_path = loader_dir.join("static_extension_autoregister.cpp");
+    let template = fs::read_to_string(&template_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", template_path.display()));
+
+    // Compiled as C++ so it shares a compiler with the autoregister file; the template is extern "C".
+    let loader_path = Path::new(out_dir).join("static_extension_loader.cpp");
+    fs::write(&loader_path, render_static_extension_loader(&template, extensions))
+        .unwrap_or_else(|err| panic!("failed to write {}: {err}", loader_path.display()));
+
+    let lib_name = "duckdb_static_extension_loader";
+    cc::Build::new()
+        .cpp(true)
+        .file(&loader_path)
+        .file(&autoregister_path)
+        .include(source_dir.join("src/include"))
+        .define("DUCKDB_STATIC_BUILD", None)
+        .cargo_metadata(false)
+        .compile(lib_name);
+    println!("cargo:rustc-link-search=native={out_dir}");
+    // Nothing references the autoregister object, so keep the linker from dropping its static initializer.
+    // skill patch: `-bundle` so rustc hands the linker this cc-built archive
+    // instead of repacking it into the rlib. On macOS the repacked copy's
+    // member is not 8-byte aligned and ld64 rejects it under -force_load.
+    println!("cargo:rustc-link-lib=static:+whole-archive,-bundle={lib_name}");
+}
+
+fn link_static_library(lib_dir: &Path, cmake_build_type: &str, name: &str) {
+    let Some(library_path) = resolve_static_library(lib_dir, cmake_build_type, name) else {
+        let filename = static_library_filename(name);
+        let searched = candidate_library_dirs(lib_dir, cmake_build_type)
+            .into_iter()
+            .map(|dir| dir.join(&filename).display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        panic!("expected bundled-cmake to produce static library `{name}`; looked in [{searched}]");
+    };
+    if let Some(parent) = library_path.parent() {
+        if parent != lib_dir {
+            println!("cargo:rustc-link-search=native={}", parent.display());
+        }
+    }
+    println!("cargo:rustc-link-lib=static={name}");
+}
+
+fn static_library_filename(name: &str) -> String {
+    if win_target() {
+        format!("{name}.lib")
+    } else {
+        format!("lib{name}.a")
+    }
+}
+
+fn list_static_extension_libraries(lib_dir: &Path, cmake_build_type: &str) -> io::Result<BTreeSet<String>> {
+    let mut extension_libraries = BTreeSet::new();
+    for candidate_dir in candidate_library_dirs(lib_dir, cmake_build_type) {
+        for entry in fs::read_dir(&candidate_dir)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if !file_type.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name();
+            let Some(file_name) = file_name.to_str() else {
+                cargo_warning(&format!(
+                    "bundled-cmake ignored non-UTF-8 library filename in {}: {}",
+                    candidate_dir.display(),
+                    entry.path().display()
+                ));
+                continue;
+            };
+            let Some(name) = normalized_static_library_name(file_name) else {
+                continue;
+            };
+            if name.ends_with("_extension") && !name.ends_with("_loadable_extension") {
+                extension_libraries.insert(name);
+            }
+        }
+    }
+    Ok(extension_libraries)
+}
+
+fn normalized_static_library_name(filename: &str) -> Option<String> {
+    if let Some(name) = filename.strip_suffix(".lib") {
+        return Some(name.to_string());
+    }
+    let name = filename.strip_prefix("lib")?.strip_suffix(".a")?;
+    Some(name.to_string())
+}
+
+fn resolve_static_library(lib_dir: &Path, cmake_build_type: &str, name: &str) -> Option<PathBuf> {
+    let filename = static_library_filename(name);
+    candidate_library_dirs(lib_dir, cmake_build_type)
+        .into_iter()
+        .map(|dir| dir.join(&filename))
+        .find(|path| path.exists())
+}
+
+fn candidate_library_dirs(lib_dir: &Path, cmake_build_type: &str) -> Vec<PathBuf> {
+    // Single-config generators (Ninja, Make) write directly into lib/.
+    // Multi-config generators (MSVC, Xcode) write into lib/<Config>/.
+    // Restricting to these two avoids picking up stale extension libraries
+    // from a previous build that used a different CMAKE_BUILD_TYPE.
+    let mut candidates = vec![lib_dir.to_path_buf()];
+    let build_type_dir = lib_dir.join(cmake_build_type);
+    if build_type_dir.is_dir() {
+        candidates.push(build_type_dir);
+    }
+    candidates
+}
+
+fn cargo_warning(message: &str) {
+    println!("cargo:warning={message}");
+}
+
+fn enabled_extensions() -> Vec<&'static str> {
+    // Match DuckDB's upstream CMake defaults for quasi-core extensions rather
+    // than trying to reproduce the cc backend's finer-grained selection.
+    // Review build_bundled_cc::extension_enabled when changing this list; the
+    // backend mechanisms and supported extension sets intentionally differ.
+    let mut extensions = vec!["parquet"];
+    if cfg!(feature = "json") {
+        extensions.push("json");
+    }
+    if cfg!(feature = "autocomplete") {
+        extensions.push("autocomplete");
+    }
+    if cfg!(feature = "httpfs") {
+        extensions.push("httpfs");
+    }
+    if cfg!(feature = "icu") {
+        extensions.push("icu");
+    }
+    if cfg!(feature = "tpcds") {
+        extensions.push("tpcds");
+    }
+    if cfg!(feature = "tpch") {
+        extensions.push("tpch");
+    }
+    extensions
+}
+
+fn link_system_libs() {
+    // Keep the per-OS lists below in sync with DuckDB's current linker requirements in
+    // duckdb-sources/src/CMakeLists.txt. If upstream drifts after a submodule bump,
+    // update every branch here alongside it.
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("Cargo should set CARGO_CFG_TARGET_OS");
+
+    match target_os.as_str() {
+        "linux" => {
+            let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+            if target_env != "gnu" {
+                panic!(
+                    "bundled-cmake on linux is currently only supported with the `gnu` target env (libstdc++); got `{target_env}`"
+                );
+            }
+            println!("cargo:rustc-link-lib=dylib=dl");
+            println!("cargo:rustc-link-lib=dylib=pthread");
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+        }
+        "macos" => {
+            println!("cargo:rustc-link-lib=dylib=c++");
+        }
+        "windows" => link_windows_system_libs(),
+        other => {
+            panic!(
+                "bundled-cmake is currently supported only on Linux, macOS, and Windows; unsupported target OS `{other}`"
+            )
+        }
+    }
+}
