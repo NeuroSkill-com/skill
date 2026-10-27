@@ -8,6 +8,18 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.5] — 2026-10-27
+
+### Build
+
+- **The macOS release builds again.** 0.1.0-rc.4 failed to link `skill-daemon` on macOS with `ld: 64-bit mach-o member … not 8-byte aligned in libduckdb_static_extension_autoregister.a`. `libduckdb-sys` 1.20000 links that archive `+whole-archive`; rustc repacks it into the rlib, and Apple's linker rejects the repacked copy. A vendored `patches/libduckdb-sys-1.20000.0` adds `-bundle` to that one link line so the archive is used as built. The release setup no longer forces GNU `ar` (`gar`) on macOS, and `.envrc` drops it too, because GNU `ar` produces the same misaligned member. Verified with the exact CI command (`cargo build -p skill-daemon --features apple --release --locked --target aarch64-apple-darwin`).
+- `scripts/bump.js` no longer crashes with `bullets is not defined` when it falls back to building release notes from commit subjects.
+
+### Dependencies
+
+- **zstd security advisories fixed** (RUSTSEC-2026-0391, RUSTSEC-2026-0398, RUSTSEC-2026-0403): every copy of `zstd` is now 0.14.3 with `zstd-safe` 8.2.0. That meant `parquet` and Arrow 58 → 60, `zstd` 0.14 in `skill-daemon` and `skill-iroh`, `rlsl` and `rlsl-iroh` 0.0.6, and rlx reading `.npz` files with `zip` 9 instead of `npyz`'s bundled `zip` 0.6. `cargo deny` and `cargo audit` are green.
+- `deny.toml` allows `exg` (GPL-3.0-only), which `zuna-rs` 0.2.2 now depends on.
+
 ## [0.1.0-rc.4] — 2026-10-26
 
 ### Features
@@ -661,18 +673,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - new distributed
 
-## [0.0.131-rc.20] — 2026-07-31
-
-### Features
-
-- updated deps
-- vendored gpu allocator
-- updated cache
-
 ## Earlier releases
 
-The 148 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 149 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.20](changes/releases/0.0.131-rc.20.md)
 - [0.0.131-rc.19](changes/releases/0.0.131-rc.19.md)
 - [0.0.131-rc.18](changes/releases/0.0.131-rc.18.md)
 - [0.0.131-rc.17](changes/releases/0.0.131-rc.17.md)
