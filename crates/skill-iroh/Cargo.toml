@@ -23,7 +23,7 @@ qrcodegen = "1.8"
 # full codec set. Other workspace consumers already do this; we were the
 # lone outlier forcing AVIF into every binary via Cargo feature unification.
 image = { version = "0.25", default-features = false, features = ["png"] }
-zstd = "0.13"
+zstd = "0.14"
 
 [dev-dependencies]
 tempfile = "3"

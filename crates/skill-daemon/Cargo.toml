@@ -143,7 +143,7 @@ thiserror  = { workspace = true }
 glob = "0.3"
 futures = "0.3"
 libc = "0.2"
-zstd = "0.13"
+zstd = "0.14"
 axum = { version = "0.8", features = ["ws"] }
 base64 = { workspace = true }
 # BLE advertisement scanning.  One process-wide `Bluetooth::shared()` session
@@ -226,7 +226,7 @@ rusqlite = { workspace = true }
 tempfile             = "3"
 mendi                = { version = "0.0.3", features = ["simulate"] }
 mw75                 = { version = "0.0.8" }
-rlsl                 = { version = "0.0.4" }
+rlsl                 = { version = "0.0.6" }
 tokio-tungstenite    = "0.28"
 
 # macOS: enable Metal backend for ZUNA/LUNA/TRIBEv2 GPU paths (embed-*-gpu).

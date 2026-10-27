@@ -182,6 +182,8 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "iroh_test_client" },
     { allow = ["GPL-3.0-only"], crate = "rlsl" },
     { allow = ["GPL-3.0-only"], crate = "rlsl-iroh" },
+    # exg (github.com/eugenehp/exg) — EEG preprocessing, pulled in by zuna-rs >= 0.2.2.
+    { allow = ["GPL-3.0-only"], crate = "exg" },
     # RLX inference runtime — all crates are GPL-3.0-only.
     { allow = ["GPL-3.0-only"], crate = "rlx" },
     { allow = ["GPL-3.0-only"], crate = "rlx-autodiff" },

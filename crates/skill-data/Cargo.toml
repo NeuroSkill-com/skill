@@ -17,9 +17,9 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 skill-db = { path = "../skill-db" }
 csv         = "1"
-parquet     = { version = "58", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
-arrow-array = { version = "58", optional = true }
-arrow-schema = { version = "58", optional = true }
+parquet     = { version = "60", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
+arrow-array = { version = "60", optional = true }
+arrow-schema = { version = "60", optional = true }
 llmfit-core = "1.1.17"
 sysinfo     = "0.38"
 libc        = "0.2"
