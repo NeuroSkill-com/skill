@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.6] — 2026-10-27
+
+### Refactor
+
+- updated rlx
+
 ## [0.1.0-rc.5] — 2026-10-27
 
 ### Build
@@ -667,16 +673,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - lock
 
-## [0.0.131-rc.21] — 2026-08-04
-
-### Features
-
-- new distributed
-
 ## Earlier releases
 
-The 149 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 150 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.21](changes/releases/0.0.131-rc.21.md)
 - [0.0.131-rc.20](changes/releases/0.0.131-rc.20.md)
 - [0.0.131-rc.19](changes/releases/0.0.131-rc.19.md)
 - [0.0.131-rc.18](changes/releases/0.0.131-rc.18.md)
