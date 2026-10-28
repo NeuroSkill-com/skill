@@ -256,7 +256,7 @@ zip = { version = "9", features = ["deflate"] }
 # and `verus_state_machines_macros`, all exact-pinned to dated 0.0.0
 # prereleases. All four are MIT, so the license gate is satisfied, but the
 # `=` pins mean nothing else in the graph may ever want a different `vstd`.
-bbtree = "0.1.5"
+bbtree = "0.1.6"
 
 # RLX — from GitHub (`branch = "main"`; Cargo.lock pins the resolved commit).
 #   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR (+ rlx-runtime, rlx-umap, …)

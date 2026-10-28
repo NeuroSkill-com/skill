@@ -426,6 +426,25 @@ pub const QUALITY_POOR_CLIPS: usize = 8;
 /// RMS above this → noticeable artifact or poor contact / Fair (µV).
 pub const QUALITY_FAIR_RMS: f64 = 100.0;
 
+/// Effective frequency (Hz) of the mains-notched signal at or above which a
+/// channel is noise-dominated → Poor. Derived from Muse S recordings: worn
+/// sensors sit at 9–38 Hz; off-skin sensors and broadband noise read 45+.
+pub const QUALITY_NOISE_POOR_HZ: f64 = 45.0;
+
+/// Effective frequency (Hz) at or above which a channel is noisy (muscle
+/// tension, dry sensor) → Fair: still analysed, contact could be better.
+pub const QUALITY_NOISE_FAIR_HZ: f64 = 35.0;
+
+/// Share of a channel's power that is mains hum (50/60 Hz) at or above which
+/// contact is loose → Fair. Worn Muse sensors measured 2–25 %, loose ear
+/// sensors 85–92 %, a headset on the desk 98 %. The hum itself is notched out
+/// before analysis, so this only flags the contact, it doesn't exclude data.
+pub const QUALITY_MAINS_FAIR_SHARE: f64 = 0.75;
+
+/// One-second windows the noise check takes the median over (smooths the
+/// large window-to-window jitter of real recordings).
+pub const QUALITY_NOISE_WINDOWS: usize = 4;
+
 // ── Artifact detection (blinks) ───────────────────────────────────────────────
 
 /// Blink detection: minimum µV spike amplitude on frontal channels (AF7/AF8).

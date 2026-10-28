@@ -57,4 +57,6 @@ pub use parse::{
     strip_tool_call_blocks_preserve, validate_tool_arguments, ChatMessage, ContentPart, ImageUrl, MessageContent, Tool,
     ToolCall, ToolCallFunction, ToolFunction, ToolPromptOptions,
 };
-pub use types::{CompressionLevel, LlmToolConfig, ToolContextCompression, ToolExecutionMode, WebCacheConfig};
+pub use types::{
+    CompressionLevel, LlmToolConfig, SkillApiToken, ToolContextCompression, ToolExecutionMode, WebCacheConfig,
+};

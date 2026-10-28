@@ -382,7 +382,12 @@ impl EegFilter {
     ///
     /// Call immediately after [`push`][Self::push] returns `true`.
     pub fn drain(&mut self, channel: usize) -> Vec<f64> {
-        self.pending[channel].drain(..).map(|v| v as f64).collect()
+        // Bounds-checked like `push`: a device with more than EEG_CHANNELS
+        // channels (64-electrode caps) used to panic the session here.
+        self.pending
+            .get_mut(channel)
+            .map(|p| p.drain(..).map(|v| v as f64).collect())
+            .unwrap_or_default()
     }
 
     /// Replace the filter configuration.
@@ -576,6 +581,15 @@ impl EegFilter {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn drain_past_the_channel_limit_is_empty_not_a_panic() {
+        let mut f = EegFilter::new(FilterConfig::default());
+        assert!(!f.push(EEG_CHANNELS, &[1.0]));
+        assert!(f.drain(EEG_CHANNELS).is_empty());
+        assert!(f.drain(EEG_CHANNELS + 31).is_empty());
+    }
+
     use super::*;
     use crate::constants::CHANNEL_NAMES;
     use std::f64::consts::PI;

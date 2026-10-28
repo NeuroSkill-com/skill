@@ -214,6 +214,7 @@ pub(crate) async fn run_adapter_session(
                             state.events_tx.clone(),
                             hooks.clone(),
                             state.text_embedder.clone(),
+                            state.exg_model_status.clone(),
                         ) {
                             Ok(mut p) => {
                                 // Capture device identity and channel metadata.
@@ -252,7 +253,7 @@ pub(crate) async fn run_adapter_session(
                                 // Broadcast signal quality (~4 Hz cadence, same as bands).
                                 let qualities = pipe.channel_quality();
                                 let q_vals: Vec<String> = qualities.iter()
-                                    .map(|q| format!("{q:?}").to_lowercase())
+                                    .map(|q| q.as_str().to_string())
                                     .collect();
                                 if let Ok(mut s) = state.status.lock() {
                                     s.channel_quality = q_vals.clone();

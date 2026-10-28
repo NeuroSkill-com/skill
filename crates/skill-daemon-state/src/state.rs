@@ -3,7 +3,10 @@
 
 /// Type alias for the persistent BLE discovery cache.
 /// Maps `"ble:<uuid>"` → `(local_name, rssi, last_seen_unix_secs)`.
-pub type BleDeviceCache = Arc<Mutex<HashMap<String, (Option<String>, i16, u64)>>>;
+///
+/// A concurrent map: the BLE listener writes it on every advertisement while
+/// discovery and connect routes read it, without a lock between them.
+pub type BleDeviceCache = Arc<BBTreeMap<String, (Option<String>, i16, u64)>>;
 
 /// Type alias for BLE devices identified by an advertised service UUID.
 /// Maps `"ble:<uuid>"` → device-kind tag (e.g. `"vital"`).
@@ -12,8 +15,9 @@ pub type BleDeviceCache = Arc<Mutex<HashMap<String, (Option<String>, i16, u64)>>
 /// the unit and lets the owner change it, so the advertised service is the only
 /// reliable discriminator.  The BLE listener records what it saw here, and both
 /// discovery and connect routing consult it before falling back to the name.
-pub type BleServiceKinds = Arc<Mutex<HashMap<String, &'static str>>>;
+pub type BleServiceKinds = Arc<BBTreeMap<String, &'static str>>;
 
+use bbtree::BBTreeMap;
 use std::{
     collections::{HashMap, VecDeque},
     path::PathBuf,
@@ -111,6 +115,12 @@ pub struct AppState {
     pub lsl_paired_streams: Arc<Mutex<Vec<LslPairedStream>>>,
     pub lsl_idle_timeout_secs: Arc<Mutex<Option<u64>>>,
     pub lsl_virtual_source: Arc<Mutex<Option<skill_lsl::VirtualLslSource>>>,
+    /// Latest device-health verdict, refreshed by the status monitor
+    /// (`skill_daemon_common::device_health`). Read by chat to warn the user.
+    pub device_health: Arc<Mutex<skill_daemon_common::device_health::DeviceHealth>>,
+    /// Fingerprint of the device issues the last chat reply explained in full;
+    /// while unchanged, replies carry a one-line reminder instead.
+    pub device_health_notified: Arc<Mutex<String>>,
     pub track_active_window: Arc<AtomicBool>,
     pub track_input_activity: Arc<AtomicBool>,
     pub track_file_activity: Arc<AtomicBool>,
@@ -128,7 +138,7 @@ pub struct AppState {
     #[cfg(not(feature = "llm"))]
     pub llm_logs: Arc<Mutex<Vec<serde_json::Value>>>,
     pub llm_catalog: Arc<Mutex<skill_llm::catalog::LlmCatalog>>,
-    pub llm_downloads: Arc<Mutex<HashMap<String, Arc<Mutex<skill_llm::catalog::DownloadProgress>>>>>,
+    pub llm_downloads: Arc<BBTreeMap<String, Arc<Mutex<skill_llm::catalog::DownloadProgress>>>>,
     #[cfg(feature = "llm")]
     pub llm_config: Arc<Mutex<LlmConfig>>,
     #[cfg(feature = "llm")]
@@ -189,7 +199,7 @@ pub struct AppState {
     /// makes a new background loop visible to the manifest — preventing the
     /// drift we'd otherwise get when someone adds a worker but forgets to
     /// edit the `/v1/activity` route.
-    pub task_heartbeats: Arc<Mutex<HashMap<&'static str, TaskHeartbeat>>>,
+    pub task_heartbeats: Arc<BBTreeMap<&'static str, TaskHeartbeat>>,
 }
 
 /// Per-task heartbeat record. Updated by background workers; read by
@@ -270,8 +280,8 @@ impl AppState {
             })),
             devices: Arc::new(Mutex::new(Vec::new())),
             scanner_running: Arc::new(Mutex::new(false)),
-            ble_device_cache: Arc::new(Mutex::new(HashMap::new())),
-            ble_service_kinds: Arc::new(Mutex::new(HashMap::new())),
+            ble_device_cache: Arc::new(BBTreeMap::new()),
+            ble_service_kinds: Arc::new(BBTreeMap::new()),
             app_log: Arc::new(Mutex::new((0, VecDeque::with_capacity(512)))),
             scanner_stop_tx: Arc::new(Mutex::new(None)),
             scanner_wifi_config: Arc::new(Mutex::new(ScannerWifiConfigRequest {
@@ -294,6 +304,8 @@ impl AppState {
             lsl_paired_streams: Arc::new(Mutex::new(settings.lsl_paired_streams.clone())),
             lsl_idle_timeout_secs: Arc::new(Mutex::new(settings.lsl_idle_timeout_secs)),
             lsl_virtual_source: Arc::new(Mutex::new(None)),
+            device_health: Arc::new(Mutex::new(Default::default())),
+            device_health_notified: Arc::new(Mutex::new(String::new())),
             track_active_window: Arc::new(AtomicBool::new(settings.track_active_window)),
             track_input_activity: Arc::new(AtomicBool::new(settings.track_input_activity)),
             track_file_activity: Arc::new(AtomicBool::new(settings.track_file_activity)),
@@ -307,7 +319,7 @@ impl AppState {
             #[cfg(not(feature = "llm"))]
             llm_logs: Arc::new(Mutex::new(Vec::new())),
             llm_catalog: Arc::new(Mutex::new(llm_catalog)),
-            llm_downloads: Arc::new(Mutex::new(HashMap::new())),
+            llm_downloads: Arc::new(BBTreeMap::new()),
             #[cfg(feature = "llm")]
             llm_config: Arc::new(Mutex::new(llm_config)),
             #[cfg(feature = "llm")]
@@ -346,7 +358,7 @@ impl AppState {
             calibration_phase: Arc::new(Mutex::new(CalibrationPhaseSnapshot::default())),
             pairing_codes: Arc::new(Mutex::new(HashMap::new())),
             validation_runtime: Arc::new(Mutex::new(skill_data::validation_store::ValidationRuntime::default())),
-            task_heartbeats: Arc::new(Mutex::new(HashMap::new())),
+            task_heartbeats: Arc::new(BBTreeMap::new()),
         }
     }
 
@@ -376,23 +388,30 @@ impl AppState {
             .unwrap_or_default()
             .as_millis() as u64;
 
-        let mut should_broadcast = false;
-        let mut tick_count = 1u64;
-        if let Ok(mut map) = self.task_heartbeats.lock() {
-            let entry = map.entry(task_id).or_default();
-            entry.last_tick_unix_ms = now_ms;
-            entry.last_duration_ms = duration_ms;
-            entry.tick_count = entry.tick_count.saturating_add(1);
-            tick_count = entry.tick_count;
-
-            // Always emit on the very first tick, then time-throttle.
-            if entry.last_broadcast_unix_ms == 0
-                || now_ms.saturating_sub(entry.last_broadcast_unix_ms) >= MIN_BROADCAST_INTERVAL_MS
-            {
-                entry.last_broadcast_unix_ms = now_ms;
-                should_broadcast = true;
-            }
-        }
+        // The first tick inserts this and always broadcasts; later ticks
+        // update the stored entry in place and time-throttle.
+        let first = TaskHeartbeat {
+            last_tick_unix_ms: now_ms,
+            last_duration_ms: duration_ms,
+            tick_count: 1,
+            last_broadcast_unix_ms: now_ms,
+        };
+        let (tick_count, should_broadcast) =
+            match self.task_heartbeats.update_or_insert(task_id, first, |_, entry, _| {
+                entry.last_tick_unix_ms = now_ms;
+                entry.last_duration_ms = duration_ms;
+                entry.tick_count = entry.tick_count.saturating_add(1);
+                let broadcast = entry.last_broadcast_unix_ms == 0
+                    || now_ms.saturating_sub(entry.last_broadcast_unix_ms) >= MIN_BROADCAST_INTERVAL_MS;
+                if broadcast {
+                    entry.last_broadcast_unix_ms = now_ms;
+                }
+                (entry.tick_count, broadcast)
+            }) {
+                Ok(Some(updated)) => updated,
+                Ok(None) => (1, true),
+                Err(_) => return,
+            };
 
         if should_broadcast {
             self.broadcast(

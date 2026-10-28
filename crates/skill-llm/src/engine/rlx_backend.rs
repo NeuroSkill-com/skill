@@ -344,7 +344,7 @@ fn try_mlx_runner(path: &Path, config: &LlmConfig) -> Option<Result<Box<dyn LmRu
         return None;
     }
     let device = resolve_mlx_device(config);
-    let max_seq = config.rlx_max_seq.max(128);
+    let max_seq = mlx_max_seq(config);
     let cfg_path = path.join("config.json");
     Some(
         rlx_models::Qwen3Config::from_file(&cfg_path)
@@ -474,7 +474,7 @@ fn try_qwen3_vl_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -
         return None;
     }
     let device = resolve_rlx_device(config);
-    let max_seq = config.rlx_max_seq.clamp(32, 4096);
+    let max_seq = qwen3_vl_max_seq(config);
     let mut b = rlx_models::qwen3_vl::Qwen3VlRunner::builder()
         .weights(path)
         .device(device)
@@ -515,7 +515,7 @@ fn try_mistral_vl_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig)
         return None;
     }
     let device = resolve_rlx_device(config);
-    let max_seq = config.rlx_max_seq.clamp(32, 8192);
+    let max_seq = mistral_vl_max_seq(config);
     Some(
         rlx_models::mistral_vl::MistralVlRunner::builder()
             .weights(path)
@@ -576,7 +576,30 @@ fn resolved_max_seq(config: &LlmConfig) -> usize {
         .map(|c| c as usize)
         .unwrap_or(0)
         .max(config.rlx_max_seq)
-        .clamp(32, 8192)
+        .clamp(32, RLX_MAX_SEQ_CAP)
+}
+
+/// Largest context any runner is compiled for, whatever `ctx_size` says.
+///
+/// The auto-context ladder can pick 16384, but the runners run prefill through
+/// a static graph sized to `max_seq`, so the cap bounds that graph's cost. The
+/// status endpoint reports the runner's real `max_seq` (see
+/// [`RlxTextRunner::max_seq`]), never the requested `ctx_size`.
+pub(super) const RLX_MAX_SEQ_CAP: usize = 8192;
+
+/// `max_seq` of the mlx packed-Qwen3 path.
+fn mlx_max_seq(config: &LlmConfig) -> usize {
+    config.rlx_max_seq.max(128)
+}
+
+/// `max_seq` of the Qwen3-VL path.
+fn qwen3_vl_max_seq(config: &LlmConfig) -> usize {
+    config.rlx_max_seq.clamp(32, 4096)
+}
+
+/// `max_seq` of the Mistral-VL path.
+fn mistral_vl_max_seq(config: &LlmConfig) -> usize {
+    config.rlx_max_seq.clamp(32, RLX_MAX_SEQ_CAP)
 }
 
 /// `AutoOptions` carrying what the USER configured — device, context, mmproj.
@@ -885,7 +908,13 @@ fn hardware_adaptive_plan(
 /// `Qwen35SpecRunner`, which (together with Metal graph warm + mmproj) has
 /// OOMed 64GB machines during validate. Plain `Qwen35Runner` is used here;
 /// speculative MTP stays opt-in via a future config path.
-fn try_qwen35_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Option<Result<Box<dyn LmRunner>>> {
+/// Returns the runner and the `max_seq` it was compiled for, which the memory
+/// plan may have lowered below the requested context.
+fn try_qwen35_runner(
+    path: &Path,
+    mmproj: Option<&Path>,
+    config: &LlmConfig,
+) -> Option<Result<(Box<dyn LmRunner>, usize)>> {
     if !looks_like_qwen35(path) {
         return None;
     }
@@ -897,16 +926,11 @@ fn try_qwen35_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> 
     // so tool-augmented daemon prompts (~5-6k tokens) fit instead of failing with
     // "prompt length N exceeds compiled max_seq". rlx long-context is correct at
     // 8192 (verified: a long natural prompt and a tool prompt both generate cleanly
-    // on Qwen3.5-0.8B). Cap at 8192 (static-prefill graph cost); memory_adaptive_plan
+    // on Qwen3.5-0.8B). Cap at RLX_MAX_SEQ_CAP (static-prefill graph cost); memory_adaptive_plan
     // trims it back under memory pressure. NOTE: a *model* that isn't trained for
     // this tool-call format (e.g. the Fara-1.5 computer-use agent model) will still
     // emit degenerate tool-call output — that's a model-fit issue, not this cap.
-    let requested_max_seq = config
-        .ctx_size
-        .map(|c| c as usize)
-        .unwrap_or(0)
-        .max(config.rlx_max_seq)
-        .clamp(32, 8192);
+    let requested_max_seq = resolved_max_seq(config);
 
     // ── Memory-adaptive streaming tuning ───────────────────────────────────────
     // On unified-memory systems a big VLM + a large context + the resident
@@ -1000,18 +1024,16 @@ fn try_qwen35_runner(path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> 
         b.build().map(|runner| Box::new(runner) as Box<dyn LmRunner>)
     };
 
-    match build(mmproj) {
-        Ok(runner) => Some(Ok(runner)),
+    let built = match build(mmproj) {
+        Ok(runner) => Ok(runner),
         Err(e) if mmproj.is_some() => {
             eprintln!("[rlx] Qwen35 with mmproj failed ({e}); retrying text-only");
-            Some(
-                build(None).map_err(|e2| {
-                    anyhow!("Qwen35Runner text-only on {device:?} failed after mmproj error ({e}): {e2}")
-                }),
-            )
+            build(None)
+                .map_err(|e2| anyhow!("Qwen35Runner text-only on {device:?} failed after mmproj error ({e}): {e2}"))
         }
-        Err(e) => Some(Err(anyhow!("Qwen35Runner on {device:?} failed: {e}"))),
-    }
+        Err(e) => Err(anyhow!("Qwen35Runner on {device:?} failed: {e}")),
+    };
+    Some(built.map(|runner| (runner, max_seq)))
 }
 
 fn resolve_gemma_tokenizer(weights: &Path) -> Option<PathBuf> {
@@ -1049,6 +1071,9 @@ pub(super) struct RlxTextRunner {
     family: &'static str,
     weights_path: PathBuf,
     explicit_tokenizer: Option<PathBuf>,
+    /// Context the runner was compiled for; `None` for families whose builder
+    /// skill doesn't size (they use their own default).
+    max_seq: Option<usize>,
 }
 
 /// Hide a leading, whitespace-only `<think>…</think>` block from streamed output.
@@ -1252,25 +1277,25 @@ impl RlxTextRunner {
         // mlx-community packed safetensors dirs — before GGUF-oriented paths.
         if let Some(result) = try_mlx_runner(model_path, config) {
             let runner = result?;
-            return finish_load(model_path, runner, mmproj, None);
+            return finish_load(model_path, runner, mmproj, None, Some(mlx_max_seq(config)));
         }
 
         // Qwen3-VL before plain Qwen3 (same GGUF family otherwise strips mmproj).
         if let Some(result) = try_qwen3_vl_runner(model_path, mmproj, config) {
             let runner = result?;
-            return finish_load(model_path, runner, mmproj, None);
+            return finish_load(model_path, runner, mmproj, None, Some(qwen3_vl_max_seq(config)));
         }
 
         // LFM + mmproj → LfmVlRunner (text-only LFM falls through).
         if let Some(result) = try_lfm_vl_runner(model_path, mmproj, config) {
             let runner = result?;
-            return finish_load(model_path, runner, mmproj, None);
+            return finish_load(model_path, runner, mmproj, None, None);
         }
 
         // Ministral / Mistral Medium + mmproj → MistralVlRunner.
         if let Some(result) = try_mistral_vl_runner(model_path, mmproj, config) {
             let runner = result?;
-            return finish_load(model_path, runner, mmproj, None);
+            return finish_load(model_path, runner, mmproj, None, Some(mistral_vl_max_seq(config)));
         }
 
         if let Some(result) = try_catalog_runner(model_path, mmproj, config) {
@@ -1281,13 +1306,13 @@ impl RlxTextRunner {
                 "minicpm5" => resolve_minicpm5_tokenizer(model_path),
                 _ => None,
             };
-            return finish_load(model_path, runner, mmproj, explicit_tokenizer);
+            return finish_load(model_path, runner, mmproj, explicit_tokenizer, None);
         }
 
         // Plain Qwen3 (not VL): never attach mmproj here.
         if mmproj.is_none() {
             if let Some(runner) = try_qwen3_runner_with_device(model_path, config) {
-                return finish_load(model_path, runner, None, None);
+                return finish_load(model_path, runner, None, None, Some(resolved_max_seq(config)));
             }
         } else if looks_like_qwen3(model_path) && !looks_like_qwen3_vl(model_path) {
             return Err(anyhow!(
@@ -1303,8 +1328,8 @@ impl RlxTextRunner {
         // as routing cost.
         eprintln!("[rlx] route cascade {:.2?} (probing qwen35)", t_cascade.elapsed());
         if let Some(result) = try_qwen35_runner(model_path, mmproj, config) {
-            let runner = result?;
-            return finish_load(model_path, runner, mmproj, None);
+            let (runner, max_seq) = result?;
+            return finish_load(model_path, runner, mmproj, None, Some(max_seq));
         }
 
         eprintln!(
@@ -1313,7 +1338,7 @@ impl RlxTextRunner {
         );
         let runner = rlx_models::run::auto_runner_with(model_path, &auto_options(config, mmproj))
             .map_err(|e| anyhow!("RLX auto_runner: {e}"))?;
-        finish_load(model_path, runner, mmproj, None)
+        finish_load(model_path, runner, mmproj, None, Some(resolved_max_seq(config)))
     }
 }
 
@@ -1322,6 +1347,7 @@ fn finish_load(
     runner: Box<dyn LmRunner>,
     mmproj: Option<&Path>,
     explicit_tokenizer: Option<PathBuf>,
+    max_seq: Option<usize>,
 ) -> Result<RlxTextRunner> {
     if mmproj.is_some() && !runner.supports_multimodal() {
         return Err(anyhow!(
@@ -1335,6 +1361,7 @@ fn finish_load(
         runner,
         weights_path: model_path.to_path_buf(),
         explicit_tokenizer,
+        max_seq,
     })
 }
 
@@ -1352,21 +1379,26 @@ fn humanize_inference_error(e: &str) -> String {
     let lower = e.to_ascii_lowercase();
     let hint = if lower.contains("weight not found") || lower.contains("outside the decode buckets") {
         Some(
-            "This conversation is longer than the context this model was loaded with.              Raise \"Context size\" in LLM settings and restart the server, or start a new chat.",
+            "This conversation is longer than the context this model was loaded with. \
+             Raise \"Context size\" in LLM settings and restart the server, or start a new chat."
+                .to_string(),
         )
     } else if lower.contains("cache invariant violated") {
         Some(
-            "Long-context memory (the HNSW KV store) is not compatible with multi-turn chat              on this model family. It is off by default; unset SKILL_QWEN3_KV_STORE and restart              the server.",
+            "Long-context memory (the HNSW KV store) is not compatible with multi-turn chat \
+             on this model family. It is off by default; unset SKILL_QWEN3_KV_STORE and restart \
+             the server."
+                .to_string(),
         )
     } else if lower.contains("exceeds compiled max_seq") || lower.contains("prompt length") {
-        Some(
-            "The prompt is longer than the loaded context. Raise \"Context size\" in LLM              settings, shorten the prompt, or turn off tools (they add a large system prompt).",
-        )
+        Some(prompt_overflow_hint(parse_prompt_overflow(e)))
     } else if lower.contains("no mmproj") || lower.contains("vision encoder") {
-        Some("This model cannot read images. Load an mmproj file for it, or pick a vision model.")
+        Some("This model cannot read images. Load an mmproj file for it, or pick a vision model.".to_string())
     } else if lower.contains("panicked") {
         Some(
-            "The model backend crashed on this request. The request was dropped but the server              is still running — please report the panic line from the LLM log.",
+            "The model backend crashed on this request. The request was dropped but the server \
+             is still running — please report the panic line from the LLM log."
+                .to_string(),
         )
     } else {
         None
@@ -1374,6 +1406,36 @@ fn humanize_inference_error(e: &str) -> String {
     match hint {
         Some(h) => format!("{h}\n\n(details: {e})"),
         None => e.to_string(),
+    }
+}
+
+/// `(prompt_tokens, limit)` from rlx's
+/// `prompt length N exceeds compiled max_seq=M` (or `prefill_seq=M`).
+fn parse_prompt_overflow(e: &str) -> Option<(usize, usize)> {
+    fn leading_number(s: &str) -> Option<usize> {
+        let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
+        digits.parse().ok()
+    }
+    let prompt = leading_number(e.split("prompt length ").nth(1)?)?;
+    let limit_part = e.split("exceeds compiled ").nth(1)?;
+    let limit = leading_number(limit_part.split('=').nth(1)?)?;
+    Some((prompt, limit))
+}
+
+/// Only suggests raising "Context size" when that can help: past
+/// [`RLX_MAX_SEQ_CAP`] the setting no longer changes the compiled context.
+fn prompt_overflow_hint(overflow: Option<(usize, usize)>) -> String {
+    const SHRINK: &str = "shorten the prompt, start a new chat, or turn off tools (they add a large system prompt)";
+    match overflow {
+        Some((prompt, limit)) if limit < RLX_MAX_SEQ_CAP => format!(
+            "The prompt ({prompt} tokens) is longer than the loaded context ({limit} tokens). \
+             Raise \"Context size\" in LLM settings, or {SHRINK}."
+        ),
+        Some((prompt, limit)) => format!(
+            "The prompt ({prompt} tokens) is longer than this model's maximum context \
+             ({limit} tokens). To fit, {SHRINK}."
+        ),
+        None => format!("The prompt is longer than the loaded context. To fit, {SHRINK}."),
     }
 }
 
@@ -1399,6 +1461,11 @@ impl RlxTextRunner {
 
     pub(super) fn supports_multimodal(&self) -> bool {
         self.runner.supports_multimodal()
+    }
+
+    /// The context, in tokens, this runner was actually compiled for.
+    pub(super) fn max_seq(&self) -> Option<usize> {
+        self.max_seq
     }
 
     pub(super) fn generate(&mut self, prompt: &str, params: GenParams, token_tx: UnboundedSender<InferToken>) {
@@ -2809,5 +2876,50 @@ mod kv_store_runtime_tests {
             // Sanity: every scenario produced tokens and stopped before the cap-loop.
             assert!(r.ctoks > 0, "{}: produced no tokens", r.name);
         }
+    }
+}
+
+#[cfg(all(test, feature = "llm-rlx"))]
+mod context_limit_tests {
+    use super::*;
+
+    #[test]
+    fn prompt_overflow_is_parsed_from_rlx_error() {
+        let e = "RLX generation failed: qwen35: prompt length 9385 exceeds compiled max_seq=8192";
+        assert_eq!(parse_prompt_overflow(e), Some((9385, 8192)));
+        let e = "prompt length 3000 exceeds compiled prefill_seq=2048 (decode max_seq=8192)";
+        assert_eq!(parse_prompt_overflow(e), Some((3000, 2048)));
+        assert_eq!(parse_prompt_overflow("prompt length too long"), None);
+    }
+
+    #[test]
+    fn overflow_hint_only_suggests_raising_context_below_the_cap() {
+        let at_cap = humanize_inference_error("prompt length 9385 exceeds compiled max_seq=8192");
+        assert!(
+            at_cap.contains("9385 tokens") && at_cap.contains("8192 tokens"),
+            "{at_cap}"
+        );
+        assert!(
+            !at_cap.contains("Raise"),
+            "raising ctx_size can't help at the cap: {at_cap}"
+        );
+        let below = humanize_inference_error("prompt length 3000 exceeds compiled max_seq=2048");
+        assert!(below.contains("Raise \"Context size\""), "{below}");
+        // Line continuations must not leave runs of spaces in user-facing text.
+        for msg in [at_cap, below, humanize_inference_error("weight not found: x")] {
+            assert!(!msg.contains("  "), "double space in {msg:?}");
+        }
+    }
+
+    #[test]
+    fn per_family_max_seq_respects_the_cap() {
+        let mut cfg = LlmConfig {
+            ctx_size: Some(16384),
+            ..LlmConfig::default()
+        };
+        assert_eq!(resolved_max_seq(&cfg), RLX_MAX_SEQ_CAP);
+        cfg.rlx_max_seq = 100_000;
+        assert_eq!(mistral_vl_max_seq(&cfg), RLX_MAX_SEQ_CAP);
+        assert_eq!(qwen3_vl_max_seq(&cfg), 4096);
     }
 }

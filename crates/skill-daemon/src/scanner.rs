@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::ops::ControlFlow;
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -142,30 +143,21 @@ pub(crate) fn kind_from_advertisement(adv: &Advertisement) -> Option<&'static st
 /// has to run to completion and pick by id.
 pub(crate) fn fresh_ids_for_service_kind(state: &AppState, kind: &str) -> Vec<String> {
     let now = now_unix_secs();
-    // One lock at a time: every other site takes these in this order, and
-    // holding both at once is how that stops being true by accident.
-    let candidates: Vec<String> = match state.ble_service_kinds.lock() {
-        Ok(kinds) => kinds
-            .iter()
-            .filter(|(_, k)| **k == kind)
-            .map(|(id, _)| id.clone())
-            .collect(),
-        Err(_) => return Vec::new(),
-    };
-    if candidates.is_empty() {
-        return Vec::new();
-    }
-    let Ok(cache) = state.ble_device_cache.lock() else {
-        return Vec::new();
-    };
-    candidates
-        .into_iter()
-        .filter(|id| {
-            cache
-                .get(id)
-                .is_some_and(|(_, _, last_seen)| now.saturating_sub(*last_seen) <= SIGHTING_FRESH_SECS)
-        })
-        .collect()
+    let mut fresh = Vec::new();
+    state.ble_service_kinds.scan::<String, ()>(.., |id, k| {
+        if *k == kind
+            && state
+                .ble_device_cache
+                .read(id, |_, (_, _, last_seen)| {
+                    now.saturating_sub(*last_seen) <= SIGHTING_FRESH_SECS
+                })
+                .unwrap_or(false)
+        {
+            fresh.push(id.clone());
+        }
+        ControlFlow::Continue(())
+    });
+    fresh
 }
 
 /// Fallback display name for a device recognised only by its service UUID and
@@ -191,9 +183,14 @@ pub(crate) fn is_known_eeg_device(state: &AppState, dev: &DiscoveredDeviceRespon
     }
     state
         .ble_service_kinds
-        .lock()
-        .map(|kinds| kinds.keys().any(|id| ble_id::same_device(id, &dev.id)))
-        .unwrap_or(false)
+        .scan::<String, ()>(.., |id, _| {
+            if ble_id::same_device(id, &dev.id) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        })
+        .is_some()
 }
 
 /// Return `true` when a discovered device is eligible for automatic pairing.
@@ -218,15 +215,12 @@ pub(crate) fn is_auto_pair_eligible(dev: &skill_daemon_common::DiscoveredDeviceR
 /// name recall).
 pub(crate) fn read_ble_cache(state: &AppState) -> Vec<DiscoveredDeviceResponse> {
     let now = now_unix_secs();
-    let service_kinds = state.ble_service_kinds.lock().map(|g| g.clone()).unwrap_or_default();
-    let Ok(cache) = state.ble_device_cache.lock() else {
-        return Vec::new();
-    };
-    cache
-        .iter()
+    state
+        .ble_device_cache
+        .range_cloned::<String, _>(..)
         .filter_map(|(id, (name_opt, rssi, last_seen))| {
             // Must be recognisable one way or the other.
-            let name = match (name_opt.as_deref(), service_kinds.get(id.as_str())) {
+            let name = match (name_opt.as_deref(), state.ble_service_kinds.get_copied(&id)) {
                 // A name we recognise — or any name at all on a device the
                 // advertised service already identified, since that one may
                 // simply have been renamed by its owner.
@@ -236,14 +230,14 @@ pub(crate) fn read_ble_cache(state: &AppState) -> Vec<DiscoveredDeviceResponse> 
                 _ => return None,
             };
             // Suppress stale entries; they stay in the cache for name recall.
-            if now.saturating_sub(*last_seen) > SIGHTING_FRESH_SECS {
+            if now.saturating_sub(last_seen) > SIGHTING_FRESH_SECS {
                 return None;
             }
             Some(DiscoveredDeviceResponse {
-                id: id.clone(),
+                id,
                 name,
-                last_seen: *last_seen,
-                last_rssi: *rssi,
+                last_seen,
+                last_rssi: rssi,
                 is_paired: false,
                 is_preferred: false,
                 transport: "ble".to_string(),
@@ -341,24 +335,26 @@ async fn run_ble_listener_task(state: AppState) {
                     // its service in the advertisement.  Remembered per id so
                     // discovery and connect routing can both use it.
                     if let Some(kind) = kind_from_advertisement(&sighting.advertisement) {
-                        if let Ok(mut kinds) = state.ble_service_kinds.lock() {
-                            if kinds.insert(key.clone(), kind).is_none() {
-                                info!(id = %key, kind, "BLE device identified by service UUID");
-                            }
+                        if let Ok(None) = state.ble_service_kinds.insert(key.clone(), kind) {
+                            info!(id = %key, kind, "BLE device identified by service UUID");
                         }
                     }
 
-                    if let Ok(mut cache) = state.ble_device_cache.lock() {
-                        let entry = cache.entry(key).or_insert((None, 0i16, 0u64));
-                        // Never overwrite a known name with None.
-                        if name.is_some() {
-                            entry.0 = name;
-                        }
-                        if rssi != 0 {
-                            entry.1 = rssi;
-                        }
-                        entry.2 = now_unix_secs();
-                    }
+                    let now = now_unix_secs();
+                    let _ = state.ble_device_cache.update_or_insert(
+                        key,
+                        (name, rssi, now),
+                        |_, entry, (name, rssi, now)| {
+                            // Never overwrite a known name with None.
+                            if name.is_some() {
+                                entry.0 = name;
+                            }
+                            if rssi != 0 {
+                                entry.1 = rssi;
+                            }
+                            entry.2 = now;
+                        },
+                    );
                 }
             }
         }
@@ -1132,9 +1128,8 @@ mod tests {
 
         state
             .ble_service_kinds
-            .lock()
-            .unwrap()
-            .insert("ble:1234-abcd".to_string(), "vital");
+            .insert("ble:1234-abcd".to_string(), "vital")
+            .unwrap();
 
         // Case-insensitive on the id, like every other comparison site.
         assert!(is_known_eeg_device(&state, &renamed));
@@ -1156,23 +1151,29 @@ mod tests {
         let now = now_unix_secs();
 
         {
-            let mut cache = state.ble_device_cache.lock().unwrap();
-            cache.insert("ble:fresh".to_string(), (Some("Vital Neuro".into()), -50, now));
-            cache.insert(
-                "ble:stale".to_string(),
-                (
-                    Some("Vital Neuro".into()),
-                    -50,
-                    now.saturating_sub(SIGHTING_FRESH_SECS + 1),
-                ),
-            );
-            cache.insert("ble:other".to_string(), (Some("Something".into()), -50, now));
+            let cache = &state.ble_device_cache;
+            cache
+                .insert("ble:fresh".to_string(), (Some("Vital Neuro".into()), -50, now))
+                .unwrap();
+            cache
+                .insert(
+                    "ble:stale".to_string(),
+                    (
+                        Some("Vital Neuro".into()),
+                        -50,
+                        now.saturating_sub(SIGHTING_FRESH_SECS + 1),
+                    ),
+                )
+                .unwrap();
+            cache
+                .insert("ble:other".to_string(), (Some("Something".into()), -50, now))
+                .unwrap();
             // In the kinds map but never seen advertising: no cache entry.
-            let mut kinds = state.ble_service_kinds.lock().unwrap();
-            kinds.insert("ble:fresh".to_string(), "vital");
-            kinds.insert("ble:stale".to_string(), "vital");
-            kinds.insert("ble:other".to_string(), "something-else");
-            kinds.insert("ble:unseen".to_string(), "vital");
+            let kinds = &state.ble_service_kinds;
+            kinds.insert("ble:fresh".to_string(), "vital").unwrap();
+            kinds.insert("ble:stale".to_string(), "vital").unwrap();
+            kinds.insert("ble:other".to_string(), "something-else").unwrap();
+            kinds.insert("ble:unseen".to_string(), "vital").unwrap();
         }
 
         assert_eq!(
@@ -1302,17 +1303,21 @@ mod tests {
         let now = now_unix_secs();
 
         {
-            let mut cache = state.ble_device_cache.lock().unwrap();
+            let cache = &state.ble_device_cache;
             // Renamed by its owner: the name identifies nothing.
-            cache.insert("ble:renamed".to_string(), (Some("Bob".to_string()), -50, now));
+            cache
+                .insert("ble:renamed".to_string(), (Some("Bob".to_string()), -50, now))
+                .unwrap();
             // Advertising no name at all.
-            cache.insert("ble:nameless".to_string(), (None, -55, now));
+            cache.insert("ble:nameless".to_string(), (None, -55, now)).unwrap();
             // Same, but never seen advertising a known service.
-            cache.insert("ble:other".to_string(), (Some("Bob 2".to_string()), -60, now));
+            cache
+                .insert("ble:other".to_string(), (Some("Bob 2".to_string()), -60, now))
+                .unwrap();
 
-            let mut kinds = state.ble_service_kinds.lock().unwrap();
-            kinds.insert("ble:renamed".to_string(), "vital");
-            kinds.insert("ble:nameless".to_string(), "vital");
+            let kinds = &state.ble_service_kinds;
+            kinds.insert("ble:renamed".to_string(), "vital").unwrap();
+            kinds.insert("ble:nameless".to_string(), "vital").unwrap();
         }
 
         let found = read_ble_cache(&state);
@@ -1370,14 +1375,20 @@ mod tests {
         let now = now_unix_secs();
 
         {
-            let mut cache = state.ble_device_cache.lock().unwrap();
-            cache.insert("ble:muse".to_string(), (Some("Muse-AB12".to_string()), -48, now));
-            cache.insert(
-                "ble:stale".to_string(),
-                (Some("Muse-OLD".to_string()), -70, now.saturating_sub(121)),
-            );
-            cache.insert("ble:jbl".to_string(), (Some("JBL Flip 5".to_string()), -30, now));
-            cache.insert("ble:noname".to_string(), (None, -40, now));
+            let cache = &state.ble_device_cache;
+            cache
+                .insert("ble:muse".to_string(), (Some("Muse-AB12".to_string()), -48, now))
+                .unwrap();
+            cache
+                .insert(
+                    "ble:stale".to_string(),
+                    (Some("Muse-OLD".to_string()), -70, now.saturating_sub(121)),
+                )
+                .unwrap();
+            cache
+                .insert("ble:jbl".to_string(), (Some("JBL Flip 5".to_string()), -30, now))
+                .unwrap();
+            cache.insert("ble:noname".to_string(), (None, -40, now)).unwrap();
         }
 
         let found = read_ble_cache(&state);
@@ -1407,9 +1418,8 @@ mod tests {
         let state = AppState::new_for_tests("test".to_string(), td.path().to_path_buf());
         state
             .ble_device_cache
-            .lock()
-            .unwrap()
-            .insert(key.clone(), (Some("Muse-AB12".to_string()), -48, now_unix_secs()));
+            .insert(key.clone(), (Some("Muse-AB12".to_string()), -48, now_unix_secs()))
+            .unwrap();
 
         let found = read_ble_cache(&state);
         assert_eq!(found.len(), 1);
@@ -1423,7 +1433,7 @@ mod tests {
         let now = now_unix_secs();
 
         {
-            let mut cache = state.ble_device_cache.lock().unwrap();
+            let cache = &state.ble_device_cache;
             for i in 0..10_000 {
                 let id = format!("ble:{i}");
                 let name = if i % 2 == 0 {
@@ -1431,7 +1441,7 @@ mod tests {
                 } else {
                     Some(format!("Speaker-{i:04}"))
                 };
-                cache.insert(id, (name, -50, now));
+                cache.insert(id, (name, -50, now)).unwrap();
             }
         }
 

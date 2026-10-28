@@ -38,6 +38,8 @@ pub(crate) struct EpochMsg {
     pub timestamp: i64,
     pub device_name: Option<String>,
     pub channel_names: Vec<String>,
+    /// Sample rate of `samples` (the embedding rate after resampling, not the
+    /// device's native rate).
     #[allow(dead_code)]
     pub sample_rate: f32,
     /// Band snapshot at the moment this epoch was emitted.
@@ -56,7 +58,6 @@ pub struct EpochAccumulator {
     max_buf_samples: usize,
     device_name: Option<String>,
     channel_names: Vec<String>,
-    sample_rate: f32,
     latest_bands: Option<skill_eeg::eeg_bands::BandSnapshot>,
     pub(crate) tx: mpsc::SyncSender<EpochMsg>,
 }
@@ -83,7 +84,6 @@ impl EpochAccumulator {
             max_buf_samples: native_epoch * 4,
             device_name: None,
             channel_names,
-            sample_rate,
             latest_bands: None,
             tx,
         }
@@ -173,7 +173,11 @@ impl EpochAccumulator {
             timestamp: skill_exg::yyyymmddhhmmss_utc(),
             device_name: self.device_name.clone(),
             channel_names: self.channel_names.clone(),
-            sample_rate: self.sample_rate,
+            // The rate of `epoch` as sent — it was resampled to
+            // EMBEDDING_EPOCH_SAMPLES above. This used to be the device's
+            // native rate, so a 250/500 Hz device told the encoder the wrong
+            // rate for 256 Hz data.
+            sample_rate: EMBEDDING_EPOCH_SAMPLES as f32 / EMBEDDING_EPOCH_SECS,
             band_snapshot: self.latest_bands.clone(),
         };
         if let Err(e) = self.tx.try_send(msg) {
@@ -207,4 +211,22 @@ fn resample_linear(src: &[f32], target_len: usize) -> Vec<f32> {
             src[lo] * (1.0 - frac) + src[hi] * frac
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn epoch_reports_the_rate_it_was_resampled_to() {
+        let (tx, rx) = mpsc::sync_channel(4);
+        let mut acc = EpochAccumulator::new(tx, 2, 500.0, vec!["C3".into(), "C4".into()]);
+        for _ in 0..(500 * 6) {
+            acc.push(0, &[1.0]);
+            acc.push(1, &[2.0]);
+        }
+        let msg = rx.try_recv().expect("an epoch after 6 s at 500 Hz");
+        assert_eq!(msg.samples[0].len(), EMBEDDING_EPOCH_SAMPLES);
+        assert_eq!(msg.sample_rate, EMBEDDING_EPOCH_SAMPLES as f32 / EMBEDDING_EPOCH_SECS);
+    }
 }

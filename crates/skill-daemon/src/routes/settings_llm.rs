@@ -13,6 +13,19 @@ use crate::{
 
 crate::settings_struct_get!(skill_settings::LlmConfig, get_llm_config => llm);
 
+/// Points the LLM's `skill` tool at this daemon.
+///
+/// Port and token are runtime-only (never persisted), so every path that hands
+/// a tool config to the LLM must call this. Without it the port stays 0 and the
+/// tool answers "tool disabled in settings"; without the token the daemon's
+/// command endpoint answers 401. The token is shared by handle, so a default
+/// token refresh reaches a running LLM.
+#[cfg(feature = "llm")]
+pub(crate) fn wire_skill_api(tools: &mut skill_tools::LlmToolConfig, state: &AppState) {
+    tools.skill_api_port = crate::handlers::daemon_addr().port();
+    tools.skill_api_token = skill_tools::SkillApiToken::shared(state.auth_token.clone());
+}
+
 pub(crate) async fn set_llm_config(
     State(state): State<AppState>,
     Json(config): Json<skill_settings::LlmConfig>,
@@ -49,9 +62,8 @@ pub(crate) async fn set_llm_config(
             // Hot-patch allowed tools on the running server.
             if let Ok(guard) = state.llm_state_cell.lock() {
                 if let Some(server) = guard.clone() {
-                    let prev_port = server.allowed_tools.lock().map(|t| t.skill_api_port).unwrap_or(18445);
                     let mut new_tools = config.tools.clone();
-                    new_tools.skill_api_port = prev_port;
+                    wire_skill_api(&mut new_tools, &state);
                     if !location_enabled {
                         new_tools.location = false;
                     }

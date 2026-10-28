@@ -451,9 +451,10 @@ where
                 if let Some(garbled) = tools::detect_garbled_tool_call(&assistant_text) {
                     self_heal_count += 1;
                     log::info!(
-                        "[tool-orchestration] garbled tool call detected (attempt {}/{}), requesting re-emit",
+                        "[tool-orchestration] garbled tool call detected (attempt {}/{}), requesting re-emit: {:?}",
                         self_heal_count,
-                        MAX_SELF_HEAL_ATTEMPTS
+                        MAX_SELF_HEAL_ATTEMPTS,
+                        garbled.chars().take(300).collect::<String>()
                     );
 
                     // Push the failed assistant message so the model sees what it emitted.
@@ -479,6 +480,20 @@ where
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
                     return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
                 }
+            }
+            // Still an unparseable tool call after the self-heal retries:
+            // stripping it leaves nothing, and an empty bubble reads as a hang.
+            if cleaned.trim().is_empty() && tools::detect_garbled_tool_call(&assistant_text).is_some() {
+                log::warn!(
+                    "[tool-orchestration] tool call still unparseable after {self_heal_count} re-emit(s) — giving up"
+                );
+                return Ok((
+                    UNPARSEABLE_TOOL_CALL_REPLY.to_string(),
+                    finish_reason,
+                    prompt_tokens,
+                    completion_tokens,
+                    n_ctx,
+                ));
             }
 
             // Strict query mode: refuse if we have no tool-backed evidence yet.
@@ -801,6 +816,11 @@ fn summarize_tool_result(content: &str) -> String {
         }
     }
 }
+
+/// Reply when the model's tool call can't be parsed even after re-emits.
+const UNPARSEABLE_TOOL_CALL_REPLY: &str =
+    "I tried to look that up but couldn't form a valid tool call. Please try asking again, \
+     perhaps phrased differently.";
 
 // ── Validation ────────────────────────────────────────────────────────────────
 

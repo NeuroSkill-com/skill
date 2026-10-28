@@ -29,8 +29,9 @@ use crate::{
         settings_llm_chat, settings_llm_runtime,
         settings_lsl::{
             get_lsl_config, get_lsl_idle_timeout, lsl_iroh_start, lsl_iroh_status, lsl_iroh_stop, lsl_pair_stream,
-            lsl_unpair_stream, lsl_virtual_source_running, lsl_virtual_source_start, lsl_virtual_source_stop,
-            set_lsl_auto_connect, set_lsl_idle_timeout,
+            lsl_unpair_stream, lsl_virtual_source_get_config, lsl_virtual_source_running,
+            lsl_virtual_source_set_config, lsl_virtual_source_start, lsl_virtual_source_stop, set_lsl_auto_connect,
+            set_lsl_idle_timeout,
         },
         settings_screenshots, settings_ui,
     },
@@ -603,6 +604,10 @@ fn lsl_routes() -> Router<AppState> {
         .route("/lsl/virtual-source/start", post(lsl_virtual_source_start))
         .route("/lsl/virtual-source/stop", post(lsl_virtual_source_stop))
         .route("/lsl/virtual-source/running", get(lsl_virtual_source_running))
+        .route(
+            "/lsl/virtual-source/config",
+            get(lsl_virtual_source_get_config).post(lsl_virtual_source_set_config),
+        )
         .route("/lsl/iroh/start", post(lsl_iroh_start))
         .route("/lsl/iroh/status", get(lsl_iroh_status))
         .route("/lsl/iroh/stop", post(lsl_iroh_stop))
@@ -2388,12 +2393,12 @@ mod tests {
     #[tokio::test]
     async fn llm_download_start_already_downloading_short_circuits() {
         let (_td, st) = mk_state();
-        if let Ok(mut m) = st.llm_downloads.lock() {
-            m.insert(
+        st.llm_downloads
+            .insert(
                 "model.gguf".into(),
                 std::sync::Arc::new(std::sync::Mutex::new(skill_llm::catalog::DownloadProgress::default())),
-            );
-        }
+            )
+            .unwrap();
 
         let Json(v) = llm_download_start(
             State(st),
@@ -2410,9 +2415,7 @@ mod tests {
     async fn llm_pause_cancel_update_live_flags() {
         let (_td, st) = mk_state();
         let progress = std::sync::Arc::new(std::sync::Mutex::new(skill_llm::catalog::DownloadProgress::default()));
-        if let Ok(mut m) = st.llm_downloads.lock() {
-            m.insert("model.gguf".into(), progress.clone());
-        }
+        st.llm_downloads.insert("model.gguf".into(), progress.clone()).unwrap();
 
         let _ = llm_download_pause(
             State(st.clone()),

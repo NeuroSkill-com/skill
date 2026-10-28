@@ -25,7 +25,7 @@
 
 pub mod source;
 
-use std::collections::BTreeMap;
+use bbtree::unsync::BBTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -265,8 +265,8 @@ pub fn export(
 
     let mut exported = Vec::new();
     let mut skipped = Vec::new();
-    let mut runs: BTreeMap<String, u32> = BTreeMap::new();
-    let mut scans: BTreeMap<String, Vec<ScanEntry>> = BTreeMap::new();
+    let mut runs: BBTreeMap<String, u32> = BBTreeMap::new();
+    let mut scans: BBTreeMap<String, Vec<ScanEntry>> = BBTreeMap::new();
     let total = recordings.len();
 
     for (i, rec) in recordings.iter().enumerate() {

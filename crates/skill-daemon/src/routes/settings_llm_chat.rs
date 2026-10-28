@@ -282,6 +282,53 @@ pub(crate) async fn chat_save_tool_calls_impl(
     Json(serde_json::json!({"ok": true}))
 }
 
+/// Device problems to surface in this chat reply: model context for the
+/// prompt, and the notice appended to the answer.
+///
+/// The answer is never withheld: problems are explained alongside it. The
+/// notice gives full advice the first time a set of problems is seen and a
+/// one-line reminder while it stays the same (a large cap with a dead
+/// electrode shouldn't repeat the same paragraph every turn).
+pub(crate) struct ChatDeviceNotice {
+    pub(crate) prompt_context: String,
+    pub(crate) notice: String,
+}
+
+pub(crate) fn chat_device_notice(state: &AppState) -> Option<ChatDeviceNotice> {
+    let health = state.device_health.lock().ok()?.clone();
+    if !health.connected || health.is_ok() {
+        return None;
+    }
+    let fingerprint = health.fingerprint();
+    let detailed = match state.device_health_notified.lock() {
+        Ok(mut last) => {
+            let fresh = *last != fingerprint;
+            *last = fingerprint;
+            fresh
+        }
+        Err(_) => true,
+    };
+    Some(ChatDeviceNotice {
+        prompt_context: health.prompt_context()?,
+        notice: health.notice_markdown(detailed)?,
+    })
+}
+
+/// Put the device context in front of the conversation as a system message
+/// (merged into an existing leading one).
+pub(crate) fn with_device_context(mut messages: Vec<serde_json::Value>, context: &str) -> Vec<serde_json::Value> {
+    let leading_system = messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system");
+    if leading_system {
+        if let Some(content) = messages[0].get("content").and_then(|c| c.as_str()) {
+            let merged = format!("{content}\n\n{context}");
+            messages[0]["content"] = serde_json::Value::String(merged);
+            return messages;
+        }
+    }
+    messages.insert(0, serde_json::json!({"role": "system", "content": context}));
+    messages
+}
+
 pub(crate) async fn llm_chat_completions_impl(
     State(state): State<AppState>,
     Json(req): Json<ChatCompletionsRequest>,
@@ -321,6 +368,19 @@ pub(crate) async fn llm_chat_completions_impl(
         };
         let params: skill_llm::GenParams = serde_json::from_value(params_val).unwrap_or_default();
 
+        // Device problems ride along with the answer. Skipped for the UI's
+        // `max_tokens: 0` warm pass, which produces no reply to attach to.
+        let device_notice = if params.max_tokens == 0 {
+            None
+        } else {
+            chat_device_notice(&state)
+        };
+        let messages = match &device_notice {
+            Some(n) => with_device_context(req.messages, &n.prompt_context),
+            None => req.messages,
+        };
+        let notice_text = device_notice.map(|n| format!("\n\n---\n{}", n.notice));
+
         let chat_id = format!(
             "chatcmpl-{}",
             std::time::SystemTime::now()
@@ -340,7 +400,7 @@ pub(crate) async fn llm_chat_completions_impl(
                 let mut buf = String::new();
 
                 let result = skill_llm::run_chat_with_builtin_tools(
-                    &srv, req.messages, params, Vec::new(),
+                    &srv, messages, params, Vec::new(),
                     |delta| {
                         // Split the delta into reasoning/content, holding back a
                         // partial tag or multi-byte char (panic-free — see
@@ -405,6 +465,16 @@ pub(crate) async fn llm_chat_completions_impl(
                     let _ = tx.try_send(format!("data: {}\n\n", chunk));
                 }
 
+                // Device notice, as one more content delta.
+                if let Some(text) = &notice_text {
+                    let chunk = serde_json::json!({
+                        "id": &chat_id2,
+                        "object": "chat.completion.chunk",
+                        "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": serde_json::Value::Null}],
+                    });
+                    let _ = tx.try_send(format!("data: {}\n\n", chunk));
+                }
+
                 // Send final chunk with finish_reason and usage
                 match result {
                     Ok((_text, finish_reason, prompt_tokens, completion_tokens, _n_ctx)) => {
@@ -446,8 +516,7 @@ pub(crate) async fn llm_chat_completions_impl(
 
         // Non-streaming response
         let result =
-            skill_llm::run_chat_with_builtin_tools(&srv, req.messages, params, Vec::new(), |_delta| {}, |_evt| {})
-                .await;
+            skill_llm::run_chat_with_builtin_tools(&srv, messages, params, Vec::new(), |_delta| {}, |_evt| {}).await;
 
         return match result {
             Ok((text, finish_reason, prompt_tokens, completion_tokens, _n_ctx)) => Json(serde_json::json!({
@@ -455,7 +524,7 @@ pub(crate) async fn llm_chat_completions_impl(
                 "object": "chat.completion",
                 "choices": [{
                     "index": 0,
-                    "message": { "role": "assistant", "content": text },
+                    "message": { "role": "assistant", "content": text + notice_text.as_deref().unwrap_or("") },
                     "finish_reason": finish_reason,
                 }],
                 "usage": {
@@ -727,5 +796,82 @@ mod split_think_tests {
         let (r, c) = run(&["<thi", "nk>推", "理内容", "</thin", "k>结果"]);
         assert_eq!(r, "推理内容");
         assert_eq!(c, "结果");
+    }
+}
+
+#[cfg(test)]
+mod device_notice_tests {
+    use super::*;
+    use skill_daemon_common::device_health::{DeviceHealth, HealthIssue, Severity};
+
+    fn state_with(issues: Vec<HealthIssue>) -> (tempfile::TempDir, AppState) {
+        let td = tempfile::tempdir().unwrap();
+        let st = AppState::new_for_tests("t".into(), td.path().to_path_buf());
+        *st.device_health.lock().unwrap() = DeviceHealth {
+            connected: true,
+            device_name: Some("MuseS".into()),
+            issues,
+            usable_channels: vec!["TP9".into(), "AF8".into(), "TP10".into()],
+            total_channels: 4,
+            ..Default::default()
+        };
+        (td, st)
+    }
+
+    fn no_signal_af7() -> HealthIssue {
+        HealthIssue {
+            code: "no_signal".into(),
+            severity: Severity::Warning,
+            message: "No signal on AF7.".into(),
+            advice: "Moisten the forehead sensor.".into(),
+            channels: vec!["AF7".into()],
+        }
+    }
+
+    #[test]
+    fn healthy_or_disconnected_device_adds_nothing() {
+        let (_td, st) = state_with(vec![]);
+        assert!(chat_device_notice(&st).is_none());
+        st.device_health.lock().unwrap().connected = false;
+        assert!(chat_device_notice(&st).is_none());
+    }
+
+    #[test]
+    fn full_advice_first_then_a_short_reminder_until_problems_change() {
+        let (_td, st) = state_with(vec![no_signal_af7()]);
+        let first = chat_device_notice(&st).unwrap();
+        assert!(first.notice.contains("Moisten the forehead sensor"), "{}", first.notice);
+        assert!(first.notice.contains("3 of 4 electrodes"), "{}", first.notice);
+        assert!(first.prompt_context.contains("Answer the user's question fully"));
+
+        let again = chat_device_notice(&st).unwrap();
+        assert!(again.notice.contains("No signal on AF7"));
+        assert!(!again.notice.contains("Moisten"), "reminder only: {}", again.notice);
+
+        st.device_health.lock().unwrap().issues.push(HealthIssue {
+            code: "battery_low".into(),
+            severity: Severity::Warning,
+            message: "Battery is low (15%).".into(),
+            advice: "Charge it soon.".into(),
+            channels: vec![],
+        });
+        let changed = chat_device_notice(&st).unwrap();
+        assert!(changed.notice.contains("Charge it soon"), "{}", changed.notice);
+    }
+
+    #[test]
+    fn device_context_merges_into_a_leading_system_message() {
+        let msgs = vec![
+            serde_json::json!({"role": "system", "content": "You are helpful."}),
+            serde_json::json!({"role": "user", "content": "hi"}),
+        ];
+        let out = with_device_context(msgs, "EEG device status: …");
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["content"], "You are helpful.\n\nEEG device status: …");
+
+        let out = with_device_context(vec![serde_json::json!({"role": "user", "content": "hi"})], "ctx");
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["role"], "system");
+        assert_eq!(out[1]["role"], "user");
     }
 }

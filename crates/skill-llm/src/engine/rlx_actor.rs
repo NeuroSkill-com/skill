@@ -90,8 +90,21 @@ pub(super) fn run_actor(
 
     let supports_vision = runner.supports_multimodal();
     vision_flag.store(supports_vision, Ordering::Relaxed);
-    // No fixed n_ctx in RLX — report config-requested value (or 0).
-    n_ctx_flag.store(config.ctx_size.unwrap_or(0) as usize, Ordering::Relaxed);
+    // Report the context the runner was compiled for: `ctx_size` is only a
+    // request (the auto ladder picks 16384; runners cap at RLX_MAX_SEQ_CAP and
+    // the memory plan may go lower). Families skill doesn't size fall back to it.
+    let n_ctx = runner
+        .max_seq()
+        .unwrap_or_else(|| config.ctx_size.unwrap_or(0) as usize);
+    n_ctx_flag.store(n_ctx, Ordering::Relaxed);
+    if let Some(requested) = config.ctx_size.filter(|&c| c as usize != n_ctx) {
+        llm_info!(
+            &app,
+            &log_buf,
+            log_file,
+            "[rlx-only actor] context: compiled for {n_ctx} tokens (requested {requested})"
+        );
+    }
 
     let family = runner.family();
     let chat_template = resolve_chat_template(&model_path, family, &app, &log_buf, log_file);

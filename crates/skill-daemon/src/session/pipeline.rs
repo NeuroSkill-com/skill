@@ -51,6 +51,9 @@ impl EpochStore {
 
 // ── Session pipeline ──────────────────────────────────────────────────────────
 
+/// Refresh the bad-electrode mask every this many samples (~8×/s at 256 Hz).
+const QUALITY_MASK_EVERY: u32 = 32;
+
 pub(crate) struct Pipeline {
     pub(crate) writer: SessionWriter,
     pub(crate) csv_path: PathBuf,
@@ -67,6 +70,8 @@ pub(crate) struct Pipeline {
     pub(crate) device_name: String,
     pub(crate) total_samples: u64,
     flush_counter: u64,
+    /// Samples since the bad-electrode mask was last refreshed.
+    quality_mask_counter: u32,
     pub(crate) firmware_version: Option<String>,
     pub(crate) serial_number: Option<String>,
     pub(crate) fnirs_channel_names: Vec<String>,
@@ -107,6 +112,7 @@ impl Pipeline {
         events_tx: broadcast::Sender<EventEnvelope>,
         hooks: Vec<HookRule>,
         text_embedder: crate::text_embedder::SharedTextEmbedder,
+        exg_status: crate::embed::SharedExgStatus,
     ) -> anyhow::Result<Self> {
         let day_dir = utc_date_dir(skill_dir);
         let start_utc = unix_secs();
@@ -159,8 +165,14 @@ impl Pipeline {
         let (embed_worker_opt, acc) = if skip_embed {
             (None, None)
         } else {
-            let worker =
-                EmbedWorkerHandle::spawn(skill_dir.to_path_buf(), model_config, events_tx, hooks, text_embedder);
+            let worker = EmbedWorkerHandle::spawn(
+                skill_dir.to_path_buf(),
+                model_config,
+                events_tx,
+                hooks,
+                text_embedder,
+                exg_status,
+            );
             let mut acc =
                 EpochAccumulator::new(worker.sender(), eeg_channels, sample_rate as f32, channel_names.clone());
             acc.set_device_name(device_name.clone());
@@ -191,6 +203,7 @@ impl Pipeline {
             device_name,
             total_samples: 0,
             flush_counter: 0,
+            quality_mask_counter: 0,
             firmware_version: None,
             serial_number: None,
             fnirs_channel_names: Vec::new(),
@@ -235,24 +248,34 @@ impl Pipeline {
         for (ch, &v) in channels.iter().enumerate() {
             self.quality.push(ch, &[v]);
         }
+        // ~8×/s: keep bad electrodes (no signal / poor contact) out of the
+        // brain-state metrics. They are still recorded and still listed.
+        self.quality_mask_counter += 1;
+        if self.quality_mask_counter >= QUALITY_MASK_EVERY {
+            self.quality_mask_counter = 0;
+            let mask: Vec<bool> = self.quality.all_qualities().iter().map(|q| q.is_bad()).collect();
+            self.band_analyzer.set_excluded(&mask);
+        }
 
         // 5. Artifact detector (on raw samples — blink detection needs pre-filter).
         for (ch, &v) in channels.iter().enumerate() {
             self.artifacts.push(ch, &[v]);
         }
 
-        // 6. Band analyzer (on filtered samples when available, else raw).
+        // 6. Band analyzer — filtered samples only.
+        //
+        // `filter.push` returns true when it has output: every sample when
+        // the filter is a passthrough, once per hop when it is active. There
+        // used to be an `else` that pushed the RAW sample whenever the filter
+        // had no output yet — i.e. on almost every sample with the default
+        // (active) filter — and the filtered copy of the same data followed at
+        // the next hop. Mains hum and muscle noise reached every brain-state
+        // metric: a worn Muse read "high gamma dominant, SNR −5 dB".
         let mut band_fired = false;
         if filter_fired {
             for ch in 0..channels.len() {
                 let drained = self.filter.drain(ch);
                 if !drained.is_empty() && self.band_analyzer.push(ch, &drained) {
-                    band_fired = true;
-                }
-            }
-        } else {
-            for (ch, &v) in channels.iter().enumerate() {
-                if self.band_analyzer.push(ch, &[v]) {
                     band_fired = true;
                 }
             }
@@ -460,6 +483,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         );
         assert!(result.is_ok());
         let pipe = result.unwrap();
@@ -489,6 +513,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
 
@@ -496,6 +521,52 @@ mod tests {
             pipe.push_eeg(&[1.0, 2.0, 3.0, 4.0], i as f64 / 256.0);
         }
         assert_eq!(pipe.total_samples, 100);
+    }
+
+    /// Mains hum must not reach the band analysis: with the default filter
+    /// (50 Hz low-pass + 60 Hz notch), 30 µV of alpha under 100 µV of 60 Hz
+    /// hum reads as alpha. Before the fix the raw samples leaked in and every
+    /// channel read high-gamma dominant.
+    #[test]
+    fn mains_hum_does_not_reach_band_metrics() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings_path = skill_settings::settings_path(dir.path());
+        if let Some(parent) = settings_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let settings = skill_settings::UserSettings::default();
+        let _ = std::fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap());
+
+        let (tx, _rx) = broadcast::channel(16);
+        let mut pipe = Pipeline::open(
+            dir.path(),
+            4,
+            256.0,
+            vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()],
+            "TestDevice".into(),
+            tx,
+            Vec::new(),
+            crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
+        )
+        .unwrap();
+
+        let tau = 2.0 * std::f64::consts::PI;
+        let mut last = None;
+        for i in 0..(256 * 8) {
+            let t = i as f64 / 256.0;
+            let v = 30.0 * (tau * 10.0 * t).sin() + 100.0 * (tau * 60.0 * t).sin();
+            if let Some(b) = pipe.push_eeg(&[v, v, v, v], t) {
+                last = Some(b);
+            }
+        }
+        let bands = last.expect("band snapshot");
+        for ch in bands["channels"].as_array().unwrap() {
+            let alpha = ch["rel_alpha"].as_f64().unwrap();
+            let high_gamma = ch["rel_high_gamma"].as_f64().unwrap();
+            assert!(alpha > 0.5, "alpha should dominate after filtering: {ch}");
+            assert!(high_gamma < 0.1, "mains leaked into high gamma: {ch}");
+        }
     }
 
     #[test]
@@ -518,6 +589,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
 
@@ -557,6 +629,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
 
@@ -587,6 +660,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
 
@@ -649,6 +723,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
 
@@ -709,6 +784,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
         pipe.device_kind = "test".into();
@@ -750,6 +826,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
         pipe.device_kind = "muse".into();
@@ -819,6 +896,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
         pipe.device_kind = "muse".into();
@@ -870,6 +948,7 @@ mod tests {
             tx,
             Vec::new(),
             crate::text_embedder::SharedTextEmbedder::new_noop(),
+            Default::default(),
         )
         .unwrap();
 

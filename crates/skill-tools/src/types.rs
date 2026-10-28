@@ -33,6 +33,33 @@ fn default_intelligent_selection_top_n() -> usize {
 
 // ── Tool configuration ────────────────────────────────────────────────────────
 
+/// The daemon's bearer token, shared by handle so a token refresh reaches a
+/// running LLM without re-wiring its tool config. `Debug` never prints it.
+#[derive(Clone, Default)]
+pub struct SkillApiToken(std::sync::Arc<std::sync::Mutex<String>>);
+
+impl SkillApiToken {
+    pub fn shared(token: std::sync::Arc<std::sync::Mutex<String>>) -> Self {
+        Self(token)
+    }
+
+    /// The current token, or `None` when unset.
+    pub fn get(&self) -> Option<String> {
+        let t = self.0.lock().map(|g| g.trim().to_string()).unwrap_or_default();
+        (!t.is_empty()).then_some(t)
+    }
+}
+
+impl std::fmt::Debug for SkillApiToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.get().is_some() {
+            "SkillApiToken(<set>)"
+        } else {
+            "SkillApiToken(<unset>)"
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LlmToolConfig {
@@ -80,10 +107,15 @@ pub struct LlmToolConfig {
     #[serde(default = "default_true")]
     pub skill_api: bool,
 
-    /// The local WebSocket/HTTP port the Skill server is listening on.
+    /// The local HTTP port the Skill API (the daemon) is listening on.
     /// Set at runtime; not persisted.  Defaults to 0 (disabled).
     #[serde(skip)]
     pub skill_api_port: u16,
+
+    /// Bearer token the `skill` tool sends to the Skill API.
+    /// Set at runtime; not persisted.
+    #[serde(skip)]
+    pub skill_api_token: SkillApiToken,
 
     /// Tool execution mode: "parallel" or "sequential".
     /// Parallel: prepare sequentially, execute concurrently.
@@ -435,6 +467,7 @@ impl Default for LlmToolConfig {
             edit_file: false,
             skill_api: true,
             skill_api_port: 0,
+            skill_api_token: SkillApiToken::default(),
             execution_mode: default_tool_execution_mode(),
             chat_mode: default_chat_mode(),
             query_refusal_response: default_query_refusal_response(),
@@ -546,6 +579,21 @@ mod tests {
         assert!(!json.contains("skill_api_port"), "skip field should not appear in JSON");
         let parsed: LlmToolConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.skill_api_port, 0);
+    }
+
+    #[test]
+    fn skill_api_token_is_shared_redacted_and_not_serialised() {
+        let shared = std::sync::Arc::new(std::sync::Mutex::new("old-secret".to_string()));
+        let mut cfg = LlmToolConfig::default();
+        assert_eq!(cfg.skill_api_token.get(), None);
+        cfg.skill_api_token = SkillApiToken::shared(shared.clone());
+        let copy = cfg.clone();
+        *shared.lock().unwrap() = "new-secret\n".into();
+        // A refresh of the daemon token reaches every clone.
+        assert_eq!(copy.skill_api_token.get().as_deref(), Some("new-secret"));
+        assert!(!format!("{cfg:?}").contains("secret"));
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("secret") && !json.contains("skill_api_token"));
     }
 
     // ── WebSearchProvider ─────────────────────────────────────────────────

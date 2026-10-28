@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
         .route("/pair/start", post(handlers::pair_start))
         .route("/pair/approve", post(handlers::pair_approve))
         .route("/status", get(handlers::status).post(handlers::update_status))
+        .route("/device/health", get(device_health))
         .route("/devices", get(handlers::devices).post(handlers::update_devices))
         .route("/devices/set-preferred", post(handlers::set_preferred_device))
         .route("/devices/pair", post(handlers::pair_device))
@@ -55,4 +56,12 @@ pub fn router() -> Router<AppState> {
         .route("/events", get(handlers::ws_events))
         .route("/events/push", post(handlers::push_event))
         .route("/cmd", post(handlers::cmd_tunnel))
+}
+
+/// Current device-health verdict: problems with the connected device and what
+/// to do about each (same data as the `DeviceHealth` event).
+async fn device_health(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> axum::Json<skill_daemon_common::device_health::DeviceHealth> {
+    axum::Json(state.device_health.lock().map(|h| h.clone()).unwrap_or_default())
 }

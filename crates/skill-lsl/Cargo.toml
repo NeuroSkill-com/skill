@@ -24,6 +24,8 @@ rand        = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
+# Virtual-source tests check faults against the real quality classifier.
+skill-eeg = { path = "../skill-eeg" }
 
 [lints]
 workspace = true

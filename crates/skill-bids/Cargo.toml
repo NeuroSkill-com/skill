@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 description = "Export NeuroSkill recordings as a BIDS-EEG dataset over a chosen time range"
 
 [dependencies]
+bbtree = { workspace = true }
 anyhow = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }

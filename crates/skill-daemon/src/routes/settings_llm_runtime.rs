@@ -172,7 +172,7 @@ fn set_download_state(
 }
 
 fn set_live_download_cancel_flags(state: &AppState, filename: &str, cancelled: bool, pause_requested: bool) {
-    let progress_opt = state.llm_downloads.lock().ok().and_then(|m| m.get(filename).cloned());
+    let progress_opt = state.llm_downloads.get_cloned(filename);
     if let Some(progress) = progress_opt {
         if let Ok(mut p) = progress.lock() {
             p.cancelled = cancelled;
@@ -198,9 +198,7 @@ fn spawn_model_download(state: AppState, filename: String) {
             ..Default::default()
         }));
 
-        if let Ok(mut m) = state.llm_downloads.lock() {
-            m.insert(filename.clone(), progress.clone());
-        }
+        let _ = state.llm_downloads.insert(filename.clone(), progress.clone());
 
         let progress_for_job = progress.clone();
         let entry_for_job = entry.clone();
@@ -238,9 +236,7 @@ fn spawn_model_download(state: AppState, filename: String) {
 
         let res = (&mut job).await;
 
-        if let Ok(mut m) = state.llm_downloads.lock() {
-            m.remove(&filename);
-        }
+        state.llm_downloads.remove(&filename);
 
         match res {
             Ok(Ok(path)) => {
@@ -290,6 +286,7 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
         let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
         let cell = state.llm_state_cell.clone();
         let log_buf = state.llm_log_buffer.clone();
+        crate::routes::settings_llm::wire_skill_api(&mut cfg.tools, &state);
 
         // UX: pressing "Start" should start the server even if the user left
         // the global enable toggle off. Persist this so subsequent starts work.
@@ -933,7 +930,6 @@ fn infer_mlx_pack_quant(repo: &str, shard_files: &[String]) -> String {
 
 pub(crate) async fn llm_get_downloads_impl(State(state): State<AppState>) -> Json<Vec<serde_json::Value>> {
     let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-    let downloads = state.llm_downloads.lock().map(|g| g.clone()).unwrap_or_default();
     let items = cat
         .entries
         .into_iter()
@@ -949,8 +945,9 @@ pub(crate) async fn llm_get_downloads_impl(State(state): State<AppState>) -> Jso
             )
         })
         .map(|e| {
-            let live = downloads
-                .get(&e.filename)
+            let live = state
+                .llm_downloads
+                .get_cloned(&e.filename)
                 .and_then(|p| p.lock().ok().map(|g| g.clone()));
             serde_json::json!({
                 "repo": e.repo,
@@ -976,12 +973,7 @@ pub(crate) async fn llm_download_start_impl(
     State(state): State<AppState>,
     Json(req): Json<LlmFilenameRequest>,
 ) -> Json<serde_json::Value> {
-    let is_active = state
-        .llm_downloads
-        .lock()
-        .ok()
-        .map(|m| m.contains_key(&req.filename))
-        .unwrap_or(false);
+    let is_active = state.llm_downloads.contains_key(&req.filename);
     if is_active {
         return Json(serde_json::json!({"ok": true, "result": "already_downloading"}));
     }
@@ -1028,12 +1020,7 @@ pub(crate) async fn llm_download_resume_impl(
     State(state): State<AppState>,
     Json(req): Json<LlmFilenameRequest>,
 ) -> Json<serde_json::Value> {
-    let is_active = state
-        .llm_downloads
-        .lock()
-        .ok()
-        .map(|m| m.contains_key(&req.filename))
-        .unwrap_or(false);
+    let is_active = state.llm_downloads.contains_key(&req.filename);
     if !is_active {
         set_download_state(
             &state,
@@ -1059,9 +1046,7 @@ pub(crate) async fn llm_download_delete_impl(
             e.local_path = None;
         }
     }
-    if let Ok(mut m) = state.llm_downloads.lock() {
-        m.remove(&req.filename);
-    }
+    state.llm_downloads.remove(&req.filename);
     persist_llm_catalog(&state);
     emit_daemon_event(
         &state,

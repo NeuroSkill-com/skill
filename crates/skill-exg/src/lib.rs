@@ -14,7 +14,7 @@ use anyhow::Context;
 use skill_constants::{LUNA_CONFIG_FILE, ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE};
 use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
-use skill_eeg::eeg_model_config::EegModelStatus;
+use skill_eeg::eeg_model_config::{EegModelStatus, LatestEpochMetrics};
 
 #[cfg(feature = "neurorvq-ndarray")]
 pub mod neurorvq;
@@ -785,13 +785,15 @@ pub struct EpochMetrics {
 }
 
 impl EpochMetrics {
-    /// Derive metrics from a `BandSnapshot` by averaging across all channels.
+    /// Derive metrics from a `BandSnapshot` by averaging across its analysis
+    /// channels (bad electrodes excluded; see `BandSnapshot::analysis_channels`).
     ///
     /// Engagement and relaxation delegate to `skill_devices::compute_engagement`
     /// / `compute_relaxation` — the single source of truth shared with the live
     /// `latest_bands` path. Storing here is fine; *computing* here is not.
     pub fn from_snapshot(snap: &BandSnapshot) -> Self {
-        let n = snap.channels.len() as f32;
+        let chans = snap.analysis_channels();
+        let n = chans.len() as f32;
         if n < 1.0 {
             return Self::default();
         }
@@ -803,7 +805,7 @@ impl EpochMetrics {
         let mut rg = 0.0f32;
         let mut rhg = 0.0f32;
 
-        for ch in &snap.channels {
+        for ch in &chans {
             rd += ch.rel_delta;
             rt += ch.rel_theta;
             ra += ch.rel_alpha;
@@ -818,13 +820,10 @@ impl EpochMetrics {
         rg /= n;
         rhg /= n;
 
-        let faa = if snap.channels.len() >= 3 {
-            let af7_alpha = snap.channels[1].alpha.max(1e-6);
-            let af8_alpha = snap.channels[2].alpha.max(1e-6);
-            af8_alpha.ln() - af7_alpha.ln()
-        } else {
-            0.0
-        };
+        // The analyzer's FAA: resolved by electrode name, over usable channels
+        // only. (This used to re-derive it from indices 1 and 2 — AF7/AF8 on a
+        // Muse, arbitrary elsewhere, and still counted a dead electrode.)
+        let faa = snap.faa;
 
         Self {
             rel_delta: rd,
@@ -888,6 +887,128 @@ impl EpochMetrics {
     /// Sigmoid mapping (0, ∞) → (0, 100).
     pub fn sigmoid100(x: f32, k: f32, mid: f32) -> f32 {
         100.0 / (1.0 + (-k * (x - mid)).exp())
+    }
+
+    /// The `latest_metrics` snapshot served by `/v1/models/status`.
+    ///
+    /// Destructures every field so adding one to `EpochMetrics` fails to
+    /// compile here until it is mapped (or explicitly ignored).
+    pub fn to_latest(&self, epoch_timestamp: i64) -> LatestEpochMetrics {
+        let Self {
+            rel_delta,
+            rel_theta,
+            rel_alpha,
+            rel_beta,
+            rel_gamma,
+            rel_high_gamma,
+            relaxation,
+            engagement,
+            faa,
+            tar,
+            bar,
+            dtr,
+            pse,
+            apf,
+            bps,
+            snr,
+            coherence,
+            mu_suppression,
+            mood,
+            tbr,
+            sef95,
+            spectral_centroid,
+            hjorth_activity,
+            hjorth_mobility,
+            hjorth_complexity,
+            permutation_entropy,
+            higuchi_fd,
+            dfa_exponent,
+            sample_entropy,
+            pac_theta_gamma,
+            laterality_index,
+            echt,
+            hr,
+            rmssd,
+            sdnn,
+            pnn50,
+            lf_hf_ratio,
+            respiratory_rate,
+            spo2_estimate,
+            perfusion_index,
+            stress_index,
+            blink_count,
+            blink_rate,
+            head_pitch,
+            head_roll,
+            stillness,
+            nod_count,
+            shake_count,
+            meditation,
+            cognitive_load,
+            drowsiness,
+            migraine_index,
+            consciousness_lzc,
+            consciousness_wakefulness,
+            consciousness_integration,
+        } = *self;
+        LatestEpochMetrics {
+            rel_delta,
+            rel_theta,
+            rel_alpha,
+            rel_beta,
+            rel_gamma,
+            rel_high_gamma,
+            relaxation_score: relaxation,
+            engagement_score: engagement,
+            faa,
+            tar,
+            bar,
+            dtr,
+            pse,
+            apf,
+            bps,
+            snr,
+            coherence,
+            mu_suppression,
+            tbr,
+            sef95,
+            spectral_centroid,
+            hjorth_activity,
+            hjorth_mobility,
+            hjorth_complexity,
+            permutation_entropy,
+            higuchi_fd,
+            dfa_exponent,
+            sample_entropy,
+            pac_theta_gamma,
+            laterality_index,
+            echt,
+            hr,
+            rmssd,
+            sdnn,
+            pnn50,
+            lf_hf_ratio,
+            respiratory_rate,
+            spo2_estimate,
+            perfusion_index,
+            stress_index,
+            mood,
+            blink_count,
+            blink_rate,
+            head_pitch,
+            head_roll,
+            stillness,
+            nod_count,
+            shake_count,
+            meditation,
+            cognitive_load,
+            drowsiness,
+            migraine_index,
+            consciousness_lzc,
+            consciousness_wakefulness,
+            consciousness_integration,
+            epoch_timestamp,
+        }
     }
 }
 
@@ -1167,6 +1288,7 @@ mod tests {
         let mut snap = BandSnapshot {
             timestamp: 0.0,
             channels: vec![ch.clone(), ch.clone(), ch.clone(), ch],
+            excluded_channels: Vec::new(),
             faa: 0.0,
             tar: 0.5,
             bar: 0.4,

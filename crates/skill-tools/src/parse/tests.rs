@@ -1217,3 +1217,54 @@ fn chat_message_tool_result() {
         _ => panic!("expected Tool"),
     }
 }
+
+// ── Dropped closing bracket (small-model habit) ─────────────────────────
+
+/// Verbatim from Qwen3.5-0.8B through the daemon: the nested `args` object
+/// lost its final `}`. These used to be "garbled", re-emitted twice the same
+/// way, and the chat ended with an empty reply.
+#[test]
+fn extract_repairs_missing_closing_brace_in_delimited_block() {
+    for raw in [
+        r#"[TOOL_CALL]{"name":"skill","arguments":{"command":"status","args":{"k":5}}[/TOOL_CALL]"#,
+        r#"[TOOL_CALL]{"name":"skill","arguments":{"command":"status","args":{"query":"EEG signal quality"}}[/TOOL_CALL]"#,
+    ] {
+        let calls = extract_tool_calls(raw);
+        assert_eq!(calls.len(), 1, "{raw}");
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"], "status");
+        assert!(detect_garbled_tool_call(raw).is_none(), "{raw}");
+    }
+}
+
+#[test]
+fn close_unbalanced_json_only_appends_a_missing_tail() {
+    use super::json_scan::close_unbalanced_json;
+    assert_eq!(
+        close_unbalanced_json(r#"{"a":{"b":[1,2]} "#).as_deref(),
+        Some(r#"{"a":{"b":[1,2]}}"#)
+    );
+    // Braces inside strings don't count.
+    assert_eq!(
+        close_unbalanced_json(r#"{"a":{"b":"}{\""}"#).as_deref(),
+        Some(r#"{"a":{"b":"}{\""}}"#)
+    );
+    // Cut off mid-value: not a dropped tail, don't invent the rest.
+    assert_eq!(close_unbalanced_json(r#"{"name":"date","arguments":{"#), None);
+    assert_eq!(close_unbalanced_json(r#"{"a":{"b":[1,2"#), None);
+    assert_eq!(close_unbalanced_json(r#"{"a":1}"#), None, "already balanced");
+    assert_eq!(
+        close_unbalanced_json(r#"{"a":"unterminated"#),
+        None,
+        "ends inside a string"
+    );
+    assert_eq!(close_unbalanced_json(r#"{"a":[1}"#), None, "mismatched closer");
+}
+
+#[test]
+fn unrepairable_delimited_block_is_still_reported_as_garbled() {
+    let raw = r#"[TOOL_CALL]{"name":"skill","arguments":{"command":[1}}[/TOOL_CALL]"#;
+    assert!(extract_tool_calls(raw).is_empty());
+    assert!(detect_garbled_tool_call(raw).is_some());
+}

@@ -211,11 +211,13 @@ fn paired_name_for(state: &AppState, target: &str) -> Option<String> {
 /// that has not advertised since the daemon started — the paired name is still
 /// the fallback.
 fn service_kind_for(state: &AppState, target: &str) -> Option<&'static str> {
-    let kinds = state.ble_service_kinds.lock().ok()?;
-    kinds
-        .iter()
-        .find(|(id, _)| ble_id::same_device(id, target))
-        .map(|(_, kind)| *kind)
+    state.ble_service_kinds.scan::<String, _>(.., |id, kind| {
+        if ble_id::same_device(id, target) {
+            std::ops::ControlFlow::Break(*kind)
+        } else {
+            std::ops::ControlFlow::Continue(())
+        }
+    })
 }
 
 /// Route a BLE target by the device kind the scanner recognised from an
@@ -780,11 +782,7 @@ mod tests {
         // Nothing advertised yet → the name decides, and "Bob" says nothing.
         assert_eq!(service_kind_route(&state, target), None);
 
-        state
-            .ble_service_kinds
-            .lock()
-            .unwrap()
-            .insert(target.to_string(), "vital");
+        state.ble_service_kinds.insert(target.to_string(), "vital").unwrap();
         assert_eq!(service_kind_route(&state, target), Some(ConnectRoute::Vital));
     }
 
@@ -799,9 +797,8 @@ mod tests {
 
         state
             .ble_service_kinds
-            .lock()
-            .unwrap()
-            .insert(target.to_string(), "a-device-with-no-driver");
+            .insert(target.to_string(), "a-device-with-no-driver")
+            .unwrap();
         assert_eq!(service_kind_route(&state, target), None);
     }
 

@@ -41,6 +41,21 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
         out.push_str(&format!("State: {} (not connected)\n", state));
     }
 
+    // ── Device health (problems + what to do) ─────────────────────────────
+    if let Some(issues) = v["device_health"]["issues"].as_array().filter(|i| !i.is_empty()) {
+        out.push_str("\n# Device problems\n");
+        for issue in issues {
+            let msg = issue["message"].as_str().unwrap_or("");
+            let advice = issue["advice"].as_str().unwrap_or("");
+            out.push_str(&format!("- {msg} {advice}\n"));
+        }
+        let usable = v["device_health"]["usable_channels"].as_array().map_or(0, Vec::len);
+        let total = v["device_health"]["total_channels"].as_u64().unwrap_or(0);
+        if total > 0 {
+            out.push_str(&format!("Usable electrodes: {usable} of {total}\n"));
+        }
+    }
+
     // ── Session ───────────────────────────────────────────────────────────
     let sess = &v["session"];
     if let Some(dur) = sess["duration_secs"].as_u64() {
@@ -118,14 +133,20 @@ pub(crate) fn format_status_as_text(v: &Value) -> String {
             out.push_str("\n# Signal Quality\n");
             for ch in chs {
                 let name = ch["channel"].as_str().unwrap_or("?");
-                let good = ch["good"].as_bool().unwrap_or(false);
-                let score = ch["score"].as_f64().unwrap_or(0.0);
-                out.push_str(&format!(
-                    "{}: {} ({:.0}%), ",
-                    name,
-                    if good { "good" } else { "poor" },
-                    score * 100.0
-                ));
+                // The daemon sends a label (good / fair / poor / no_signal);
+                // older producers sent `good` + a 0–1 `score`.
+                if let Some(quality) = ch["quality"].as_str() {
+                    out.push_str(&format!("{name}: {}, ", quality.replace('_', " ")));
+                } else {
+                    let good = ch["good"].as_bool().unwrap_or(false);
+                    let score = ch["score"].as_f64().unwrap_or(0.0);
+                    out.push_str(&format!(
+                        "{}: {} ({:.0}%), ",
+                        name,
+                        if good { "good" } else { "poor" },
+                        score * 100.0
+                    ));
+                }
             }
             if out.ends_with(", ") {
                 out.truncate(out.len() - 2);

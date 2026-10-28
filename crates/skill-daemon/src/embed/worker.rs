@@ -23,6 +23,7 @@ use tracing::{error, info, warn};
 
 use super::accumulator::EpochMsg;
 use super::day_store::DayStore;
+use super::status::{SharedExgStatus, StatusReporter};
 
 /// Handle to the background embed worker.  Dropping it signals the worker
 /// to shut down (the sender half of the channel is dropped).
@@ -88,6 +89,7 @@ impl EmbedWorkerHandle {
         events_tx: broadcast::Sender<EventEnvelope>,
         hooks: Vec<HookRule>,
         text_embedder: crate::text_embedder::SharedTextEmbedder,
+        status: SharedExgStatus,
     ) -> Self {
         // Keep a larger pre-encoder buffer so epochs are not dropped while
         // heavy models (e.g. ZUNA) are still loading.
@@ -99,7 +101,7 @@ impl EmbedWorkerHandle {
             .name("eeg-embed".into())
             .spawn(move || {
                 let _done = done_tx;
-                embed_worker_main(rx, skill_dir, config, events_tx, hooks, text_embedder);
+                embed_worker_main(rx, skill_dir, config, events_tx, hooks, text_embedder, status);
             })
             .expect("failed to spawn embed worker thread");
 
@@ -383,16 +385,19 @@ fn embed_worker_main(
     events_tx: broadcast::Sender<EventEnvelope>,
     hooks: Vec<HookRule>,
     text_embedder: crate::text_embedder::SharedTextEmbedder,
+    status: SharedExgStatus,
 ) {
     info!(
         backend = config.model_backend.as_str(),
         repo = %config.hf_repo,
         "embed worker started"
     );
+    let mut reporter = StatusReporter::start(status, config.model_backend.as_str());
 
     // Open today's day store.
     let mut current_date = yyyymmdd_utc();
     let mut store = DayStore::open(&day_dir(&skill_dir), config.hnsw_m, config.hnsw_ef_construction);
+    reporter.day_store_opened(store.as_ref());
 
     if let Some(ref s) = store {
         info!(
@@ -423,6 +428,7 @@ fn embed_worker_main(
 
     // Load encoder.
     let mut encoder = load_encoder(&config, &skill_dir);
+    reporter.encoder_loaded(encoder.is_some());
 
     // Initialize hook matcher.
     let mut hook_matcher = if hooks.iter().any(|h| h.enabled) {
@@ -502,6 +508,7 @@ fn embed_worker_main(
             current_date = today;
             store = DayStore::open(&day_dir(&skill_dir), config.hnsw_m, config.hnsw_ef_construction);
             info!("day store rolled to {current_date}");
+            reporter.day_store_opened(store.as_ref());
             if let Some(ref s) = store {
                 if s.hnsw_rebuilt() {
                     let recovered = s.hnsw_rebuilt_count();
@@ -532,7 +539,8 @@ fn embed_worker_main(
         // Encode the epoch.
         let t0 = std::time::Instant::now();
         let embedding = encoder.as_mut().and_then(|enc| encode_epoch(enc, &msg));
-        let embed_ms = t0.elapsed().as_millis();
+        let elapsed = t0.elapsed();
+        let embed_ms = elapsed.as_millis();
 
         if embedding.is_none() && encoder.is_some() {
             metrics_only_streak += 1;
@@ -568,6 +576,15 @@ fn embed_worker_main(
                 s.insert_metrics_only(ts_ms, msg.device_name.as_deref(), m);
             }
         }
+
+        reporter.epoch_done(
+            embedding
+                .as_ref()
+                .map(|emb| (elapsed.as_secs_f64() * 1000.0, emb.len())),
+            metrics.as_ref(),
+            msg.timestamp,
+            store.as_ref(),
+        );
 
         // Evaluate hook triggers.
         if let (Some(ref mut matcher), Some(ref emb)) = (&mut hook_matcher, &embedding) {
@@ -1003,20 +1020,63 @@ fn encode_epoch(encoder: &mut Encoder, msg: &EpochMsg) -> Option<Vec<f32>> {
     }
 }
 
+/// Electrodes in this epoch with no signal or poor contact, judged by the same
+/// classifier as the live quality readout, over the epoch itself — so live
+/// embedding and after-the-fact re-embedding agree.
+///
+/// `sample_rate` matters: the monitor's window is one second, and its noise
+/// check measures frequency in Hz.
+pub(crate) fn bad_channel_mask(samples: &[Vec<f32>], sample_rate: f32) -> Vec<bool> {
+    let n_ch = samples.len();
+    if n_ch == 0 || samples[0].is_empty() {
+        return vec![false; n_ch];
+    }
+    let mut q = skill_eeg::eeg_quality::QualityMonitor::with_window(n_ch, sample_rate.round().max(32.0) as usize);
+    for (ch, s) in samples.iter().enumerate() {
+        let v: Vec<f64> = s.iter().map(|&x| x as f64).collect();
+        q.push(ch, &v);
+    }
+    q.all_qualities()
+        .iter()
+        .map(skill_eeg::eeg_quality::SignalQuality::is_bad)
+        .collect()
+}
+
+/// Channels to encode: all, minus bad electrodes while at least one good one
+/// remains (ZUNA takes any channel subset with positions by name, so a dead
+/// electrode is simply left out instead of being encoded as signal).
+pub(crate) fn usable_channel_indices(samples: &[Vec<f32>], n_ch: usize, sample_rate: f32) -> Vec<usize> {
+    let bad = bad_channel_mask(&samples[..n_ch.min(samples.len())], sample_rate);
+    let good: Vec<usize> = (0..n_ch).filter(|&c| !bad.get(c).copied().unwrap_or(false)).collect();
+    if good.is_empty() {
+        (0..n_ch).collect()
+    } else {
+        good
+    }
+}
+
 #[cfg(feature = "embed-zuna")]
 fn encode_zuna(state: &mut ZunaState, msg: &EpochMsg) -> Option<Vec<f32>> {
     let n_ch = msg.channel_names.len().min(msg.samples.len());
     if n_ch == 0 {
         return None;
     }
+    let keep = usable_channel_indices(&msg.samples, n_ch, msg.sample_rate);
+    if keep.len() < n_ch {
+        tracing::debug!(
+            kept = keep.len(),
+            of = n_ch,
+            "[embed] leaving bad electrodes out of this epoch"
+        );
+    }
     let n_samples = msg.samples[0].len();
-    let mut data = ndarray::Array2::<f32>::zeros((n_ch, n_samples));
-    for (ch, samples) in msg.samples.iter().enumerate().take(n_ch) {
-        for (s, &v) in samples.iter().enumerate() {
-            data[[ch, s]] = v;
+    let mut data = ndarray::Array2::<f32>::zeros((keep.len(), n_samples));
+    for (row, &ch) in keep.iter().enumerate() {
+        for (s, &v) in msg.samples[ch].iter().enumerate().take(n_samples) {
+            data[[row, s]] = v;
         }
     }
-    let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();
+    let ch_names: Vec<&str> = keep.iter().map(|&ch| msg.channel_names[ch].as_str()).collect();
     let empty_pos: HashMap<String, [f32; 3]> = HashMap::new();
     let batches = zuna_rs::csv_loader::load_from_named_tensor(
         data,
@@ -1180,5 +1240,31 @@ pub fn encode_raw_public(
     };
     match encoder {
         PublicEncoder::Inner(enc) => encode_epoch(enc, &msg),
+    }
+}
+
+#[cfg(test)]
+mod channel_mask_tests {
+    use super::*;
+
+    fn alpha(n: usize) -> Vec<f32> {
+        (0..n)
+            .map(|i| (2.0 * std::f32::consts::PI * 10.0 * i as f32 / 256.0).sin() * 30.0)
+            .collect()
+    }
+
+    #[test]
+    fn dead_and_noisy_electrodes_are_left_out_of_the_epoch() {
+        let n = 1280;
+        let noisy: Vec<f32> = (0..n).map(|i| if i % 2 == 0 { 900.0 } else { -900.0 }).collect();
+        let samples = vec![alpha(n), vec![0.0; n], alpha(n), noisy];
+        assert_eq!(bad_channel_mask(&samples, 256.0), [false, true, false, true]);
+        assert_eq!(usable_channel_indices(&samples, 4, 256.0), [0, 2]);
+    }
+
+    #[test]
+    fn all_bad_keeps_everything_rather_than_nothing() {
+        let samples = vec![vec![0.0; 1280]; 3];
+        assert_eq!(usable_channel_indices(&samples, 3, 256.0), [0, 1, 2]);
     }
 }

@@ -342,6 +342,7 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
 
     let url = format!("http://127.0.0.1:{}/", port);
     let payload_str = payload.to_string();
+    let token = allowed_tools.skill_api_token.get();
 
     tokio::task::spawn_blocking(move || {
         let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -350,11 +351,11 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
             .build()
             .into();
 
-        match agent
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .send(&payload_str)
-        {
+        let mut req = agent.post(&url).header("Content-Type", "application/json");
+        if let Some(t) = token {
+            req = req.header("Authorization", format!("Bearer {t}"));
+        }
+        match req.send(&payload_str) {
             Ok(resp) => {
                 match resp.into_body().read_json::<Value>() {
                     Ok(mut v) => {

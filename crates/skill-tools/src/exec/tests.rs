@@ -275,6 +275,52 @@ fn utc_offset_zero() {
 // ── format_status_as_text ─────────────────────────────────────────────
 
 #[test]
+fn status_text_lists_device_problems_with_advice() {
+    let v = json!({
+        "device": { "state": "connected", "connected": true, "name": "MuseS-F921", "battery": 12.0 },
+        "device_health": {
+            "connected": true,
+            "issues": [{ "code": "battery_low", "severity": "warning",
+                         "message": "Battery is low (12%).", "advice": "Charge it soon." }],
+            "usable_channels": ["TP9", "AF8", "TP10"],
+            "total_channels": 4,
+        },
+    });
+    let text = format_status_as_text(&v);
+    assert!(text.contains("# Device problems"), "{text}");
+    assert!(text.contains("- Battery is low (12%). Charge it soon."), "{text}");
+    assert!(text.contains("Usable electrodes: 3 of 4"), "{text}");
+}
+
+/// The shape `skill-daemon`'s `status` command sends for a streaming headset.
+#[test]
+fn status_text_daemon_payload_streaming_headset() {
+    let v = json!({
+        "device": { "state": "connected", "connected": true, "streaming": true, "name": "MuseS-F921",
+                    "battery": 43.9, "eeg_samples": 14784, "ppg_samples": 59264, "imu_samples": 5964 },
+        "session": { "duration_secs": 125 },
+        "embeddings": { "total": 40, "today": 12, "recording_days": 1, "encoder_loaded": true },
+        "signal_quality": [
+            { "channel": "TP9", "quality": "poor", "good": false },
+            { "channel": "AF7", "quality": "no_signal", "good": false },
+        ],
+        "scores": null,
+    });
+    let text = format_status_as_text(&v);
+    assert!(
+        text.contains("State: connected | Name: MuseS-F921 | Streaming: yes"),
+        "{text}"
+    );
+    assert!(text.contains("Battery: 44%"), "{text}");
+    assert!(
+        text.contains("Today: 12") && text.contains("Encoder loaded: yes"),
+        "{text}"
+    );
+    assert!(text.contains("TP9: poor, AF7: no signal"), "{text}");
+    assert!(!text.contains("not connected"), "{text}");
+}
+
+#[test]
 fn status_text_disconnected_device() {
     let v = json!({
         "device": { "state": "disconnected", "connected": false, "streaming": false },

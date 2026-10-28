@@ -112,6 +112,25 @@ pub struct BandPowers {
     pub dominant_color: String,
 }
 
+impl BandSnapshot {
+    /// Channels derived metrics should use: `channels` minus
+    /// `excluded_channels`. Never empty unless `channels` is.
+    pub fn analysis_channels(&self) -> Vec<&BandPowers> {
+        let kept: Vec<&BandPowers> = self
+            .channels
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !self.excluded_channels.contains(i))
+            .map(|(_, c)| c)
+            .collect();
+        if kept.is_empty() {
+            self.channels.iter().collect()
+        } else {
+            kept
+        }
+    }
+}
+
 /// Band power snapshot for all 4 Muse channels, emitted as `"eeg-bands"` event.
 ///
 /// In addition to per-channel relative band powers, the snapshot contains
@@ -123,6 +142,13 @@ pub struct BandSnapshot {
     pub timestamp: f64,
     /// One entry per channel: `[TP9, AF7, AF8, TP10]`.
     pub channels: Vec<BandPowers>,
+
+    /// Indices into `channels` left out of every cross-channel metric in this
+    /// snapshot (no signal / poor contact). `channels` still lists them so
+    /// per-channel displays and the metrics CSV keep a fixed layout; use
+    /// [`Self::analysis_channels`] for anything averaged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_channels: Vec<usize>,
 
     // ── Cross-band ratios (averaged across 4 channels) ───────────────────────
     /// Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α).
@@ -366,6 +392,8 @@ pub struct BandAnalyzer {
     snapshot_count: u64,
     /// Hardware sample rate (Hz).  Used for PSD bin-frequency and PAC computation.
     sample_rate: f32,
+    /// Channels to leave out of cross-channel metrics (bad electrodes).
+    excluded: [bool; EEG_CHANNELS],
 }
 
 impl BandAnalyzer {
@@ -400,6 +428,18 @@ impl BandAnalyzer {
             alpha_baseline: 0.0,
             snapshot_count: 0,
             sample_rate,
+            excluded: [false; EEG_CHANNELS],
+        }
+    }
+
+    /// Leave these channels (`true` = bad electrode) out of every averaged
+    /// metric from the next snapshot on. They still appear in
+    /// [`BandSnapshot::channels`]. If that would leave no channel, nothing is
+    /// excluded — a degraded estimate beats none.
+    pub fn set_excluded(&mut self, mask: &[bool]) {
+        self.excluded = [false; EEG_CHANNELS];
+        for (slot, &bad) in self.excluded.iter_mut().zip(mask) {
+            *slot = bad;
         }
     }
 
@@ -520,6 +560,16 @@ impl BandAnalyzer {
             .as_secs_f64();
 
         let active_count = self.active.iter().filter(|&&a| a).count();
+        // Channels the averaged metrics use: active, minus excluded (bad
+        // electrodes) — unless that leaves none.
+        let mut included: [bool; EEG_CHANNELS] = std::array::from_fn(|ch| self.active[ch] && !self.excluded[ch]);
+        if !included.iter().any(|&i| i) {
+            included = self.active;
+        }
+        // Every active channel, for display / CSV; `ch_powers` (below) holds
+        // only the included ones and feeds every aggregate.
+        let mut ch_powers_all: Vec<BandPowers> = Vec::with_capacity(active_count);
+        let mut excluded_channels: Vec<usize> = Vec::new();
         let mut ch_powers: Vec<BandPowers> = Vec::with_capacity(active_count);
         // Per-channel alpha peak freq accumulator and PSD-derived data for
         // cross-channel metrics computed after the loop.
@@ -533,6 +583,10 @@ impl BandAnalyzer {
             if !self.active[ch] {
                 continue;
             }
+
+            // An excluded channel's contributions to the running sums below
+            // are rolled back at the end of the iteration.
+            let sums_before = (ch_apf_sum, ch_apf_count, ch_bps_sum, ch_snr_sum, ch_alpha_abs_sum);
 
             // One-sided raw PSD (length n_oneside = 257).
             // psd::psd gives (r² + i²) / n for each bin.
@@ -650,7 +704,7 @@ impl BandAnalyzer {
 
             ch_alpha_abs_sum += abs_pwr[2]; // alpha band
 
-            ch_powers.push(BandPowers {
+            let powers = BandPowers {
                 channel: CHANNEL_NAMES.get(ch).copied().unwrap_or("Ch?").to_string(),
                 delta: abs_pwr[0],
                 theta: abs_pwr[1],
@@ -667,7 +721,14 @@ impl BandAnalyzer {
                 dominant: BANDS[dom].0.to_string(),
                 dominant_symbol: BAND_SYMBOLS[dom].to_string(),
                 dominant_color: BAND_COLORS[dom].to_string(),
-            });
+            };
+            if included[ch] {
+                ch_powers.push(powers.clone());
+            } else {
+                (ch_apf_sum, ch_apf_count, ch_bps_sum, ch_snr_sum, ch_alpha_abs_sum) = sums_before;
+                excluded_channels.push(ch_powers_all.len());
+            }
+            ch_powers_all.push(powers);
         }
 
         let nch = ch_powers.len() as f32;
@@ -815,7 +876,14 @@ impl BandAnalyzer {
         // ── SEF95 & Spectral Centroid (averaged across channels) ─────────────
         let mut sef95_sum = 0.0f32;
         let mut sc_sum = 0.0f32;
-        for (real, imag) in spectra.iter().take(EEG_CHANNELS) {
+        // Included channels only (this used to run over all EEG_CHANNELS slots,
+        // averaging empty ones into a 4-channel device's metrics).
+        for (_, (real, imag)) in spectra
+            .iter()
+            .enumerate()
+            .take(EEG_CHANNELS)
+            .filter(|(ch, _)| included[*ch])
+        {
             let psd_raw = psd(&real[..n_oneside], &imag[..n_oneside]);
             let psd_scaled: Vec<f32> = psd_raw
                 .iter()
@@ -841,7 +909,7 @@ impl BandAnalyzer {
         let mut se_sum = 0.0f32;
         let mut pac_sum = 0.0f32;
         let mut echt_sum = 0.0f32;
-        for ch_idx in 0..EEG_CHANNELS {
+        for ch_idx in (0..EEG_CHANNELS).filter(|&ch| included[ch]) {
             let raw: Vec<f32> = self.window[ch_idx].iter().copied().collect();
             let (ha, hm, hc) = hjorth_params(&raw);
             ha_sum += ha;
@@ -959,7 +1027,8 @@ impl BandAnalyzer {
 
         self.latest = Some(BandSnapshot {
             timestamp: now,
-            channels: ch_powers,
+            channels: ch_powers_all,
+            excluded_channels,
             faa,
             tar,
             bar,
@@ -1054,6 +1123,63 @@ mod tests {
             }
         }
         a.latest.expect("signal was long enough but snapshot is None")
+    }
+
+    /// Channels 0–2 carry alpha; channel 3 carries `bad` (a dead or noisy
+    /// electrode). Returns the snapshot with channel 3 excluded or not.
+    fn run_with_bad_channel(bad: &[f64], exclude: bool) -> BandSnapshot {
+        let good = sine(10.0, BAND_WINDOW * 2);
+        let mut a = BandAnalyzer::new();
+        a.set_excluded(&[false, false, false, exclude]);
+        for i in 0..good.len() {
+            for ch in 0..3 {
+                a.push(ch, &good[i..i + 1]);
+            }
+            a.push(3, &bad[i..i + 1]);
+        }
+        a.latest.expect("snapshot")
+    }
+
+    #[test]
+    fn excluded_channel_is_listed_but_kept_out_of_aggregates() {
+        // A 60 Hz-dominated "electrode" next to three clean alpha channels.
+        let bad: Vec<f64> = sine(60.0, BAND_WINDOW * 2).iter().map(|v| v * 50.0).collect();
+        let polluted = run_with_bad_channel(&bad, false);
+        let clean = run_with_bad_channel(&bad, true);
+
+        assert_eq!(clean.channels.len(), 4, "still listed for display / CSV");
+        assert_eq!(clean.excluded_channels, [3]);
+        assert_eq!(clean.analysis_channels().len(), 3);
+        assert!(polluted.excluded_channels.is_empty());
+
+        // Aggregates now match three clean alpha channels.
+        let three = run_n(3, &sine(10.0, BAND_WINDOW * 2));
+        assert!((clean.pse - three.pse).abs() < 1e-4, "{} vs {}", clean.pse, three.pse);
+        assert!(
+            (clean.sef95 - three.sef95).abs() < 1e-3,
+            "{} vs {}",
+            clean.sef95,
+            three.sef95
+        );
+        assert!(
+            (polluted.sef95 - three.sef95).abs() > 1.0,
+            "the bad channel should have skewed sef95"
+        );
+    }
+
+    #[test]
+    fn excluding_every_channel_falls_back_to_all() {
+        let mut a = BandAnalyzer::new();
+        a.set_excluded(&[true; 4]);
+        let sig = sine(10.0, BAND_WINDOW * 2);
+        for i in 0..sig.len() {
+            for ch in 0..4 {
+                a.push(ch, &sig[i..i + 1]);
+            }
+        }
+        let snap = a.latest.expect("snapshot");
+        assert!(snap.excluded_channels.is_empty());
+        assert_eq!(snap.analysis_channels().len(), 4);
     }
 
     // ── Constants sanity ──────────────────────────────────────────────────────

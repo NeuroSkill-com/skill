@@ -16,9 +16,10 @@ use crate::state::AppState;
 
 // ── Search result cache ──────────────────────────────────────────────────────
 // Simple bounded cache: key = hash of query+params, value = JSON result.
-static SEARCH_CACHE: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::HashMap<u64, (std::time::Instant, serde_json::Value)>>,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+// A concurrent map, so searches running at once don't queue on a lock; the
+// bound is approximate under concurrent puts, which is fine for a cache.
+static SEARCH_CACHE: std::sync::LazyLock<bbtree::BBTreeMap<u64, (std::time::Instant, serde_json::Value)>> =
+    std::sync::LazyLock::new(bbtree::BBTreeMap::new);
 const CACHE_MAX: usize = 8;
 const CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
@@ -31,31 +32,41 @@ fn cache_key(parts: &[&str]) -> u64 {
     h.finish()
 }
 fn cache_get(key: u64) -> Option<serde_json::Value> {
-    let guard = SEARCH_CACHE.lock().ok()?;
-    let (ts, val) = guard.get(&key)?;
-    if ts.elapsed().as_secs() < CACHE_TTL_SECS {
-        Some(val.clone())
-    } else {
-        None
-    }
+    SEARCH_CACHE
+        .read(&key, |_, (ts, val)| {
+            (ts.elapsed().as_secs() < CACHE_TTL_SECS).then(|| val.clone())
+        })
+        .flatten()
 }
 /// Clear the search result cache (e.g. after backfill enriches metrics).
 pub fn cache_clear() {
-    if let Ok(mut guard) = SEARCH_CACHE.lock() {
-        guard.clear();
+    let mut keys = Vec::new();
+    SEARCH_CACHE.scan::<u64, ()>(.., |k, _| {
+        keys.push(*k);
+        std::ops::ControlFlow::Continue(())
+    });
+    for k in keys {
+        SEARCH_CACHE.remove(&k);
     }
 }
 
 fn cache_put(key: u64, val: serde_json::Value) {
-    if let Ok(mut guard) = SEARCH_CACHE.lock() {
-        // Evict oldest if full.
-        if guard.len() >= CACHE_MAX {
-            if let Some(&oldest_key) = guard.iter().min_by_key(|(_, (ts, _))| *ts).map(|(k, _)| k) {
-                guard.remove(&oldest_key);
-            }
+    // Evict oldest if full.
+    let mut len = 0;
+    let mut oldest: Option<(std::time::Instant, u64)> = None;
+    SEARCH_CACHE.scan::<u64, ()>(.., |k, (ts, _)| {
+        len += 1;
+        if oldest.is_none_or(|(t, _)| *ts < t) {
+            oldest = Some((*ts, *k));
         }
-        guard.insert(key, (std::time::Instant::now(), val));
+        std::ops::ControlFlow::Continue(())
+    });
+    if len >= CACHE_MAX {
+        if let Some((_, oldest_key)) = oldest {
+            SEARCH_CACHE.remove(&oldest_key);
+        }
     }
+    let _ = SEARCH_CACHE.insert(key, (std::time::Instant::now(), val));
 }
 
 /// Unified request for `/v1/search/eeg`.

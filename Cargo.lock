@@ -13507,6 +13507,7 @@ name = "skill-bids"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bbtree",
  "bids-core",
  "bids-eeg",
  "bids-io",
@@ -13641,6 +13642,7 @@ dependencies = [
 name = "skill-daemon-common"
 version = "0.1.0"
 dependencies = [
+ "bbtree",
  "dirs 6.0.0",
  "serde",
  "serde_json",
@@ -13958,6 +13960,7 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "skill-devices",
+ "skill-eeg",
  "tempfile",
  "tokio",
 ]

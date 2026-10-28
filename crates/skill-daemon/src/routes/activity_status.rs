@@ -176,11 +176,9 @@ async fn get_activity(State(state): State<AppState>) -> Json<ActivityResponse> {
         Err(_) => (false, None),
     };
 
-    let heartbeats = state.task_heartbeats.lock().ok().map(|m| m.clone()).unwrap_or_default();
-
     let mut tasks = Vec::with_capacity(MANIFEST.len());
     for entry in MANIFEST {
-        let hb = heartbeats.get(entry.id).cloned().unwrap_or_default();
+        let hb = state.task_heartbeats.get_cloned(entry.id).unwrap_or_default();
         let live_state = match entry.id {
             "device-scanner" => Some(TaskState {
                 running: scanner_running,

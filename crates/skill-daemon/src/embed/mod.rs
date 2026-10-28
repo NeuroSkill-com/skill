@@ -9,10 +9,12 @@
 mod accumulator;
 mod day_store;
 mod device;
+mod status;
 mod worker;
 
 pub(crate) use device::resolve_exg_device;
 
 pub(crate) use accumulator::EpochAccumulator;
+pub(crate) use status::SharedExgStatus;
 pub(crate) use worker::EmbedWorkerHandle;
 pub(crate) use worker::{encode_raw_public, load_encoder_public, PublicEncoder};

@@ -11,7 +11,7 @@
 use serde_json::Value;
 use std::collections::HashSet;
 
-use super::json_scan::{find_balanced_json_arrays, find_balanced_json_objects};
+use super::json_scan::{close_unbalanced_json, find_balanced_json_arrays, find_balanced_json_objects};
 use super::types::{ToolCall, ToolCallFunction};
 use skill_constants::{TOOL_CALL_END, TOOL_CALL_START};
 
@@ -165,7 +165,12 @@ fn extract_delimited_blocks(content: &str, calls: &mut Vec<ToolCall>, dedup: &mu
             break;
         };
         let block = after_start[..e].trim();
-        if let Ok(v) = serde_json::from_str::<Value>(block) {
+        // The end tag bounds the call, so a missing closing bracket can be
+        // restored safely (a small-model habit; see `close_unbalanced_json`).
+        let parsed = serde_json::from_str::<Value>(block)
+            .ok()
+            .or_else(|| serde_json::from_str(&close_unbalanced_json(block)?).ok());
+        if let Some(v) = parsed {
             let name = v
                 .get("name")
                 .or_else(|| v.get("tool"))

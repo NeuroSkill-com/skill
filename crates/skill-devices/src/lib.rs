@@ -119,8 +119,9 @@ pub fn enrich_band_snapshot(snap: &mut BandSnapshot, ctx: &SnapshotContext) {
 /// - Stillness (head-pose stillness × 0.2)
 /// - HRV component (RMSSD / 100 × 20, capped at 20; defaults to 10 if no PPG)
 pub fn compute_meditation(snap: &BandSnapshot, stillness: f64, rmssd: Option<f64>) -> f64 {
-    let alpha_dom = snap.channels.iter().map(|ch| ch.rel_alpha as f64).sum::<f64>() / snap.channels.len().max(1) as f64;
-    let beta_dom = snap.channels.iter().map(|ch| ch.rel_beta as f64).sum::<f64>() / snap.channels.len().max(1) as f64;
+    let chans = snap.analysis_channels();
+    let alpha_dom = chans.iter().map(|ch| ch.rel_alpha as f64).sum::<f64>() / chans.len().max(1) as f64;
+    let beta_dom = chans.iter().map(|ch| ch.rel_beta as f64).sum::<f64>() / chans.len().max(1) as f64;
     let alpha_component = (alpha_dom * 200.0).min(40.0);
     let beta_penalty = (beta_dom * 100.0).min(20.0);
     let still_component = stillness * 0.2;
@@ -141,7 +142,8 @@ pub fn compute_meditation(snap: &BandSnapshot, stillness: f64, rmssd: Option<f64
 /// lacks a clear frontal/parietal pair, it falls back to an even split of
 /// all channels by index (first half = "frontal", second half = "parietal").
 pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
-    if snap.channels.is_empty() {
+    let chans = snap.analysis_channels();
+    if chans.is_empty() {
         return 50.0;
     }
 
@@ -152,7 +154,7 @@ pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
     let mut frontal_theta = Vec::new();
     let mut parietal_alpha = Vec::new();
 
-    for ch in &snap.channels {
+    for ch in &chans {
         let name = ch.channel.as_str();
         let is_frontal = FRONTAL.iter().any(|p| name.starts_with(p));
         let is_parietal = PARIETAL.iter().any(|p| name.starts_with(p));
@@ -167,13 +169,13 @@ pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
     // Fallback: if the montage has no recognised frontal/parietal labels
     // (e.g. generic "Ch1"–"Ch4" on Ganglion), split channels by index.
     if frontal_theta.is_empty() || parietal_alpha.is_empty() {
-        let n = snap.channels.len();
+        let n = chans.len();
         if n < 2 {
             return 50.0;
         }
         let mid = n / 2;
-        frontal_theta = snap.channels[..mid].iter().map(|c| c.rel_theta as f64).collect();
-        parietal_alpha = snap.channels[mid..].iter().map(|c| c.rel_alpha as f64).collect();
+        frontal_theta = chans[..mid].iter().map(|c| c.rel_theta as f64).collect();
+        parietal_alpha = chans[mid..].iter().map(|c| c.rel_alpha as f64).collect();
     }
 
     let avg_frontal = frontal_theta.iter().sum::<f64>() / frontal_theta.len() as f64;
@@ -194,7 +196,8 @@ pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
 /// - Alpha spindle component: mean rel_alpha × 100, capped at 20
 pub fn compute_drowsiness(snap: &BandSnapshot) -> f64 {
     let tar = snap.tar as f64;
-    let alpha_dom = snap.channels.iter().map(|ch| ch.rel_alpha as f64).sum::<f64>() / snap.channels.len().max(1) as f64;
+    let chans = snap.analysis_channels();
+    let alpha_dom = chans.iter().map(|ch| ch.rel_alpha as f64).sum::<f64>() / chans.len().max(1) as f64;
     let tar_component = (tar / 3.0 * 80.0).min(80.0);
     let alpha_spindle = (alpha_dom * 100.0).min(20.0);
     (tar_component + alpha_spindle).clamp(0.0, 100.0)
@@ -205,11 +208,12 @@ pub fn compute_drowsiness(snap: &BandSnapshot) -> f64 {
 /// For each channel: β / (α + θ), averaged across all channels.
 /// Returns 0.5 if no channels are present.
 pub fn compute_engagement_raw(snap: &BandSnapshot) -> f32 {
-    if snap.channels.is_empty() {
+    let chans = snap.analysis_channels();
+    if chans.is_empty() {
         return 0.5;
     }
-    let n = snap.channels.len() as f32;
-    snap.channels
+    let n = chans.len() as f32;
+    chans
         .iter()
         .map(|ch| {
             let d = ch.rel_alpha + ch.rel_theta;
@@ -264,12 +268,12 @@ pub fn compute_engagement(snap: &BandSnapshot) -> f64 {
 /// degenerate channels. Theta is in the denominator (matches Putman 2010 /
 /// Angelidis 2016) — earlier sites that used `α / (α + β)` are deprecated.
 pub fn compute_relaxation(snap: &BandSnapshot) -> f64 {
-    if snap.channels.is_empty() {
+    let chans = snap.analysis_channels();
+    if chans.is_empty() {
         return sigmoid_0_100(0.5, 2.5, 1.0);
     }
-    let n = snap.channels.len() as f32;
-    let raw: f32 = snap
-        .channels
+    let n = chans.len() as f32;
+    let raw: f32 = chans
         .iter()
         .map(|ch| {
             let d = ch.rel_beta + ch.rel_theta;
@@ -560,6 +564,7 @@ mod tests {
         let ch = test_ch();
         BandSnapshot {
             channels: vec![ch.clone(), ch.clone(), ch.clone(), ch.clone()],
+            excluded_channels: Vec::new(),
             tar: 0.5,
             bar: 0.4,
             dtr: 1.2,

@@ -151,6 +151,45 @@ pub(crate) async fn lsl_virtual_source_running(State(state): State<AppState>) ->
     Json(serde_json::json!({"running": running}))
 }
 
+/// Current virtual-source configuration and simulated battery.
+pub(crate) async fn lsl_virtual_source_get_config(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let Ok(g) = state.lsl_virtual_source.lock() else {
+        return Json(serde_json::json!({"ok": false, "running": false}));
+    };
+    match g.as_ref() {
+        Some(src) => Json(serde_json::json!({
+            "ok": true,
+            "running": true,
+            "config": src.config(),
+            "battery_percent": src.battery_percent(),
+        })),
+        None => Json(serde_json::json!({"ok": true, "running": false})),
+    }
+}
+
+/// Change the running virtual source in place — template, faults, battery,
+/// noise — without restarting the stream, so a test can walk one session
+/// through a scenario. `channels` / `sample_rate` are fixed by the stream.
+pub(crate) async fn lsl_virtual_source_set_config(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let config: skill_lsl::VirtualSourceConfig = match serde_json::from_value(body) {
+        Ok(c) => c,
+        Err(e) => return Json(serde_json::json!({"ok": false, "error": format!("invalid config: {e}")})),
+    };
+    let Ok(g) = state.lsl_virtual_source.lock() else {
+        return Json(serde_json::json!({"ok": false, "running": false}));
+    };
+    match g.as_ref() {
+        Some(src) => {
+            src.update(config);
+            Json(serde_json::json!({"ok": true, "running": true, "config": src.config()}))
+        }
+        None => Json(serde_json::json!({"ok": false, "running": false, "error": "virtual source not running"})),
+    }
+}
+
 pub(crate) async fn lsl_iroh_start(State(state): State<AppState>) -> Json<serde_json::Value> {
     let mut guard = state.lsl_iroh_endpoint_id.lock().ok();
     if let Some(ref mut g) = guard {

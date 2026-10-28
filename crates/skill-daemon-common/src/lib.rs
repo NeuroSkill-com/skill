@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod ble_id;
+pub mod device_health;
 pub mod paths;
 
 pub const PROTOCOL_VERSION: u32 = 1;

@@ -20,9 +20,14 @@ pub(super) async fn cmd_status(state: &AppState) -> Result<Value, String> {
         .await
         .unwrap_or_default();
 
-    // Build device block
+    // Build device block. `connected` / `streaming` are what the LLM tool's
+    // formatter (`skill_tools::exec::status`) reads; without them it printed
+    // "connected (not connected)" and dropped the battery line.
+    let connected = status.state == "connected";
     let device = json!({
         "state": status.state,
+        "connected": connected,
+        "streaming": connected && status.sample_count > 0,
         "name": status.device_name,
         "kind": status.device_kind,
         "id": status.device_id,
@@ -54,34 +59,51 @@ pub(super) async fn cmd_status(state: &AppState) -> Result<Value, String> {
     // Build scores block from latest bands
     let scores = if let Some(b) = &bands { b.clone() } else { Value::Null };
 
-    // Build embeddings stub
+    // Per-channel quality label (good / fair / poor / no_signal).
+    let signal_quality: Vec<Value> = status
+        .channel_names
+        .iter()
+        .zip(&status.channel_quality)
+        .map(|(channel, quality)| json!({ "channel": channel, "quality": quality, "good": quality == "good" }))
+        .collect();
+
+    // Embedding totals across day stores; a day counts once it has a store.
     let skill_dir2 = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-    let embedding_count = tokio::task::spawn_blocking(move || {
-        let mut count = 0u64;
+    let (embedding_count, recording_days) = tokio::task::spawn_blocking(move || {
+        let (mut count, mut days) = (0u64, 0u64);
         if let Ok(entries) = std::fs::read_dir(&skill_dir2) {
             for entry in entries.filter_map(Result::ok) {
-                {
-                    if let Some(conn) = skill_data::eeg_store::open_existing(&entry.path()) {
-                        count += conn
-                            .query_row("SELECT COUNT(*) FROM embeddings", [], |r| {
-                                r.get::<_, i64>(0).map(|v| v as u64)
-                            })
-                            .unwrap_or(0);
-                    }
+                if let Some(conn) = skill_data::eeg_store::open_existing(&entry.path()) {
+                    days += 1;
+                    count += conn
+                        .query_row("SELECT COUNT(*) FROM embeddings", [], |r| {
+                            r.get::<_, i64>(0).map(|v| v as u64)
+                        })
+                        .unwrap_or(0);
                 }
             }
         }
-        count
+        (count, days)
     })
     .await
-    .unwrap_or(0);
+    .unwrap_or((0, 0));
+    let (embeddings_today, encoder_loaded) = state
+        .exg_model_status
+        .lock()
+        .map(|m| (m.embeddings_today, m.encoder_loaded))
+        .unwrap_or_default();
 
     Ok(json!({
         "device": device,
         "session": session,
         "scores": scores,
+        "signal_quality": signal_quality,
+        "device_health": state.device_health.lock().map(|h| h.clone()).unwrap_or_default(),
         "embeddings": {
             "total": embedding_count,
+            "today": embeddings_today,
+            "recording_days": recording_days,
+            "encoder_loaded": encoder_loaded,
         },
         "discovered_devices": devices.len(),
         "paired_devices": status.paired_devices,
@@ -784,6 +806,35 @@ mod tests {
         let result = cmd_status(&state).await.unwrap();
         assert!(result.get("device").is_some());
         assert!(result.get("session").is_some());
+    }
+
+    /// The LLM `skill` tool formats this payload (`skill_tools::exec::status`);
+    /// these are the keys it reads. Missing ones rendered as "not connected",
+    /// no battery and "Encoder loaded: no" while a headset was streaming.
+    #[tokio::test]
+    async fn cmd_status_has_the_fields_the_llm_formatter_reads() {
+        let (_td, state) = test_state();
+        if let Ok(mut s) = state.status.lock() {
+            s.state = "connected".into();
+            s.battery = 87.0;
+            s.sample_count = 256;
+            s.channel_names = vec!["TP9".into(), "AF7".into()];
+            s.channel_quality = vec!["good".into(), "poor".into()];
+        }
+        if let Ok(mut m) = state.exg_model_status.lock() {
+            m.encoder_loaded = true;
+            m.embeddings_today = 12;
+        }
+        let v = cmd_status(&state).await.unwrap();
+        assert_eq!(v["device"]["connected"], true);
+        assert_eq!(v["device"]["streaming"], true);
+        assert_eq!(v["device"]["battery"], 87.0);
+        assert_eq!(v["embeddings"]["today"], 12);
+        assert_eq!(v["embeddings"]["encoder_loaded"], true);
+        assert!(v["embeddings"]["recording_days"].is_u64());
+        assert_eq!(v["signal_quality"][1]["channel"], "AF7");
+        assert_eq!(v["signal_quality"][1]["quality"], "poor");
+        assert_eq!(v["signal_quality"][0]["good"], true);
     }
 
     #[tokio::test]

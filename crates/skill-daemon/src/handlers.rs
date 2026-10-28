@@ -15,9 +15,8 @@ use skill_daemon_common::{
     SessionControlRequest, SetPreferredDeviceRequest, StatusResponse, VersionResponse, WsClient, WsPortResponse,
     WsRequestLog, DAEMON_NAME, PROTOCOL_VERSION,
 };
-use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock as StdRwLock};
+use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::error;
 
@@ -1600,7 +1599,9 @@ pub(crate) async fn handle_ws(socket: WebSocket, mut rx: broadcast::Receiver<Eve
     //   - `{command:"unsubscribe",events:[…]}` removes types; an empty
     //     array or `["*"]` clears the whole subscription set.
     //   - Response: `{command:"subscribe",ok:true,subscribed:[…]}`.
-    let subscribed: Arc<StdRwLock<HashSet<String>>> = Arc::new(StdRwLock::new(HashSet::new()));
+    // A concurrent map used as a set: the event task reads it per event while
+    // the receiver loop changes it, with no lock between them.
+    let subscribed: Arc<bbtree::BBTreeMap<String, ()>> = Arc::new(bbtree::BBTreeMap::new());
 
     let (mut sender, mut receiver) = socket.split();
 
@@ -1664,15 +1665,8 @@ pub(crate) async fn handle_ws(socket: WebSocket, mut rx: broadcast::Receiver<Eve
         loop {
             match rx.recv().await {
                 Ok(ev) => {
-                    if is_high_rate_event(&ev.r#type) {
-                        // Cheap read lock — RwLock is std::sync (sub-µs reads).
-                        let subs = match subscribed_for_evt.read() {
-                            Ok(g) => g,
-                            Err(p) => p.into_inner(),
-                        };
-                        if !subs.contains(&ev.r#type) {
-                            continue;
-                        }
+                    if is_high_rate_event(&ev.r#type) && !subscribed_for_evt.contains_key(&ev.r#type) {
+                        continue;
                     }
                     let payload = match serde_json::to_string(&ev) {
                         Ok(v) => v,
@@ -1717,33 +1711,31 @@ pub(crate) async fn handle_ws(socket: WebSocket, mut rx: broadcast::Receiver<Eve
                         .and_then(serde_json::Value::as_array)
                         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                         .unwrap_or_default();
-                    let mut subs = match subscribed.write() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner(),
-                    };
                     let wants_all = events.iter().any(|e| e == "*");
                     if cmd_name == "subscribe" {
                         if wants_all {
                             for ty in HIGH_RATE_EVENT_TYPES {
-                                subs.insert((*ty).to_string());
+                                let _ = subscribed.insert((*ty).to_string(), ());
                             }
                         } else {
                             for ev in events {
                                 if HIGH_RATE_EVENT_TYPES.contains(&ev.as_str()) {
-                                    subs.insert(ev);
+                                    let _ = subscribed.insert(ev, ());
                                 }
                             }
                         }
                     } else if events.is_empty() || wants_all {
-                        subs.clear();
+                        // Only high-rate types are ever subscribed.
+                        for ty in HIGH_RATE_EVENT_TYPES {
+                            subscribed.remove(*ty);
+                        }
                     } else {
                         for ev in &events {
-                            subs.remove(ev);
+                            subscribed.remove(ev);
                         }
                     }
-                    let mut current: Vec<String> = subs.iter().cloned().collect();
-                    drop(subs);
-                    current.sort();
+                    // Key order: already sorted.
+                    let current: Vec<String> = subscribed.range_cloned::<String, _>(..).map(|(ty, ())| ty).collect();
                     let response = serde_json::json!({
                         "command": cmd_name,
                         "ok": true,

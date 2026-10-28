@@ -5,6 +5,7 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
+bbtree = { workspace = true }
 # For `paths`: resolving the platform config directory.
 dirs = "6"
 serde = { workspace = true }
