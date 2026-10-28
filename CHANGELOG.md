@@ -8,6 +8,41 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.7] — 2026-10-28
+
+### Features
+
+- **Device problems are always reported, and nothing stops because of them.** A device-health check (`skill-daemon-common::device_health`, every second) looks for a low or critical battery, electrodes with no signal or poor contact, electrodes that keep cutting out, electrodes faulty for minutes (normal on large caps), most electrodes failing together (points at the reference / ground), data that stopped arriving and device errors. Each problem comes with what to do about it, specific to the electrode and device (Muse ear vs forehead sensors, gel caps, reference electrode). It is served at `GET /v1/device/health`, pushed as a `DeviceHealth` event when it changes, and raised as a toast per new problem (not repeated within 10 minutes).
+- **Chat answers the question and tells you about the device.** While the connected device has problems, the assistant gets them as context (answer fully, note if the EEG reading is less reliable), and every reply ends with a device notice: full advice the first time, a one-line reminder while the problems are unchanged. The `status` tool includes the same problems.
+- **Bad electrodes no longer distort brain-state metrics or embeddings.** Electrodes reading no signal / poor contact are left out of every averaged metric (meditation, focus, drowsiness, ratios, spectral and complexity measures) while at least one good one remains, and ZUNA embeddings encode only usable electrodes (judged on each epoch, so live and re-embedded data agree). They are still recorded and still shown per channel (`excluded_channels` in the band snapshot).
+- **The virtual EEG source can simulate the real world.** Brain states (`relaxed`, `focused`, `drowsy`, `sleep`, `cycle`), `artifacts` (blinks, jaw clenches), per-electrode faults (`flat`, `noisy`, `railed`, `line_noise`, `drift`, `intermittent`, `hum`, `emg`) by label or index, a draining battery, and up to 64 channels with 10-10 labels — all changeable mid-session via `POST /v1/lsl/virtual-source/config`. `npm run test:device-health` walks one session through every case (34 checks, optionally with chat; fetches the EEG encoder weights if missing).
+
+### Bugfixes
+
+- **The EEG Model settings page reports embedding status again.** `/v1/models/status` always said the encoder was not loaded and showed 0 embeddings today, even while a session was writing embeddings: nothing in the daemon updated those fields. The embed worker now keeps `encoder_loaded`, `embed_worker_active`, `encoder_describe`, `embeddings_today`, the last/average embed time, today's database paths and `latest_metrics` (the most recent epoch's band metrics, including metrics-only epochs) current, and clears the live flags when the session ends. A worker still finishing its queue after a newer session has started can't overwrite the new session's status.
+
+- **Brain-state metrics are computed from filtered signal only.** On every sample where the notch/band-pass filter had no output yet — almost every sample with the default filter — the pipeline fed the raw sample to the band analyser, and the filtered copy of the same data followed a hop later. Mains hum and muscle noise reached every metric: a worn Muse read "high gamma dominant, SNR −5 dB". Regression test: 30 µV alpha under 100 µV of 60 Hz hum now reads as alpha.
+- **Electrode quality catches noise at a normal amplitude.** Quality was amplitude-only, so a loose or off-skin sensor read "good" whenever its noise was a normal size. Mains is now notched out of the quality signal and the effective frequency of the rest (4-second median) is checked: noise-dominated (≥ 45 Hz) → poor, noisy (≥ 35 Hz) or ≥ 75 % mains hum → fair. Thresholds come from real Muse S recordings; replayed through the new code, a loose-ear-sensor session goes from "good" everywhere to mostly fair, a headset on the desk stays poor, and a worn session stays mostly good. Mostly-fair electrodes get a "contact could be better" hint and stay in the analysis.
+- Embedding epochs reported the device's native sample rate for data already resampled to 256 Hz, so encoders were told the wrong rate on 250/500 Hz devices.
+- **Devices with more than 32 channels no longer crash the session.** `EegFilter::drain` indexed a fixed 32-slot array without a bounds check, so a 64-electrode cap panicked on its first samples. Brain-state analysis still reads the first 32 channels; the device notice says so.
+- Signal quality was published as `nosignal` while the monitor, the UI electrode map and the chat tool expected `no_signal`, so dead electrodes were never counted as bad.
+- Spectral-edge, spectral-centroid and the time-domain complexity metrics averaged all 32 analyser slots, including channels the device doesn't have, into a 4-channel device's values.
+
+### Refactor
+
+- Embed-worker status reporting lives in `skill-daemon/src/embed/status.rs` (`StatusReporter`). The `EpochMetrics` → `LatestEpochMetrics` mapping is `EpochMetrics::to_latest` in `skill-exg`, which destructures every field, so a metric added later can't silently go missing from the status.
+
+### LLM
+
+- **The chat assistant can read your EEG status again.** Its `skill` tool (device, battery, signal quality, scores, embeddings) always answered "tool disabled in settings": the tool's port is runtime-only, and since the daemon took over the LLM nothing set it. Both LLM start paths and the settings hot-patch now point the tool at the daemon, and the tool sends the daemon's bearer token, which the command endpoint now requires. The token is shared by handle, so refreshing the default token reaches a running LLM, and it never appears in `Debug` output or saved settings.
+- The `status` result the tool formats now carries what the formatter reads: `connected` / `streaming`, today's embedding count, whether the encoder is loaded, recording days and per-channel signal quality. Before, a streaming headset came out as "connected (not connected)" with no battery line.
+- `/v1/llm/server/status` reports the context the model was actually compiled for (`n_ctx: 8192` for the default model) instead of the requested `ctx_size` (16384 from the auto ladder). A prompt that doesn't fit now says how long it is and what the limit is, and only suggests raising "Context size" when that can help. The hint texts no longer contain runs of spaces.
+- **EEG questions no longer come back as an empty reply.** The default Qwen3.5-0.8B often drops the last `}` of a nested tool call (`[TOOL_CALL]{"name":"skill","arguments":{"command":"status","args":{"k":5}}[/TOOL_CALL]`). The parser rejected it, the model re-emitted the same call twice, and the chat ended blank; 3 of 4 EEG questions did this. A `[TOOL_CALL]` block that ends on a closing bracket but is short of closers is now completed and parsed (the end tag bounds it; a value cut off mid-way is still rejected). If a call still can't be parsed after the retries, the user gets a short "couldn't form a valid tool call" reply instead of nothing, and the log shows the offending fragment.
+
+### Dependencies
+
+- Tailwind CSS 4.2 → 4.3.3 (`tailwindcss`, `@tailwindcss/vite`). Older `@tailwindcss/node` called `module.register()`, which Node 26 deprecates (DEP0205), so `npm run check` and every Vite build printed a deprecation warning; 4.3.3 uses `module.registerHooks()`.
+
 ## [0.1.0-rc.6] — 2026-10-27
 
 ### Refactor
@@ -667,16 +702,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - updated inference
 
-## [0.0.131-rc.22] — 2026-08-04
-
-### Features
-
-- lock
-
 ## Earlier releases
 
-The 150 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 151 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.22](changes/releases/0.0.131-rc.22.md)
 - [0.0.131-rc.21](changes/releases/0.0.131-rc.21.md)
 - [0.0.131-rc.20](changes/releases/0.0.131-rc.20.md)
 - [0.0.131-rc.19](changes/releases/0.0.131-rc.19.md)

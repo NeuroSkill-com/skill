@@ -1,6 +1,6 @@
 {
   "name": "neuroskill",
-  "version": "0.1.0-rc.6",
+  "version": "0.1.0-rc.7",
   "description": "",
   "type": "module",
   "engines": {
@@ -131,7 +131,7 @@
   },
   "license": "GPL-3.0-only",
   "dependencies": {
-    "@tailwindcss/vite": "^4.2.4",
+    "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2",
@@ -149,7 +149,7 @@
     "pmtiles": "^4.4.0",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
-    "tailwindcss": "^4.2.4",
+    "tailwindcss": "^4.3.3",
     "three": "^0.184.0"
   },
   "devDependencies": {
