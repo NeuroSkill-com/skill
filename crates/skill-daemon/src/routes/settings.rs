@@ -22,9 +22,9 @@ use crate::{
         settings_device, settings_exg, settings_hooks_activity,
         settings_io::{load_user_settings, patch_settings, patch_user_settings_sync},
         settings_llm::{
-            get_exg_auto_download_weights, get_exg_inference_device, get_hf_endpoint, get_inference_device,
-            get_llm_config, set_exg_auto_download_weights, set_exg_inference_device, set_hf_endpoint,
-            set_inference_device, set_llm_config,
+            get_eeg_fft_backend, get_exg_auto_download_weights, get_exg_inference_device, get_hf_endpoint,
+            get_inference_device, get_llm_config, set_eeg_fft_backend, set_exg_auto_download_weights,
+            set_exg_inference_device, set_hf_endpoint, set_inference_device, set_llm_config,
         },
         settings_llm_chat, settings_llm_runtime,
         settings_lsl::{
@@ -359,6 +359,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/exg-inference-device",
             get(get_exg_inference_device).post(set_exg_inference_device),
+        )
+        .route(
+            "/settings/eeg-fft-backend",
+            get(get_eeg_fft_backend).post(set_eeg_fft_backend),
         )
         .route(
             "/settings/exg-auto-download-weights",

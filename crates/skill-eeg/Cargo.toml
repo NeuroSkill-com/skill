@@ -11,6 +11,8 @@ default = []
 # rlx-fft enables the rlx CPU baseline; the tier suffixes add GPU backends.
 rlx-fft       = ["dep:rlx", "rlx/cpu"]
 rlx-fft-metal = ["rlx-fft", "rlx/metal"]
+rlx-fft-mlx   = ["rlx-fft", "rlx/mlx"]
+rlx-fft-ane   = ["rlx-fft", "rlx/coreml"]
 rlx-fft-cuda  = ["rlx-fft", "rlx/cuda"]
 rlx-fft-gpu   = ["rlx-fft", "rlx/gpu"]
 rlx-fft-rocm  = ["rlx-fft", "rlx/rocm"]

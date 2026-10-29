@@ -1094,6 +1094,14 @@ pub struct UserSettings {
     #[serde(default = "default_exg_inference_device")]
     pub exg_inference_device: String,
 
+    /// Where the live EEG DSP (filter, band analysis) runs its FFTs:
+    /// `"auto"` (Accelerate on macOS, rustfft elsewhere), `"cpu"`,
+    /// `"accelerate"`, or an rlx device (`"metal"`, `"mlx"`, `"ane"`, `"cuda"`,
+    /// …). A backend that is missing or fails a parity check is refused and
+    /// the DSP stays where it was. See `skill_eeg::fft`.
+    #[serde(default = "default_eeg_fft_backend")]
+    pub eeg_fft_backend: String,
+
     /// Fetch EXG encoder weights automatically when a session starts and they
     /// are not on disk.
     ///
@@ -1230,6 +1238,9 @@ pub fn default_inference_device() -> String {
     "gpu".into()
 }
 pub fn default_exg_inference_device() -> String {
+    "auto".into()
+}
+pub fn default_eeg_fft_backend() -> String {
     "auto".into()
 }
 pub fn default_llm_gpu_layers_saved() -> u32 {
@@ -1400,6 +1411,7 @@ impl Default for UserSettings {
             llm_gpu_layers_saved: default_llm_gpu_layers_saved(),
             llm_rlx_device_saved: String::new(),
             exg_inference_device: default_exg_inference_device(),
+            eeg_fft_backend: default_eeg_fft_backend(),
             exg_auto_download_weights: false,
             reembed: ReembedConfig::default(),
             daemon_auto_restart: default_daemon_auto_restart(),

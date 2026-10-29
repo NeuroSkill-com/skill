@@ -266,7 +266,8 @@ const history: Record<string, string> = {
   // BIDS export
   "history.bids.title": "BIDS としてエクスポート",
   "history.bids.button": "BIDS エクスポート",
-  "history.bids.description": "指定期間の記録を BIDS-EEG データセットとして書き出します（BrainVision EEG、ラベルはイベント、PPG と IMU）。",
+  "history.bids.description":
+    "指定期間の記録を BIDS-EEG データセットとして書き出します（BrainVision EEG、ラベルはイベント、PPG と IMU）。",
   "history.bids.from": "開始",
   "history.bids.to": "終了",
   "history.bids.presetSession": "このセッション",

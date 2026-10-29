@@ -167,7 +167,7 @@ needed_rlx="$({
 # (transitive crates.io pins from rlx-models). Omit unused-only crates (bake/optim).
 for extra in \
   rlx rlx-ir rlx-flow rlx-runtime rlx-driver rlx-opt rlx-autodiff \
-  rlx-compile rlx-fusion rlx-cpu rlx-gguf rlx-pkg rlx-text rlx-metal \
+  rlx-compile rlx-fusion rlx-cpu rlx-spectral rlx-gguf rlx-pkg rlx-text rlx-metal \
   rlx-mlx rlx-cuda rlx-wgpu rlx-rocm rlx-onnx-import rlx-nemo rlx-umap rlx-tensor \
   rlx-macros rlx-funasr rlx-nemotron-asr rlx-asr rlx-tts-bench rlx-whisper rlx-vad \
   rlx-search rlx-rng

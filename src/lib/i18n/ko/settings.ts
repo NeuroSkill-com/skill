@@ -298,7 +298,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "로우패스 차단 주파수",
   "settings.pipeline": "파이프라인",
   "settings.passthrough": "패스스루",
-  "settings.gpuLatency": "GPU · ~125 ms",
+  "settings.fftBackend": "FFT 백엔드",
+  "settings.fftBackendDesc":
+    "신호 필터와 대역 분석이 FFT를 계산하는 위치입니다. 자동은 가장 빠른 CPU 경로(macOS에서는 Accelerate)를 사용합니다. 결과가 기준과 일치하는 백엔드만 사용되며, 변경 사항은 즉시 적용됩니다.",
+  "settings.fftBackendAuto": "자동",
+  "settings.fftBackendActive": "{backend}에서 실행 중",
+  "settings.fftBackendRefused": "사용할 수 없음: {reason}",
+  "settings.fftBackendGpuNote":
+    "GPU 및 Neural Engine 백엔드는 EEG 크기의 FFT에서 더 느리고, 다른 모델이 GPU를 사용하는 동안 멈출 수 있습니다.",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.dailyGoal": "일일 목표",
   "settings.dailyGoalMinutes": "하루 목표 분",
   "settings.dailyGoalDesc": "일일 녹화 목표를 설정하세요. 진행률이 대시보드에 표시됩니다.",

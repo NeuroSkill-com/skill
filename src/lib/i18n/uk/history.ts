@@ -273,7 +273,8 @@ const history: Record<string, string> = {
   // BIDS export
   "history.bids.title": "Експорт у BIDS",
   "history.bids.button": "Експорт BIDS",
-  "history.bids.description": "Записати записи за проміжок часу як набір даних BIDS-EEG: ЕЕГ у BrainVision, мітки як події, PPG та IMU.",
+  "history.bids.description":
+    "Записати записи за проміжок часу як набір даних BIDS-EEG: ЕЕГ у BrainVision, мітки як події, PPG та IMU.",
   "history.bids.from": "Від",
   "history.bids.to": "До",
   "history.bids.presetSession": "Цей сеанс",

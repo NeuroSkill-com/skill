@@ -266,7 +266,8 @@ const history: Record<string, string> = {
   // BIDS export
   "history.bids.title": "BIDS로 내보내기",
   "history.bids.button": "BIDS 내보내기",
-  "history.bids.description": "선택한 기간의 기록을 BIDS-EEG 데이터셋으로 저장합니다: BrainVision EEG, 이벤트로 저장되는 라벨, PPG 및 IMU.",
+  "history.bids.description":
+    "선택한 기간의 기록을 BIDS-EEG 데이터셋으로 저장합니다: BrainVision EEG, 이벤트로 저장되는 라벨, PPG 및 IMU.",
   "history.bids.from": "시작",
   "history.bids.to": "끝",
   "history.bids.presetSession": "이 세션",

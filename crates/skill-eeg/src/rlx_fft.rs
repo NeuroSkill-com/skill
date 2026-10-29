@@ -104,12 +104,16 @@ fn get_or_compile_inv(device: Device, batch: usize, n_pad: usize) -> Arc<Mutex<C
 /// All signals must have the same length.  Returns `(real, imag)` pairs, each
 /// of length `n.next_power_of_two()`, matching the `cpu_fft::fft_batch` layout.
 pub fn fft_batch(signals: &[Vec<f32>]) -> Vec<(Vec<f32>, Vec<f32>)> {
+    fft_batch_on(current_device(), signals)
+}
+
+/// [`fft_batch`] on an explicit device (used by [`crate::fft`]).
+pub fn fft_batch_on(device: Device, signals: &[Vec<f32>]) -> Vec<(Vec<f32>, Vec<f32>)> {
     if signals.is_empty() {
         return vec![];
     }
     let batch = signals.len();
     let n = signals[0].len();
-    let device = current_device();
     let kernel = get_or_compile_fwd(device, batch, n);
     let n_pad = n.next_power_of_two();
 
@@ -135,12 +139,16 @@ pub fn fft_batch(signals: &[Vec<f32>]) -> Vec<(Vec<f32>, Vec<f32>)> {
 /// Each spectrum is a `(real, imag)` pair of length `n_pad` (power of two).
 /// Returns the real time-domain signal of the same length.
 pub fn ifft_batch(spectra: &[(Vec<f32>, Vec<f32>)]) -> Vec<Vec<f32>> {
+    ifft_batch_on(current_device(), spectra)
+}
+
+/// [`ifft_batch`] on an explicit device (used by [`crate::fft`]).
+pub fn ifft_batch_on(device: Device, spectra: &[(Vec<f32>, Vec<f32>)]) -> Vec<Vec<f32>> {
     if spectra.is_empty() {
         return vec![];
     }
     let batch = spectra.len();
     let n_pad = spectra[0].0.len();
-    let device = current_device();
     let kernel = get_or_compile_inv(device, batch, n_pad);
 
     let re_flat: Vec<f32> = spectra.iter().flat_map(|(re, _)| re.iter().copied()).collect();
@@ -165,4 +173,54 @@ pub fn psd(real: &[f32], imag: &[f32]) -> Vec<f32> {
         .zip(imag.iter())
         .map(|(&r, &i)| (r * r + i * i) / n as f32)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every FFT backend must match `cpu_fft` exactly in layout and scale
+    /// (band powers and the filter depend on it). rlx's CPU backend here; the
+    /// selectable devices are checked the same way when chosen
+    /// (`crate::fft::set_backend`).
+    #[test]
+    fn matches_cpu_fft() {
+        for n in [250usize, 256, 1000, 1024] {
+            let sig: Vec<Vec<f32>> = (0..4)
+                .map(|c| {
+                    (0..n)
+                        .map(|i| ((i * (c + 3)) as f32 * 0.07).sin() * 20.0 + (i % 7) as f32)
+                        .collect()
+                })
+                .collect();
+            let a = fft_batch(&sig);
+            let b = crate::cpu_fft::fft_batch(&sig);
+            let scale = a[0].0.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
+            for ((ar, ai), (br, bi)) in a.iter().zip(&b) {
+                assert_eq!(ar.len(), br.len(), "n={n}: padded length");
+                for k in 0..ar.len() {
+                    assert!(
+                        (ar[k] - br[k]).abs() <= 1e-3 * scale && (ai[k] - bi[k]).abs() <= 1e-3 * scale,
+                        "n={n} bin {k}: rlx ({}, {}) vs cpu ({}, {})",
+                        ar[k],
+                        ai[k],
+                        br[k],
+                        bi[k]
+                    );
+                }
+            }
+            let ra = ifft_batch(&a);
+            let rb = crate::cpu_fft::ifft_batch(&b);
+            for (x, y) in ra.iter().zip(&rb) {
+                for k in 0..x.len() {
+                    assert!(
+                        (x[k] - y[k]).abs() <= 1e-3,
+                        "n={n} ifft sample {k}: {} vs {}",
+                        x[k],
+                        y[k]
+                    );
+                }
+            }
+        }
+    }
 }

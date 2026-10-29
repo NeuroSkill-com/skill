@@ -247,6 +247,18 @@ async fn daemon_main() -> anyhow::Result<()> {
         }
     }
 
+    // Apply the saved EEG FFT backend now, so `GET /settings/eeg-fft-backend`
+    // reports what sessions will use before the first one starts. The parity
+    // probe may compile a GPU graph, so off the async runtime.
+    {
+        let backend = skill_settings::load_settings(&skill_dir).eeg_fft_backend;
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = skill_eeg::fft::set_backend(&backend) {
+                tracing::warn!(requested = %backend, "EEG FFT backend refused at startup: {e}");
+            }
+        });
+    }
+
     // CLI flag overrides the persisted setting
     if cli_iroh_logs {
         state

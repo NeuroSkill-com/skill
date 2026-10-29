@@ -164,6 +164,42 @@ pub(crate) async fn set_inference_device(
 
 crate::settings_get_value!(get_exg_inference_device => exg_inference_device);
 
+/// `GET /settings/eeg-fft-backend` → the saved choice, the backend FFTs run on
+/// now, and the backends this build can try here.
+pub(crate) async fn get_eeg_fft_backend(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "value": load_user_settings(&state).eeg_fft_backend,
+        "active": skill_eeg::fft::backend().name(),
+        "available": skill_eeg::fft::known(),
+    }))
+}
+
+/// `POST /settings/eeg-fft-backend` `{"value": "accelerate"}` — applies it now
+/// (after a parity check against rustfft) and saves it only if it was accepted.
+pub(crate) async fn set_eeg_fft_backend(
+    State(state): State<AppState>,
+    Json(req): Json<StringValueRequest>,
+) -> Json<serde_json::Value> {
+    let name = req.value.trim().to_string();
+    // The probe may compile a GPU graph; keep it off the async runtime.
+    let n2 = name.clone();
+    let res = tokio::task::spawn_blocking(move || skill_eeg::fft::set_backend(&n2))
+        .await
+        .unwrap_or_else(|e| Err(format!("probe task failed: {e}")));
+    match res {
+        Ok(b) => {
+            let saved = name.to_ascii_lowercase();
+            modify_settings_blocking(&state, move |s| s.eeg_fft_backend = saved).await;
+            Json(serde_json::json!({"ok": true, "value": name.to_ascii_lowercase(), "active": b.name()}))
+        }
+        Err(e) => Json(serde_json::json!({
+            "ok": false,
+            "error": e,
+            "active": skill_eeg::fft::backend().name(),
+        })),
+    }
+}
+
 // Opt-in: fetch EXG encoder weights automatically when a session finds them
 // missing. Off by default — see `Settings::exg_auto_download_weights`.
 crate::settings_bool!(get_exg_auto_download_weights, set_exg_auto_download_weights => exg_auto_download_weights);

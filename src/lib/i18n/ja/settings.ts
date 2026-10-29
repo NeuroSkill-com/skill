@@ -310,7 +310,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "ローパスカットオフ",
   "settings.pipeline": "パイプライン",
   "settings.passthrough": "パススルー",
-  "settings.gpuLatency": "GPU · 約125ms",
+  "settings.fftBackend": "FFT バックエンド",
+  "settings.fftBackendDesc":
+    "信号フィルターと帯域解析が FFT を計算する場所です。自動は最速の CPU 経路（macOS では Accelerate）を使います。結果が基準と一致するバックエンドだけが使われ、変更はすぐに反映されます。",
+  "settings.fftBackendAuto": "自動",
+  "settings.fftBackendActive": "{backend} で実行中",
+  "settings.fftBackendRefused": "利用できません: {reason}",
+  "settings.fftBackendGpuNote":
+    "GPU と Neural Engine のバックエンドは EEG サイズの FFT では遅く、他のモデルが GPU を使っている間は停止することがあります。",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.dailyGoal": "デイリー目標",
   "settings.dailyGoalMinutes": "1日あたりの目標分数",
   "settings.dailyGoalDesc": "デイリー記録目標を設定します。進捗はダッシュボードに表示されます。",

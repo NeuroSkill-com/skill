@@ -273,7 +273,8 @@ const history: Record<string, string> = {
   // BIDS export
   "history.bids.title": "Exporter en BIDS",
   "history.bids.button": "Exporter en BIDS",
-  "history.bids.description": "Enregistre les enregistrements d’une période sous forme de jeu de données BIDS-EEG : EEG BrainVision, étiquettes comme événements, PPG et IMU.",
+  "history.bids.description":
+    "Enregistre les enregistrements d’une période sous forme de jeu de données BIDS-EEG : EEG BrainVision, étiquettes comme événements, PPG et IMU.",
   "history.bids.from": "Du",
   "history.bids.to": "Au",
   "history.bids.presetSession": "Cette session",

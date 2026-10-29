@@ -152,7 +152,7 @@ export const EXEMPT_KEY_PREFIXES = [
   "settings.logBluetooth",
   "settings.logWebsocket", // technology names
   "settings.openbciPreset", // electrode placement names (Frontal, Occipital)
-  "settings.gpuLatency", // technical spec string
+  "settings.pipelineFft", // "FFT · {backend}" technical label
   "helpPrivacy.ble", // technology full name
   "helpSettings.openbciGanglion", // hardware product name
   "apiStatus.", // generic English labels used in technical context

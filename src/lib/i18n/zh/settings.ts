@@ -294,7 +294,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "低通截止频率",
   "settings.pipeline": "处理管线",
   "settings.passthrough": "直通",
-  "settings.gpuLatency": "GPU · ~125 ms",
+  "settings.fftBackend": "FFT 后端",
+  "settings.fftBackendDesc":
+    "信号滤波和频段分析计算 FFT 的位置。自动会使用最快的 CPU 路径（macOS 上为 Accelerate）。只有结果与参考一致的后端才会被使用，更改立即生效。",
+  "settings.fftBackendAuto": "自动",
+  "settings.fftBackendActive": "正在 {backend} 上运行",
+  "settings.fftBackendRefused": "不可用：{reason}",
+  "settings.fftBackendGpuNote":
+    "GPU 和 Neural Engine 后端处理 EEG 大小的 FFT 更慢，并且在其他模型使用 GPU 时可能会卡顿。",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.dailyGoal": "每日目标",
   "settings.dailyGoalMinutes": "每日目标分钟数",
   "settings.dailyGoalDesc": "设置您的每日录制目标。进度显示在仪表板上。",

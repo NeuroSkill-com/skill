@@ -169,6 +169,7 @@ rlx-autodiff     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main"
 rlx-compile      = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-fusion       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-cpu          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-spectral     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-gguf         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-pkg          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-text         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }

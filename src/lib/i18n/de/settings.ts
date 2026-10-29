@@ -39,7 +39,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "Tiefpass-Grenzfrequenz",
   "settings.pipeline": "Verarbeitungskette",
   "settings.passthrough": "Durchleitung",
-  "settings.gpuLatency": "GPU · ~125 ms",
+  "settings.fftBackend": "FFT-Backend",
+  "settings.fftBackendDesc":
+    "Wo Signalfilter und Bandanalyse ihre FFTs berechnen. Auto nutzt den schnellsten CPU-Pfad (Accelerate unter macOS). Ein Backend wird nur verwendet, wenn seine Ergebnisse mit der Referenz übereinstimmen; Änderungen gelten sofort.",
+  "settings.fftBackendAuto": "Auto",
+  "settings.fftBackendActive": "Läuft auf {backend}",
+  "settings.fftBackendRefused": "Nicht verfügbar: {reason}",
+  "settings.fftBackendGpuNote":
+    "GPU- und Neural-Engine-Backends sind bei FFTs in EEG-Größe langsamer und können stocken, während andere Modelle die GPU nutzen.",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.eegEmbedding": "EEG-Embedding",
   "settings.epochOverlap": "Epochen-Überlappung",
   "settings.everyNSecs": "alle {n} s",

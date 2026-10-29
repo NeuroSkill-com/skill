@@ -133,11 +133,18 @@ impl Pipeline {
 
         // DSP pipeline: filter → bands → quality → artifacts.
         let filter_config = {
+            // FFT backend for the filter and band analyser (`eeg_fft_backend`,
+            // default `auto` = CPU-side). Separate from the EXG device setting,
+            // which is for encoders. A refused backend keeps the current one.
             let settings = skill_settings::load_settings(skill_dir);
-            // Propagate the EXG device preference to the RLX FFT kernels so the
-            // filter and band-analyzer use Metal on macOS, CUDA → wgpu → CPU elsewhere.
-            #[cfg(feature = "embed-exg")]
-            skill_eeg::rlx_fft::init_device(crate::embed::resolve_exg_device(&settings.exg_inference_device));
+            match skill_eeg::fft::set_backend(&settings.eeg_fft_backend) {
+                Ok(b) => tracing::info!(backend = %b.name(), "EEG FFT backend"),
+                Err(e) => tracing::warn!(
+                    requested = %settings.eeg_fft_backend,
+                    using = %skill_eeg::fft::backend().name(),
+                    "EEG FFT backend refused: {e}"
+                ),
+            }
             let mut cfg = settings.filter_config;
             cfg.sample_rate = sample_rate as f32;
             cfg

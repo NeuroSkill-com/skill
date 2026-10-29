@@ -60,10 +60,8 @@
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(not(feature = "rlx-fft"))]
-use crate::cpu_fft::{fft_batch, ifft_batch, psd as one_sided_psd};
-#[cfg(feature = "rlx-fft")]
-use crate::rlx_fft::{fft_batch, ifft_batch, psd as one_sided_psd};
+// Selectable backend, CPU by default — see `crate::fft` for why.
+use crate::fft::{fft_batch, ifft_batch, psd as one_sided_psd};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{

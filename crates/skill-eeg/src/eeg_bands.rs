@@ -64,10 +64,8 @@ use std::collections::VecDeque;
 use std::f32::consts::PI;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(not(feature = "rlx-fft"))]
-use crate::cpu_fft::{fft_batch, psd};
-#[cfg(feature = "rlx-fft")]
-use crate::rlx_fft::{fft_batch, psd};
+// Selectable backend, CPU by default — see `crate::fft`.
+use crate::fft::{fft_batch, psd};
 use serde::{Deserialize, Serialize};
 
 use crate::band_metrics::*;

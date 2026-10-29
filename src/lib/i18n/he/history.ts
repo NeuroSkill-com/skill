@@ -269,7 +269,8 @@ const history: Record<string, string> = {
   // BIDS export
   "history.bids.title": "ייצוא כ-BIDS",
   "history.bids.button": "ייצוא BIDS",
-  "history.bids.description": "כתיבת ההקלטות בטווח זמן כמערך נתונים BIDS-EEG: EEG בפורמט BrainVision, תוויות כאירועים, PPG ו-IMU.",
+  "history.bids.description":
+    "כתיבת ההקלטות בטווח זמן כמערך נתונים BIDS-EEG: EEG בפורמט BrainVision, תוויות כאירועים, PPG ו-IMU.",
   "history.bids.from": "מ-",
   "history.bids.to": "עד",
   "history.bids.presetSession": "הסשן הזה",

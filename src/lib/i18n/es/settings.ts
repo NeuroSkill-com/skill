@@ -338,7 +338,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "Corte de paso bajo",
   "settings.pipeline": "Tubería",
   "settings.passthrough": "Paso a través",
-  "settings.gpuLatency": "GPU · ~125 ms",
+  "settings.fftBackend": "Backend de FFT",
+  "settings.fftBackendDesc":
+    "Dónde calculan sus FFT el filtro de señal y el análisis de bandas. Auto usa la ruta de CPU más rápida (Accelerate en macOS). Un backend solo se usa si sus resultados coinciden con la referencia, y los cambios se aplican al instante.",
+  "settings.fftBackendAuto": "Auto",
+  "settings.fftBackendActive": "Ejecutándose en {backend}",
+  "settings.fftBackendRefused": "No disponible: {reason}",
+  "settings.fftBackendGpuNote":
+    "Los backends de GPU y Neural Engine son más lentos para FFT del tamaño de un EEG y pueden detenerse mientras otros modelos usan la GPU.",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.dailyGoal": "Objetivo diario",
   "settings.dailyGoalMinutes": "Minutos objetivo por día",
   "settings.dailyGoalDesc": "Establece tu objetivo de grabación diario. El progreso se muestra en el tablero.",

@@ -4,19 +4,37 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-//! CPU-based FFT fallback used when the `gpu` feature is disabled.
+//! CPU FFT via `rustfft` — the default backend of [`crate::fft`].
 //!
-//! Provides the same API surface as `gpu_fft` (fft_batch, ifft_batch, psd)
-//! using `rustfft` so that tests and headless CI environments work without
-//! a GPU.
+//! Same API surface as `rlx_fft` / `accel_fft` (fft_batch, ifft_batch, psd).
+//! The reference every other backend is checked against.
 
-use rustfft::{num_complex::Complex, FftPlanner};
+use std::cell::RefCell;
+use std::sync::Arc;
+
+use rustfft::{num_complex::Complex, Fft, FftPlanner};
+
+thread_local! {
+    // A planner caches its plans; a fresh one per call re-planned every time
+    // (~4× the cost of the transform itself for 32 × 1024).
+    static PLANNER: RefCell<FftPlanner<f32>> = RefCell::new(FftPlanner::new());
+}
+
+fn plan(n: usize, inverse: bool) -> Arc<dyn Fft<f32>> {
+    PLANNER.with(|p| {
+        let mut p = p.borrow_mut();
+        if inverse {
+            p.plan_fft_inverse(n)
+        } else {
+            p.plan_fft_forward(n)
+        }
+    })
+}
 
 /// Forward FFT of a single real signal → (real, imag) vectors.
 fn fft_single(input: &[f32]) -> (Vec<f32>, Vec<f32>) {
     let n = input.len().next_power_of_two();
-    let mut planner = FftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(n);
+    let fft = plan(n, false);
 
     let mut buf: Vec<Complex<f32>> = input.iter().map(|&v| Complex::new(v, 0.0)).collect();
     buf.resize(n, Complex::new(0.0, 0.0));
@@ -45,8 +63,7 @@ pub fn ifft_batch(spectra: &[(Vec<f32>, Vec<f32>)]) -> Vec<Vec<f32>> {
         .iter()
         .map(|(real, imag)| {
             let n = real.len();
-            let mut planner = FftPlanner::<f32>::new();
-            let ifft = planner.plan_fft_inverse(n);
+            let ifft = plan(n, true);
 
             let mut buf: Vec<Complex<f32>> = real
                 .iter()

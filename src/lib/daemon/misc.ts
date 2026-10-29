@@ -76,6 +76,24 @@ export async function setExgInferenceDevice(device: string): Promise<void> {
   await daemonPost("/v1/settings/exg-inference-device", { value: device });
 }
 
+/** EEG FFT backend: the saved choice, what runs now, and what this machine can try. */
+export interface EegFftBackend {
+  value: string;
+  active: string;
+  available: string[];
+}
+
+export async function getEegFftBackend(): Promise<EegFftBackend> {
+  return daemonGet<EegFftBackend>("/v1/settings/eeg-fft-backend");
+}
+
+/** Applies after a parity check; `ok: false` keeps the current backend and says why. */
+export async function setEegFftBackend(
+  value: string,
+): Promise<{ ok: boolean; value?: string; active: string; error?: string }> {
+  return daemonPost("/v1/settings/eeg-fft-backend", { value });
+}
+
 export async function downloadOcrModels(): Promise<void> {
   await daemonPost("/v1/settings/screenshot/download-ocr", {});
 }

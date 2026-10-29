@@ -193,9 +193,15 @@ def main():
             check("chat still answers the prompt", not err and len(ans.split("---")[0].strip()) > 20, ans[:120])
             check("chat reply carries the device notice with advice",
                   "Device check" in ans and "Fp1" in ans and "forehead" in ans.lower(), ans[-260:].replace("\n", " "))
+            before = set(codes(health(d)))
             ans2, _ = chat(d, "Name one benefit of meditation in one sentence.")
+            changed = set(codes(health(d))) != before
+            # On a slow machine Fp1 can cross the persistent-fault threshold
+            # between the replies; the problem then changed, and full advice
+            # again is correct.
             check("second reply: short reminder, not the full advice",
-                  "Fp1" in ans2 and "forehead" not in ans2.split("---")[-1].lower(), ans2[-200:].replace("\n", " "))
+                  "Fp1" in ans2 and (changed or "forehead" not in ans2.split("---")[-1].lower()),
+                  ("(problem changed between replies) " if changed else "") + ans2[-200:].replace("\n", " "))
 
         print("\n### the same electrode stays dead → persistent fault (20 s in this test)")
         h = wait_for(d, lambda h: "faulty_electrodes" in codes(h), 35)

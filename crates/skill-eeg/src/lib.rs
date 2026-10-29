@@ -22,10 +22,14 @@ pub mod constants {
 #[cfg(feature = "rlx-fft")]
 pub mod rlx_fft;
 
-/// CPU-based FFT fallback (rustfft) used when `rlx-fft` is not enabled.
-#[cfg(not(feature = "rlx-fft"))]
+/// Apple Accelerate (vDSP) FFT backend.
+#[cfg(target_os = "macos")]
+pub mod accel_fft;
+/// CPU FFT (rustfft) — the default FFT backend.
 pub mod cpu_fft;
-#[cfg(all(test, not(feature = "rlx-fft")))]
+/// Selectable FFT backend used by the live DSP (filter, band analysis).
+pub mod fft;
+#[cfg(test)]
 mod proptest_tests;
 
 pub mod artifact_detection;

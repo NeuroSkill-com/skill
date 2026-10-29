@@ -1367,37 +1367,43 @@ fn daemon_required_env() -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn install_daemon_service() -> Result<serde_json::Value, String> {
-    let base_url = daemon_base_url();
-    let mut resp = daemon_http_agent()
-        .post(&format!("{base_url}/service/install"))
-        .send("")
-        .map_err(|e| e.to_string())?;
+/// `/service/*` sits behind the daemon's bearer auth like every other route.
+/// These calls used to go out without the token, so every upgrade logged
+/// `service reinstall_failed: http status: 401` and the OS service (LaunchAgent
+/// / systemd unit / Windows service) was never re-pointed or installed.
+fn daemon_service_request(method: &str, path: &str) -> Result<serde_json::Value, String> {
+    let url = format!("{}{path}", daemon_base_url());
+    let auth = load_daemon_token().ok().map(|tok| format!("Bearer {tok}"));
+    let agent = daemon_http_agent();
+    let mut resp = if method == "GET" {
+        let mut req = agent.get(&url);
+        if let Some(a) = &auth {
+            req = req.header("Authorization", a);
+        }
+        req.call()
+    } else {
+        let mut req = agent.post(&url);
+        if let Some(a) = &auth {
+            req = req.header("Authorization", a);
+        }
+        req.send_empty()
+    }
+    .map_err(|e| e.to_string())?;
     resp.body_mut()
         .read_json::<serde_json::Value>()
         .map_err(|e| e.to_string())
+}
+
+pub(crate) fn install_daemon_service() -> Result<serde_json::Value, String> {
+    daemon_service_request("POST", "/service/install")
 }
 
 pub(crate) fn uninstall_daemon_service() -> Result<serde_json::Value, String> {
-    let base_url = daemon_base_url();
-    let mut resp = daemon_http_agent()
-        .post(&format!("{base_url}/service/uninstall"))
-        .send("")
-        .map_err(|e| e.to_string())?;
-    resp.body_mut()
-        .read_json::<serde_json::Value>()
-        .map_err(|e| e.to_string())
+    daemon_service_request("POST", "/service/uninstall")
 }
 
 pub(crate) fn daemon_service_status() -> Result<serde_json::Value, String> {
-    let base_url = daemon_base_url();
-    let mut resp = daemon_http_agent()
-        .get(&format!("{base_url}/service/status"))
-        .call()
-        .map_err(|e| e.to_string())?;
-    resp.body_mut()
-        .read_json::<serde_json::Value>()
-        .map_err(|e| e.to_string())
+    daemon_service_request("GET", "/service/status")
 }
 
 fn wait_for_protocol_compatibility(timeout: Duration) -> Result<bool, String> {
@@ -3587,14 +3593,23 @@ mod tests {
 
     // ── service install/uninstall/status HTTP contract ────────────────────────
 
+    fn write_test_token() {
+        let token_path = token_path().expect("token path");
+        if let Some(parent) = token_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&token_path, "test-token\n").unwrap();
+    }
+
     #[test]
-    fn service_install_sends_post_without_auth() {
+    fn service_install_sends_post_with_auth() {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", td.path());
         std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
         std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        write_test_token();
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3602,9 +3617,14 @@ mod tests {
 
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept");
-            let (method, path, _head, _body) = read_http_request(&mut stream);
+            let (method, path, head, _body) = read_http_request(&mut stream);
             assert_eq!(method, "POST");
             assert_eq!(path, "/service/install");
+            assert!(
+                head.to_ascii_lowercase()
+                    .contains("authorization: bearer test-token"),
+                "/service/install must carry the daemon token (it answers 401 without): {head}"
+            );
             write_json_response(&mut stream, "200 OK", "{\"ok\":true}");
         });
 
@@ -3622,6 +3642,7 @@ mod tests {
         std::env::set_var("HOME", td.path());
         std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
         std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        write_test_token();
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3629,9 +3650,14 @@ mod tests {
 
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept");
-            let (method, path, _head, _body) = read_http_request(&mut stream);
+            let (method, path, head, _body) = read_http_request(&mut stream);
             assert_eq!(method, "POST");
             assert_eq!(path, "/service/uninstall");
+            assert!(
+                head.to_ascii_lowercase()
+                    .contains("authorization: bearer test-token"),
+                "/service/uninstall must carry the daemon token (it answers 401 without): {head}"
+            );
             write_json_response(&mut stream, "200 OK", "{\"ok\":true}");
         });
 
@@ -3649,6 +3675,7 @@ mod tests {
         std::env::set_var("HOME", td.path());
         std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
         std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        write_test_token();
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3656,9 +3683,14 @@ mod tests {
 
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept");
-            let (method, path, _head, _body) = read_http_request(&mut stream);
+            let (method, path, head, _body) = read_http_request(&mut stream);
             assert_eq!(method, "GET");
             assert_eq!(path, "/service/status");
+            assert!(
+                head.to_ascii_lowercase()
+                    .contains("authorization: bearer test-token"),
+                "/service/status must carry the daemon token (it answers 401 without): {head}"
+            );
             write_json_response(&mut stream, "200 OK", "{\"status\":\"running\"}");
         });
 

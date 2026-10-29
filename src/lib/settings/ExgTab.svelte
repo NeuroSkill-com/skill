@@ -14,6 +14,7 @@ import { SectionHeader } from "$lib/components/ui/section-header";
 import { SettingsCard } from "$lib/components/ui/settings-card";
 import { DEFAULT_FILTER_CONFIG, EMBEDDING_EPOCH_SECS, EMBEDDING_OVERLAP_SECS } from "$lib/constants";
 import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { getEegFftBackend, setEegFftBackend } from "$lib/daemon/misc";
 import { t } from "$lib/i18n/index.svelte";
 import EegModelTab from "$lib/settings/EegModelTab.svelte";
 
@@ -33,6 +34,27 @@ let exgInferenceDeviceSaving = $state(false);
 let filter = $state<FilterConfig>({ ...DEFAULT_FILTER_CONFIG });
 let filterSaving = $state(false);
 let overlapSecs = $state(EMBEDDING_OVERLAP_SECS);
+// FFT backend for the filter / band analysis (`eeg_fft_backend`).
+let fftValue = $state("auto");
+let fftActive = $state("");
+let fftAvailable = $state<string[]>([]);
+let fftError = $state("");
+let fftSaving = $state(false);
+// Product / library names — not translated.
+const FFT_NAMES: Record<string, string> = {
+  cpu: "CPU (rustfft)",
+  accelerate: "Accelerate",
+  "rlx-cpu": "rlx CPU",
+  metal: "Metal",
+  mlx: "MLX",
+  ane: "Neural Engine",
+  cuda: "CUDA",
+  rocm: "ROCm",
+  xdna: "XDNA",
+  gpu: "wgpu",
+  vulkan: "Vulkan",
+};
+const fftLabel = (b: string) => (b === "auto" ? t("settings.fftBackendAuto") : (FFT_NAMES[b] ?? b));
 let overlapSaving = $state(false);
 
 // ── Filter ─────────────────────────────────────────────────────────────────
@@ -68,6 +90,22 @@ async function setOverlap(secs: number) {
   }
 }
 
+async function setFftBackend(b: string) {
+  if (fftSaving || b === fftValue) return;
+  fftSaving = true;
+  fftError = "";
+  try {
+    const r = await setEegFftBackend(b);
+    fftActive = r.active;
+    if (r.ok) fftValue = r.value ?? b;
+    else fftError = r.error ?? "";
+  } catch (e) {
+    fftError = String(e);
+  } finally {
+    fftSaving = false;
+  }
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 async function setExgInferenceDevice(dev: "auto" | "mlx" | "gpu" | "cpu") {
   if (exgInferenceDevice === dev || exgInferenceDeviceSaving) return;
@@ -83,6 +121,12 @@ onMount(async () => {
   exgInferenceDevice = (await daemonInvoke<{ value: string }>("get_exg_inference_device")
     .then((r) => r.value)
     .catch(() => "auto")) as "auto" | "mlx" | "gpu" | "cpu";
+  const fft = await getEegFftBackend().catch(() => null);
+  if (fft) {
+    fftValue = fft.value || "auto";
+    fftActive = fft.active;
+    fftAvailable = fft.available;
+  }
 });
 </script>
 
@@ -227,6 +271,33 @@ onMount(async () => {
           </div>
         </div>
 
+        <!-- FFT backend -->
+        <div class="flex flex-col gap-2 px-4 py-3">
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="text-ui-lg font-semibold text-foreground">{t("settings.fftBackend")}</span>
+            {#if fftSaving}
+              <span class="text-ui-xs text-muted-foreground">{t("common.saving")}</span>
+            {:else if fftActive}
+              <span class="text-ui-xs text-muted-foreground">
+                {t("settings.fftBackendActive", { backend: fftLabel(fftActive) })}
+              </span>
+            {/if}
+          </div>
+          <p class="text-ui-sm text-muted-foreground leading-relaxed">{t("settings.fftBackendDesc")}</p>
+          <ChipGroup
+            items={["auto", ...fftAvailable]}
+            selected={fftValue}
+            onselect={setFftBackend}
+            labelFn={fftLabel}
+          />
+          {#if fftError}
+            <p class="text-ui-sm text-amber-500/80 dark:text-amber-400/70">
+              ⚠️ {t("settings.fftBackendRefused", { reason: fftError })}
+            </p>
+          {/if}
+          <p class="text-ui-xs text-muted-foreground/70">{t("settings.fftBackendGpuNote")}</p>
+        </div>
+
         <!-- Pipeline summary -->
         <div class="flex items-center gap-2 flex-wrap px-4 py-3 bg-surface-3">
           <SectionHeader class="shrink-0">{t("settings.pipeline")}</SectionHeader>
@@ -254,7 +325,11 @@ onMount(async () => {
               {t("settings.passthrough")}
             </Badge>
           {/if}
-          <span class="ml-auto text-ui-xs text-muted-foreground/60 shrink-0">{t("settings.gpuLatency")}</span>
+          {#if fftActive}
+            <span class="ml-auto text-ui-xs text-muted-foreground/60 shrink-0">
+              {t("settings.pipelineFft", { backend: fftLabel(fftActive) })}
+            </span>
+          {/if}
         </div>
 
       </CardContent>

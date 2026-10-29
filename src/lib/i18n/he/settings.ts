@@ -39,7 +39,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "מסנן עובר-נמוך",
   "settings.pipeline": "צינור עיבוד",
   "settings.passthrough": "מעבר ישיר",
-  "settings.gpuLatency": "GPU · ~125 ms",
+  "settings.fftBackend": "מנוע FFT",
+  "settings.fftBackendDesc":
+    "היכן מסנן האות וניתוח הפסים מחשבים את ה-FFT שלהם. אוטומטי משתמש בנתיב ה-CPU המהיר ביותר (Accelerate ב-macOS). מנוע משמש רק אם התוצאות שלו תואמות לייחוס, והשינויים חלים מיד.",
+  "settings.fftBackendAuto": "אוטומטי",
+  "settings.fftBackendActive": "פועל על {backend}",
+  "settings.fftBackendRefused": "לא זמין: {reason}",
+  "settings.fftBackendGpuNote":
+    "מנועי GPU ו-Neural Engine איטיים יותר עבור FFT בגודל EEG ועלולים להיתקע בזמן שמודלים אחרים משתמשים ב-GPU.",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.eegEmbedding": "הטמעת EEG",
   "settings.epochOverlap": "חפיפת חלונות",
   "settings.everyNSecs": "כל {n} שנ׳",

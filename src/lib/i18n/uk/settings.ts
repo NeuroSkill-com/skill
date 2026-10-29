@@ -39,7 +39,15 @@ const settings: Record<string, string> = {
   "settings.lowPassCutoff": "Фільтр нижніх частот",
   "settings.pipeline": "Конвеєр",
   "settings.passthrough": "Прямий прохід",
-  "settings.gpuLatency": "GPU · ~125 мс",
+  "settings.fftBackend": "Бекенд FFT",
+  "settings.fftBackendDesc":
+    "Де фільтр сигналу та аналіз діапазонів обчислюють FFT. Авто використовує найшвидший шлях на CPU (Accelerate на macOS). Бекенд використовується, лише якщо його результати збігаються з еталоном; зміни застосовуються одразу.",
+  "settings.fftBackendAuto": "Авто",
+  "settings.fftBackendActive": "Працює на {backend}",
+  "settings.fftBackendRefused": "Недоступно: {reason}",
+  "settings.fftBackendGpuNote":
+    "Бекенди GPU та Neural Engine повільніші для FFT розміру ЕЕГ і можуть зависати, поки інші моделі використовують GPU.",
+  "settings.pipelineFft": "FFT · {backend}",
   "settings.eegEmbedding": "Вбудовування ЕЕГ",
   "settings.epochOverlap": "Перекриття вікон",
   "settings.everyNSecs": "кожні {n} с",
