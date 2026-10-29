@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "FFT 后端",
+    "desc": "信号滤波和频段分析计算 FFT 的位置。自动会使用最快的 CPU 路径（macOS 上为 Accelerate）。只有结果与参考一致的后端才会被使用，更改立即生效。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "字体大小",
     "desc": "调整界面文字大小。影响应用中的所有文本。"

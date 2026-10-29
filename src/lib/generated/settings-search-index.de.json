@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "FFT-Backend",
+    "desc": "Wo Signalfilter und Bandanalyse ihre FFTs berechnen. Auto nutzt den schnellsten CPU-Pfad (Accelerate unter macOS). Ein Backend wird nur verwendet, wenn seine Ergebnisse mit der Referenz übereinstimmen; Änderungen gelten sofort."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Schriftgröße",
     "desc": "Passen Sie die Textgröße der Benutzeroberfläche an. Beeinflusst allen Text in der App."

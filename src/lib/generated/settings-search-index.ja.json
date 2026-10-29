@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "FFT バックエンド",
+    "desc": "信号フィルターと帯域解析が FFT を計算する場所です。自動は最速の CPU 経路（macOS では Accelerate）を使います。結果が基準と一致するバックエンドだけが使われ、変更はすぐに反映されます。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "フォントサイズ",
     "desc": "UIテキストサイズを調整します。アプリ内のすべてのテキストに影響します。"

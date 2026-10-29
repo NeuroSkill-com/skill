@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "Moteur FFT",
+    "desc": "Où le filtre du signal et l'analyse des bandes calculent leurs FFT. Auto utilise le chemin CPU le plus rapide (Accelerate sur macOS). Un moteur n'est utilisé que si ses résultats correspondent à la référence, et les changements s'appliquent immédiatement."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Taille de police",
     "desc": "Ajustez la taille du texte de l'interface utilisateur. Affecte tout le texte de l'application."

@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "FFT backend",
+    "desc": "Where the signal filter and band analysis compute their FFTs. Auto uses the fastest CPU path (Accelerate on macOS). A backend is only used if its results match the reference, and changes apply immediately."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Font Size",
     "desc": "Adjust the UI text size. Affects all text in the app."

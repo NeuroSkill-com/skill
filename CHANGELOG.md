@@ -8,6 +8,27 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.8] — 2026-10-29
+
+### Features
+
+- **Choose where EEG FFTs run.** New setting `eeg_fft_backend`, in Settings → EXG → Signal Processing → *FFT backend*, also at `GET`/`POST /v1/settings/eeg-fft-backend`. It applies live and at daemon start. The picker lists only the backends this machine has, shows which one is running, and explains a refusal. The pipeline summary now shows the active FFT backend instead of a fixed "GPU · ~125 ms". Translated into all 10 languages.
+  Options:
+  - `auto` (default) is Apple Accelerate (vDSP) on macOS and rustfft elsewhere.
+  - `cpu` is rustfft; `accelerate` is Apple vDSP.
+  - Any rlx device this build has: `metal`, `mlx`, `ane`/`coreml`, `cuda`, `rocm`, `xdna`, `gpu`, `vulkan`, `rlx-cpu`, ….
+  - A backend is only used after a parity check against rustfft. One that's missing, panics, or disagrees is refused with a reason, and the current backend stays.
+  - If a chosen backend later fails, FFTs fall back to CPU instead of failing the session.
+  - Measured for 32 channels × 1024 samples: Accelerate ~70 µs, rustfft ~120 µs, rlx-cpu ~350 µs, ANE ~0.6–0.8 ms, Metal 0.4–3 ms, MLX 0.7–7 ms (`skill-eeg/tests/fft_backends.rs`).
+  - `blas` is refused with a pointer to `accelerate`, because BLAS has no FFT routine.
+
+### Bugfixes
+
+- **Sessions no longer stall while another model is using the GPU.** The EEG filter and band analysis ran their FFTs on Metal through rlx's single shared Metal queue, so every FFT waited behind whatever else was queued. A session started during the text-to-speech warm-up after launch got one batch of samples, then nothing for 10–20 s, with a false "No EEG data has arrived" critical alert. An LLM reply or embedding batch slowed it the same way. The live DSP now runs its FFTs on the CPU by default. A separate Metal queue per graph was tried in rlx and does not help: the GPU finishes the running job first whichever queue the next one is on.
+- The CPU FFT (rustfft) built a new planner on every call. Plans are now cached per thread: 480 µs → 120 µs for 32 channels × 1024 samples.
+- **The daemon's background service is reinstalled after an upgrade again.** The app called `/service/install`, `/service/uninstall` and `/service/status` without the daemon's auth token, so they all answered 401: every upgrade logged `service reinstall_failed: http status: 401` and left the service `not_installed` (nothing restarted the daemon at login or after a crash), and the background-service setting could not read or change it. The token is now sent, and the tests require it.
+- Eight `history.ts` locale files were reformatted to pass CI's Biome format check.
+
 ## [0.1.0-rc.7] — 2026-10-28
 
 ### Features
@@ -696,16 +717,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - added i18n
 
-## [0.0.131-rc.23] — 2026-08-09
-
-### Features
-
-- updated inference
-
 ## Earlier releases
 
-The 151 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 152 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.23](changes/releases/0.0.131-rc.23.md)
 - [0.0.131-rc.22](changes/releases/0.0.131-rc.22.md)
 - [0.0.131-rc.21](changes/releases/0.0.131-rc.21.md)
 - [0.0.131-rc.20](changes/releases/0.0.131-rc.20.md)

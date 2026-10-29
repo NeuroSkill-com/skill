@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "FFT 백엔드",
+    "desc": "신호 필터와 대역 분석이 FFT를 계산하는 위치입니다. 자동은 가장 빠른 CPU 경로(macOS에서는 Accelerate)를 사용합니다. 결과가 기준과 일치하는 백엔드만 사용되며, 변경 사항은 즉시 적용됩니다."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "글꼴 크기",
     "desc": "UI 텍스트 크기를 조정합니다. 앱의 모든 텍스트에 영향을 줍니다."

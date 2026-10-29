@@ -679,6 +679,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.fftBackend",
+    "label": "Backend de FFT",
+    "desc": "Dónde calculan sus FFT el filtro de señal y el análisis de bandas. Auto usa la ruta de CPU más rápida (Accelerate en macOS). Un backend solo se usa si sus resultados coinciden con la referencia, y los cambios se aplican al instante."
+  },
+  {
+    "tab": "settings",
     "key": "settings.fontSize",
     "label": "Tamaño de fuente",
     "desc": "Ajuste el tamaño del texto de la interfaz de usuario. Afecta a todo el texto de la aplicación."
