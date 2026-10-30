@@ -454,9 +454,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "AI推論の実行場所。GPUは高速、CPUはどのマシンでも動作しVRAMの圧迫を回避します。変更後はLLMサーバーを再起動してください。",
   "settings.inferenceDeviceAuto": "Auto",
-  "settings.inferenceDeviceAutoDesc": "Apple SiliconではMLX、その他ではGPU。",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "Apple Siliconネイティブ — Macで最速。",
+  "settings.inferenceDeviceAutoDesc": "Mac では Metal、それ以外では GPU。",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "wgpu (Metal / Vulkan) で推論。",

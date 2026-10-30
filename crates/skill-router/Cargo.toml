@@ -18,7 +18,7 @@ default = []
 # Internal umbrella: switches the source onto the rlx-runtime device-resolution
 # path and always brings CPU dispatch as the fallback. Every backend feature
 # below enables it; it is not meant to be turned on directly.
-accel = ["dep:rlx-runtime", "rlx-runtime/cpu"]
+accel = ["dep:rlx-runtime", "rlx-runtime/cpu", "dep:skill-accel"]
 
 # ── RLX backend selection (each independent — no cross-bundling) ──────────────
 cpu   = ["accel"]
@@ -29,7 +29,7 @@ rocm  = ["accel", "rlx-umap/rocm",  "rlx-runtime/rocm"]
 wgpu  = ["accel", "rlx-umap/gpu",   "rlx-runtime/gpu"]
 
 # ── OS umbrellas + convenience aliases ────────────────────────────────────────
-apple     = ["metal", "mlx"]   # all Apple GPU backends (macOS)
+apple     = ["metal", "wgpu"]   # Metal → wgpu → CPU; no MLX, see skill-daemon `apple`
 linux     = ["cuda", "wgpu"]
 windows   = ["cuda", "wgpu"]   # CUDA + wgpu (DX12); runtime falls back when no NVIDIA driver
 gpu-apple = ["apple"]          # back-compat alias
@@ -44,6 +44,7 @@ hotpath-cpu = ["dep:hotpath", "hotpath/hotpath-cpu"]
 hotpath-alloc = ["dep:hotpath", "hotpath/hotpath-alloc"]
 
 [dependencies]
+skill-accel = { path = "../skill-accel", optional = true }
 anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-commands  = { path = "../skill-commands" }

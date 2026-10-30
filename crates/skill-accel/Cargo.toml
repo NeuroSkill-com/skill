@@ -1,0 +1,13 @@
+[package]
+name = "skill-accel"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Device fallback chain (Metal → wgpu → CPU on macOS; CUDA → wgpu → CPU elsewhere) shared by every model loader"
+
+[dependencies]
+anyhow      = { workspace = true }
+rlx-runtime = { workspace = true }
+
+[lints]
+workspace = true

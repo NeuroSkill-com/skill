@@ -189,11 +189,13 @@ def main():
                 if d.req("/v1/llm/server/status").get("status") == "running":
                     break
                 time.sleep(2)
+            # The daemon compares each notice with the problems at the first
+            # reply; snapshot them before it, not between replies.
+            before = set(codes(health(d)))
             ans, err = chat(d, "In one sentence, what is alpha brain activity?")
             check("chat still answers the prompt", not err and len(ans.split("---")[0].strip()) > 20, ans[:120])
             check("chat reply carries the device notice with advice",
                   "Device check" in ans and "Fp1" in ans and "forehead" in ans.lower(), ans[-260:].replace("\n", " "))
-            before = set(codes(health(d)))
             ans2, _ = chat(d, "Name one benefit of meditation in one sentence.")
             changed = set(codes(health(d))) != before
             # On a slow machine Fp1 can cross the persistent-fault threshold

@@ -250,9 +250,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "היכן מופעלת ההסקה. ה-GPU מהיר יותר; ה-CPU עובד על כל מכשיר בלי לחוץ על VRAM. הפעל מחדש את שרת ה-LLM לאחר השינוי.",
   "settings.inferenceDeviceAuto": "אוטומטי",
-  "settings.inferenceDeviceAutoDesc": "MLX ב-Apple Silicon, GPU במקומות אחרים.",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "טבעי ל-Apple Silicon — הכי מהיר ב-Mac.",
+  "settings.inferenceDeviceAutoDesc": "Metal ב-Mac, GPU במקומות אחרים.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "משתמש ב-wgpu (Metal / Vulkan) להסקה.",

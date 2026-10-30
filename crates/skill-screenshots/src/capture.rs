@@ -284,11 +284,21 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<rlx_ocr::OcrEngine> {
         return None;
     }
 
-    rlx_ocr::OcrEngine::new(rlx_ocr::OcrEngineParams {
-        detection_model: Some(det_st),
-        recognition_model: Some(rec_st),
-        device: ocr_device(),
-        ..Default::default()
+    // Best device first, then down the chain (macOS Metal → wgpu → CPU) if the
+    // engine fails to build — or panics — on one.
+    skill_accel::load_with_fallback("OCR", ocr_device(), &[], |device| {
+        rlx_ocr::validate_device(device).map_err(|e| anyhow::anyhow!("{e}"))?;
+        rlx_ocr::OcrEngine::new(rlx_ocr::OcrEngineParams {
+            detection_model: Some(det_st.clone()),
+            recognition_model: Some(rec_st.clone()),
+            device,
+            ..Default::default()
+        })
+        .map_err(|e| anyhow::anyhow!("{e:#}"))
+    })
+    .map(|(engine, d)| {
+        eprintln!("[screenshot-embed] OCR engine on {}", d.as_arg());
+        engine
     })
     .map_err(|e| eprintln!("[screenshot-embed] OCR engine init failed: {e:#}"))
     .ok()
@@ -320,23 +330,11 @@ fn materialize_bundled(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// + per-image multi-shape in rlx 0.2.x, so OCR runs wherever the rest of the
 /// screenshots pipeline does.
 fn ocr_device() -> rlx_runtime::Device {
-    use rlx_runtime::Device;
-    let ok = |d: Device| rlx_ocr::validate_device(d).is_ok();
-    if let Ok(s) = std::env::var("OCR_DEVICE") {
-        let d = match s.trim().to_ascii_lowercase().as_str() {
-            "metal" => Device::Metal,
-            "mlx" => Device::Mlx,
-            "cuda" => Device::Cuda,
-            "rocm" => Device::Rocm,
-            "gpu" | "wgpu" => Device::Gpu,
-            _ => Device::Cpu,
-        };
-        return if ok(d) { d } else { Device::Cpu };
-    }
-    [Device::Metal, Device::Mlx, Device::Cuda, Device::Rocm, Device::Gpu]
-        .into_iter()
-        .find(|&d| ok(d))
-        .unwrap_or(Device::Cpu)
+    // `OCR_DEVICE` (metal / wgpu / cuda / rocm / cpu / …) picks the first
+    // device; otherwise the platform's best GPU. `load_ocr_engine` walks the
+    // rest of the chain if that one fails.
+    let pref = std::env::var("OCR_DEVICE").unwrap_or_else(|_| "auto".into());
+    skill_accel::best(skill_accel::parse_device(&pref))
 }
 
 /// Run OCR on an already-resized PNG image. Returns the extracted text.

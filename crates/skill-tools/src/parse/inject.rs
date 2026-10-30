@@ -171,6 +171,16 @@ fn build_full_tool_block(tools: &[Tool], options: &ToolPromptOptions) -> String 
         _ => "\n## Automatic mode policy\n- Prefer tool use for actions and factual verification.\n- You may answer directly when no tool is needed.".to_string(),
     };
 
+    // Small models read "You MUST use tools" + tool-only examples as "every
+    // question needs a tool" (Qwen3.5-0.8B answered "capital of France?" by
+    // calling `location` → "San Jose"). Show direct answers too, except in
+    // query mode, which must stay tool-grounded.
+    let direct_examples = if options.chat_mode.as_deref() == Some("query") {
+        ""
+    } else {
+        "User: \"What is the capital of France?\"\nAssistant: Paris.\n\nUser: \"What is 17 * 3?\"\nAssistant: 51.\n(General knowledge, definitions and arithmetic need NO tool: answer directly. The `location` tool returns where the USER is — never call it for questions about other places.)\n\n"
+    };
+
     let native_hint = if options.prefer_native_tool_calling {
         "\n## Native + fallback tool-call formats\nPreferred: OpenAI-style `tool_calls` JSON object.\nFallback: `[TOOL_CALL]{...}[/TOOL_CALL]` blocks.\nIf one format fails, immediately retry the other."
     } else {
@@ -205,7 +215,7 @@ Rules:
 
 ## Examples
 
-User: "What time is it?"
+{direct_examples}User: "What time is it?"
 Assistant: [TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
 
 User: "How much disk space is left?"

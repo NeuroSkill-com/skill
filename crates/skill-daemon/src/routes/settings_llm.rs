@@ -165,12 +165,23 @@ pub(crate) async fn set_inference_device(
 crate::settings_get_value!(get_exg_inference_device => exg_inference_device);
 
 /// `GET /settings/eeg-fft-backend` → the saved choice, the backend FFTs run on
-/// now, and the backends this build can try here.
+/// now, the backends this build can try here, and — under `auto` — which GPU
+/// (if any) takes batches from what size (`null` while calibrating / no win).
 pub(crate) async fn get_eeg_fft_backend(State(state): State<AppState>) -> Json<serde_json::Value> {
+    use skill_eeg::fft;
+    let auto = fft::is_auto().then(|| {
+        let plan = fft::auto_plan();
+        serde_json::json!({
+            "calibrating": fft::calibrating(),
+            "gpu": plan.map(|p| p.gpu.name()),
+            "gpu_min_samples": plan.map(|p| p.min_samples),
+        })
+    });
     Json(serde_json::json!({
         "value": load_user_settings(&state).eeg_fft_backend,
-        "active": skill_eeg::fft::backend().name(),
-        "available": skill_eeg::fft::known(),
+        "active": fft::backend().name(),
+        "available": fft::known(),
+        "auto": auto,
     }))
 }
 

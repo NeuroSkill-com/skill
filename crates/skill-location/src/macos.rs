@@ -31,8 +31,8 @@ extern "C" {
 
 pub fn auth_status() -> LocationAuthStatus {
     // SAFETY: `skill_location_auth_status` is a plain C function with no
-    // pointers or mutable state — it allocates a temporary CLLocationManager
-    // on the main thread and returns an integer enum value.
+    // pointers or mutable state — it reads a temporary CLLocationManager's
+    // status on the calling thread and returns an integer enum value.
     let raw = unsafe { skill_location_auth_status() };
     match raw {
         0 => LocationAuthStatus::NotDetermined,
@@ -44,8 +44,8 @@ pub fn auth_status() -> LocationAuthStatus {
 
 pub fn request_access(timeout_secs: f64) -> bool {
     // SAFETY: `skill_location_request_access` is a plain C function that
-    // takes a scalar timeout and returns 0/1.  It dispatches to the main
-    // thread internally, so the call is thread-safe.
+    // takes a scalar timeout and returns 0/1.  It runs entirely on the calling
+    // thread (spinning that thread's run loop), so the call is thread-safe.
     unsafe { skill_location_request_access(timeout_secs) == 1 }
 }
 

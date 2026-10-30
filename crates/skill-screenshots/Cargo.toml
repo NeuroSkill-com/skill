@@ -31,6 +31,7 @@ rlx-models      = { workspace = true, features = ["embed", "ocr"] }
 # converted detection+recognition safetensors (see `assets/`, `capture.rs`), so
 # no `convert-rten` (and no rten-inference stack) and no runtime download.
 rlx-ocr         = { workspace = true }
+skill-accel     = { path = "../skill-accel" }
 # rlx-runtime is already pulled transitively by rlx-ocr; make it a direct dep so
 # we can name `rlx_runtime::Device` (rlx-ocr doesn't re-export it) to pick the
 # OCR backend, and so OCR has a CPU backend even when text-embeddings is off.
@@ -58,9 +59,9 @@ objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplicat
 # for embeddings + OCR GPU backends together.
 default = ["capture", "text-embeddings-rlx"]
 capture = ["xcap"]
-apple = [
-    "text-embeddings-rlx-metal", "text-embeddings-rlx-mlx",
-    "ocr-metal", "ocr-mlx",
+apple = [  # Metal → wgpu → CPU; no MLX — see skill-daemon `apple`
+    "text-embeddings-rlx-metal", "text-embeddings-rlx-wgpu",
+    "ocr-metal", "ocr-wgpu",
 ]
 linux = [
     "text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda",

@@ -240,9 +240,14 @@ fn load_rlx_embedder(_code: &str, _device: &str, _max_seq: usize) -> Result<Load
 
 #[cfg(feature = "text-embeddings-rlx")]
 fn load_rlx_embedder(code: &str, device: &str, max_seq: usize) -> Result<LoadedTextEmbedder> {
-    Ok(LoadedTextEmbedder::Rlx(Box::new(RlxTextEmbedding::from_repo(
-        code, device, max_seq,
-    )?)))
+    // Requested device first, then macOS Metal → wgpu → CPU (see skill_accel).
+    // An unavailable choice (e.g. CUDA on a Mac) used to leave semantic search
+    // without embeddings; now it just moves down the chain.
+    let first = skill_accel::parse_device(device);
+    let (emb, _) = skill_accel::load_with_fallback(&format!("text embeddings ({code})"), first, &[], |d| {
+        RlxTextEmbedding::from_repo(code, d, max_seq)
+    })?;
+    Ok(LoadedTextEmbedder::Rlx(Box::new(emb)))
 }
 
 #[cfg(feature = "text-embeddings-rlx")]
@@ -264,11 +269,14 @@ struct RlxTextEmbedding {
     weights_path: String,
     device: rlx::Device,
     max_seq: usize,
+    /// Largest batch known to work on `device` (set after a too-big batch
+    /// failed; `None` = no limit seen yet).
+    max_batch: Option<usize>,
 }
 
 #[cfg(feature = "text-embeddings-rlx")]
 impl RlxTextEmbedding {
-    fn from_repo(repo_id: &str, device: &str, max_seq: usize) -> Result<Self> {
+    fn from_repo(repo_id: &str, device: rlx::Device, max_seq: usize) -> Result<Self> {
         let repo = hf_hub::api::sync::ApiBuilder::new()
             .with_progress(true)
             .build()?
@@ -280,10 +288,6 @@ impl RlxTextEmbedding {
             tokenizers::Tokenizer::from_file(&tokenizer_path).map_err(|e| anyhow!("loading tokenizer.json: {e}"))?;
         let arch = detect_rlx_arch(&config_path)?;
         let pooling = default_pooling(repo_id);
-        let device = parse_rlx_device(device)?;
-        if !rlx::runtime::is_available(device) {
-            return Err(anyhow!("RLX device '{}' is not available in this build", device.name()));
-        }
         let weights_path = weights_path
             .to_str()
             .ok_or_else(|| anyhow!("non-utf8 weights path"))?
@@ -301,14 +305,61 @@ impl RlxTextEmbedding {
             weights_path,
             device,
             max_seq: max_seq.max(1),
+            max_batch: None,
         })
     }
 
+    /// Embed `texts`, recovering from a backend that can't run the batch:
+    /// a failed or panicking batch is split in half (graph memory grows with
+    /// batch size — wgpu refuses work buffers over its 4 GiB cap, e.g. 12 GiB
+    /// for a skill-ranking batch), and the limit is remembered; if even one
+    /// text fails, move to the next device in the chain (macOS Metal → wgpu →
+    /// CPU) and stay there.
     fn embed(&mut self, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
+        if let Some(cap) = self.max_batch {
+            if texts.len() > cap {
+                let mut out = Vec::with_capacity(texts.len());
+                for chunk in texts.chunks(cap) {
+                    out.extend(self.embed(chunk.to_vec())?);
+                }
+                return Ok(out);
+            }
+        }
+        let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.embed_once(texts.clone())))
+            .unwrap_or_else(|p| Err(anyhow!("embedder panicked: {}", panic_text(&p))));
+        match attempt {
+            Ok(v) => Ok(v),
+            Err(e) if texts.len() > 1 => {
+                let half = texts.len().div_ceil(2);
+                eprintln!(
+                    "[text-embedder] batch of {} failed on {} ({e:#}); retrying in batches of {half}",
+                    texts.len(),
+                    self.device.as_arg()
+                );
+                self.max_batch = Some(half);
+                self.embed(texts)
+            }
+            Err(e) => {
+                let Some(next) = skill_accel::next_after(self.device) else {
+                    return Err(e.context("no device left to fall back to"));
+                };
+                eprintln!(
+                    "[text-embedder] {} failed even for one text ({e:#}); moving to {}",
+                    self.device.as_arg(),
+                    next.as_arg()
+                );
+                self.device = next;
+                self.compiled_bs = (0, 0);
+                self.max_batch = None;
+                self.embed(texts)
+            }
+        }
+    }
 
+    fn embed_once(&mut self, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
         let mut ids_rows = Vec::with_capacity(texts.len());
         for text in texts {
             let enc = self
@@ -465,20 +516,6 @@ fn default_pooling(repo_id: &str) -> rlx_models::Pooling {
 }
 
 #[cfg(feature = "text-embeddings-rlx")]
-fn parse_rlx_device(tag: &str) -> Result<rlx::Device> {
-    match tag.to_ascii_lowercase().as_str() {
-        "cpu" => Ok(rlx::Device::Cpu),
-        "metal" => Ok(rlx::Device::Metal),
-        "mlx" => Ok(rlx::Device::Mlx),
-        "gpu" | "wgpu" => Ok(rlx::Device::Gpu),
-        "cuda" => Ok(rlx::Device::Cuda),
-        "rocm" => Ok(rlx::Device::Rocm),
-        "tpu" => Ok(rlx::Device::Tpu),
-        other => Err(anyhow!("unsupported RLX device '{other}'")),
-    }
-}
-
-#[cfg(feature = "text-embeddings-rlx")]
 fn l2_normalize(v: &mut [f32]) {
     let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm > 0.0 {
@@ -490,6 +527,16 @@ fn l2_normalize(v: &mut [f32]) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(feature = "text-embeddings-rlx", target_os = "macos"))]
+    #[test]
+    fn saved_device_choices_start_on_metal_on_a_mac() {
+        // No MLX in the macOS build; "gpu" means best GPU (Metal) first.
+        for saved in ["mlx", "gpu", "metal", "auto"] {
+            assert_eq!(skill_accel::parse_device(saved), rlx::Device::Metal, "{saved}");
+        }
+        assert_eq!(skill_accel::parse_device("wgpu"), rlx::Device::Gpu);
+    }
+
     use super::*;
 
     #[test]
@@ -508,4 +555,12 @@ mod tests {
         assert!(!te.needs_task_prefix());
         assert_eq!(te.with_prefix("hello", "search_query"), "hello");
     }
+}
+
+#[cfg(feature = "text-embeddings-rlx")]
+fn panic_text(p: &Box<dyn std::any::Any + Send>) -> String {
+    p.downcast_ref::<String>()
+        .map(|s| s.lines().next().unwrap_or("").to_string())
+        .or_else(|| p.downcast_ref::<&str>().map(|s| s.to_string()))
+        .unwrap_or_else(|| "unknown panic".into())
 }

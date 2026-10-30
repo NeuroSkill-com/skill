@@ -9,18 +9,19 @@ license = "GPL-3.0-only"
 # `--no-default-features --features apple|linux|…` still ships a full daemon.
 #
 # Product builds pass exactly one umbrella (see scripts/lib/compile-product.mjs):
-#   apple   — Metal + MLX
+#   apple   — Metal, wgpu as the GPU fallback (no MLX; see the note on `apple` below)
 #   linux   — CUDA + wgpu (runtime: CUDA → wgpu → CPU)
 #   windows — CUDA + wgpu (runtime: CUDA → wgpu → CPU)
 #
 # Leaf features remain for targeted tests (`cargo test -p skill-llm --features llm-rlx-metal`).
 product = ["llm", "embed-exg", "mw75-rfcomm", "text-embeddings-rlx", "asr", "voice-tts"]
 default = ["product"]
+# MLX is left out of the macOS product on purpose: everything runs on rlx's Metal backend, and the app never shipped MLX's 147 MB mlx.metallib, so MLX could not run and probing it crashed the daemon (0.1.0-rc.8). Leaf `*-mlx` features remain for opt-in builds.
 apple = [
     "product",
     "skill-llm/apple",
     "llm-model-discovery",
-    "embed-exg-metal", "embed-exg-mlx",
+    "embed-exg-metal", "embed-exg-gpu",
     "skill-daemon-state/apple",
     "skill-screenshots/apple",
     "skill-asr/apple",
@@ -192,6 +193,7 @@ skill-router        = { path = "../skill-router", default-features = false }
 skill-skills        = { path = "../skill-skills", features = ["sync"] }
 skill-tools         = { path = "../skill-tools" }
 skill-oura          = { path = "../skill-oura" }
+skill-accel         = { path = "../skill-accel" }
 skill-eeg           = { path = "../skill-eeg" }
 skill-exg           = { path = "../skill-exg" }
 antneuro            = { version = "0.0.1", default-features = false, features = ["native"] }

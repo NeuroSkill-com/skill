@@ -104,9 +104,18 @@ function runCargo(cmd, args, opts = {}) {
 export function verifyDaemonFeatures(osFeature, triple) {
   /** @type {Record<DaemonOsFeature, string[]>} */
   const expected = {
-    apple: ["rlx-metal ", "rlx-mlx "],
+    apple: ["rlx-metal ", "rlx-wgpu "],
     linux: ["rlx-cuda ", "rlx-wgpu "],
     windows: ["rlx-cuda ", "rlx-wgpu "],
+  };
+  // Must NOT be present. macOS ships without MLX: the app never bundled MLX's
+  // mlx.metallib, so MLX could not run, and probing it crashed the daemon
+  // (0.1.0-rc.8). Everything runs on rlx's Metal backend instead.
+  /** @type {Record<DaemonOsFeature, string[]>} */
+  const forbidden = {
+    apple: ["rlx-mlx ", "rlx-mlx-sys "],
+    linux: [],
+    windows: [],
   };
   const want = expected[osFeature];
   if (!want) {
@@ -133,6 +142,13 @@ export function verifyDaemonFeatures(osFeature, triple) {
     throw new Error(
       `Feature proof failed for skill-llm --features ${osFeature}: ` +
         `missing [${missing.map((s) => s.trim()).join(", ")}]`,
+    );
+  }
+  const present = (forbidden[osFeature] ?? []).filter((p) => text.includes(p));
+  if (present.length) {
+    throw new Error(
+      `Feature proof failed for skill-llm --features ${osFeature}: ` +
+        `must not include [${present.map((s) => s.trim()).join(", ")}]`,
     );
   }
   console.log(

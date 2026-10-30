@@ -31,6 +31,17 @@ fn main() {
     }
     println!("cargo:rustc-env=SKILL_PRODUCT_VERSION={product_version}");
 
+    // macOS: link clang's runtime (`libclang_rt.osx.a`). rlx-coreml's
+    // Objective-C shim uses `@available`, which compiles to
+    // `___isPlatformVersionAtLeast`, and Rust links with `-nodefaultlibs`, so
+    // nothing supplies it unless asked. It used to arrive by accident via
+    // rlx-mlx-sys; since the macOS build dropped MLX the release link failed
+    // with an undefined `___isPlatformVersionAtLeast`. (Also being fixed in
+    // rlx-coreml's own build script; harmless to have both.)
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        link_clang_rt_osx();
+    }
+
     // NOTE: do NOT add `-Wl,-no_compact_unwind` here.
     //
     // It was previously passed on macOS to silence ld64's "compact unwind table
@@ -52,5 +63,29 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
         println!("cargo:rustc-link-lib=vulkan");
         linux_openblas::link_system_openblas(true);
+    }
+}
+
+/// Add `libclang_rt.osx.a` (from the active clang) to the link line.
+fn link_clang_rt_osx() {
+    let out = std::process::Command::new("clang")
+        .arg("--print-file-name=libclang_rt.osx.a")
+        .output();
+    let path = match out {
+        Ok(o) if o.status.success() => PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()),
+        _ => {
+            println!("cargo:warning=skill-daemon: `clang --print-file-name=libclang_rt.osx.a` failed");
+            return;
+        }
+    };
+    match path.parent() {
+        Some(dir) if path.is_file() => {
+            println!("cargo:rustc-link-search=native={}", dir.display());
+            println!("cargo:rustc-link-lib=static=clang_rt.osx");
+        }
+        _ => println!(
+            "cargo:warning=skill-daemon: libclang_rt.osx.a not found ({})",
+            path.display()
+        ),
     }
 }

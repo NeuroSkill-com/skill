@@ -212,9 +212,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "Де виконується виведення ШІ. GPU швидше; CPU працює на будь-якому пристрої без навантаження VRAM. Перезапустіть LLM-сервер після зміни.",
   "settings.inferenceDeviceAuto": "Auto",
-  "settings.inferenceDeviceAutoDesc": "MLX на Apple Silicon, GPU в інших випадках.",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "Нативне для Apple Silicon — найшвидше на Mac.",
+  "settings.inferenceDeviceAutoDesc": "Metal на Mac, GPU в інших системах.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "Використовує wgpu (Metal / Vulkan) для виведення.",

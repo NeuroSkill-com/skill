@@ -917,24 +917,26 @@ fn exg_weights_missing(_config: &ExgModelConfig) -> bool {
     false
 }
 
-/// Load the EEG/EXG encoder, retrying on CPU when the preferred (GPU) device
-/// fails to load or compile the model. A GPU hiccup then yields CPU embeddings
+/// Load the EEG/EXG encoder, walking the device chain (macOS Metal → wgpu →
+/// CPU; see `skill_accel`) when a device fails to load or compile the model —
+/// or panics doing so. A GPU hiccup then yields embeddings on the next device
 /// instead of silently degrading the session to metrics-only.
 fn load_encoder(config: &ExgModelConfig, skill_dir: &Path) -> Option<Encoder> {
     let pref = skill_settings::load_settings(skill_dir).exg_inference_device;
-    if let Some(enc) = load_encoder_on(config, pref.clone()) {
-        return Some(enc);
-    }
-    // Only retry if the preferred device actually resolved to a non-CPU device;
-    // otherwise CPU already failed and there is nothing left to try.
-    if !matches!(super::resolve_exg_device(&pref), rlx::Device::Cpu) {
-        warn!(pref = %pref, "EEG encoder failed on preferred device — retrying on CPU");
-        if let Some(enc) = load_encoder_on(config, "cpu".to_string()) {
-            info!("EEG encoder loaded on CPU (fallback)");
-            return Some(enc);
+    let first = super::resolve_exg_device(&pref);
+    match skill_accel::load_with_fallback("EXG encoder", first, &[], |d| {
+        load_encoder_on(config, super::device::device_setting(d).to_string())
+            .ok_or_else(|| anyhow::anyhow!("encoder did not load (see log above)"))
+    }) {
+        Ok((enc, d)) => {
+            info!(pref = %pref, device = d.as_arg(), "EEG encoder loaded");
+            Some(enc)
+        }
+        Err(e) => {
+            warn!("{e:#}");
+            None
         }
     }
-    None
 }
 
 /// Resolve weights+config from HF cache using the exg_catalog.json family ID.

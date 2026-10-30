@@ -620,31 +620,31 @@ fn auto_options(config: &LlmConfig, mmproj: Option<&Path>) -> rlx_models::run::A
 }
 
 fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
-    use rlx::runtime::{device_ext::is_available, Device};
-
+    // Shared policy (skill_accel): the requested device if usable, else the
+    // platform chain — macOS Metal → wgpu → CPU, elsewhere CUDA → wgpu → CPU.
+    // `cpu` pins CPU; `wgpu`/`vulkan` ask for wgpu explicitly; on a Mac `gpu`
+    // and `mlx` mean Metal first. Loading walks the same chain on failure
+    // (`RlxTextRunner::load_with_mmproj`).
     if config.rlx_device.eq_ignore_ascii_case("cpu") {
-        return Device::Cpu;
+        return rlx::runtime::Device::Cpu;
     }
-
-    let pick = |d: Device| is_available(d).then_some(d);
-    let best_available = || {
-        [Device::Metal, Device::Cuda, Device::Mlx, Device::Gpu]
-            .into_iter()
-            .find(|d| is_available(*d))
-    };
-
-    match config.rlx_device.to_ascii_lowercase().as_str() {
-        "metal" => pick(Device::Metal).or_else(best_available),
-        "mlx" => pick(Device::Mlx).or_else(best_available),
-        // Product Windows/Linux: CUDA when the driver is present, else wgpu.
-        "cuda" => pick(Device::Cuda).or_else(|| pick(Device::Gpu)).or_else(best_available),
-        "rocm" => pick(Device::Rocm).or_else(best_available),
-        "gpu" | "vulkan" | "wgpu" => pick(Device::Gpu).or_else(best_available),
-        // "auto" / empty / unknown
-        _ => best_available(),
-    }
-    .unwrap_or(Device::Cpu)
+    skill_accel::best(skill_accel::parse_device(&config.rlx_device))
 }
+
+/// `config` with `rlx_device` set so `resolve_rlx_device` picks exactly `d`.
+pub(super) fn config_on(config: &LlmConfig, d: rlx::runtime::Device) -> LlmConfig {
+    let mut on = config.clone();
+    on.rlx_device = match d {
+        rlx::runtime::Device::Gpu => "wgpu".into(),
+        other => other.as_arg().into(),
+    };
+    on
+}
+
+/// Backends kept out of the LLM's automatic fallback. Empty unless a backend
+/// is known to load but answer wrongly — set from measurement, see
+/// `RlxTextRunner::load_with_mmproj`.
+const LLM_FALLBACK_SKIP: &[rlx::runtime::Device] = &[];
 
 /// Resolve `(device, packed_weights)` for a GGUF family runner.
 ///
@@ -1266,9 +1266,32 @@ impl ChatStreamer {
 }
 
 impl RlxTextRunner {
+    /// Test helper: [`Self::load_with_mmproj_device`] without the device.
+    #[cfg(test)]
+    pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
+        Self::load_with_mmproj_device(model_path, mmproj, config).map(|(r, _)| r)
+    }
+
     /// Attach an optional mmproj vision encoder (e.g. for Qwen3.5-VL).
     /// When `mmproj` is `None` the runner is text-only.
-    pub(super) fn load_with_mmproj(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
+    /// Also returns the device the runner ended up on (the actor moves on
+    /// from it if generation later fails there).
+    pub(super) fn load_with_mmproj_device(
+        model_path: &Path,
+        mmproj: Option<&Path>,
+        config: &LlmConfig,
+    ) -> Result<(Self, rlx::runtime::Device)> {
+        // Try the chosen device, then the rest of the chain (macOS Metal →
+        // wgpu → CPU) if the model fails to load there — or panics doing so,
+        // which would otherwise abort the daemon from inside rlx.
+        let first = resolve_rlx_device(config);
+        skill_accel::load_with_fallback("LLM", first, LLM_FALLBACK_SKIP, |d| {
+            Self::load_with_mmproj_on(model_path, mmproj, &config_on(config, d))
+        })
+    }
+
+    /// One load attempt with `config.rlx_device` as the device.
+    fn load_with_mmproj_on(model_path: &Path, mmproj: Option<&Path>, config: &LlmConfig) -> Result<Self> {
         // Routing is timed because it is not free: the cascade below asks
         // several families "is this yours?", and they answer by reading the
         // GGUF header. That was 2.88s of a 6.55s load before `peek_gguf_arch`

@@ -497,28 +497,36 @@ pub fn umap_compute_inner(
 
     rlx_umap::register();
 
-    let fitted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let umap = if device.0 == rlx_umap::Device::Cpu {
-            rlx_umap::Umap::new(config)
+    // Fit on the chosen device; if it fails or panics, walk the rest of the
+    // chain (macOS Metal → wgpu → CPU, see `skill_accel`) instead of failing
+    // the projection.
+    let progress = on_progress.map(|cb| std::sync::Arc::new(std::sync::Mutex::new(cb)));
+    let fit_on = |d: rlx_umap::Device| -> anyhow::Result<rlx_umap::FittedUmap> {
+        let umap = if d == rlx_umap::Device::Cpu {
+            rlx_umap::Umap::new(config.clone())
         } else {
-            rlx_umap::Umap::with_device(config, device.0)
+            rlx_umap::Umap::with_device(config.clone(), d)
         };
-        if let Some(cb) = on_progress {
-            umap.fit_with_progress(data, move |p| cb(p))
-        } else {
-            umap.fit(data)
-        }
-    }))
-    .map_err(|e| {
-        let msg = if let Some(s) = e.downcast_ref::<String>() {
-            s.clone()
-        } else if let Some(s) = e.downcast_ref::<&str>() {
-            s.to_string()
-        } else {
-            "unknown panic".to_string()
-        };
-        anyhow::anyhow!("UMAP projection failed: {msg}")
-    })?;
+        let data = data.clone();
+        Ok(match &progress {
+            Some(cb) => {
+                let cb = cb.clone();
+                umap.fit_with_progress(data, move |p| {
+                    if let Ok(f) = cb.lock() {
+                        f(p);
+                    }
+                })
+            }
+            None => umap.fit(data),
+        })
+    };
+    #[cfg(feature = "accel")]
+    let fitted = skill_accel::load_with_fallback("UMAP", device.0, &[], fit_on)
+        .map(|(f, _)| f)
+        .map_err(|e| anyhow::anyhow!("UMAP projection failed: {e:#}"))?;
+    #[cfg(not(feature = "accel"))]
+    let fitted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fit_on(rlx_umap::Device::Cpu)))
+        .map_err(|_| anyhow::anyhow!("UMAP projection failed: panicked"))??;
 
     let embedding = fitted.embedding;
 

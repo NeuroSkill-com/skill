@@ -6,20 +6,14 @@
 //
 // ── Concurrency model ───────────────────────────────────────────────────────
 //
-// CLLocationManager must be created on a thread that has an active run loop.
-// Delegate callbacks are delivered on that same thread/run loop.
+// CLLocationManager delivers delegate callbacks on the run loop of the thread
+// that created it, so every call below creates its manager on the CALLING
+// thread and spins that thread's run loop until done or timed out.
 //
-// The Rust callers come from tokio::task::spawn_blocking threads, which do NOT
-// have a run loop.  The naive fix — dispatch_sync(main_queue, ^{ spin_runloop })
-// — deadlocks: CoreLocation dispatches delegate callbacks via
-// dispatch_async(main_queue,...) but the main queue is already occupied by the
-// dispatch_sync block, so callbacks never fire and the spin loop times out.
-//
-// Correct fix: dispatch_async(main_queue, work) + dispatch_semaphore_wait on
-// the calling thread.  The main queue is free to receive CoreLocation callbacks
-// while the work block is spinning the run loop, because the spin itself calls
-// [[NSRunLoop currentRunLoop] runMode:...] which also drains pending dispatch
-// queue sources (including those callbacks).
+// Never hop to the main queue: skill-daemon's main thread runs tokio and never
+// drains the main dispatch queue, so dispatch_sync(main) hung forever (POST
+// /v1/settings/location-enabled never returned) and dispatch_async(main) +
+// semaphore always burned the full timeout + 5 s before the IP fallback.
 
 #import <CoreLocation/CoreLocation.h>
 #import <Foundation/Foundation.h>
@@ -94,22 +88,24 @@ static BOOL isAuthorized(CLAuthorizationStatus s) {
 
 // ── Public C API ─────────────────────────────────────────────────────────────
 
-// auth_status is a quick property read — dispatch_sync is fine here because
-// it holds no run loop and returns immediately.
-int skill_location_auth_status(void) {
-    __block CLAuthorizationStatus status;
-
-    void (^read)(void) = ^{
-        CLLocationManager *mgr = [[CLLocationManager alloc] init];
-        status = mgr.authorizationStatus;
-    };
-
-    if ([NSThread isMainThread]) {
-        read();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), read);
+// Spin the current thread's run loop until `del.done` or `timeout_secs` elapse.
+static void spinUntilDone(SkillLocationDelegate *del, double timeout_secs) {
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout_secs];
+    while (!del.done && [[NSDate date] compare:deadline] == NSOrderedAscending) {
+        // runMode returns NO at once when the loop has no sources; sleep then
+        // so a thread without CoreLocation sources does not busy-spin.
+        if (![[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                      beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]]) {
+            [NSThread sleepForTimeInterval:0.05];
+        }
     }
+}
 
+int skill_location_auth_status(void) {
+    CLAuthorizationStatus status;
+    @autoreleasepool {
+        status = [[CLLocationManager alloc] init].authorizationStatus;
+    }
     switch (status) {
         case kCLAuthorizationStatusNotDetermined:     return SkillLocAuthNotDetermined;
         case kCLAuthorizationStatusRestricted:        return SkillLocAuthRestricted;
@@ -123,8 +119,7 @@ int skill_location_auth_status(void) {
 /// Returns 1 if access is (or becomes) authorized, 0 otherwise.
 /// Blocks the calling thread for up to `timeout_secs` seconds.
 int skill_location_request_access(double timeout_secs) {
-    if ([NSThread isMainThread]) {
-        // Direct call — already on the main thread.
+    @autoreleasepool {
         CLLocationManager *mgr = [[CLLocationManager alloc] init];
         if (isAuthorized(mgr.authorizationStatus)) return 1;
         if (mgr.authorizationStatus != kCLAuthorizationStatusNotDetermined) return 0;
@@ -133,57 +128,9 @@ int skill_location_request_access(double timeout_secs) {
         del.authStatus = mgr.authorizationStatus;
         mgr.delegate = del;
         [mgr requestWhenInUseAuthorization];
-
-        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout_secs];
-        while (!del.done &&
-               [[NSDate date] compare:deadline] == NSOrderedAscending) {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
-        }
+        spinUntilDone(del, timeout_secs);
         return isAuthorized(del.authStatus) ? 1 : 0;
     }
-
-    // Called from a background thread: use dispatch_async so the main queue
-    // remains free to receive CoreLocation delegate callbacks.
-    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-    __block int result = 0;
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        CLLocationManager *mgr = [[CLLocationManager alloc] init];
-        if (isAuthorized(mgr.authorizationStatus)) {
-            result = 1;
-            dispatch_semaphore_signal(sem);
-            return;
-        }
-        if (mgr.authorizationStatus != kCLAuthorizationStatusNotDetermined) {
-            result = 0;
-            dispatch_semaphore_signal(sem);
-            return;
-        }
-
-        SkillLocationDelegate *del = [[SkillLocationDelegate alloc] init];
-        del.authStatus = mgr.authorizationStatus;
-        mgr.delegate = del;
-        [mgr requestWhenInUseAuthorization];
-
-        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout_secs];
-        while (!del.done &&
-               [[NSDate date] compare:deadline] == NSOrderedAscending) {
-            // runMode:beforeDate: also drains pending dispatch_async sources,
-            // so CoreLocation delegate callbacks arrive here without deadlock.
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
-        }
-
-        result = isAuthorized(del.authStatus) ? 1 : 0;
-        dispatch_semaphore_signal(sem);
-    });
-
-    // Wait slightly longer than the run-loop timeout to account for scheduling.
-    dispatch_time_t wait = dispatch_time(DISPATCH_TIME_NOW,
-                                         (int64_t)((timeout_secs + 5.0) * NSEC_PER_SEC));
-    dispatch_semaphore_wait(sem, wait);
-    return result;
 }
 
 /// Fetch the current location.  Blocks the calling thread for up to `timeout_secs`.
@@ -195,68 +142,39 @@ void skill_location_fetch(double timeout_secs, SkillLocationResult *out) {
     out->speed               = -1;
     out->course              = -1;
 
-    void (^work)(SkillLocationResult *) = ^(SkillLocationResult *r) {
+    @autoreleasepool {
         CLLocationManager *mgr = [[CLLocationManager alloc] init];
-        SkillLocationDelegate *del = [[SkillLocationDelegate alloc] init];
-        del.authStatus = mgr.authorizationStatus;
-        mgr.delegate = del;
-        mgr.desiredAccuracy = kCLLocationAccuracyBest;
-
-        r->auth_status = (int)mgr.authorizationStatus;
-
+        out->auth_status = (int)mgr.authorizationStatus;
         if (!isAuthorized(mgr.authorizationStatus)) {
-            r->ok = 0;
-            snprintf(r->error, sizeof(r->error),
+            snprintf(out->error, sizeof(out->error),
                      "location not authorized (status=%d)", (int)mgr.authorizationStatus);
             return;
         }
 
+        SkillLocationDelegate *del = [[SkillLocationDelegate alloc] init];
+        del.authStatus = mgr.authorizationStatus;
+        mgr.delegate = del;
+        mgr.desiredAccuracy = kCLLocationAccuracyBest;
         [mgr requestLocation];
-
-        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout_secs];
-        while (!del.done &&
-               [[NSDate date] compare:deadline] == NSOrderedAscending) {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
-        }
+        spinUntilDone(del, timeout_secs);
+        mgr.delegate = nil;
 
         if (del.lastLocation) {
             CLLocation *loc = del.lastLocation;
-            r->ok                  = 1;
-            r->latitude            = loc.coordinate.latitude;
-            r->longitude           = loc.coordinate.longitude;
-            r->altitude            = loc.altitude;
-            r->horizontal_accuracy = loc.horizontalAccuracy;
-            r->vertical_accuracy   = loc.verticalAccuracy;
-            r->speed               = loc.speed;
-            r->course              = loc.course;
-            r->timestamp           = [loc.timestamp timeIntervalSince1970];
+            out->ok                  = 1;
+            out->latitude            = loc.coordinate.latitude;
+            out->longitude           = loc.coordinate.longitude;
+            out->altitude            = loc.altitude;
+            out->horizontal_accuracy = loc.horizontalAccuracy;
+            out->vertical_accuracy   = loc.verticalAccuracy;
+            out->speed               = loc.speed;
+            out->course              = loc.course;
+            out->timestamp           = [loc.timestamp timeIntervalSince1970];
         } else if (del.lastError) {
-            r->ok = 0;
-            snprintf(r->error, sizeof(r->error),
+            snprintf(out->error, sizeof(out->error),
                      "%s", del.lastError.localizedDescription.UTF8String ?: "unknown error");
         } else {
-            r->ok = 0;
-            snprintf(r->error, sizeof(r->error), "location request timed out");
+            snprintf(out->error, sizeof(out->error), "location request timed out");
         }
-    };
-
-    if ([NSThread isMainThread]) {
-        work(out);
-        return;
     }
-
-    // Background thread path: dispatch_async + semaphore (see module comment).
-    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-    __block SkillLocationResult local = *out;
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        work(&local);
-        dispatch_semaphore_signal(sem);
-    });
-
-    dispatch_time_t wait = dispatch_time(DISPATCH_TIME_NOW,
-                                         (int64_t)((timeout_secs + 5.0) * NSEC_PER_SEC));
-    dispatch_semaphore_wait(sem, wait);
-    *out = local;
 }

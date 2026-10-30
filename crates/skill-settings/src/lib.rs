@@ -1096,7 +1096,7 @@ pub struct UserSettings {
 
     /// Where the live EEG DSP (filter, band analysis) runs its FFTs:
     /// `"auto"` (Accelerate on macOS, rustfft elsewhere), `"cpu"`,
-    /// `"accelerate"`, or an rlx device (`"metal"`, `"mlx"`, `"ane"`, `"cuda"`,
+    /// `"accelerate"`, or an rlx device (`"metal"`, `"ane"`, `"cuda"`,
     /// …). A backend that is missing or fails a parity check is refused and
     /// the DSP stays where it was. See `skill_eeg::fft`.
     #[serde(default = "default_eeg_fft_backend")]

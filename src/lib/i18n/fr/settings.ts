@@ -214,9 +214,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "Où l’inférence IA s’exécute. Le GPU est plus rapide ; le CPU fonctionne sur n’importe quelle machine sans pression sur la VRAM. Redémarrez le serveur LLM après modification.",
   "settings.inferenceDeviceAuto": "Auto",
-  "settings.inferenceDeviceAutoDesc": "MLX sur Apple Silicon, GPU ailleurs.",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "Natif Apple Silicon — le plus rapide sur Mac.",
+  "settings.inferenceDeviceAutoDesc": "Metal sur Mac, GPU ailleurs.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "Utilise wgpu (Metal / Vulkan) pour l’inférence.",

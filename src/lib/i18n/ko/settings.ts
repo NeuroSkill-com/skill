@@ -442,9 +442,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "AI 추론이 실행되는 위치. GPU가 빠르고, CPU는 모든 기기에서 작동하며 VRAM 부담을 줄입니다. 변경 후 LLM 서버를 재시작하세요.",
   "settings.inferenceDeviceAuto": "Auto",
-  "settings.inferenceDeviceAutoDesc": "Apple Silicon에서 MLX, 그 외에는 GPU.",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "Apple Silicon 네이티브 — Mac에서 가장 빠름.",
+  "settings.inferenceDeviceAutoDesc": "Mac에서는 Metal, 그 외에는 GPU.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "wgpu (Metal / Vulkan)로 추론.",

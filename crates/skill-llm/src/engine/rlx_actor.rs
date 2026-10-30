@@ -68,17 +68,18 @@ pub(super) fn run_actor(
     // between this and "ready" is ours. Without the split, "8s to load" sends you
     // reading the wrong crate.
     let t_load = std::time::Instant::now();
-    let mut runner = match RlxTextRunner::load_with_mmproj(&model_path, mmproj_path.as_deref(), &config) {
-        Ok(r) => r,
-        Err(e) => {
-            llm_error!(&app, &log_buf, log_file, "RLX runner load failed: {e}");
-            app.emit_event(
-                "llm:status",
-                json!({"status":"stopped","error":format!("RLX load failed: {e}")}),
-            );
-            return;
-        }
-    };
+    let (mut runner, mut device) =
+        match RlxTextRunner::load_with_mmproj_device(&model_path, mmproj_path.as_deref(), &config) {
+            Ok(r) => r,
+            Err(e) => {
+                llm_error!(&app, &log_buf, log_file, "RLX runner load failed: {e}");
+                app.emit_event(
+                    "llm:status",
+                    json!({"status":"stopped","error":format!("RLX load failed: {e}")}),
+                );
+                return;
+            }
+        };
 
     llm_info!(
         &app,
@@ -167,6 +168,8 @@ pub(super) fn run_actor(
                     params.max_tokens
                 );
                 let err_tx = token_tx.clone();
+                let retry_tx = token_tx.clone();
+                let retry_params = params.clone();
                 let outcome = guard_panic(|| {
                     if !images.is_empty() {
                         if runner.supports_multimodal() {
@@ -185,7 +188,24 @@ pub(super) fn run_actor(
                     }
                 });
                 if let Err(panic) = outcome {
-                    report_panic(&app, &log_buf, log_file, &err_tx, "generate", &panic);
+                    // The device couldn't run this request (e.g. wgpu refusing a
+                    // 16 GiB prefill buffer for a long prompt): move the model to
+                    // the next device in the chain and try the request once more.
+                    // Prefill fails before any token is sent, so nothing repeats.
+                    let moved = images.is_empty()
+                        && move_to_next_device(
+                            &mut runner,
+                            &mut device,
+                            &model_path,
+                            mmproj_path.as_deref(),
+                            &config,
+                            &panic,
+                            (&app, &log_buf, log_file),
+                        );
+                    let retried = moved && guard_panic(|| runner.generate(&prompt, retry_params, retry_tx)).is_ok();
+                    if !retried {
+                        report_panic(&app, &log_buf, log_file, &err_tx, "generate", &panic);
+                    }
                 }
             }
 
@@ -249,6 +269,43 @@ fn guard_panic<F: FnOnce()>(f: F) -> Result<(), String> {
             "non-string panic payload".to_string()
         }
     })
+}
+
+/// Reload the model on the device after `device` in the chain (macOS Metal →
+/// wgpu → CPU) because generation failed there. Returns whether it moved; the
+/// new runner stays for later requests.
+fn move_to_next_device(
+    runner: &mut RlxTextRunner,
+    device: &mut rlx::runtime::Device,
+    model_path: &std::path::Path,
+    mmproj: Option<&std::path::Path>,
+    config: &LlmConfig,
+    why: &str,
+    (app, log_buf, log_file): (&Arc<dyn LlmEventEmitter>, &LlmLogBuffer, Option<&LlmLogFile>),
+) -> bool {
+    let Some(next) = skill_accel::next_after(*device) else {
+        return false;
+    };
+    llm_info!(
+        app,
+        log_buf,
+        log_file,
+        "[rlx-only actor] generation failed on {} ({}); reloading on {}",
+        device.as_arg(),
+        why.lines().next().unwrap_or(""),
+        next.as_arg()
+    );
+    match RlxTextRunner::load_with_mmproj_device(model_path, mmproj, &super::rlx_backend::config_on(config, next)) {
+        Ok((r, d)) => {
+            *runner = r;
+            *device = d;
+            true
+        }
+        Err(e) => {
+            llm_error!(app, log_buf, log_file, "reload on {} failed: {e:#}", next.as_arg());
+            false
+        }
+    }
 }
 
 /// Surface a caught panic on the request that caused it, and in the log.

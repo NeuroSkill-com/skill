@@ -3,88 +3,54 @@
 
 use rlx::Device;
 
-/// Resolve the best available RLX device for EXG inference.
-///
-/// Respects the user's `Settings::exg_inference_device` preference string:
-///
-/// | value    | behaviour                                      |
-/// |----------|------------------------------------------------|
-/// | `"auto"` | platform default (see below), CPU fallback     |
-/// | `"cpu"`  | always CPU                                     |
-/// | `"metal"`| Apple Metal; CPU if unavailable                |
-/// | `"mlx"`  | Apple MLX;   CPU if unavailable                |
-/// | `"cuda"` | NVIDIA CUDA; CPU if unavailable                |
-/// | `"gpu"`  | wgpu;        CPU if unavailable                |
-/// | `"rocm"` | AMD ROCm;    CPU if unavailable                |
-///
-/// Platform defaults for `"auto"`:
-/// - **macOS**: Metal → MLX → CPU
-/// - **Linux / Windows**: CUDA → wgpu → CPU
-///
-/// `is_available` returns `true` only when the backend feature was
-/// compiled in AND the hardware/driver probe passes (CUDA/wgpu).
-/// Selecting a device that is unavailable silently falls back to CPU.
+/// Resolve the device to *try first* for EXG inference from the user's
+/// `Settings::exg_inference_device` (`auto`, `metal`, `gpu`, `wgpu`, `cuda`,
+/// `rocm`, `mlx`, `cpu`). Policy lives in [`skill_accel`]: the requested
+/// device if usable, else the platform chain — macOS **Metal → wgpu → CPU**,
+/// elsewhere **CUDA → wgpu → CPU**. On a Mac `gpu` and `mlx` mean Metal first.
+/// Loading falls further down the same chain on failure (`load_encoder`).
 pub fn resolve_exg_device(pref: &str) -> Device {
-    use rlx::runtime::device_ext::is_available;
+    skill_accel::best(skill_accel::parse_device(pref))
+}
 
-    match pref {
-        "cpu" => return Device::Cpu,
-        "metal" => {
-            return if is_available(Device::Metal) {
-                Device::Metal
-            } else {
-                Device::Cpu
-            }
-        }
-        "mlx" => {
-            return if is_available(Device::Mlx) {
-                Device::Mlx
-            } else {
-                Device::Cpu
-            }
-        }
-        "cuda" => {
-            return if is_available(Device::Cuda) {
-                Device::Cuda
-            } else {
-                Device::Cpu
-            }
-        }
-        "gpu" => {
-            return if is_available(Device::Gpu) {
-                Device::Gpu
-            } else {
-                Device::Cpu
-            }
-        }
-        "rocm" => {
-            return if is_available(Device::Rocm) {
-                Device::Rocm
-            } else {
-                Device::Cpu
-            }
-        }
-        _ => {} // "auto" or unknown — fall through to platform defaults
+/// The setting string that makes [`resolve_exg_device`] pick exactly `d`
+/// (`wgpu` rather than `gpu`, which means "best GPU" on a Mac).
+pub fn device_setting(d: Device) -> &'static str {
+    match d {
+        Device::Gpu => "wgpu",
+        other => other.as_arg(),
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rlx::runtime::device_ext::{feature_compiled, is_available};
+
+    /// The macOS product has no MLX: a saved "mlx" or "gpu" must land on
+    /// Metal, not drop to CPU (as "gpu" used to) or reach MLX.
+    #[test]
     #[cfg(target_os = "macos")]
-    {
-        if is_available(Device::Metal) {
-            return Device::Metal;
+    fn mlx_and_gpu_choices_run_on_metal_on_a_mac() {
+        if !is_available(Device::Metal) {
+            return; // headless CI Mac without a GPU
         }
-        if is_available(Device::Mlx) {
-            return Device::Mlx;
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        if is_available(Device::Cuda) {
-            return Device::Cuda;
-        }
-        if is_available(Device::Gpu) {
-            return Device::Gpu;
-        }
+        assert!(
+            !feature_compiled(Device::Mlx),
+            "MLX must not be compiled into the macOS daemon"
+        );
+        assert_eq!(resolve_exg_device("mlx"), Device::Metal);
+        assert_eq!(resolve_exg_device("auto"), Device::Metal);
+        assert_eq!(resolve_exg_device("gpu"), Device::Metal);
+        assert_eq!(resolve_exg_device("cpu"), Device::Cpu);
     }
 
-    Device::Cpu
+    /// Every device in the chain can be requested exactly, so the loader can
+    /// walk the chain through the setting-string API.
+    #[test]
+    fn device_setting_round_trips() {
+        for d in skill_accel::fallback_chain(Device::Metal) {
+            assert_eq!(resolve_exg_device(device_setting(d)), d, "{d:?}");
+        }
+    }
 }

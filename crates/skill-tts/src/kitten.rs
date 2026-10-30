@@ -104,14 +104,12 @@ fn hf_cache_dir() -> PathBuf {
     skill_dir().join("models/kittentts/hf-cache")
 }
 
+/// First device to try: `KITTEN_TTS_DEVICE` (metal / wgpu / cpu / …) or the
+/// platform's best GPU. `load_from_hub_cb` walks the rest of the chain
+/// (macOS Metal → wgpu → CPU) if the model fails there.
 fn resolve_device() -> Device {
-    if std::env::var("KITTEN_TTS_DEVICE").as_deref() == Ok("metal") {
-        #[cfg(all(target_os = "macos", feature = "tts-kitten"))]
-        if rlx_runtime::device_ext::is_available(Device::Metal) {
-            return Device::Metal;
-        }
-    }
-    Device::Cpu
+    let pref = std::env::var("KITTEN_TTS_DEVICE").unwrap_or_else(|_| "auto".into());
+    skill_accel::best(skill_accel::parse_device(&pref))
 }
 
 /// Match rlx-kittentts smoke defaults so HF `rlx_bundle` synthesis is audible.
@@ -120,6 +118,15 @@ fn apply_native_runtime_defaults() {
         // SAFETY: process-local defaults before any KittenTTS load; no concurrent readers yet.
         unsafe {
             std::env::set_var("KITTEN_RLX_INFER", "production");
+        }
+    }
+    // In production mode rlx-kittentts silently turns a CPU request into
+    // Metal. We ask for Metal ourselves (first in the chain), so make CPU mean
+    // CPU — otherwise the last fallback step would land on Metal again.
+    if std::env::var_os("KITTEN_RLX_PREFER_METAL").is_none() {
+        // SAFETY: as above.
+        unsafe {
+            std::env::set_var("KITTEN_RLX_PREFER_METAL", "0");
         }
     }
 }
@@ -176,7 +183,10 @@ where
     ensure_rlx_bundle(&snapshot, &mut on_progress)?;
 
     on_progress(LoadProgress::Loading);
-    KittenTTS::load_from_dir(&snapshot, resolve_device()).context("load KittenTTS (native RLX)")
+    let (tts, _) = skill_accel::load_with_fallback("TTS (KittenTTS)", resolve_device(), &[], |d| {
+        KittenTTS::load_from_dir(&snapshot, d).context("load KittenTTS (native RLX)")
+    })?;
+    Ok(tts)
 }
 
 // ─── Worker ───────────────────────────────────────────────────────────────────

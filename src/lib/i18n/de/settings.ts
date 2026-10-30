@@ -212,9 +212,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "Wo KI-Inferenz ausgeführt wird. GPU ist schneller; CPU funktioniert auf jedem Gerät ohne VRAM-Druck. Nach der Änderung den LLM-Server neu starten.",
   "settings.inferenceDeviceAuto": "Auto",
-  "settings.inferenceDeviceAutoDesc": "MLX auf Apple Silicon, GPU anderswo.",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "Nativ für Apple Silicon — am schnellsten auf Mac.",
+  "settings.inferenceDeviceAutoDesc": "Metal auf dem Mac, sonst GPU.",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "Nutzt wgpu (Metal / Vulkan) für Inferenz.",

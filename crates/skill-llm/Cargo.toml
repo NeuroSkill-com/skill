@@ -13,7 +13,7 @@ default    = []
 # engine scaffolding (state, protocol, handlers, tool orchestration).
 #
 # Per-platform RLX backend variants (mirror rlx's own naming):
-#   macOS:        llm-rlx-metal | llm-rlx-mlx                 (also brings BLAS Accelerate)
+#   macOS:        llm-rlx-metal (llm-rlx-mlx is opt-in only)  (also brings BLAS Accelerate)
 #   Linux:        llm-rlx-cuda  | llm-rlx-rocm | llm-rlx-wgpu | llm-rlx-cpu
 #   Windows:      llm-rlx-cuda  | llm-rlx-wgpu | llm-rlx-cpu
 # `llm-rlx-cpu` is the portable fallback (no GPU dependency; relies on
@@ -22,7 +22,7 @@ default    = []
 # Product builds should enable one OS umbrella (`apple` / `linux` / `windows`)
 # rather than listing leaf backends. Linux/Windows compile CUDA + wgpu; missing
 # NVIDIA drivers fall back at runtime (CUDA → wgpu → CPU).
-apple   = ["llm-rlx-metal", "llm-rlx-mlx"]
+apple   = ["llm-rlx-metal", "llm-rlx-wgpu"]  # Metal → wgpu → CPU; no MLX — see skill-daemon `apple`
 linux   = ["llm-rlx-wgpu", "llm-rlx-cuda"]
 windows = ["llm-rlx-wgpu", "llm-rlx-cuda"]
 llm                = []
@@ -31,7 +31,7 @@ llm                = []
 # `rlx-models/runner` gates the `run` module (LmRunner, Qwen3Runner, auto_*,
 # ChatTemplate/ChatMessage). rlx-models 0.2.9+ made model families opt-in, so
 # this must be enabled explicitly now (was default in 0.2.5).
-llm-rlx       = ["llm", "dep:rlx", "dep:rlx-models", "rlx-models?/runner", "rlx-models?/qwen35-vlm", "rlx-models?/dual-encoder", "dep:rlx-minicpm5", "dep:rlx-minimax", "dep:rlx-nemotron", "dep:rlx-gemma", "dep:image", "rlx?/cpu"]
+llm-rlx       = ["dep:skill-accel", "llm", "dep:rlx", "dep:rlx-models", "rlx-models?/runner", "rlx-models?/qwen35-vlm", "rlx-models?/dual-encoder", "dep:rlx-minicpm5", "dep:rlx-minimax", "dep:rlx-nemotron", "dep:rlx-gemma", "dep:image", "rlx?/cpu"]
 llm-rlx-cpu   = ["llm-rlx"]
 llm-rlx-metal = ["llm-rlx", "rlx?/metal", "rlx?/blas-accelerate", "rlx-models?/metal", "rlx-minicpm5?/metal", "rlx-minimax?/metal", "rlx-nemotron?/metal", "rlx-gemma?/metal"]
 llm-rlx-mlx   = ["llm-rlx", "rlx?/mlx", "rlx?/blas-accelerate", "rlx-models?/mlx", "rlx-minicpm5?/mlx", "rlx-minimax?/mlx", "rlx-nemotron?/mlx", "rlx-gemma?/mlx"]
@@ -50,6 +50,7 @@ llm-rlx-wgpu  = ["llm-rlx", "rlx?/gpu", "rlx-models?/gpu", "rlx-minicpm5?/gpu", 
 llm-model-discovery = ["llm-rlx"]
 
 [dependencies]
+skill-accel = { path = "../skill-accel", optional = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 glob = "0.3"

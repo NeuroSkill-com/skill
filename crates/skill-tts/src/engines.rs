@@ -297,7 +297,27 @@ fn skill_tts_device_override() -> Option<Device> {
 }
 
 /// Build the backend for `engine`, honouring an optional `model` repo override.
+///
+/// Engines that run on one device walk the chain (macOS Metal → wgpu → CPU,
+/// see `skill_accel`) when a device fails to load the model — or panics.
+/// Orpheus (separate LM / codec devices) and the native catalog choose their
+/// own devices, so they get one attempt.
 fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> {
+    let id = engine.trim().to_ascii_lowercase();
+    let first = match id.as_str() {
+        "qwen3-tts" | "qwen3_tts" | "inflect-nano" | "inflect_nano" => resolve_device(),
+        "kyutai-tts" | "kyutai" => kyutai_device(),
+        _ => return build_synthesizer_on(engine, model, resolve_device()),
+    };
+    skill_accel::load_with_fallback(&format!("TTS ({id})"), first, &[], |d| {
+        build_synthesizer_on(engine, model, d)
+    })
+    .map(|(synth, _)| synth)
+}
+
+/// One build attempt of `engine` on `device` (ignored by engines that pick
+/// their own devices).
+fn build_synthesizer_on(engine: &str, model: &str, device: Device) -> Result<Box<dyn Synthesizer>> {
     match engine.trim().to_ascii_lowercase().as_str() {
         "qwen3-tts" | "qwen3_tts" => {
             let repo = if model.trim().is_empty() {
@@ -311,7 +331,7 @@ fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> 
             ensure_qwen3_tokenizer(&dir)?;
             let runner = rlx_qwen3_tts::Qwen3TtsRunner::builder()
                 .model_dir(dir)
-                .device(resolve_device())
+                .device(device)
                 .build()
                 .context("build Qwen3-TTS runner")?;
             Ok(Box::new(Qwen3Synth { runner }))
@@ -329,7 +349,6 @@ fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> 
             Ok(Box::new(OrpheusSynth { tts }))
         }
         "kyutai-tts" | "kyutai" => {
-            let device = kyutai_device();
             let (tts_dir, mimi_dir) = ensure_kyutai_models()?;
             let session = rlx_kyutai_tts::KyutaiTtsSession::open_on(&tts_dir, &mimi_dir, device)
                 .context("open Kyutai TTS session")?;
@@ -348,7 +367,6 @@ fn build_synthesizer(engine: &str, model: &str) -> Result<Box<dyn Synthesizer>> 
                 "Export it once with rlx-inflect-nano's scripts/export_inflect_nano.py.",
             )?;
             let synth = rlx_inflect_nano::InflectNano::load_from_dir(&dir).context("load Inflect-Nano")?;
-            let device = resolve_device();
             tts_log!("tts", "inflect-nano ready on {:?} ({})", device, dir.display());
             Ok(Box::new(InflectNanoSynth { model: synth, device }))
         }

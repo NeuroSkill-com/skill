@@ -8,12 +8,13 @@ build = "build.rs"
 
 [features]
 default     = []
-tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio"]
+tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio", "dep:skill-accel"]
 tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
 # Pluggable RLX TTS engines. Legacy HF paths (Qwen3/Orpheus/Kyutai/Inflect) stay
 # for auto-download UX; the full native catalog routes through `rlx-tts-bench`
 # (no ONNX Runtime — `ort` features are never enabled).
 tts-engines = [
+    "dep:skill-accel",
     "dep:rlx-qwen3-tts",
     "dep:rlx-orpheus",
     "dep:rlx-kyutai-tts",
@@ -26,6 +27,7 @@ tts-engines = [
 whisper-validate = ["dep:rlx-whisper", "dep:hound"]
 
 [dependencies]
+skill-accel = { path = "../skill-accel", optional = true }
 anyhow      = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }

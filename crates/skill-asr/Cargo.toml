@@ -10,12 +10,12 @@ build = "build.rs"
 default = []
 # OS umbrellas — product builds pass one of these (via skill-daemon).
 # Leaf `asr-*` features remain for targeted tests.
-apple   = ["asr-metal", "asr-mlx"]
+apple   = ["asr-metal", "asr-wgpu"]  # Metal → wgpu → CPU; no MLX — see skill-daemon `apple`
 linux   = ["asr-cuda", "asr-wgpu"]
 windows = ["asr-cuda", "asr-wgpu"]
 # `asr` wires up the real engine on every desktop OS: Whisper / Qwen3-ASR /
 # Voxtral / FunASR / Nemotron / rlx-asr + Silero VAD + cpal mic capture.
-asr = [
+asr = ["dep:skill-accel", 
     "dep:cpal",
     "dep:hf-hub",
     "dep:rlx-whisper",
@@ -35,6 +35,7 @@ asr-wgpu  = ["asr", "rlx-whisper?/gpu",   "rlx-vad?/gpu",   "rlx-runtime?/gpu", 
 asr-rocm  = ["asr", "rlx-whisper?/rocm",  "rlx-vad?/rocm",  "rlx-runtime?/rocm",  "rlx-qwen3-asr?/rocm",  "rlx-voxtral?/rocm",  "rlx-funasr?/rocm",  "rlx-nemotron-asr?/rocm",  "rlx-asr?/rocm"]
 
 [dependencies]
+skill-accel = { path = "../skill-accel", optional = true }
 anyhow          = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }

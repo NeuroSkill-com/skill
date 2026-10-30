@@ -29,7 +29,7 @@ interface FilterConfig {
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-let exgInferenceDevice = $state<"auto" | "mlx" | "gpu" | "cpu">("auto");
+let exgInferenceDevice = $state<"auto" | "gpu" | "cpu">("auto");
 let exgInferenceDeviceSaving = $state(false);
 let filter = $state<FilterConfig>({ ...DEFAULT_FILTER_CONFIG });
 let filterSaving = $state(false);
@@ -46,7 +46,6 @@ const FFT_NAMES: Record<string, string> = {
   accelerate: "Accelerate",
   "rlx-cpu": "rlx CPU",
   metal: "Metal",
-  mlx: "MLX",
   ane: "Neural Engine",
   cuda: "CUDA",
   rocm: "ROCm",
@@ -107,7 +106,7 @@ async function setFftBackend(b: string) {
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
-async function setExgInferenceDevice(dev: "auto" | "mlx" | "gpu" | "cpu") {
+async function setExgInferenceDevice(dev: "auto" | "gpu" | "cpu") {
   if (exgInferenceDevice === dev || exgInferenceDeviceSaving) return;
   exgInferenceDeviceSaving = true;
   exgInferenceDevice = dev;
@@ -119,8 +118,9 @@ onMount(async () => {
   filter = await daemonInvoke<FilterConfig>("get_filter_config");
   overlapSecs = await daemonInvoke<number>("get_embedding_overlap");
   exgInferenceDevice = (await daemonInvoke<{ value: string }>("get_exg_inference_device")
-    .then((r) => r.value)
-    .catch(() => "auto")) as "auto" | "mlx" | "gpu" | "cpu";
+    // A saved "mlx" (no longer offered) runs on Metal — the same as Auto on a Mac.
+    .then((r) => (r.value === "mlx" ? "auto" : r.value))
+    .catch(() => "auto")) as "auto" | "gpu" | "cpu";
   const fft = await getEegFftBackend().catch(() => null);
   if (fft) {
     fftValue = fft.value || "auto";
@@ -141,14 +141,12 @@ onMount(async () => {
           {t("settings.inferenceDeviceDesc")}
         </p>
         <div class="flex items-stretch divide-x divide-border dark:divide-white/[0.05]">
-          {#each (["auto", "mlx", "gpu", "cpu"] as ("auto" | "mlx" | "gpu" | "cpu")[]) as dev}
+          {#each (["auto", "gpu", "cpu"] as ("auto" | "gpu" | "cpu")[]) as dev}
             {@const isActive = exgInferenceDevice === dev}
             {@const label = dev === "auto" ? t("settings.inferenceDeviceAuto")
-                          : dev === "mlx"  ? t("settings.inferenceDeviceMlx")
                           : dev === "gpu"  ? t("settings.inferenceDeviceGpu")
                           :                  t("settings.inferenceDeviceCpu")}
             {@const desc = dev === "auto" ? t("settings.inferenceDeviceAutoDesc")
-                         : dev === "mlx"  ? t("settings.inferenceDeviceMlxDesc")
                          : dev === "gpu"  ? t("settings.inferenceDeviceGpuDesc")
                          :                  t("settings.inferenceDeviceCpuDesc")}
             <button

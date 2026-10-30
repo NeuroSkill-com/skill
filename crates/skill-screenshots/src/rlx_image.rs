@@ -25,8 +25,15 @@ pub struct RlxImageEmbedder {
 
 impl RlxImageEmbedder {
     /// Resolve nomic-embed-vision-v1.5 from HF cache and compile its graph.
+    /// Starts on `device` and walks the chain (macOS Metal → wgpu → CPU) if
+    /// the model fails to load or compile there.
     pub fn from_repo(device: &str) -> Result<Self> {
-        let device = parse_device(device);
+        let first = skill_accel::parse_device(device);
+        let (me, _) = skill_accel::load_with_fallback("screenshot image embeddings", first, &[], Self::load_on)?;
+        Ok(me)
+    }
+
+    fn load_on(device: rlx::Device) -> Result<Self> {
         let repo = hf_hub::api::sync::ApiBuilder::new()
             .with_progress(true)
             .build()?
@@ -73,25 +80,6 @@ impl RlxImageEmbedder {
     pub fn dim(&self) -> usize {
         // NomicEmbedVisionV15: hidden=768.
         self.inner.lock().map(|m| m.hidden_size()).unwrap_or(768)
-    }
-}
-
-fn parse_device(s: &str) -> rlx::Device {
-    use rlx::Device;
-    let want = match s.trim().to_ascii_lowercase().as_str() {
-        "metal" => Device::Metal,
-        "mlx" => Device::Mlx,
-        "cuda" => Device::Cuda,
-        "rocm" => Device::Rocm,
-        "gpu" | "wgpu" => Device::Gpu,
-        _ => Device::Cpu,
-    };
-    // Fall back to CPU when the requested GPU backend isn't compiled in / present,
-    // rather than handing rlx an unavailable device (which panics at session setup).
-    if matches!(want, Device::Cpu) || rlx::runtime::device_ext::is_available(want) {
-        want
-    } else {
-        Device::Cpu
     }
 }
 

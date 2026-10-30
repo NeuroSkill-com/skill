@@ -436,9 +436,7 @@ const settings: Record<string, string> = {
   "settings.inferenceDeviceDesc":
     "AI 推理运行的位置。GPU 更快；CPU 适用于任何机器且避免 VRAM 压力。更改后重启 LLM 服务器。",
   "settings.inferenceDeviceAuto": "Auto",
-  "settings.inferenceDeviceAutoDesc": "Apple Silicon 上使用 MLX，其他平台使用 GPU。",
-  "settings.inferenceDeviceMlx": "MLX",
-  "settings.inferenceDeviceMlxDesc": "Apple Silicon 原生 — Mac 上最快。",
+  "settings.inferenceDeviceAutoDesc": "Mac 上使用 Metal，其他平台使用 GPU。",
   "settings.inferenceDeviceGpu": "GPU",
   "settings.inferenceDeviceCpu": "CPU",
   "settings.inferenceDeviceGpuDesc": "使用 wgpu (Metal / Vulkan) 进行推理。",

@@ -2700,8 +2700,6 @@ export type TranslationKey =
   | "settings.inferenceDeviceExgRestartHint"
   | "settings.inferenceDeviceGpu"
   | "settings.inferenceDeviceGpuDesc"
-  | "settings.inferenceDeviceMlx"
-  | "settings.inferenceDeviceMlxDesc"
   | "settings.inferenceDeviceRestartHint"
   | "settings.inputActivityActive"
   | "settings.inputActivityKeyboard"

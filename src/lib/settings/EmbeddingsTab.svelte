@@ -293,7 +293,7 @@ async function load() {
       rlx_max_seq?: number;
     }>("get_embedding_model");
     currentCode = r.model || models[0]?.code || "";
-    rlxDevice = r.rlx_device || rlxDevice;
+    rlxDevice = (r.rlx_device === "mlx" ? "metal" : r.rlx_device) || rlxDevice; // saved "mlx" runs on Metal
     rlxMaxSeq = r.rlx_max_seq || rlxMaxSeq;
   } catch {
     currentCode = models[0]?.code ?? "";
@@ -322,7 +322,7 @@ async function applyModel() {
       rlx_max_seq: rlxMaxSeq,
     });
     if (r.ok) {
-      rlxDevice = r.rlx_device || rlxDevice;
+      rlxDevice = (r.rlx_device === "mlx" ? "metal" : r.rlx_device) || rlxDevice; // saved "mlx" runs on Metal
       rlxMaxSeq = r.rlx_max_seq || rlxMaxSeq;
       addToast("success", t("embeddings.modelApplied"), currentCode, 3000);
       staleCount = 0;
@@ -454,7 +454,6 @@ function pct(v: number) {
                        focus:outline-none focus:ring-1 focus:ring-ring/50">
           <option value="metal">Metal</option>
           <option value="cpu">CPU</option>
-          <option value="mlx">MLX</option>
           <option value="gpu">GPU / wgpu</option>
           <option value="cuda">CUDA</option>
           <option value="rocm">ROCm</option>

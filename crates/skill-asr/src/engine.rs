@@ -266,7 +266,28 @@ impl Transcriber for RlxAsrTranscriber {
 /// Construct the ASR backend for `engine` (`"whisper"` | `"qwen3-asr"` |
 /// `"voxtral"` | `"funasr"` | `"nemotron-asr"` | `"rlx-asr"`; unknown falls back
 /// to Whisper). `model` is the engine-specific model id (HF repo).
+///
+/// Walks the device chain (macOS Metal → wgpu → CPU, see `skill_accel`) when
+/// a device fails to load the model or panics; `rlx-asr` picks its own device
+/// and gets one attempt.
 fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &EventSink) -> Result<Box<dyn Transcriber>> {
+    let id = crate::normalize_asr_engine_id(engine);
+    if id == "rlx-asr" {
+        return build_transcriber_on(engine, model, language, on_event, asr_device());
+    }
+    skill_accel::load_with_fallback(&format!("ASR ({id})"), asr_device(), &[], |d| {
+        build_transcriber_on(engine, model, language, on_event, d)
+    })
+    .map(|(t, _)| t)
+}
+
+fn build_transcriber_on(
+    engine: &str,
+    model: &str,
+    language: &str,
+    on_event: &EventSink,
+    device: Device,
+) -> Result<Box<dyn Transcriber>> {
     let engine = crate::normalize_asr_engine_id(engine);
     let progress = |label: String, downloaded: u64, total: u64| {
         on_event(AsrEvent::Download {
@@ -281,7 +302,7 @@ fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &Event
             let dir = ensure_qwen3_asr_model(model)?;
             let runner = rlx_qwen3_asr::AsrRunner::builder()
                 .weights(&dir)
-                .device(asr_device())
+                .device(device)
                 .build()
                 .context("build Qwen3-ASR runner")?;
             Ok(Box::new(Qwen3AsrTranscriber(runner)))
@@ -291,7 +312,7 @@ fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &Event
             let dir = ensure_voxtral_model(model)?;
             let runner = rlx_voxtral::VoxtralRunner::builder()
                 .weights(&dir)
-                .device(asr_device())
+                .device(device)
                 .build()
                 .context("build Voxtral runner")?;
             let lang = match language.trim() {
@@ -307,13 +328,13 @@ fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &Event
         "funasr" => {
             progress("FunASR / SenseVoice weights…".into(), 0, 0);
             let dir = ensure_funasr_model(model)?;
-            let asr = rlx_funasr::runner::open_asr(&dir, asr_device()).context("open FunASR model")?;
+            let asr = rlx_funasr::runner::open_asr(&dir, device).context("open FunASR model")?;
             Ok(Box::new(FunAsrTranscriber(asr)))
         }
         "nemotron-asr" => {
             progress("Nemotron-ASR .nemo (large download)…".into(), 0, 0);
             let nemo = ensure_nemotron_asr_model(model)?;
-            let mut asr = rlx_nemotron_asr::NemotronAsr::open(&nemo, asr_device()).context("open Nemotron ASR")?;
+            let mut asr = rlx_nemotron_asr::NemotronAsr::open(&nemo, device).context("open Nemotron ASR")?;
             let lang = match language.trim() {
                 "" | "auto" => "en-US",
                 l => l,
@@ -329,7 +350,7 @@ fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &Event
         }
         _ => {
             progress("Whisper weights…".into(), 0, 0);
-            Ok(Box::new(WhisperTranscriber(build_runner(model, language)?)))
+            Ok(Box::new(WhisperTranscriber(build_runner_on(model, language, device)?)))
         }
     }
 }
@@ -337,12 +358,19 @@ fn build_transcriber(engine: &str, model: &str, language: &str, on_event: &Event
 /// Build a Whisper runner against the cached/downloaded checkpoint for `model`
 /// (a HuggingFace repo, e.g. `openai/whisper-base.en` or `openai/whisper-small`).
 fn build_runner(model: &str, language: &str) -> Result<WhisperRunner> {
+    skill_accel::load_with_fallback("ASR (whisper)", asr_device(), &[], |d| {
+        build_runner_on(model, language, d)
+    })
+    .map(|(r, _)| r)
+}
+
+fn build_runner_on(model: &str, language: &str, device: Device) -> Result<WhisperRunner> {
     let dir = ensure_whisper_model(model).context("prepare Whisper model")?;
     WhisperRunner::builder()
         .weights(dir.join("model.safetensors"))
         .config_path(dir.join("config.json"))
         .tokenizer_path(dir.join("tokenizer.json"))
-        .device(asr_device())
+        .device(device)
         .language(language.to_string())
         .build()
         .context("build WhisperRunner")
@@ -410,32 +438,10 @@ fn push_transcript(runner: &mut WhisperRunner, pcm: &[f32], out: &mut Vec<String
 /// `cuda` / `rocm` / `gpu` / `auto`); otherwise pick the first compiled-in
 /// accelerator that reports available (Metal → CUDA → MLX → wgpu → CPU).
 fn asr_device() -> Device {
-    use rlx_runtime::device_ext::is_available;
-
-    if let Ok(v) = std::env::var("SKILL_ASR_DEVICE") {
-        let v = v.trim().to_ascii_lowercase();
-        if !v.is_empty() && v != "auto" {
-            if v == "cpu" {
-                return Device::Cpu;
-            }
-            let explicit = match v.as_str() {
-                "metal" => Device::Metal,
-                "mlx" => Device::Mlx,
-                "cuda" => Device::Cuda,
-                "rocm" => Device::Rocm,
-                "gpu" | "vulkan" | "wgpu" => Device::Gpu,
-                _ => Device::Cpu,
-            };
-            if explicit == Device::Cpu || is_available(explicit) {
-                return explicit;
-            }
-        }
-    }
-
-    [Device::Metal, Device::Cuda, Device::Mlx, Device::Gpu]
-        .into_iter()
-        .find(|&d| is_available(d))
-        .unwrap_or(Device::Cpu)
+    // `SKILL_ASR_DEVICE` (cpu / metal / wgpu / cuda / rocm / auto) or the
+    // platform's best GPU; loaders walk the rest of the chain on failure.
+    let pref = std::env::var("SKILL_ASR_DEVICE").unwrap_or_else(|_| "auto".into());
+    skill_accel::best(skill_accel::parse_device(&pref))
 }
 
 fn build_input_stream(
