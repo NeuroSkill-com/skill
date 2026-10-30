@@ -8,6 +8,34 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.9] — 2026-10-30
+
+### Features
+
+- **EEG FFT `auto` now picks the backend per call by batch size.** Small batches use the fastest CPU backend (Accelerate on macOS, rustfft elsewhere). When `auto` is selected, a background thread times every usable GPU backend that passed the correctness check against it, from 32 × 256 up to 512 × 4096 samples. Batches from the size where a GPU is at least 1.25× faster, at that size and every larger one, then run on that GPU. Calibration never blocks the EEG pipeline: everything stays on the CPU while it runs or when no GPU wins. If the GPU fails on a batch, the batch is redone on CPU and the GPU is dropped. `GET /v1/settings/eeg-fft-backend` reports the result under `auto` (`calibrating`, `gpu`, `gpu_min_samples`).
+  - On an M-series Mac no GPU wins at any measured size (Accelerate 0.03–1.6 ms against Metal 0.2–6 ms), so `auto` keeps everything on Accelerate.
+  - The Neural Engine FFT (`ane`) fails the correctness check with current rlx: it computes in float16, which is off by about 1% of the signal amplitude. It is refused rather than used.
+
+- **wgpu on macOS, and every model falls back instead of failing: Metal → wgpu → CPU.** wgpu is now built into the macOS app as a second GPU backend (daemon +8 MB). LLM chat, TTS (Kitten and the engine framework), speech recognition, text embeddings, screenshot image embeddings, OCR, EEG encoders and UMAP all load through one shared policy (new `skill-accel` crate). They start on the chosen device (or the best available), and if a model fails to load there — or panics — they move on to the next device and log why. Linux and Windows use CUDA → wgpu → CPU.
+  - **Failures while running are also handled.** Text embeddings split a batch that is too large for the device and remember the limit (wgpu refuses work buffers over 4 GiB). If a single text still fails, they move to the next device. The LLM moves to the next device and retries the request once when generation fails (e.g. a long prompt needing a 16 GiB buffer on wgpu).
+  - Kitten TTS used to turn a CPU request into Metal; now CPU means CPU, so the last step of the chain works.
+  - Device settings that can't run here (e.g. CUDA on a Mac) move down the chain instead of turning a feature off. Text embeddings used to stay off in that case.
+  - Checked end to end with the device-health suite, including chat (33/33 each): normal on Metal, with Metal forced to fail (everything on wgpu, including correct LLM answers), and with Metal and wgpu forced to fail (everything on CPU). The forcing switch is `SKILL_ACCEL_SIMULATE_FAIL=metal,gpu`, for diagnostics.
+
+### Bugfixes
+
+- **Turning on location in Settings no longer hangs, and location lookups no longer take 15 s.** The CoreLocation bridge sent its work to the main thread's dispatch queue, which the daemon never services (its main thread runs the async runtime). Checking permission waited forever, so the Settings toggle never returned. Every lookup waited out its full 10 s + 5 s timeout before falling back to IP geolocation. The bridge now does all CoreLocation work on the calling thread and runs that thread's run loop. Lookups take 0.1 s instead of 15 s, and the toggle returns at once.
+- **Small models no longer call tools for general-knowledge questions.** The tool instructions only showed examples that call a tool, so Qwen3.5-0.8B answered "What is the capital of France?" by calling `location` and replied with the user's own city ("San Jose"). The instructions now also show questions answered directly and say that `location` is only about where the user is. Query mode still answers only from tool results.
+
+- **Opening Settings → EXG no longer crashes the daemon (0.1.0-rc.8).** The new FFT-backend picker asked rlx for every available device. For MLX, rlx checks by running a kernel, and the app bundle doesn't include MLX's Metal library, so MLX trapped in C++ and took the daemon down (`EXC_BREAKPOINT` in `mlx::core::metal::Device`; it can't be caught). The picker now asks each device individually and never offers MLX for EEG FFTs. MLX was also the slowest FFT backend measured.
+- **MLX is removed from the macOS app; everything runs on Metal.** The app never shipped MLX's 147 MB Metal kernel library, so MLX could not run in any released build, and checking whether it could run crashed the daemon. Everything MLX was offered for (EEG encoders, text embeddings, speech recognition, LLMs including MLX-format model packs, EEG FFTs) already runs on rlx's Metal backend.
+  - The daemon drops MLX from its macOS build: 16 MB smaller (228 → 212 MB).
+  - A saved `mlx` choice (EXG inference device, text-embeddings device) now runs on Metal.
+  - The MLX choices are removed from Settings → EXG and Settings → Embeddings.
+  - MLX-format model files (mlx-community) are still supported; rlx loads them on Metal.
+- The EXG inference device **GPU** used to fall back to CPU on a Mac (wgpu isn't built for macOS). It now uses Metal. The **Auto** description wrongly said "MLX on Apple Silicon"; it now says Metal, in all languages.
+- The macOS daemon now links clang's runtime library itself. rlx-coreml needs it for its `@available` checks, and it used to arrive only through MLX.
+
 ## [0.1.0-rc.8] — 2026-10-29
 
 ### Features
@@ -711,16 +739,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 - **Fork `oura-api` 0.1.2 to `reqwest` 0.12** (`patches/oura-api-0.1.2`, vendored; the only change from crates.io is the dependency version). Upstream's newest release pins `reqwest` 0.11, which pulled the entire hyper 0.14 stack including `h2` 0.3.x — the branch RUSTSEC-2026-0258 is unpatched on, fixed in `h2` >= 0.4.16 only. This removes the last advisory and drops a duplicate HTTP stack: the tree now resolves a single `hyper` (1.11) and a single `h2` (0.4.19), where it previously carried both 0.14/1.x and 0.3/0.4.
 - Remove dead `deny.toml` entries that made `cargo deny` fail or warn: the `RUSTSEC-2024-0415` gtk ignore (unreachable — `unmaintained = "workspace"` already scopes that lint to our own crates, and an ignore that never matches is a hard error), the `winreg@0.55.0` duplicate skip (deduplicated by dropping `reqwest` 0.11), and re-pin the `winnow` skip 1.0.3 → 1.0.4.
 
-## [0.0.131-rc.24] — 2026-08-12
-
-### Features
-
-- added i18n
-
 ## Earlier releases
 
-The 152 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 153 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.24](changes/releases/0.0.131-rc.24.md)
 - [0.0.131-rc.23](changes/releases/0.0.131-rc.23.md)
 - [0.0.131-rc.22](changes/releases/0.0.131-rc.22.md)
 - [0.0.131-rc.21](changes/releases/0.0.131-rc.21.md)
