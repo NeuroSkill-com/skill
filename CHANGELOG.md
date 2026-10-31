@@ -8,6 +8,34 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0-rc.10] — 2026-10-31
+
+### Bugfixes
+
+- **Settings → EXG no longer offers an FFT backend that gives wrong answers.** The FFT-backend list showed every backend that is built in and present, so it offered the Neural Engine (`ane`), whose float16 FFT is off by about 1% of the signal amplitude and is refused when picked. The daemon now runs the correctness check on every backend once at startup, in the background, and remembers each result. The list leaves out backends that failed. Picking one directly is still refused, with the reason.
+- **The `date` tool no longer makes the model call local time "UTC".** Its result put `iso_utc` next to a `timezone.name` that was only the UTC offset again (chrono can't name the local zone), so Qwen3.5-0.8B answered "…in the UTC timezone" for a local time. The result now includes a readable `local_time`, the real zone name (e.g. `America/New_York`, from the OS) and a one-line note on which time to report. The model now answers "15:31:48 on Saturday, October 31, 2026, in America/New_York (Eastern Time)".
+
+### Build
+
+- **`cargo deny check` passes with no warnings.**
+  - It failed outright because the `skill-accel` crate (new in 0.1.0-rc.9) had no GPL-3.0-only license exception in `deny.toml`.
+  - Removed two quick-xml advisory ignores (RUSTSEC-2026-0194/0195) that no longer match anything: only fixed quick-xml 0.41/0.42 remain. Removed from `.cargo/audit.toml` too, keeping the two ignore lists in sync.
+  - Allowed the bids-rs git source used by BIDS export.
+  - `mw75`'s deprecated `GPL-3.0` license ID is now clarified to `GPL-3.0-only`, so its exception no longer needs the deprecated alias.
+
+- **The LLM-catalog sync script now records real file sizes.** It asked Hugging Face for each repo's file list without `blobs=true`, which leaves sizes out, so every added entry silently copied an existing entry's size (a 0.59 GB projector was listed at 3.8 GB). It now fetches sizes. It also names quantized projectors by their quant (`Q8_0`, not `MMPROJ`), and no longer marks a new Q4_K_M or BF16 projector "recommended" in a family that already has a curated pick (LFM2.5-VL would have shown two recommended models).
+- **Every release now publishes its LLM catalog.** A new workflow (`release-catalog.yml`) runs on each release tag and attaches `llm_catalog.json` + `llm_catalog.json.sha256` to the release. It also mirrors them to `rc-latest`, the same way as `latest.json`. Stable: `releases/latest/download/llm_catalog.json`; RC channel: `releases/download/rc-latest/llm_catalog.json`. It needs no build, so it publishes in about a minute and survives a failed platform build. The catalog is validated first (`node scripts/ci.mjs publish-llm-catalog`), and the CI self-test in pre-push runs the same validation: every model has a known family and a size, the default model exists and isn't a vision projector, no duplicates.
+- **The published catalog says what it is compatible with.** A `compatibility` block comes first: `schema` (catalog layout, now 1), `min_app_version` (oldest app that reads this layout: 0.0.131-rc.10), `bundled_in` (the release version, tag, commit and platforms it shipped in) and `runtime.rlx` (the rlx revision those models were validated against). Everything after it is byte-for-byte the catalog compiled into the app, which ignores the extra block.
+
+### LLM
+
+- **LLM catalog: 41 new quantizations of catalogued models.** Synced from Hugging Face. Nothing was removed and the default model (Qwen3.5-0.8B Q4_K_M) is unchanged. New entries:
+  - Qwen3-0.6B: unsloth BF16 and UD Q2–Q8 K_XL quants.
+  - LFM2.5-VL-1.6B: Q4_K_M, Q5_K_M and Q6_K.
+  - LFM2.5-1.2B-Instruct: QAD Q4_0.
+  - Bonsai-27B and Ternary-Bonsai-27B: dspark Q4_1, F16, dspark BF16 and Ternary PQ2_0 / Q2_g64, plus BF16 and Q8_0 vision projectors.
+- Hugging Face download counts refreshed (140 repos).
+
 ## [0.1.0-rc.9] — 2026-10-30
 
 ### Features
@@ -703,46 +731,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 - **muse-rs 0.1 → 0.2**: switches the Muse BLE backend from btleplug to webbluetooth. The `MuseClient` / `MuseClientConfig` / `MuseDevice` / `MuseHandle` / `MuseEvent` API is unchanged, so the adapter and connect paths needed no edits.
 - **webbluetooth 0.0.1** added as a direct dependency of `skill-daemon`, replacing its direct `btleplug` dependency. Its backends have no native dependencies — no `bluer`, no `dbus`, no `windows` crates — which drops a runtime `libdbus` requirement from the Linux packages.
 
-## [0.0.131-rc.25] — 2026-09-18
-
-### Features
-
-- **`exg_auto_download_weights` setting** (Settings → EEG Model, off by default): when an EEG session starts without encoder weights on disk, fetch them automatically instead of recording metrics-only. Off by default because the default ZUNA encoder is a 380M-parameter model. Reuses the existing download machinery, including progress events and cancellation.
-
-### Performance
-
-- **Screenshot backfill: one paged query instead of three full table scans.** `rows_needing_backfill` replaces issuing `rows_without_ocr` + `rows_without_embedding` + `rows_without_ocr_embedding` and merging them into a map of every pending row; it carries the per-row flags plus `ocr_text` and `timestamp`, which also removes two per-row lookups. Rows are walked newest-first via an `id` cursor, so an interrupted pass has covered the most recently captured screenshots rather than an arbitrary hash-order subset.
-- Backfill progress now reports to the UI on the existing `screenshot-reembed-progress` event (`done`/`total`/`elapsed_secs`/`eta_secs`, plus `embedded`/`skipped`/`complete`), and logs an embedded/skipped/elapsed tally on completion. Previously a multi-minute pass was silent and unreadable files were skipped without being counted.
-- **An empty screenshot HNSW index could never be loaded again.** `fast-hnsw` serializes a zero-node labeled index but rejects it on read ("file contains no payload section"), so an empty index that reached disk failed to load on every subsequent boot, was rebuilt — still empty — and written again. Empty indexes are no longer written, and a stale empty file is removed so the next load takes the clean path.
-- **EEG sessions recorded with no embeddings gave no actionable signal.** The weights resolver only probes the HuggingFace cache and never downloads, so a machine without encoder weights recorded every session metrics-only behind a single ERROR line. `EmbedWorkerStatus` now reports a `reason` (`weights_missing` vs `encoder_unavailable`) and the worker emits `ExgWeightsMissing`.
-- **Auto-connect attempted a BLE device before it was discoverable.** The first connect fired 900 ms after daemon boot against the cached preferred device, burning a full scan timeout per attempt — typically 7 failed attempts and ~70 s of ERROR lines before a headband appeared, out of a 12-attempt budget. BLE targets now wait for the scanner to see the device (60 s cap, then attempt anyway); wired and manual targets are unaffected. Retryable failures log at WARN until the retry budget is exhausted.
-- **ANT Neuro SDK was re-initialized every 10 seconds.** The scanner built a fresh `AntNeuroSdk` on every other tick, and its `NativeBackend` logs its version unconditionally — one INFO line every 10 s for the life of the daemon, on machines with no ANT Neuro hardware. The handle is now built once per process.
-
-### Bugfixes
-
-- **Screenshot capture was silently disabled on default settings.** The daemon's `ScreenshotContext::is_session_active()` returned a hardcoded `false` — a stub left by the thin-client migration (`ba3f07d4`), where the Tauri implementation had checked `session_start_utc.is_some()`. Since `session_only` defaults to `true`, the capture loop's gate was permanently shut: the worker spawned, logged "worker spawned", then spun on a 1-second no-op forever, never capturing, embedding, or backfilling. It now reads the live `session_handle`, matching how the rest of the daemon defines an active session.
-- **Screenshot backfill was decided once at boot and effectively never ran.** The gate was read a single time when the embed worker spawned — before any session exists — so with the default `session_only = true` the historical catch-up was skipped on every boot and never re-evaluated. The backfill now runs from the embed loop's idle time, re-reading the gate every pass.
-- **The screenshot backfill starved live capture.** It walked every owed row in one uninterruptible pass on the embed thread; since the job channel is `bounded(4)` with `try_send`, the capture thread *dropped* new screenshots for the whole window — manufacturing the debt the backfill was paying down, recoverable only on a later daemon start. It now runs in bounded 25-row chunks during idle ticks, so live jobs always take priority, a mid-pass disable stops it, and completed work survives a restart (indexes are saved per chunk).
-
-### Server
-
-- **Canonical `unix_ms` column on the `embeddings` table.** `timestamp` carries three historical encodings (Unix ms, `YYYYMMDDHHmmss`, and `YYYYMMDDHHmmss × 1000`), so every range query had to go through `DualTimestampRange` and match all three — with an explicit warning never to write a raw `WHERE timestamp >= ?`. Day stores now gain a `unix_ms` column, backfilled from whichever format each row uses, plus an index.
-
-  The migration is deliberately **additive: `timestamp` is never rewritten**, because older builds of the app read it directly and expect the format they wrote — normalising it in place would corrupt their view of existing recordings. This is the expand half of expand/contract; `timestamp` can only be retired once no old build remains in the wild. Applied on open by both writers (the day store and the session pipeline's `EpochStore`, which share the table), idempotent, and resumable if interrupted part-way.
-
-  Verified against a real 296-row recording containing both encodings: all rows backfilled, every `timestamp` byte-for-byte unchanged, every `unix_ms` a plausible instant, and a re-run a no-op. An `#[ignore]`d fixture test (`SKILL_MIGRATION_FIXTURE`) re-runs that check against any real day store before a release.
-
-### Dependencies
-
-- Refresh `rlx` / `rlx-models` git pins from the stale 0.2.14 lock to current `main` (0.2.16).
-- **Clear all outstanding `cargo deny` advisories.** `rustls` 0.23.42 → 0.23.45 (RUSTSEC-2026-0285, TLS 1.3 handshake messages accepted across encryption-level boundaries), `h2` 0.4.15 → 0.4.19 and `chacha20` 0.10.1 → 0.10.2 (yanked).
-- **Fork `oura-api` 0.1.2 to `reqwest` 0.12** (`patches/oura-api-0.1.2`, vendored; the only change from crates.io is the dependency version). Upstream's newest release pins `reqwest` 0.11, which pulled the entire hyper 0.14 stack including `h2` 0.3.x — the branch RUSTSEC-2026-0258 is unpatched on, fixed in `h2` >= 0.4.16 only. This removes the last advisory and drops a duplicate HTTP stack: the tree now resolves a single `hyper` (1.11) and a single `h2` (0.4.19), where it previously carried both 0.14/1.x and 0.3/0.4.
-- Remove dead `deny.toml` entries that made `cargo deny` fail or warn: the `RUSTSEC-2024-0415` gtk ignore (unreachable — `unmaintained = "workspace"` already scopes that lint to our own crates, and an ignore that never matches is a hard error), the `winreg@0.55.0` duplicate skip (deduplicated by dropping `reqwest` 0.11), and re-pin the `winnow` skip 1.0.3 → 1.0.4.
-
 ## Earlier releases
 
-The 153 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 154 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.25](changes/releases/0.0.131-rc.25.md)
 - [0.0.131-rc.24](changes/releases/0.0.131-rc.24.md)
 - [0.0.131-rc.23](changes/releases/0.0.131-rc.23.md)
 - [0.0.131-rc.22](changes/releases/0.0.131-rc.22.md)
