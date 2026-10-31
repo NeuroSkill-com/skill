@@ -772,7 +772,10 @@ fn summarize_tool_result(content: &str) -> String {
         }
         "date" => {
             let iso = v.get("iso_local").and_then(|c| c.as_str()).unwrap_or("?");
-            format!("[date: {iso}]")
+            match v.pointer("/timezone/name").and_then(|c| c.as_str()) {
+                Some(zone) => format!("[date: {iso} local, {zone}]"),
+                None => format!("[date: {iso}]"),
+            }
         }
         "web_search" => {
             let query = v.get("query").and_then(|q| q.as_str()).unwrap_or("?");
@@ -1171,6 +1174,15 @@ mod tests {
         let r = json!({"ok":true,"tool":"date","iso_local":"2026-03-28T12:00:00-07:00"});
         let s = summarize_tool_result(&r.to_string());
         assert!(s.contains("date") && s.contains("2026-03-28"));
+    }
+
+    #[test]
+    fn summarize_date_names_the_local_zone() {
+        let r = json!({"ok":true,"tool":"date","iso_local":"2026-03-28T12:00:00-07:00","timezone":{"name":"America/Los_Angeles"}});
+        assert_eq!(
+            summarize_tool_result(&r.to_string()),
+            "[date: 2026-03-28T12:00:00-07:00 local, America/Los_Angeles]"
+        );
     }
 
     #[test]

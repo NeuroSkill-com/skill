@@ -256,6 +256,8 @@ async fn daemon_main() -> anyhow::Result<()> {
             if let Err(e) = skill_eeg::fft::set_backend(&backend) {
                 tracing::warn!(requested = %backend, "EEG FFT backend refused at startup: {e}");
             }
+            // Settings → EXG then lists only backends that give right answers.
+            skill_eeg::fft::probe_all();
         });
     }
 

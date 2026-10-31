@@ -1,0 +1,76 @@
+name: Release — LLM catalog
+
+# Triggered by the same semver tag as the platform release workflows. Publishes
+# the LLM catalog compiled into this release (src-tauri/llm_catalog.json at the
+# tag) plus its SHA-256 as release assets, so it can be fetched without
+# installing the app:
+#   stable : https://github.com/<repo>/releases/latest/download/llm_catalog.json
+#   rc     : https://github.com/<repo>/releases/download/rc-latest/llm_catalog.json
+#   pinned : https://github.com/<repo>/releases/download/<tag>/llm_catalog.json
+#
+# A separate workflow on purpose: it needs no build, so it publishes in about a
+# minute and is not lost when a platform build fails. Promotion (promote.yml)
+# keeps the assets — it only flips the prerelease flag.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create/update GitHub Releases and upload assets
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  release-catalog:
+    name: Publish LLM catalog
+    runs-on: ubuntu-24.04
+    environment: Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      # ── Verify tag matches VERSION ────────────────────────────────────────────
+      - name: Resolve version
+        id: version_meta
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF:        ${{ github.ref }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+        run: node scripts/ci.mjs resolve-version
+
+      # Validates the catalog and writes llm_catalog.json + llm_catalog.json.sha256.
+      # Runs on manual dispatch too, as a dry run.
+      - name: Validate catalog
+        run: node scripts/ci.mjs publish-llm-catalog
+
+      # Creates the release if this job is first; the platform workflows then
+      # add their binaries and the release notes to it.
+      - name: Upload catalog to the release
+        if: steps.version_meta.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name:                ${{ steps.version_meta.outputs.tag }}
+          name:                    Skill v${{ steps.version_meta.outputs.version }}
+          generate_release_notes:  false
+          fail_on_unmatched_files: true
+          prerelease:              ${{ steps.version_meta.outputs.prerelease == 'true' }}
+          files: |
+            llm_catalog.json
+            llm_catalog.json.sha256
+
+      # Same channel rule as latest.json: RC and stable builds both mirror here.
+      - name: Mirror catalog to rc-latest
+        if: steps.version_meta.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci.mjs publish-llm-catalog --mirror-to-rc-latest

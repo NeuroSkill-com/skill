@@ -61,3 +61,7 @@ dist/rpm-verify/
 
 # Python bytecode from scripts/lib helpers.
 __pycache__/
+
+# Written by `node scripts/ci.mjs publish-llm-catalog` (release asset, CI only)
+/llm_catalog.json
+/llm_catalog.json.sha256

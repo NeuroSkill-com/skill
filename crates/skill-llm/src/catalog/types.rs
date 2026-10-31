@@ -1219,6 +1219,25 @@ mod tests {
         }
     }
 
+    /// The release asset (`ci.mjs publish-llm-catalog`) is the bundled catalog
+    /// with a `compatibility` block prepended; the app must still read it.
+    #[test]
+    fn published_catalog_with_compatibility_block_parses() {
+        let bundled = include_str!("../../../../src-tauri/llm_catalog.json");
+        let mut v: serde_json::Value = serde_json::from_str(bundled).unwrap();
+        v.as_object_mut().unwrap().insert(
+            "compatibility".into(),
+            serde_json::json!({"schema": 1, "min_app_version": "0.0.131-rc.10",
+                "bundled_in": {"version": "0.1.0", "tag": "v0.1.0", "commit": "abc", "platforms": ["darwin-aarch64"]},
+                "runtime": {"rlx": {"version": "0.2.19", "source": "git+https://github.com/MIT-RLX/rlx.git", "rev": "abc"}}}),
+        );
+        let published = parse_catalog_json(&v.to_string()).unwrap();
+        assert_eq!(
+            published.entries.len(),
+            parse_catalog_json(bundled).unwrap().entries.len()
+        );
+    }
+
     #[test]
     fn deflated_json_is_smaller_than_flat() {
         let json = include_str!("../../../../src-tauri/llm_catalog.json");

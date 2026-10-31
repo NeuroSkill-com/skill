@@ -24,7 +24,7 @@ function inferQuant(filename, isMmproj) {
   const stem = filename.replace(/\.gguf$/i, "");
 
   if (isMmproj) {
-    const mmprojMatch = stem.match(/-(bf16|f16|f32)$/i);
+    const mmprojMatch = stem.match(/-(bf16|f16|f32|q\d+_[0-9a-z]+(?:_[0-9a-z]+)?)$/i);
     return mmprojMatch ? normalizeQuant(mmprojMatch[1]) : "MMPROJ";
   }
 
@@ -32,15 +32,15 @@ function inferQuant(filename, isMmproj) {
   return quantMatch ? normalizeQuant(quantMatch[1]) : "UNKNOWN";
 }
 
-function inferDescription({ quant, isMmproj }) {
+function inferDescription({ quant, isMmproj, recommended }) {
   if (isMmproj) {
-    if (quant === "BF16") return "Vision projector — BF16 (recommended)";
+    if (quant === "BF16") return recommended ? "Vision projector — BF16 (recommended)" : "Vision projector — BF16";
     if (quant === "F16") return "Vision projector — FP16";
     if (quant === "F32") return "Vision projector — FP32";
-    return "Vision projector";
+    return quant === "MMPROJ" ? "Vision projector" : `Vision projector — ${quant}`;
   }
 
-  if (quant === "Q4_K_M") return "Recommended — best quality/size tradeoff";
+  if (quant === "Q4_K_M") return recommended ? "Recommended — best quality/size tradeoff" : "Balanced 4-bit quant";
   if (quant === "Q4_0") return "Legacy 4-bit quant";
   if (quant === "Q2_K") return "Ultra-compressed; lowest quality";
   if (quant === "Q6_K") return "Near-lossless quality";
@@ -104,6 +104,9 @@ function quantSortKey(quant, isMmproj) {
 async function fetchRepoSiblings(repo) {
   const url = new URL(`${HUGGING_FACE_API}${repo}`);
   url.searchParams.append("expand[]", "siblings");
+  // Without blobs=true siblings carry no `size`, and every added entry
+  // silently inherited its template's size (a 0.6 GB projector listed at 3.8 GB).
+  url.searchParams.append("blobs", "true");
 
   const response = await fetch(url, {
     headers: {
@@ -214,20 +217,26 @@ function remoteKey(entry) {
   return entry.remote_filename ?? entry.filename;
 }
 
-function createAddedEntry(filename, siblingMap, template) {
+/**
+ * @param {Set<boolean>} recommendedKinds `true` if the family already has a
+ *   recommended projector, `false` if it has a recommended model. A curated
+ *   pick is never joined by an auto-picked second "recommended" entry.
+ */
+function createAddedEntry(filename, siblingMap, template, recommendedKinds) {
   const isMmproj = /mmproj/i.test(filename);
   const quant = inferQuant(filename, isMmproj);
   const sibling = siblingMap.get(filename);
   const sizeBytes = typeof sibling?.size === "number" ? sibling.size : undefined;
   const sizeGb = sizeBytes ? Number((sizeBytes / 1024 ** 3).toFixed(2)) : template.size_gb;
-  const recommended = inferRecommended({ quant, isMmproj });
+  const recommended = inferRecommended({ quant, isMmproj }) && !recommendedKinds.has(isMmproj);
+  if (recommended) recommendedKinds.add(isMmproj);
 
   return {
     repo: template.repo,
     filename,
     quant,
     size_gb: sizeGb,
-    description: inferDescription({ quant, isMmproj }),
+    description: inferDescription({ quant, isMmproj, recommended }),
     family_id: template.family_id,
     family_name: isMmproj ? "" : template.family_name,
     family_desc: isMmproj ? "" : template.family_desc,
@@ -322,10 +331,13 @@ async function syncCatalog() {
 
     const templateModel = existing.find((entry) => !entry.is_mmproj) ?? existing[0];
 
+    const recommendedKinds = new Set(
+      existing.filter((entry) => entry.recommended).map((entry) => /mmproj/i.test(entry.filename)),
+    );
     const newEntries = [];
     for (const filename of remoteGguf) {
       if (existingFilenames.has(filename) || existingRemoteKeys.has(filename)) continue;
-      newEntries.push(createAddedEntry(filename, siblingMap, templateModel));
+      newEntries.push(createAddedEntry(filename, siblingMap, templateModel, recommendedKinds));
     }
 
     newEntries.sort((a, b) => {

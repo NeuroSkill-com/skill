@@ -542,6 +542,14 @@ fn exec_date_returns_structured_json() {
     assert!(result["iso_local"].as_str().is_some());
     assert!(result["timezone"]["offset"].as_str().is_some());
     assert!(result["timezone"]["offset_seconds"].is_number());
+    // A zone name, not the offset again (chrono's `%Z` for Local).
+    let zone = result["timezone"]["name"].as_str().unwrap();
+    assert!(
+        !zone.is_empty() && zone != result["timezone"]["offset"].as_str().unwrap(),
+        "{zone}"
+    );
+    assert!(result["local_time"].as_str().unwrap().contains(", "));
+    assert!(result["note"].as_str().unwrap().contains(zone));
 }
 
 #[test]

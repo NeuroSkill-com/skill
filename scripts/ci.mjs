@@ -10,6 +10,7 @@
 //   resolve-version          Resolve version from VERSION, validate tag + derived files
 //   verify-secrets V1 V2 ... Check env vars are non-empty
 //   prepare-changelog VER OUT [RANGE]  Generate release notes markdown
+//   publish-llm-catalog [--tag T --upload] [--mirror-to-rc-latest]  Validate + publish src-tauri/llm_catalog.json
 //   update-latest-json ...   Merge platform entry into Tauri updater manifest
 //   discord-notify ...       Send Discord webhook notification
 //   import-apple-cert        Import .p12 into temporary keychain (macOS)
@@ -340,6 +341,116 @@ function ensureRcLatestRelease() {
 }
 
 /**
+ * Problems with an LLM catalog that would mislead users or break the app; [] if
+ * none. Curated quirks the app tolerates (a family with two hand-picked
+ * recommended quants) are not errors.
+ */
+export function validateLlmCatalog(cat) {
+  const errors = [];
+  if (!cat || typeof cat !== "object") return ["catalog is not a JSON object"];
+  const families = cat.families ?? {};
+  const models = Array.isArray(cat.models) ? cat.models : [];
+  if (models.length === 0) errors.push("no models");
+  const seen = new Set();
+  for (const m of models) {
+    const id = `${m.family}/${m.filename}`;
+    if (!families[m.family]) errors.push(`${id}: unknown family`);
+    // GGUF files, or multi-file packs (mlx-community) listing their files.
+    const isPack = Array.isArray(m.shard_files) && m.shard_files.includes(m.filename);
+    if (!/\.gguf$/i.test(m.filename ?? "") && !isPack) errors.push(`${id}: not a .gguf file or a listed pack file`);
+    if (!(typeof m.size_gb === "number" && m.size_gb > 0)) errors.push(`${id}: size_gb must be > 0`);
+    if (seen.has(id)) errors.push(`${id}: duplicate entry`);
+    seen.add(id);
+  }
+  for (const [id, f] of Object.entries(families)) {
+    if (!f.repo) errors.push(`family ${id}: no repo`);
+  }
+  const isMmproj = (m) => /mmproj/i.test(m.filename);
+  const active = models.find((m) => m.filename === cat.active_model);
+  if (!active) errors.push(`active_model ${cat.active_model} is not in the catalog`);
+  else if (isMmproj(active)) errors.push(`active_model ${cat.active_model} is a vision projector`);
+  if (cat.active_mmproj && !models.some((m) => isMmproj(m) && m.filename === cat.active_mmproj)) {
+    errors.push(`active_mmproj ${cat.active_mmproj} is not a projector in the catalog`);
+  }
+  return errors;
+}
+
+/**
+ * Publish the bundled LLM catalog (src-tauri/llm_catalog.json — the file
+ * compiled into this build) as release assets with a `compatibility` block
+ * ([`llmCatalogCompatibility`]) prepended, plus a SHA-256.
+ *
+ * Usage:
+ *   node scripts/ci.mjs publish-llm-catalog [--tag <tag>] [--upload] [--mirror-to-rc-latest]
+ *
+ * Without --upload it only validates and writes the files (dry run). Stable
+ * clients can then fetch releases/latest/download/llm_catalog.json; the RC
+ * channel reads the copy mirrored to the `rc-latest` release.
+ */
+/** Layout of llm_catalog.json (normalized `families` + `models`). Bump when
+ * the app can no longer read an older catalog, or an older app a newer one. */
+const LLM_CATALOG_SCHEMA = 1;
+/** First release whose app reads schema 1 (catalog normalized in d04cd538). */
+const LLM_CATALOG_MIN_APP_VERSION = "0.0.131-rc.10";
+/** Platforms every release builds — the latest.json platform keys. */
+const RELEASE_PLATFORMS = ["darwin-aarch64", "linux-x86_64", "windows-x86_64"];
+
+/** The rlx git revision this build runs models on, from Cargo.lock. */
+function lockedRlxRevision() {
+  const lock = readFileSync("Cargo.lock", "utf8");
+  const m = lock.match(/\[\[package\]\]\nname = "rlx"\nversion = "([^"]+)"\nsource = "([^"]+)"/);
+  if (!m) return null;
+  const [, version, source] = m;
+  return { version, source: source.replace(/#.*$/, ""), rev: source.includes("#") ? source.split("#").pop() : null };
+}
+
+/**
+ * What a published catalog is compatible with. Reading it needs an app of at
+ * least `min_app_version`; the models in it were bundled with, and validated
+ * against, `bundled_in` (that app build) running `runtime.rlx`. An older app
+ * can read the catalog but may lack runtime support for a newer model.
+ */
+function llmCatalogCompatibility() {
+  const version = confVersion();
+  const commit = process.env.GITHUB_SHA || run(["git", "rev-parse", "HEAD"], { capture: true }).stdout.trim();
+  return {
+    schema: LLM_CATALOG_SCHEMA,
+    min_app_version: LLM_CATALOG_MIN_APP_VERSION,
+    bundled_in: { version, tag: `v${version}`, commit, platforms: RELEASE_PLATFORMS },
+    runtime: { rlx: lockedRlxRevision() },
+  };
+}
+
+function cmdPublishLlmCatalog(args) {
+  const src = "src-tauri/llm_catalog.json";
+  const cat = JSON.parse(readFileSync(src, "utf8"));
+  const errors = validateLlmCatalog(cat);
+  if (errors.length) {
+    throw new Error(`${src} is not publishable:\n  ${errors.join("\n  ")}`);
+  }
+  // The bundled catalog plus where it is compatible (the app ignores unknown
+  // top-level fields, so this stays readable by any schema-1 app).
+  const compatibility = llmCatalogCompatibility();
+  const raw = `${JSON.stringify({ compatibility, ...cat }, null, 2)}\n`;
+  const files = ["llm_catalog.json", "llm_catalog.json.sha256"];
+  writeFileSync(files[0], raw);
+  writeFileSync(files[1], `${createHash("sha256").update(raw).digest("hex")}  llm_catalog.json\n`);
+  console.log(`✓ llm_catalog.json valid (${cat.models.length} models, ${Object.keys(cat.families).length} families, default ${cat.active_model})`);
+  console.log(`  compatible: app >= ${compatibility.min_app_version} (schema ${compatibility.schema}); bundled in v${compatibility.bundled_in.version}, rlx ${compatibility.runtime.rlx?.rev?.slice(0, 8) ?? "?"}`);
+
+  if (args.upload) {
+    if (!args.tag) throw new Error("--upload needs --tag");
+    run(["gh", "release", "upload", args.tag, ...files, "--clobber"], { check: true });
+    console.log(`✓ llm_catalog.json uploaded to release ${args.tag}`);
+  }
+  if (args["mirror-to-rc-latest"]) {
+    ensureRcLatestRelease();
+    run(["gh", "release", "upload", "rc-latest", ...files, "--clobber"], { check: true });
+    console.log("✓ llm_catalog.json mirrored to rc-latest");
+  }
+}
+
+/**
  * Reconcile the Homebrew cask (Casks/neuroskill.rb) to a released build.
  *
  * Usage:
@@ -658,7 +769,7 @@ function cmdSelfTest() {
     "free-disk-space": cmdFreeDiskSpace, "install-protoc-windows": cmdInstallProtocWindows,
     "compile-product": cmdCompileProduct,
     "self-test": cmdSelfTest, "dry-run-release": cmdDryRunRelease,
-    "update-cask": cmdUpdateCask,
+    "update-cask": cmdUpdateCask, "publish-llm-catalog": cmdPublishLlmCatalog,
   };
 
   for (const [name, fn] of Object.entries(commandMap)) {
@@ -678,6 +789,15 @@ function cmdSelfTest() {
       }
     }
   } catch {}
+
+  // The catalog every release publishes (publish-llm-catalog) must be valid.
+  try {
+    const catErrors = validateLlmCatalog(JSON.parse(readFileSync("src-tauri/llm_catalog.json", "utf8")));
+    if (catErrors.length) errors.push(...catErrors.map((e) => `  llm_catalog.json: ${e}`));
+    else log("✓ llm_catalog.json publishable");
+  } catch (e) {
+    errors.push(`  llm_catalog.json: ${e.message}`);
+  }
 
   // Verify confVersion
   try {
@@ -788,6 +908,7 @@ const COMMANDS = {
   "self-test": cmdSelfTest,
   "dry-run-release": (a) => cmdDryRunRelease(a),
   "update-cask": cmdUpdateCask,
+  "publish-llm-catalog": cmdPublishLlmCatalog,
 };
 
 async function main() {

@@ -19,16 +19,22 @@ pub(crate) fn exec_date() -> Value {
     let now_utc = Utc::now();
     let now_local = now_utc.with_timezone(&Local);
     let offset_seconds = now_local.offset().local_minus_utc();
+    let offset = format_utc_offset(offset_seconds);
+    // chrono's `%Z` for `Local` is only the offset again; ask the OS for the
+    // zone's name so the model does not mistake the time for UTC.
+    let zone = iana_time_zone::get_timezone().unwrap_or_else(|_| format!("UTC{offset}"));
     json!({
         "ok": true,
         "tool": "date",
+        "local_time": now_local.format("%A, %B %-d, %Y, %H:%M:%S").to_string(),
+        "note": format!("local_time is the user's wall-clock time in {zone} (UTC{offset}); report that, not iso_utc."),
         "unix": now.as_secs(),
         "unix_ms": now.as_millis() as u64,
         "iso_utc": now_utc.to_rfc3339_opts(SecondsFormat::Millis, true),
         "iso_local": now_local.to_rfc3339_opts(SecondsFormat::Millis, false),
         "timezone": {
-            "name": now_local.format("%Z").to_string(),
-            "offset": format_utc_offset(offset_seconds),
+            "name": zone,
+            "offset": offset,
             "offset_seconds": offset_seconds
         },
         "tz_env": std::env::var("TZ").ok(),

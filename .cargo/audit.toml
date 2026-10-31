@@ -77,12 +77,10 @@ ignore = [
 
     # ── Mirrors of deny.toml's reviewed ignores ─────────────────────────────
     # cargo-deny reads deny.toml and cargo-audit reads this file, so a decision
-    # recorded in one is invisible to the other — and CI runs both. These three
-    # are the same calls, with the same reasoning, as the `[advisories] ignore`
-    # entries in deny.toml; change them together or the audit job disagrees
+    # recorded in one is invisible to the other — and CI runs both. This one is
+    # the same call, with the same reasoning, as its `[advisories] ignore`
+    # entry in deny.toml; change them together or the audit job disagrees
     # with the deny job.
-    "RUSTSEC-2026-0194", # quick-xml <0.41 pinned by tauri/plist; trusted local XML only
-    "RUSTSEC-2026-0195", # quick-xml <0.41 pinned by tauri/plist; trusted local XML only
     "RUSTSEC-2024-0437", # protobuf <3.7.2, build-only protoc codegen; not in the shipped binary
 
     # zip <9.0.0 extraction advisories. Everything we own moved to zip 9.1.1 on

@@ -17,6 +17,21 @@
       "params_b": 0.8,
       "max_context_length": 131072
     },
+    "qwen35-0.8b-bartowski": {
+      "name": "Qwen3.5 0.8B (bartowski)",
+      "description": "Qwen3.5 0.8B — bartowski imatrix GGUFs (full quant lineup incl. IQ*).",
+      "repo": "bartowski/Qwen_Qwen3.5-0.8B-GGUF",
+      "tags": [
+        "chat",
+        "reasoning",
+        "tiny",
+        "long-context"
+      ],
+      "is_mmproj": false,
+      "mtp": false,
+      "params_b": 0.8,
+      "max_context_length": 131072
+    },
     "qwen3-0.6b": {
       "name": "Qwen3 0.6B",
       "description": "Alibaba's ultra-compact 0.6B model — runs on any machine. Long context via on-device HNSW KV memory.",
@@ -596,23 +611,8 @@
       ],
       "is_mmproj": false,
       "mtp": false,
-      "params_b": 4.0,
+      "params_b": 4,
       "max_context_length": 32768
-    },
-    "qwen35-0.8b-bartowski": {
-      "name": "Qwen3.5 0.8B (bartowski)",
-      "description": "Qwen3.5 0.8B — bartowski imatrix GGUFs (full quant lineup incl. IQ*).",
-      "repo": "bartowski/Qwen_Qwen3.5-0.8B-GGUF",
-      "tags": [
-        "chat",
-        "reasoning",
-        "tiny",
-        "long-context"
-      ],
-      "is_mmproj": false,
-      "mtp": false,
-      "params_b": 0.8,
-      "max_context_length": 131072
     }
   },
   "models": [
@@ -982,16 +982,211 @@
       "filename": "mmproj-Qwen_Qwen3.5-0.8B-f16.gguf",
       "quant": "f16",
       "size_gb": 0.4,
-      "description": "Vision projector (f16)",
-      "advanced": false
+      "description": "Vision projector (f16)"
     },
     {
       "family": "qwen3-0.6b",
       "filename": "Qwen3-0.6B-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 0.4,
-      "description": "Recommended — tiny & fast, HNSW-extended long context",
-      "recommended": false
+      "description": "Recommended — tiny & fast, HNSW-extended long context"
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-IQ1_S.gguf",
+      "quant": "IQ1_S",
+      "size_gb": 0.2,
+      "description": "IQ1_S quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-IQ1_M.gguf",
+      "quant": "IQ1_M",
+      "size_gb": 0.21,
+      "description": "IQ1_M quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-IQ2_XXS.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 0.22,
+      "description": "IQ2_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-IQ2_M.gguf",
+      "quant": "IQ2_M",
+      "size_gb": 0.25,
+      "description": "IQ2_M quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q2_K.gguf",
+      "quant": "Q2_K",
+      "size_gb": 0.28,
+      "description": "Ultra-compressed; lowest quality",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q2_K_L.gguf",
+      "quant": "Q2_K_L",
+      "size_gb": 0.28,
+      "description": "Q2_K_L quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-IQ3_XXS.gguf",
+      "quant": "IQ3_XXS",
+      "size_gb": 0.26,
+      "description": "IQ3_XXS quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q3_K_S.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 0.3,
+      "description": "Q3_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q3_K_M.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 0.32,
+      "description": "Q3_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-Q3_K_XL.gguf",
+      "quant": "Q3_K_XL",
+      "size_gb": 0.33,
+      "description": "Q3_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-IQ4_XS.gguf",
+      "quant": "IQ4_XS",
+      "size_gb": 0.34,
+      "description": "IQ4_XS quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-IQ4_NL.gguf",
+      "quant": "IQ4_NL",
+      "size_gb": 0.36,
+      "description": "IQ4_NL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 0.36,
+      "description": "Legacy 4-bit quant"
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 0.38,
+      "description": "Q4_1 quant"
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q4_K_S.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 0.36,
+      "description": "Q4_K_S quant"
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q5_K_S.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 0.41,
+      "description": "Q5_K_S quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 0.41,
+      "description": "Q5_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 0.46,
+      "description": "Near-lossless quality",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 0.6,
+      "description": "Effectively lossless 8-bit",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 1.12,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-Q2_K_XL.gguf",
+      "quant": "Q2_K_XL",
+      "size_gb": 0.28,
+      "description": "Q2_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-Q4_K_XL.gguf",
+      "quant": "Q4_K_XL",
+      "size_gb": 0.38,
+      "description": "Q4_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-Q5_K_XL.gguf",
+      "quant": "Q5_K_XL",
+      "size_gb": 0.42,
+      "description": "Q5_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-Q6_K_XL.gguf",
+      "quant": "Q6_K_XL",
+      "size_gb": 0.54,
+      "description": "Q6_K_XL quant",
+      "advanced": true
+    },
+    {
+      "family": "qwen3-0.6b",
+      "filename": "Qwen3-0.6B-UD-Q8_K_XL.gguf",
+      "quant": "Q8_K_XL",
+      "size_gb": 0.79,
+      "description": "Q8_K_XL quant",
+      "advanced": true
     },
     {
       "family": "qwen35-4b",
@@ -4680,6 +4875,29 @@
       "advanced": true
     },
     {
+      "family": "lfm25-vl-1.6b",
+      "filename": "LFM2.5-VL-1.6B-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 0.68,
+      "description": "Balanced 4-bit quant"
+    },
+    {
+      "family": "lfm25-vl-1.6b",
+      "filename": "LFM2.5-VL-1.6B-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 0.79,
+      "description": "Q5_K_M quant",
+      "advanced": true
+    },
+    {
+      "family": "lfm25-vl-1.6b",
+      "filename": "LFM2.5-VL-1.6B-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 0.9,
+      "description": "Near-lossless quality",
+      "advanced": true
+    },
+    {
       "family": "lfm25-1.2b-instruct",
       "filename": "LFM2.5-1.2B-Instruct-Q4_0.gguf",
       "quant": "Q4_0",
@@ -4730,6 +4948,13 @@
       "size_gb": 2.34,
       "description": "Full BF16 precision",
       "advanced": true
+    },
+    {
+      "family": "lfm25-1.2b-instruct",
+      "filename": "LFM2.5-1.2B-Instruct-QAD-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 0.65,
+      "description": "Legacy 4-bit quant"
     },
     {
       "family": "lfm25-1.2b-thinking",
@@ -4938,12 +5163,104 @@
       "recommended": true
     },
     {
+      "family": "bonsai-27b",
+      "filename": "Bonsai-27B-dspark-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 1.66,
+      "description": "Q4_1 quant"
+    },
+    {
+      "family": "bonsai-27b",
+      "filename": "Bonsai-27B-F16.gguf",
+      "quant": "F16",
+      "size_gb": 50.11,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "bonsai-27b",
+      "filename": "Bonsai-27B-dspark-bf16.gguf",
+      "quant": "BF16",
+      "size_gb": 6.79,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "bonsai-27b",
+      "filename": "Bonsai-27B-mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 0.87,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "bonsai-27b",
+      "filename": "Bonsai-27B-mmproj-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 0.59,
+      "description": "Vision projector — Q8_0"
+    },
+    {
       "family": "ternary-bonsai-27b",
       "filename": "Ternary-Bonsai-27B-Q2_0.gguf",
       "quant": "Q2_0",
       "size_gb": 7.2,
       "description": "Ternary Q2_0 (~2.125 bpw) — higher fidelity than Q1_0, 26.9B params in ~7.2 GB, CPU-packed decode",
       "recommended": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-dspark-Q4_1.gguf",
+      "quant": "Q4_1",
+      "size_gb": 1.81,
+      "description": "Q4_1 quant"
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-F16.gguf",
+      "quant": "F16",
+      "size_gb": 50.11,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-dspark-bf16.gguf",
+      "quant": "BF16",
+      "size_gb": 6.79,
+      "description": "Full precision weights",
+      "advanced": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-PQ2_0.gguf",
+      "quant": "UNKNOWN",
+      "size_gb": 6.67,
+      "description": "UNKNOWN quant",
+      "advanced": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-Q2_g64.gguf",
+      "quant": "Q2_G64",
+      "size_gb": 7.06,
+      "description": "Q2_G64 quant",
+      "advanced": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-mmproj-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 0.87,
+      "description": "Vision projector — BF16 (recommended)",
+      "recommended": true
+    },
+    {
+      "family": "ternary-bonsai-27b",
+      "filename": "Ternary-Bonsai-27B-mmproj-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 0.59,
+      "description": "Vision projector — Q8_0"
     },
     {
       "family": "bonsai-8b",

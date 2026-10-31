@@ -35,7 +35,7 @@
 //! and CPU stays selected — an FFT backend never takes a session down.
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 /// Where FFTs run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -186,17 +186,56 @@ fn rlx_usable(d: rlx::Device) -> bool {
     d != rlx::Device::Mlx && rlx::is_available(d)
 }
 
-/// Backends this build can run here right now (not yet parity-checked).
+/// Backends this build can run here, minus any that already failed the parity
+/// probe ([`probe_all`] checks them all; until then unchecked ones are listed).
 pub fn known() -> Vec<String> {
+    candidates()
+        .into_iter()
+        .filter(|b| !matches!(probed(*b), Some(Err(_))))
+        .map(FftBackend::name)
+        .collect()
+}
+
+fn candidates() -> Vec<FftBackend> {
     #[allow(unused_mut)]
-    let mut v = vec![FftBackend::Cpu.name()];
+    let mut v = vec![FftBackend::Cpu];
     #[cfg(target_os = "macos")]
-    v.push(FftBackend::Accelerate.name());
+    v.push(FftBackend::Accelerate);
     #[cfg(feature = "rlx-fft")]
     for d in RLX_CANDIDATES.into_iter().filter(|d| rlx_usable(*d)) {
-        v.push(FftBackend::Rlx(d).name());
+        v.push(FftBackend::Rlx(d));
     }
     v
+}
+
+/// Parity-probe results so far; a probe can compile GPU graphs, so each
+/// backend is checked once per process.
+static PROBED: Mutex<Vec<(FftBackend, Result<(), String>)>> = Mutex::new(Vec::new());
+
+fn probed(b: FftBackend) -> Option<Result<(), String>> {
+    let cache = PROBED.lock().unwrap_or_else(|e| e.into_inner());
+    cache.iter().find(|(x, _)| *x == b).map(|(_, r)| r.clone())
+}
+
+/// [`probe`], remembered.
+fn probe_cached(b: FftBackend) -> Result<(), String> {
+    if let Some(r) = probed(b) {
+        return r;
+    }
+    let r = probe(b);
+    PROBED.lock().unwrap_or_else(|e| e.into_inner()).push((b, r.clone()));
+    r
+}
+
+/// Parity-probe every backend this build can run, so [`known`] stops listing
+/// ones that give wrong answers (e.g. the f16 Neural Engine FFT). May compile
+/// GPU graphs — call it off the async runtime.
+pub fn probe_all() {
+    for b in candidates() {
+        if let Err(e) = probe_cached(b) {
+            eprintln!("[fft] not offering `{}`: {e}", b.name());
+        }
+    }
 }
 
 /// Select a backend by setting value. On success returns the backend now in
@@ -204,7 +243,7 @@ pub fn known() -> Vec<String> {
 pub fn set_backend(name: &str) -> Result<FftBackend, String> {
     let b = parse(name)?;
     if b != backend() {
-        probe(b)?;
+        probe_cached(b)?;
         store(b);
     }
     let auto = matches!(name.trim().to_ascii_lowercase().as_str(), "" | "auto" | "default");
@@ -295,7 +334,7 @@ pub fn calibrate(cpu: FftBackend) -> Option<AutoPlan> {
             .filter(|d| *d != rlx::Device::Cpu && rlx_usable(*d))
         {
             let gpu = FftBackend::Rlx(d);
-            if let Err(e) = probe(gpu) {
+            if let Err(e) = probe_cached(gpu) {
                 eprintln!("[fft] auto: skipping `{}`: {e}", gpu.name());
                 continue;
             }
@@ -530,6 +569,14 @@ mod tests {
             cpu,
             "an explicit backend is never overridden"
         );
+    }
+
+    #[test]
+    fn listed_backends_all_pass_the_probe() {
+        probe_all();
+        for n in known() {
+            probe(parse(&n).unwrap()).unwrap_or_else(|e| panic!("`{n}` is listed but fails: {e}"));
+        }
     }
 
     #[test]

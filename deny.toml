@@ -31,12 +31,6 @@ ignore = [
     # anyhow's RUSTSEC-2026-0190 (downcast_mut unsoundness) is fixed by upgrading
     # to anyhow >=1.0.103 (done in Cargo.lock), so it is NOT ignored here.
     #
-    # quick-xml 0.30/0.37/0.39 — DoS advisories, fixed in >=0.41.0. Pinned by
-    # tauri/plist (build-time codegen + macOS Info.plist parsing); reaching 0.41
-    # needs a Tauri major bump. Inputs are trusted local config/plist, not
-    # attacker-controlled network XML.
-    { id = "RUSTSEC-2026-0194", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
-    { id = "RUSTSEC-2026-0195", reason = "quick-xml <0.41 pinned transitively by tauri/plist; trusted local XML only" },
     # DISABLED with rlx-tiny-tts (reshape bug on Metal + MLX). The onnx → protoc
     # codegen chain (protobuf 1.x, tempdir → remove_dir_all) only entered the
     # graph via rlx-tiny-tts; with that engine commented out no crate matches
@@ -121,6 +115,7 @@ exceptions = [
     # Our own crates use GPL-3.0-only (Cargo.toml) / GPL-3.0 (deprecated SPDX alias)
     { allow = ["GPL-3.0-only"], crate = "skill" },
     { allow = ["GPL-3.0-only"], crate = "brainmaster" },
+    { allow = ["GPL-3.0-only"], crate = "skill-accel" },
     { allow = ["GPL-3.0-only"], crate = "skill-asr" },
     { allow = ["GPL-3.0-only"], crate = "skill-autostart" },
     { allow = ["GPL-3.0-only"], crate = "skill-calendar" },
@@ -153,9 +148,9 @@ exceptions = [
     { allow = ["GPL-3.0-only"], crate = "skill-tty" },
     { allow = ["GPL-3.0-only"], crate = "skill-vision" },
     # Third-party GPL crates pulled in by device drivers.
-    # mw75 uses the deprecated "GPL-3.0" SPDX identifier (no license file),
-    # so we allow both the deprecated alias and the canonical form.
-    { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "mw75" },
+    # mw75 publishes the deprecated "GPL-3.0" SPDX id; clarified to the
+    # canonical form below.
+    { allow = ["GPL-3.0-only"], crate = "mw75" },
     { allow = ["GPL-3.0-only", "GPL-3.0"], crate = "awear" },
     { allow = ["GPL-3.0-or-later"], crate = "hermes-ble" },
     { allow = ["GPL-3.0-or-later"], crate = "espeak-ng" },
@@ -336,6 +331,14 @@ crate = "exg-luna"
 expression = "LicenseRef-AI100"
 license-files = [{ path = "LICENSE", hash = 0xdfd55603 }]
 
+# mw75 (0.0.8) declares `license = "GPL-3.0"`, a deprecated SPDX id, and ships
+# no license file. Its author means GPL-3.0-only (as for our other crates); fix
+# the field on mw75's next publish and drop this.
+[[licenses.clarify]]
+crate = "mw75"
+expression = "GPL-3.0-only"
+license-files = []
+
 # Device-driver crates that ship a LICENSE file but omit the `license` field
 # in Cargo.toml.  Hashes verified against the versions in Cargo.lock.
 [[licenses.clarify]]
@@ -421,6 +424,8 @@ unknown-git      = "warn"
 allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/eugenehp/gtk-rs-core.git",
+    # bids-rs — BIDS dataset export (skill-bids); tracks GitHub main.
+    "https://github.com/eugenehp/bids-rs",
     "https://github.com/MIT-RLX/rlx.git",
     "https://github.com/MIT-RLX/rlx-models.git",
     # open_oura — the Oura ring BLE protocol and link layer (MIT).  Unpublished,
