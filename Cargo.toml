@@ -269,6 +269,7 @@ bbtree = "0.1.6"
 rlx          = { git = "https://github.com/MIT-RLX/rlx.git", version = "0.2.19", branch = "main", default-features = false }
 rlx-runtime  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 rlx-umap     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
+rlx-text     = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main", default-features = false }
 
 rlx-models   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 rlx-minicpm5 = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }

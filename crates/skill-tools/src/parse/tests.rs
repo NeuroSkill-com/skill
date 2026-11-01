@@ -1268,3 +1268,30 @@ fn unrepairable_delimited_block_is_still_reported_as_garbled() {
     assert!(extract_tool_calls(raw).is_empty());
     assert!(detect_garbled_tool_call(raw).is_some());
 }
+
+// ── Echoed `[Calling tool: …]` history lines ─────────────────────────────────
+
+#[test]
+fn echoed_call_summary_is_hidden_and_counts_as_garbled() {
+    let echoed = "[Calling tool: web_search({\"query\":\"weather San Jose\",\"render\":true})]";
+    assert_eq!(strip_tool_call_blocks(echoed), "");
+    assert!(detect_garbled_tool_call(echoed).is_some());
+
+    // Text around it survives; the summary line goes.
+    let mixed = "Here you go.\n[Calling tool: date({})]\nIt is morning.";
+    assert_eq!(strip_tool_call_blocks(mixed), "Here you go.\nIt is morning.");
+
+    // Mid-stream: the partial marker and an unterminated line are held back.
+    assert_eq!(strip_tool_call_blocks_preserve("Sure. [Calling to"), "Sure. ");
+    assert_eq!(
+        strip_tool_call_blocks_preserve("Sure. [Calling tool: web_search(query=\"25%"),
+        "Sure. "
+    );
+
+    // Ordinary prose with brackets is untouched.
+    assert_eq!(
+        strip_tool_call_blocks("See [1] and [Calling] notes."),
+        "See [1] and [Calling] notes."
+    );
+    assert!(detect_garbled_tool_call("See [1].").is_none());
+}

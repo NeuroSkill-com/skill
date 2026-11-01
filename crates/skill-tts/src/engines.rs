@@ -856,8 +856,21 @@ fn orpheus_snac_path(dest: &Path) -> Result<PathBuf> {
 /// Synthesize `text` with the active engine and return mono PCM + sample rate
 /// **without** playing it. Builds a fresh synthesizer each call — intended for
 /// file export / verification, not the hot speak path.
+///
+/// The legacy engines are not in the native catalog: Kitten (the default)
+/// synthesises on its own worker, reusing the model `say` loaded.
 pub fn synthesize_pcm(text: &str) -> Result<(Vec<f32>, u32)> {
     let (engine, model, voice) = crate::active_engine();
+    match engine.trim().to_ascii_lowercase().as_str() {
+        "" | "kitten" => {
+            #[cfg(tts_kitten_active)]
+            return crate::kitten::synthesize_pcm(text, &voice).map(|pcm| (pcm, crate::kitten::SAMPLE_RATE));
+            #[cfg(not(tts_kitten_active))]
+            anyhow::bail!("KittenTTS is not built into this daemon");
+        }
+        "neutts" => anyhow::bail!("NeuTTS can only speak aloud; it can't synthesise to a buffer for validation"),
+        _ => {}
+    }
     let mut synth = build_synthesizer(&engine, &model)?;
     synth.synthesize(text, &voice)
 }

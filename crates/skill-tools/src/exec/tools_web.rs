@@ -39,6 +39,29 @@ fn blocked_fetch_url(url: &str) -> Option<String> {
 
 // ── web_search ────────────────────────────────────────────────────────────────
 
+/// An unfilled location slot such as `<city>` or `<your location>`, as in
+/// `weather <city>`. Other bracketed words (`<div>`) are real search terms.
+fn template_placeholder(query: &str) -> Option<&str> {
+    const SLOTS: &[&str] = &["city", "town", "location", "place", "country", "region", "address"];
+    let mut rest = query;
+    while let Some(open) = rest.find('<') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('>') else { break };
+        let inner = &after[..close];
+        if !inner.trim().is_empty()
+            && inner.len() <= 32
+            && inner.chars().all(|c| c.is_alphabetic() || matches!(c, ' ' | '_' | '-'))
+            && inner
+                .split([' ', '_', '-'])
+                .any(|w| SLOTS.contains(&w.to_ascii_lowercase().as_str()))
+        {
+            return Some(&rest[open..open + close + 2]);
+        }
+        rest = &after[close + 1..];
+    }
+    None
+}
+
 pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
     let query = args
         .get("query")
@@ -48,6 +71,19 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
         .to_string();
     if query.is_empty() {
         return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
+    }
+    if let Some(slot) = template_placeholder(&query) {
+        // Small models copy `weather <city>` from an example before they know
+        // the city. Searching for it returns some other place's weather, and
+        // the answer reads as if it were right.
+        return json!({
+            "ok": false,
+            "tool": "web_search",
+            "error": format!(
+                "the query still contains the placeholder `{slot}`; replace it with the real value \
+                 (for the user's own city, call `location` first and use its result)"
+            ),
+        });
     }
 
     let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
@@ -445,4 +481,23 @@ async fn exec_web_fetch_plain(url: &str, max_content: usize, retry: &crate::type
     })
     .await
     .unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+}
+
+#[cfg(test)]
+mod placeholder_tests {
+    use super::template_placeholder;
+
+    #[test]
+    fn finds_unfilled_slots_only() {
+        assert_eq!(template_placeholder("weather <city>"), Some("<city>"));
+        assert_eq!(
+            template_placeholder("news in <your city name>"),
+            Some("<your city name>")
+        );
+        assert_eq!(template_placeholder("weather in San Jose"), None);
+        assert_eq!(template_placeholder("is 3 < 5 > 2"), None);
+        assert_eq!(template_placeholder("html <div> tag"), None);
+        assert_eq!(template_placeholder("hotels in <CITY_NAME>"), Some("<CITY_NAME>"));
+        assert_eq!(template_placeholder("vec<u8> rust"), None);
+    }
 }

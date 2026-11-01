@@ -178,7 +178,7 @@ fn build_full_tool_block(tools: &[Tool], options: &ToolPromptOptions) -> String 
     let direct_examples = if options.chat_mode.as_deref() == Some("query") {
         ""
     } else {
-        "User: \"What is the capital of France?\"\nAssistant: Paris.\n\nUser: \"What is 17 * 3?\"\nAssistant: 51.\n(General knowledge, definitions and arithmetic need NO tool: answer directly. The `location` tool returns where the USER is — never call it for questions about other places.)\n\n"
+        "User: \"What is the capital of France?\"\nAssistant: Paris.\n\nUser: \"What is 17 * 3?\"\nAssistant: 51.\n(General knowledge, definitions and arithmetic need NO tool, not even `date`: answer directly. The `location` tool returns where the USER is — never call it for questions about other places.)\n\n"
     };
 
     let native_hint = if options.prefer_native_tool_calling {
@@ -206,6 +206,7 @@ Output a tool-call block in exactly this format:
 Rules:
 - The JSON inside [TOOL_CALL]…[/TOOL_CALL] MUST be valid JSON on a single line.
 - You may call multiple tools by emitting multiple [TOOL_CALL]…[/TOOL_CALL] blocks.
+- A request with several parts ("X, then Y", "X and Y") needs a tool call for EACH part that needs one. Emit them all in the same reply, then answer every part.
 - After emitting tool calls, STOP generating and wait. The system will execute the tool(s) and provide results in a follow-up message.
 - Use the tool results to formulate your final answer to the user.
 - Do NOT fabricate or guess tool results. Always call the tool and use the actual result.
@@ -237,6 +238,11 @@ Assistant: [TOOL_CALL]{{"name":"web_search","arguments":{{"query":"weather <city
 User: "How do I feel?" / "What's my brain state?"
 Assistant: [TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOOL_CALL]
 (Use the "skill" tool for ALL EEG/brain/device queries. Pass the command name inside "arguments", e.g. {{"command":"status"}}. Do NOT call "status" or any other command name directly as a tool — always wrap it with the "skill" tool.)
+
+User: "Check my brain state, then tell me the time."
+Assistant: [TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOOL_CALL]
+[TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
+(One tool call for EACH part of the request, all in the same reply.)
 {mode_policy}
 {native_hint}"#
     )

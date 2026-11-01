@@ -481,3 +481,65 @@ fn simple_render_chat(msgs: &[rlx_models::run::ChatMessage]) -> anyhow::Result<S
     out.push_str("assistant: ");
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Qwen3.5's tool-result branch, verbatim in shape: `loop.previtem` must be
+    /// defined and a wrapped message must test true, or the `<|im_start|>user`
+    /// opener is dropped and the model reads the result as its own turn.
+    /// Runs without a GGUF.
+    #[test]
+    fn tool_result_opens_a_user_turn() {
+        let source = "{%- for message in messages %}\
+{%- if message.role == \"tool\" %}\
+{%- if loop.previtem and loop.previtem.role != \"tool\" %}{{- '<|im_start|>user' }}{%- endif %}\
+{{- '\\n<tool_response>\\n' }}{{- message.content }}{{- '\\n</tool_response><|im_end|>\\n' }}\
+{%- else %}{{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>\\n' }}{%- endif %}\
+{%- endfor %}";
+        let tpl = rlx_models::run::ChatTemplate::from_source(source).expect("compiles");
+        let messages = vec![
+            serde_json::json!({"role": "assistant", "content": "[Calling tool: date({})]"}),
+            serde_json::json!({"role": "tool", "content": "{}"}),
+        ];
+        let prompt = render_chat(&Some(tpl), &messages, false).expect("render");
+        assert!(
+            prompt.contains("<|im_end|>\n<|im_start|>user\n<tool_response>\n{}"),
+            "{prompt:?}"
+        );
+    }
+
+    /// A tool round as the orchestrator builds it, rendered through the
+    /// template the actor resolves for Qwen3.5. Skips without the GGUF
+    /// (`QWEN35_GGUF`).
+    #[test]
+    fn qwen35_tool_round_renders_with_the_gguf_template() {
+        let gguf = std::env::var("QWEN35_GGUF")
+            .unwrap_or_else(|_| "/Volumes/FOUR/weights/Qwen3.5-0.8B-gguf/Qwen3.5-0.8B-Q4_K_M.gguf".into());
+        let path = std::path::PathBuf::from(gguf);
+        if !path.is_file() {
+            eprintln!("skip: {} not found", path.display());
+            return;
+        }
+        let app: Arc<dyn LlmEventEmitter> = Arc::new(crate::event::NoopEmitter);
+        let log_buf = LlmLogBuffer::default();
+        let tpl = resolve_chat_template(&path, "qwen35", &app, &log_buf, None);
+        let messages = vec![
+            serde_json::json!({"role": "system", "content": "You are helpful."}),
+            serde_json::json!({"role": "user", "content": "What time is it?"}),
+            serde_json::json!({"role": "assistant", "content": "[Calling tool: date({})]"}),
+            serde_json::json!({"role": "tool", "tool_call_id": "c1", "content": "{\"ok\":true,\"tool\":\"date\"}"}),
+        ];
+        let prompt = render_chat(&tpl, &messages, false).expect("render");
+        assert!(prompt.contains("<|im_start|>assistant\n"), "{prompt}");
+        assert!(
+            !prompt.contains("\ntool: ") && !prompt.starts_with("system: "),
+            "fell back to role concat: {prompt}"
+        );
+        assert!(
+            prompt.contains("<|im_end|>\n<|im_start|>user\n<tool_response>\n"),
+            "tool result must open its own user turn: {prompt}"
+        );
+    }
+}

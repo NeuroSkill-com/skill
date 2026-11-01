@@ -104,6 +104,68 @@ where
     Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))
 }
 
+/// One last round with no tools in the prompt: the question, the tool results
+/// so far, and an instruction to answer in prose.
+///
+/// For a model that is stuck calling tools (it repeats calls that already ran,
+/// or returns nothing after a result). Before, the user got the raw JSON of the
+/// last tool result. Returns `None` if this round yields no text either.
+async fn answer_without_tools<F: FnMut(&str)>(
+    state: &LlmServerState,
+    params: &GenParams,
+    question: &str,
+    messages: &[Value],
+    on_visible_delta: &mut F,
+) -> Option<(String, String, usize, usize, usize)> {
+    const MAX_RESULT_CHARS: usize = 2_000;
+    let results: Vec<String> = messages
+        .iter()
+        .filter(|m| m.get("role").and_then(Value::as_str) == Some("tool"))
+        .map(message_text_content)
+        // A failed call adds nothing but a reason to talk about the failure.
+        .filter(|text| {
+            serde_json::from_str::<Value>(text)
+                .ok()
+                .and_then(|v| v.get("ok").and_then(Value::as_bool))
+                != Some(false)
+        })
+        .map(|text| format!("- {}", text.chars().take(MAX_RESULT_CHARS).collect::<String>()))
+        .collect();
+    let user = if results.is_empty() {
+        question.to_string()
+    } else {
+        format!("{question}\n\nFacts:\n{}", results.join("\n"))
+    };
+    let prompt = vec![
+        json!({
+            "role": "system",
+            "content": "Answer the user's question in plain text. Use the facts given where they help, \
+                        and answer the rest from what you know. Do not mention tools, searches, facts \
+                        you were given, or errors.",
+        }),
+        json!({ "role": "user", "content": user }),
+    ];
+    let (tok_tx, tok_rx) = mpsc::unbounded_channel();
+    state
+        .req_tx
+        .send(InferRequest::Generate {
+            messages: prompt,
+            images: Vec::new(),
+            params: params.clone(),
+            token_tx: tok_tx,
+        })
+        .ok()?;
+    let (text, finish, pt, ct, n_ctx) = collect_infer_output(tok_rx, |d| on_visible_delta(d), |_| {})
+        .await
+        .ok()?;
+    let cleaned = tools::strip_tool_call_blocks(&text);
+    if cleaned.trim().is_empty() {
+        return None;
+    }
+    log::info!("[tool-orchestration] answered in a tool-free round after the model got stuck");
+    Some((cleaned, finish, pt, ct, n_ctx))
+}
+
 // ── Prompt helpers ────────────────────────────────────────────────────────────
 
 fn message_text_content(msg: &Value) -> String {
@@ -292,6 +354,9 @@ where
 
     let mut messages = base_messages;
     apply_runtime_prompt_variables(&mut messages, state, &allowed_tools);
+    // The user's question, before any of the loop's own notes are appended
+    // as user turns.
+    let question = latest_user_prompt(&messages).unwrap_or_default();
 
     if tools_from_req.is_empty() {
         tools_from_req = enabled_builtin_llm_tools(&allowed_tools);
@@ -321,6 +386,24 @@ where
         query_refusal_response: Some(allowed_tools.query_refusal_response.clone()),
     };
     tools::inject_tools_into_system_prompt_with_options(&mut messages, &tools_from_req, n_ctx, &prompt_opts);
+
+    // Which tools this request needs, from its wording. The plan goes into the
+    // system prompt, and every tool round is checked against it below.
+    #[cfg(feature = "llm-rlx")]
+    let tool_plan = latest_user_prompt(&messages)
+        .map(|prompt| super::tool_planner::plan_for(&prompt, &tools_from_req))
+        .filter(|plan| !plan.is_empty());
+    #[cfg(feature = "llm-rlx")]
+    if let Some(hint) = tool_plan.as_ref().and_then(|plan| plan.hint()) {
+        log::info!("[tool-plan] {}", hint.lines().skip(2).collect::<Vec<_>>().join(" | "));
+        if let Some(system) = messages
+            .iter_mut()
+            .find(|m| m.get("role").and_then(Value::as_str) == Some("system"))
+        {
+            let content = message_text_content(system);
+            system["content"] = Value::from(format!("{content}\n\n{hint}"));
+        }
+    }
 
     // Inject discovered Agent Skills into the system prompt so the LLM knows
     // which specialised instruction files it can load via read_file.
@@ -403,6 +486,8 @@ where
     let mut had_successful_tool_result = false;
     let mut dedup_nudge_count = 0u32;
     let mut self_heal_count = 0u32;
+    #[cfg(feature = "llm-rlx")]
+    let mut direct_nudged = false;
     let mut cumulative_prompt_tokens = 0usize;
     let mut cumulative_completion_tokens = 0usize;
     const MAX_SELF_HEAL_ATTEMPTS: u32 = 2;
@@ -476,7 +561,12 @@ where
             // results, surface the raw result as a fallback.
             if cleaned.trim().is_empty() {
                 if let Some(ref result) = last_tool_result {
-                    log::warn!("[tool-orchestration] model returned empty after tool call — returning raw result");
+                    log::warn!("[tool-orchestration] model returned empty after tool call");
+                    if let Some(answer) =
+                        answer_without_tools(state, &params, &question, &messages, &mut on_visible_delta).await
+                    {
+                        return Ok(answer);
+                    }
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
                     return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
                 }
@@ -542,12 +632,18 @@ where
             // All tool calls were duplicates and no visible text was produced.
             // The model is stuck re-emitting the same call.
             dedup_nudge_count += 1;
-            if dedup_nudge_count > 2 {
-                // Model is hopelessly stuck — return the raw tool result.
+            // Two re-sent calls in a row: it will not answer on its own.
+            if dedup_nudge_count > 1 {
                 log::warn!(
-                    "[tool-orchestration] model stuck after {} dedup nudges — returning raw tool result",
+                    "[tool-orchestration] model stuck after {} dedup nudges",
                     dedup_nudge_count
                 );
+                if let Some(answer) =
+                    answer_without_tools(state, &params, &question, &messages, &mut on_visible_delta).await
+                {
+                    return Ok(answer);
+                }
+                // Not even a tool-free round answered: show the raw result.
                 if let Some(ref result) = last_tool_result {
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
                     return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
@@ -566,28 +662,6 @@ where
             }));
             continue;
         }
-
-        // Always push an assistant message to maintain alternation.
-        // Include the tool call details so the model knows what it already
-        // called and can interpret the following tool-result "user" message
-        // as a result (not a new question).
-        let tool_call_summary: String = selected_calls
-            .iter()
-            .map(|tc| {
-                let args_preview: String = tc.function.arguments.chars().take(120).collect();
-                format!("{}({})", tc.function.name, args_preview)
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        let assistant_content = if cleaned.trim().is_empty() {
-            format!("[Calling tool: {}]", tool_call_summary)
-        } else {
-            format!("{}\n[Calling tool: {}]", cleaned, tool_call_summary)
-        };
-        messages.push(json!({
-            "role": "assistant",
-            "content": assistant_content,
-        }));
 
         // Auto-redirect: if the LLM called a Skill API sub-command as a
         // top-level tool (e.g. tool="status" instead of tool="skill" +
@@ -615,6 +689,49 @@ where
                 tc
             })
             .collect();
+
+        // Keep the round to the plan: add planned calls the model skipped, and
+        // hold back a call whose input another tool has yet to produce.
+        // Searches for parts the model can answer itself are dropped once per
+        // request; if it searches again, the search goes through.
+        #[cfg(feature = "llm-rlx")]
+        let plan_changes = match &tool_plan {
+            Some(plan) => super::tool_planner::review_round(plan, &mut selected_calls, &executed_calls, !direct_nudged),
+            None => Default::default(),
+        };
+        #[cfg(feature = "llm-rlx")]
+        if plan_changes.dropped {
+            direct_nudged = true;
+            if selected_calls.is_empty() {
+                if let Some(note) = tool_plan.as_ref().and_then(super::tool_planner::direct_note) {
+                    log::info!("[tool-plan] {note}");
+                    messages.push(json!({ "role": "user", "content": note }));
+                }
+                continue;
+            }
+        }
+
+        // Always push an assistant message to maintain alternation.
+        // Include the tool call details so the model knows what it already
+        // called and can interpret the following tool-result "user" message
+        // as a result (not a new question).
+        let tool_call_summary: String = selected_calls
+            .iter()
+            .map(|tc| {
+                let args_preview: String = tc.function.arguments.chars().take(120).collect();
+                format!("{}({})", tc.function.name, args_preview)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let assistant_content = if cleaned.trim().is_empty() {
+            format!("[Calling tool: {}]", tool_call_summary)
+        } else {
+            format!("{}\n[Calling tool: {}]", cleaned, tool_call_summary)
+        };
+        messages.push(json!({
+            "role": "assistant",
+            "content": assistant_content,
+        }));
 
         // Record for cross-round dedup.
         for tc in &selected_calls {
@@ -648,6 +765,20 @@ where
                     &state.scripts_dir,
                 )
                 .await;
+            }
+        }
+
+        #[cfg(feature = "llm-rlx")]
+        if let Some(plan) = &tool_plan {
+            let mut notes: Vec<String> = Vec::new();
+            notes.extend(super::tool_planner::follow_up(plan, &plan_changes.waiting));
+            if plan_changes.dropped {
+                notes.extend(super::tool_planner::direct_note(plan));
+            }
+            if !notes.is_empty() {
+                let next = notes.join(" ");
+                log::info!("[tool-plan] follow-up: {next}");
+                messages.push(json!({ "role": "user", "content": next }));
             }
         }
 
@@ -688,8 +819,12 @@ where
         });
     }
 
-    // If we exhausted all rounds but have a tool result, return it as a
-    // fallback so the user at least sees the raw data.
+    // Out of rounds: one tool-free round, then the raw result as a last resort.
+    if last_tool_result.is_some() {
+        if let Some(answer) = answer_without_tools(state, &params, &question, &messages, &mut on_visible_delta).await {
+            return Ok(answer);
+        }
+    }
     if let Some(result) = last_tool_result {
         log::warn!("[tool-orchestration] round limit reached but have tool result — returning raw");
         let fallback = format!(

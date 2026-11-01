@@ -96,6 +96,12 @@ pub fn detect_garbled_tool_call(content: &str) -> Option<String> {
         return None;
     }
 
+    // An echo of the orchestrator's `[Calling tool: name(args)]` history line:
+    // the model meant to call a tool but used the summary form.
+    if let Some(s) = content.find(super::strip::CALL_SUMMARY_MARKER) {
+        return Some(content[s..].chars().take(500).collect());
+    }
+
     let has_start_tag = content.contains(TOOL_CALL_START);
     let has_function_xml = content.contains("<function=");
     let has_tool_call_json = {

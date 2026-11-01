@@ -71,6 +71,12 @@ pub enum Cmd {
         voice: String,
         done: oneshot::Sender<()>,
     },
+    /// Synthesise without playing; answers mono samples at [`SAMPLE_RATE`].
+    Synthesize {
+        text: String,
+        voice: String,
+        done: oneshot::Sender<anyhow::Result<Vec<f32>>>,
+    },
     Unload {
         done: oneshot::Sender<()>,
     },
@@ -247,6 +253,28 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 done.send(()).ok();
             }
 
+            Cmd::Synthesize { text, voice, done } => {
+                if model.is_none() {
+                    match load_from_hub_cb(HF_REPO, |_| {}) {
+                        Ok(m) => {
+                            let _ = AVAILABLE_VOICES.set(m.available_voices.clone());
+                            LOADED.store(true, Ordering::Relaxed);
+                            model = Some(m);
+                        }
+                        Err(e) => {
+                            done.send(Err(e.context("rlx-kittentts load failed"))).ok();
+                            continue;
+                        }
+                    }
+                }
+                if let Some(m) = &model {
+                    let result = m
+                        .generate_from_text(&text, &voice, SPEED, LANG)
+                        .with_context(|| format!("synthesis failed for {text:?}"));
+                    done.send(result).ok();
+                }
+            }
+
             Cmd::Unload { done } => {
                 model = None;
                 LOADED.store(false, Ordering::Relaxed);
@@ -267,6 +295,26 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 }
 
 // ─── Synthesis ────────────────────────────────────────────────────────────────
+
+/// Synthesise `text` to mono PCM at [`SAMPLE_RATE`] on the worker thread,
+/// reusing the model `say` loaded. Blocking; call from a blocking context.
+pub fn synthesize_pcm(text: &str, voice: &str) -> anyhow::Result<Vec<f32>> {
+    let voice = if voice.is_empty() || voice == "default" {
+        get_voice()
+    } else {
+        voice.to_string()
+    };
+    let (tx, rx) = oneshot::channel();
+    get_tx()
+        .send(Cmd::Synthesize {
+            text: text.to_string(),
+            voice,
+            done: tx,
+        })
+        .map_err(|_| anyhow::anyhow!("KittenTTS worker is gone"))?;
+    rx.blocking_recv()
+        .map_err(|_| anyhow::anyhow!("KittenTTS worker dropped the request"))?
+}
 
 fn speak_inner(model: &KittenTTS, stream: &MixerDeviceSink, text: &str, voice: &str) -> anyhow::Result<()> {
     let t0 = std::time::Instant::now();

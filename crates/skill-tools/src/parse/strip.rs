@@ -38,8 +38,34 @@ pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
     strip_trailing_tag_prefix(&mut out, TOOL_CALL_START);
     strip_trailing_tag_prefix(&mut out, TOOL_CALL_END);
 
+    let out = strip_call_summaries(&out);
     let out = strip_llama_xml_tool_call_blocks(&out);
     strip_json_tool_call_payloads_preserve(&out)
+}
+
+/// The orchestrator records each tool round in the history as
+/// `[Calling tool: name(args)]`. Small models copy that line into a later
+/// reply, where it is not a call the parser runs, so it must not reach the
+/// user. A line still being streamed is held back whole.
+pub const CALL_SUMMARY_MARKER: &str = "[Calling tool:";
+
+fn strip_call_summaries(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut rest = content;
+    while let Some(s) = rest.find(CALL_SUMMARY_MARKER) {
+        out.push_str(&rest[..s]);
+        let after = &rest[s..];
+        match after.find('\n') {
+            Some(nl) => rest = &after[nl + 1..],
+            None => {
+                rest = "";
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    strip_trailing_tag_prefix(&mut out, CALL_SUMMARY_MARKER);
+    out
 }
 
 /// Strip tool-call blocks and trim whitespace.

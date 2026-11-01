@@ -38,6 +38,8 @@ mod rlx_actor;
 #[cfg(feature = "llm-rlx")]
 mod rlx_backend;
 pub mod tool_orchestration;
+#[cfg(feature = "llm-rlx")]
+mod tool_planner;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 // Preserve the flat `crate::engine::Foo` API so existing imports keep working.
