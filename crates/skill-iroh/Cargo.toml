@@ -12,11 +12,11 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 iroh = "1.0.0-rc.0"
 # pkcs8 0.11.0 stable is now compatible with iroh 1.0.0-rc.0's ed25519-dalek
-rand = "0.9"
+rand = "0.10"
 tokio = { version = "1", features = ["full"] }
-totp-rs = { version = "5.7", features = ["gen_secret", "otpauth", "qr"] }
+totp-rs = { version = "6.0", features = ["gen_secret", "otpauth", "qr"] }
 ureq = { version = "3", features = ["native-tls", "json"] }
-base64 = "0.22"
+base64 = "0.23"
 qrcodegen = "1.8"
 # Default features pull `avif` → `ravif` → `rav1e` (AV1 encoder, ~5 MB).
 # We only need PNG to render QR codes for TOTP pairing — opt out of the

@@ -7,7 +7,7 @@ license = "GPL-3.0-only"
 [dependencies]
 bbtree = { workspace = true }
 # For `paths`: resolving the platform config directory.
-dirs = "6"
+dirs = "7"
 serde = { workspace = true }
 serde_json = { workspace = true }
 

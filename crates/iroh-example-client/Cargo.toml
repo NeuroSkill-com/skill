@@ -10,7 +10,7 @@ iroh = "1.0.0-rc.0"
 iroh-base = "1.0.0-rc.0"
 skill-iroh = { path = "../skill-iroh" }
 tokio = { version = "1", features = ["full"] }
-totp-rs = "5.7"
+totp-rs = "6.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = { workspace = true }

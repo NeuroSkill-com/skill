@@ -218,8 +218,8 @@ rlx-assets        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch 
 [workspace.dependencies]
 anyhow = "1"
 thiserror = "2"
-base64 = "0.22"
-rusqlite = { version = "0.39", features = ["bundled"] }
+base64 = "0.23"
+rusqlite = { version = "0.41", features = ["bundled"] }
 # DuckDB — one version for the whole graph: libduckdb-sys declares
 # `links = "duckdb"`, so bids-layout (via bids-eeg) and our own stores must
 # agree on it.

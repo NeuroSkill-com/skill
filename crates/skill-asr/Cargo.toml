@@ -40,9 +40,9 @@ anyhow          = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
-dirs       = "6"
+dirs       = "7"
 hf-hub     = { version = "0.5", optional = true }
-cpal       = { version = "0.17", optional = true }
+cpal       = { version = "0.18", optional = true }
 
 # Platform baseline GPU features (extra backends via asr-* Cargo features above).
 # macOS: Metal. Linux/Windows: CUDA + wgpu. Runtime picks the first available.
