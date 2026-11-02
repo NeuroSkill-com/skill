@@ -185,19 +185,20 @@ erased-serde = "0.4.10"
 # Not used by our own code — this entry exists purely to turn Deflate on in
 # tauri-plugin-updater's copy of `zip`.
 #
-# The updater takes `zip = { version = "4", default-features = false,
-# features = [] }`, Windows-only, so on its own it cannot inflate a method-8
-# entry — and `release-windows.yml` builds the `.nsis.zip` updater package with
-# `CompressionLevel::Optimal`, which is exactly method 8. Cargo unions features
-# per resolved package, so the knob has to be turned on the SAME package: the
-# `^4` line below, not our own `zip` (on 9.x, a different package entirely).
-# That is why this is a renamed dependency rather than the workspace one — the
-# workspace `zip = { features = ["deflate"] }` reached the updater only while
-# both requirements resolved to one package, and stopped once ours moved past 4.
+# The updater takes `zip = { version = "9", default-features = false }`
+# (it was `^4` before tauri-plugin-updater 2.14), Windows-only, so on its own
+# it cannot inflate a method-8 entry — and `release-windows.yml` builds the
+# `.nsis.zip` updater package with `CompressionLevel::Optimal`, which is
+# exactly method 8. Cargo unions features per resolved package, so the knob
+# has to be turned on the SAME package as the updater's: this line has to
+# follow the updater's major version, or it keeps an otherwise-unused older
+# `zip` alive (zip 4 carried RUSTSEC-2026-0367/0368/0369/0429) and enables
+# nothing on the copy the updater actually uses.
 #
-# Verify after any zip bump, on either side: the `zip 4.x` entry in Cargo.lock
-# must list `flate2`. If it does not, Windows auto-update fails at extract time.
-zip-updater-deflate = { package = "zip", version = "4", default-features = false, features = ["deflate", "deflate64"] }
+# Verify after any zip or updater bump: the zip entry the updater resolves to
+# in Cargo.lock must list `flate2`. If it does not, Windows auto-update fails
+# at extract time.
+zip-updater-deflate = { package = "zip", version = "9", default-features = false, features = ["deflate", "deflate64"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pure-Rust Focus Mode / Do Not Disturb control — no Swift, no ObjC, no

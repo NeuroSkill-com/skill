@@ -38,36 +38,6 @@ ignore = [
     # both lines together with rlx-tiny-tts in crates/skill-tts/Cargo.toml.
     #   protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2 (build-only, never shipped)
     { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
-    # zip <9.0.0 — three advisories against the extraction APIs
-    # (`ZipArchive::extract` / `ZipStreamReader::extract`), all fixed in 9.0.0.
-    # Everything we own is on 9.x as of 2026-10-25: the workspace `zip`
-    # (root Cargo.toml) and the rlx / rlx-models archive readers (rlx-pkg,
-    # rlx-dduf, rlx-asr, rlx-funasr, rlx-kittentts, rlx-kittentts2,
-    # rlx-voxtral-tts). Two copies we do not control are left, and neither is
-    # reachable in a way these advisories describe:
-    #
-    #   zip 4.6.1 — tauri-plugin-updater, declared
-    #     `target = cfg(target_os = "windows")`. This is the one place in the
-    #     whole graph that actually calls `extract()` (`updater.rs::extract_zip`,
-    #     behind its `zip` feature) — and all three advisories are about Unix
-    #     semantics: SUID/SGID bits preserved from `external_attributes`, and
-    #     symlinks whose targets escape the destination. Neither exists on the
-    #     only platform this copy is ever compiled for. The bytes reaching
-    #     `extract()` come from `Update::download`, which verifies their minisign
-    #     signature against the pinned pubkey before returning them, so the
-    #     archive is our own signed `.nsis.zip`, not attacker-controlled input.
-    #     There is nothing to upgrade to: even tauri-plugin-updater
-    #     3.0.0-alpha.3 still requires `zip ^4`.
-    #
-    #   zip 0.6.6 — `npyz`'s `npz` feature, reached through rlx-mlx-io. npyz
-    #     0.9.1, its newest release, still requires `zip ^0.6`. rlx-mlx-io reads
-    #     `.npz` members by name through `NpzArchive` and never extracts to disk.
-    #
-    # Mirrored in .cargo/audit.toml — cargo-audit reads that file, not this one,
-    # and CI runs both.
-    { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() APIs; the only extract() caller left is tauri-updater's Windows-only zip 4 (Unix-only issue, signature-verified archive); npyz's zip 0.6 never extracts" },
-    { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() APIs; the only extract() caller left is tauri-updater's Windows-only zip 4 (Unix-only issue, signature-verified archive); npyz's zip 0.6 never extracts" },
-    { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() APIs; the only extract() caller left is tauri-updater's Windows-only zip 4 (Unix-only issue, signature-verified archive); npyz's zip 0.6 never extracts" },
     # NOTE: noyalib's RUSTSEC-2026-0333 (YAML budget DoS) needed an entry here
     # until 2026-10-15, when llmfit-core 0.9 -> 1.1.17 replaced serde_yml with
     # yaml_serde and took serde_yml and noyalib out of the graph with it. Do

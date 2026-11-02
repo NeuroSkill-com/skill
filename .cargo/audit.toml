@@ -82,18 +82,4 @@ ignore = [
     # entry in deny.toml; change them together or the audit job disagrees
     # with the deny job.
     "RUSTSEC-2024-0437", # protobuf <3.7.2, build-only protoc codegen; not in the shipped binary
-
-    # zip <9.0.0 extraction advisories. Everything we own moved to zip 9.1.1 on
-    # 2026-10-25 (workspace root, plus rlx-pkg / rlx-dduf / rlx-asr / rlx-funasr
-    # / rlx-kittentts / rlx-kittentts2 / rlx-voxtral-tts upstream). What is left
-    # is tauri-plugin-updater's `zip ^4`, compiled only for Windows — where the
-    # Unix permission-bit and symlink semantics all three advisories describe do
-    # not exist — extracting a `.nsis.zip` whose minisign signature
-    # `Update::download` has already checked against the pinned pubkey; and
-    # npyz's `zip ^0.6`, which rlx-mlx-io only reads members from. See deny.toml
-    # for the full reasoning; both files must list these or the two jobs disagree.
-    "RUSTSEC-2026-0367", # zip <9 — SUID/SGID bits preserved during extract()
-    "RUSTSEC-2026-0368", # zip <9 — extract() symlink target escapes destination
-    "RUSTSEC-2026-0369", # zip <9 — extract() applies permissions through symlinks
-
 ]
