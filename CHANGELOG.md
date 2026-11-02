@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-11-02
+
+### Build
+
+- Minor updates and improvements
+
 ## [0.1.0-rc.11] — 2026-11-01
 
 ### Bugfixes
@@ -715,16 +721,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - updated release windows action
 
-## [0.0.131-rc.27] — 2026-09-22
-
-### Features
-
-- fixed windows build
-
 ## Earlier releases
 
-The 155 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 156 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.27](changes/releases/0.0.131-rc.27.md)
 - [0.0.131-rc.26](changes/releases/0.0.131-rc.26.md)
 - [0.0.131-rc.25](changes/releases/0.0.131-rc.25.md)
 - [0.0.131-rc.24](changes/releases/0.0.131-rc.24.md)
