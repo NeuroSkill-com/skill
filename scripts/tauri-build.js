@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Tauri wrapper — handles platform-specific setup (Linux Vulkan SDK, linker
- * flags, macOS target) before delegating to the Tauri CLI.
+ * Tauri wrapper — handles platform-specific setup (linker flags, macOS
+ * target) before delegating to the Tauri CLI.
  *
  * Handles: dev, build (and passes everything else straight through).
  *
@@ -310,7 +310,7 @@ if (isLinux && explicitTarget?.endsWith("-unknown-linux-gnu") && process.env.ALL
 // ── Platform-specific setup ──────────────────────────────────────────────────
 //
 // espeak-ng is now a pure Rust dependency (espeak-ng crate) — no C build
-// scripts needed.  This section handles platform flags, the Linux Vulkan SDK, and
+// scripts needed.  This section handles platform flags and
 // macOS/Windows/Linux quirks.
 
 let platformFlags = []; // extra flags injected before the user's subArgs
@@ -385,8 +385,7 @@ if (isMingwTarget) {
   }
 
   // LLM inference runs in skill-daemon (OS umbrella: windows / linux / apple),
-  // so no GPU Cargo features are injected on the Tauri app. The Vulkan SDK is
-  // still installed above for optional native tooling / daemon-adjacent builds.
+  // so no GPU Cargo features are injected on the Tauri app.
 } else {
   // Linux native.
 
@@ -399,12 +398,6 @@ if (isMingwTarget) {
       process.env.WEBKIT_DISABLE_DMABUF_RENDERER = "1";
     }
   }
-  execFileSync("bash", ["scripts/install-vulkan-sdk.sh"], {
-    cwd: root,
-    stdio: "inherit",
-    env: process.env,
-  });
-
   // LLM inference runs in skill-daemon (OS umbrella: linux) — no GPU features
   // on the Tauri app.
 

@@ -41,3 +41,9 @@ updates:
       # Upgrade wgpu together with the encoder crates.
       - dependency-name: "wgpu"
         versions: [">=27"]
+      # hf-hub 1.0 is a reqwest-based rewrite (HFClient/HFClientSync; no
+      # `api::sync::Api`, no `ureq` feature), so the grouped update fails to
+      # resolve. rlx-models still uses 0.5 for its own downloads — migrate both
+      # together, or skill ships two HF clients and two HTTP stacks.
+      - dependency-name: "hf-hub"
+        update-types: ["version-update:semver-major"]

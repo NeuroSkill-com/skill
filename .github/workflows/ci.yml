@@ -140,9 +140,7 @@ jobs:
   rust-check:
     name: Rust — clippy + test
     runs-on: ubuntu-24.04
-    # Pinned, not ubuntu-latest: LunarG publishes its Vulkan SDK apt repo only
-    # for Ubuntu 24.04/22.04, and ubuntu-latest moved to 26.04 (no LunarG list,
-    # so setup-vulkan-linux 404s). 24.04 is also what release-linux.yml builds on.
+    # Pinned, not ubuntu-latest: 24.04 is what release-linux.yml builds on.
     steps:
       # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
       # ubuntu-latest ships Android SDK, .NET, Swift, Haskell, CodeQL, large
@@ -190,9 +188,6 @@ jobs:
           max-size: 3GiB
           pr-comment: false
 
-      - name: Setup Vulkan SDK repository
-        uses: ./.github/actions/setup-vulkan-linux
-
       - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
@@ -204,8 +199,7 @@ jobs:
             libpipewire-0.3-dev libgbm-dev
             cmake binutils mold clang
             protobuf-compiler libopenblas-dev
-            vulkan-sdk
-          version: tauri-rust-check-v7
+          version: tauri-rust-check-v8
 
       # Always lint/test against the latest rlx / rlx-models main (rewrites
       # Cargo.lock pins before the `--locked` clippy/test steps below).
@@ -688,7 +682,7 @@ jobs:
       # clippy replaces check — clippy performs the same compilation plus lint
       # passes, so running both wastes a full compile cycle.
       # Only the Tauri UI crate (`skill`) — daemon GPU backends are exercised on
-      # release/`windows` builds, not PR CI (avoids CUDA + Vulkan SDK here).
+      # release/`windows` builds, not PR CI (avoids CUDA here).
       - name: cargo clippy
         shell: bash
         env:
@@ -706,7 +700,7 @@ jobs:
   llm-e2e:
     name: LLM — E2E integration test
     runs-on: ubuntu-24.04
-    # Pinned to 24.04 for LunarG's Vulkan apt repo; see rust-check.
+    # Pinned to 24.04 to match release-linux.yml; see rust-check.
     # Run after rust-check so we reuse its cached build artifacts (clippy
     # already compiled the full workspace including skill-llm).  This
     # turns the E2E compilation into a cheap incremental build (~30 s)
@@ -744,9 +738,6 @@ jobs:
           pr-comment: false
           save-cache: false
 
-      - name: Setup Vulkan SDK repository
-        uses: ./.github/actions/setup-vulkan-linux
-
       # Install all system deps in one cached step (includes mold + clang
       # to match rust-check's linker and reuse its build artifacts).
       - name: Cache + install system deps
@@ -757,8 +748,7 @@ jobs:
             libespeak-ng-dev libasound2-dev
             libpipewire-0.3-dev mold clang
             protobuf-compiler libopenblas-dev
-            vulkan-sdk
-          version: llm-e2e-v6
+          version: llm-e2e-v7
 
       - name: Cache HuggingFace model
         uses: actions/cache@v5
@@ -920,7 +910,7 @@ jobs:
   coverage:
     name: Rust — code coverage
     runs-on: ubuntu-24.04
-    # Pinned to 24.04 for LunarG's Vulkan apt repo; see rust-check.
+    # Pinned to 24.04 to match release-linux.yml; see rust-check.
     needs: rust-check
     timeout-minutes: 90
     if: github.event_name == 'workflow_dispatch' && inputs.run_coverage == true
@@ -947,10 +937,7 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
-      - name: Setup Vulkan SDK repository
-        uses: ./.github/actions/setup-vulkan-linux
-
-      - name: Cache + install Tauri system deps (incl. mold + clang + Vulkan)
+      - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -961,8 +948,7 @@ jobs:
             libpipewire-0.3-dev libgbm-dev
             cmake binutils mold clang
             protobuf-compiler libopenblas-dev
-            vulkan-sdk
-          version: tauri-rust-check-v7
+          version: tauri-rust-check-v8
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked

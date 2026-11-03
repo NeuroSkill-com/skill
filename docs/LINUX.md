@@ -123,14 +123,8 @@ dynamic-loading).
 **At runtime:** CUDA when an NVIDIA driver is present, otherwise **wgpu**,
 otherwise CPU. That fallback is automatic — not a separate build flavor.
 
-Optional Vulkan headers/tooling (still installed in CI for system deps):
-
-```bash
-bash scripts/install-vulkan-sdk.sh
-```
-
-That script ensures Vulkan headers/loader + shader tooling are present
-(`libvulkan-dev`, `glslang-tools`/`shaderc`, `spirv-tools`, etc.).
+No Vulkan SDK is needed to build: wgpu loads the system Vulkan loader
+(`libvulkan1`, shipped with Mesa / the GPU driver) at run time.
 
 Optional verification:
 
