@@ -29,17 +29,6 @@ fn main() {
     // A build script's own `#[cfg]` describes the HOST running it, so target
     // decisions below read `t_os` (CARGO_CFG_TARGET_OS) instead.
 
-    // ── Vulkan: Linux only ───────────────────────────────────────────────
-    // Windows needs no Vulkan SDK: rlx's wgpu backend uses DirectX 12 only,
-    // and the app never calls Vulkan directly. (This used to download and
-    // silently install LunarG's SDK on every fresh Windows build.) The probe
-    // asks the build machine's pkg-config, so it only applies to native Linux
-    // builds; a cross build would read the wrong system's paths.
-    #[cfg(target_os = "linux")]
-    if t_os == "linux" {
-        setup_vulkan_sdk_linux();
-    }
-
     // ── Windows app manifest ─────────────────────────────────────────────
     // Gated on the target: with `#[cfg(target_os = "windows")]` a Windows
     // binary cross-compiled from macOS or Linux shipped without the manifest.
@@ -110,58 +99,5 @@ fn git(args: &[&str]) -> Option<String> {
         None
     } else {
         Some(s)
-    }
-}
-
-// ── Vulkan SDK helpers ────────────────────────────────────────────────────────
-
-#[cfg(target_os = "linux")]
-fn setup_vulkan_sdk_linux() {
-    use std::process::Command;
-
-    let pkg_config_output = Command::new("pkg-config")
-        .args(["--cflags", "--libs", "vulkan"])
-        .output();
-
-    if let Ok(output) = pkg_config_output {
-        if output.status.success() {
-            println!("cargo:warning=Vulkan SDK found via pkg-config");
-            let libs_output = String::from_utf8_lossy(&output.stdout);
-            println!("cargo:rustc-link-lib=vulkan");
-            for token in libs_output.split_whitespace() {
-                if let Some(path) = token.strip_prefix("-L") {
-                    println!("cargo:rustc-link-search={}", path);
-                }
-            }
-            return;
-        }
-    }
-
-    println!("cargo:warning=Vulkan SDK not found. Attempting to install via apt...");
-
-    let install_status = Command::new("sudo")
-        .args(["apt-get", "install", "-y", "libvulkan-dev", "vulkan-tools"])
-        .status();
-
-    match install_status {
-        Ok(status) if status.success() => {
-            println!("cargo:warning=Vulkan SDK installed successfully");
-            println!("cargo:rustc-link-search=/usr/lib");
-            println!("cargo:rustc-link-search=/usr/lib/x86_64-linux-gnu");
-            println!("cargo:rustc-link-lib=vulkan");
-        }
-        _ => {
-            println!("cargo:warning=Failed to install Vulkan SDK via apt.");
-            println!(
-                "cargo:warning=  Ubuntu/Debian: sudo apt-get install libvulkan-dev vulkan-tools"
-            );
-            println!(
-                "cargo:warning=  Fedora/RHEL:   sudo dnf install vulkan-loader-devel vulkan-tools"
-            );
-            println!(
-                "cargo:warning=  Arch:          sudo pacman -S vulkan-icd-loader vulkan-devel"
-            );
-            println!("cargo:rustc-link-lib=vulkan");
-        }
     }
 }

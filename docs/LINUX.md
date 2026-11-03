@@ -126,13 +126,6 @@ otherwise CPU. That fallback is automatic — not a separate build flavor.
 No Vulkan SDK is needed to build: wgpu loads the system Vulkan loader
 (`libvulkan1`, shipped with Mesa / the GPU driver) at run time.
 
-Optional verification:
-
-```bash
-ls /usr/include/vulkan/vulkan.h
-command -v glslc || command -v glslangValidator
-```
-
 ## 7) Optional local tooling
 
 Useful for diagnostics in this repo:

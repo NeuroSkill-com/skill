@@ -282,7 +282,7 @@ Most of the time you don't run `bump` and `tag` directly: `npm run release`
 
 The release pipeline is **PR-driven**. Every release — stable or otherwise —
 ships through a release pull request. Cutting the PR publishes a release
-candidate; merging the PR promotes the most recent RC to stable. The bytes
+candidate; `npm run release` merges the PR, promoting the most recent RC to stable. The bytes
 shipped to stable users are **byte-identical** to the tested RC — no rebuild,
 no re-signing, no re-notarization. Promotion is a metadata flip on the
 existing GitHub Release.
@@ -299,7 +299,7 @@ flowchart TD
     F -- "bug found" --> G["Fix on release branch<br/>→ npm run release -- --rc"]
     G --> H["bump rc.N → rc.N+1"]
     H --> C
-    F -- "yes" --> M["Merge PR<br/>(rebase or squash only)"]
+    F -- "yes" --> M["npm run release<br/>(checks RC, rebase-merges PR)"]
     M --> N["promote.yml fires:<br/>gh release edit --prerelease=false --latest"]
     N -. "releases/latest URL<br/>now resolves here" .-> S(["Stable channel<br/>users"])
 
@@ -322,13 +322,29 @@ npm run release -- --rc
 # 2. Iterate as bugs surface (from the release/X.Y.Z branch)
 npm run release -- --rc        # publishes rc.2, comments on the PR
 
-# 3. Approve and merge the PR using rebase or squash merge
-#    (the pr-checks workflow comments a reminder on the PR)
+# 3. Ship the latest RC to stable (from the release/X.Y.Z branch)
+npm run release
 
-# Done. promote.yml fires on the merge commit, flips the most recent RC
-# to "latest" on GitHub. Stable users see the new version on their next
-# update poll.
+# Done. It checks the RC, rebase-merges the PR and waits for promote.yml to
+# flip the RC to "latest" on GitHub. Stable users see the new version on
+# their next update poll.
 ```
+
+### `npm run release`
+
+Promotes the current RC to stable, from the `release/x.y.z` branch. It refuses
+unless the tree is clean, HEAD is the pushed and tagged bump commit, the PR is
+mergeable, every release workflow passed for the tag and all platforms are in
+`latest.json`. Then it asks you to type the version, rebase-merges the PR and
+waits for `promote.yml`.
+
+| Flag        | Meaning                                  |
+|-------------|------------------------------------------|
+| `--dry-run` | Run the checks only; change nothing.     |
+| `--yes`     | Skip the confirmation prompt.            |
+
+Merging by hand only works as a rebase merge. A merge commit or a squash loses
+the bare-version commit message `promote.yml` matches on, so nothing is promoted.
 
 ### `npm run release -- --rc`
 
@@ -339,7 +355,7 @@ you're on `main` (cuts a new release branch `release/x.y.z`) or already on a
 
 | Flag         | Meaning                                                        |
 |--------------|----------------------------------------------------------------|
-| `--rc`       | **Required.** All releases start as an RC.                     |
+| `--rc`       | **Required.** Cut or iterate an RC rather than promote one.    |
 | `--dry-run`  | Print what would happen; do not modify, push, or open the PR.  |
 | `--force`    | Forwarded to `bump` — skips the version-tagged-on-remote check.|
 
@@ -352,8 +368,8 @@ merge. By design.
    Releases (each marked `prerelease: true`). RC channel users have been
    pulling them automatically.
 2. Reviewers approve the PR.
-3. The merger uses **Rebase merge** or **Squash merge** — `pr-checks.yml`
-   comments a reminder on every release-labeled PR.
+3. The merge is a **Rebase merge**, which `npm run release` does for you;
+   `pr-checks.yml` comments a reminder on every release-labeled PR.
 4. The merge commit on `main` carries the version string as its message
    (`bump.js` ensures this). `promote.yml` watches `main`, sees the
    `-rc.` in the commit message, finds the matching tag, and runs:
@@ -365,7 +381,7 @@ merge. By design.
 
 A regular merge commit would create a different commit hash whose message
 doesn't match the version regex — `promote.yml` silently skips, leaving
-stable pinned to the previous release. That's why rebase/squash is enforced.
+stable pinned to the previous release. That's why only a rebase merge works.
 
 ### Update channels
 
@@ -419,7 +435,7 @@ exact source state.
 | `scripts/compile-product.mjs`                 | Shared daemon (OS umbrella) → tty → app (`custom-protocol`) |
 | `.github/workflows/release-{mac,linux,win}.yml` | Build + sign + notarize + publish; tag pattern allows `-rc.N` |
 | `.github/workflows/promote.yml`               | Push-to-main → flip prerelease flag on matching tag        |
-| `.github/workflows/pr-checks.yml`             | Soft reminder on `release`-labeled PRs to use rebase/squash|
+| `.github/workflows/pr-checks.yml`             | Soft reminder on `release`-labeled PRs to use rebase merge |
 | `src-tauri/build.rs`                          | Bakes `BUILD_INFO_*` env vars from git into the binary     |
 | `src-tauri/src/update_channel.rs`             | Channel preference storage, channel-aware updater builder  |
 
