@@ -7,7 +7,7 @@
  * Extracted from `routes/chat/+page.svelte`.
  */
 
-import type { BandPowers, BandSnapshot } from "$lib/chat/chat-types";
+import type { BandPowers, BandSnapshot } from "#lib/chat/chat-types";
 
 /**
  * Build a compact EEG brain-state block suitable for injection into a

@@ -10,7 +10,7 @@ import {
   startRuntime,
   stopRuntime,
   type VirtualEegConfig,
-} from "$lib/virtual-eeg/generator";
+} from "#lib/virtual-eeg/generator";
 
 describe("VirtualEegConfig defaults", () => {
   it("has sensible defaults", () => {

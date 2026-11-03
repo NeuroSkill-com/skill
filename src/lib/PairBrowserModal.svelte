@@ -12,8 +12,8 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { daemonPost } from "$lib/daemon/http";
-import { addToast } from "$lib/stores/toast.svelte";
+import { daemonPost } from "#lib/daemon/http";
+import { addToast } from "#lib/stores/toast.svelte";
 
 let visible = $state(false);
 let sessionId = $state("");

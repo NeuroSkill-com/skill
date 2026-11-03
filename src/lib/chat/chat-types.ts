@@ -292,7 +292,7 @@ export const SYSTEM_PROMPT_PRESETS: { key: string; icon: string; prompt: string 
 // ── EEG band snapshot — re-exported from the canonical BandChart module ─────
 // The full BandPowers / BandSnapshot interfaces live in BandChart.svelte.
 // Re-export here so chat-related code doesn't need to import from a UI component.
-export type { BandPowers, BandSnapshot } from "$lib/charts/BandChart.svelte";
+export type { BandPowers, BandSnapshot } from "#lib/charts/BandChart.svelte";
 
 // ── Conversion helpers ──────────────────────────────────────────────────────
 

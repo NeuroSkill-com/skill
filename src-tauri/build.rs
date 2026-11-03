@@ -26,24 +26,29 @@ fn main() {
         println!("cargo:rustc-link-arg-bins=-Wl,-z,stacksize=33554432");
     }
 
-    // ── Vulkan SDK: setup on Windows and Linux ────────────────────────────
-    #[cfg(target_os = "windows")]
-    setup_vulkan_sdk_windows();
+    // A build script's own `#[cfg]` describes the HOST running it, so target
+    // decisions below read `t_os` (CARGO_CFG_TARGET_OS) instead.
 
+    // ── Vulkan: Linux only ───────────────────────────────────────────────
+    // Windows needs no Vulkan SDK: rlx's wgpu backend uses DirectX 12 only,
+    // and the app never calls Vulkan directly. (This used to download and
+    // silently install LunarG's SDK on every fresh Windows build.) The probe
+    // asks the build machine's pkg-config, so it only applies to native Linux
+    // builds; a cross build would read the wrong system's paths.
     #[cfg(target_os = "linux")]
-    setup_vulkan_sdk_linux();
+    if t_os == "linux" {
+        setup_vulkan_sdk_linux();
+    }
 
     // ── Windows app manifest ─────────────────────────────────────────────
-    #[cfg(target_os = "windows")]
-    {
+    // Gated on the target: with `#[cfg(target_os = "windows")]` a Windows
+    // binary cross-compiled from macOS or Linux shipped without the manifest.
+    if t_os == "windows" {
         let manifest = include_str!("./manifest.xml");
         let windows = tauri_build::WindowsAttributes::new().app_manifest(manifest);
         let attrs = tauri_build::Attributes::new().windows_attributes(windows);
         tauri_build::try_build(attrs).expect("failed to run tauri build script");
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
+    } else {
         tauri_build::build();
     }
 }
@@ -108,74 +113,7 @@ fn git(args: &[&str]) -> Option<String> {
     }
 }
 
-// ── Vulkan SDK helpers (unchanged) ────────────────────────────────────────────
-
-#[cfg(target_os = "windows")]
-fn setup_vulkan_sdk_windows() {
-    use std::path::Path;
-    use std::process::Command;
-
-    let vulkan_sdk_path =
-        std::env::var("VULKAN_SDK").unwrap_or_else(|_| "C:\\VulkanSDK".to_string());
-
-    if Path::new(&vulkan_sdk_path).exists() {
-        println!(
-            "cargo:warning=Vulkan SDK already installed at {}",
-            vulkan_sdk_path
-        );
-        println!("cargo:rustc-link-search={}\\Lib", vulkan_sdk_path);
-        println!("cargo:rustc-link-lib=vulkan-1");
-        return;
-    }
-
-    println!("cargo:warning=Vulkan SDK not found. Installing...");
-
-    let vulkan_version = "1.3.280";
-    let installer_url = format!(
-        "https://sdk.lunarg.com/sdk/download/{}/windows/VulkanSDK-{}-Installer.exe",
-        vulkan_version, vulkan_version
-    );
-
-    let temp_dir = std::env::temp_dir();
-    let installer_path = temp_dir.join("VulkanSDK-installer.exe");
-
-    let download_status = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Invoke-WebRequest -Uri '{}' -OutFile '{}'",
-                installer_url,
-                installer_path.display()
-            ),
-        ])
-        .status();
-
-    match download_status {
-        Ok(status) if status.success() => {
-            println!("cargo:warning=Download successful");
-        }
-        _ => {
-            println!("cargo:warning=Failed to download Vulkan SDK. Please install manually from https://vulkan.lunarg.com/sdk/home");
-            return;
-        }
-    }
-
-    let install_status = Command::new(&installer_path).args(["/S"]).status();
-
-    match install_status {
-        Ok(status) if status.success() => {
-            println!("cargo:warning=Vulkan SDK installed successfully");
-            println!("cargo:rustc-link-search={}\\Lib", vulkan_sdk_path);
-            println!("cargo:rustc-link-lib=vulkan-1");
-        }
-        _ => {
-            println!("cargo:warning=Failed to install Vulkan SDK. Please install manually from https://vulkan.lunarg.com/sdk/home");
-        }
-    }
-
-    let _ = std::fs::remove_file(&installer_path);
-}
+// ── Vulkan SDK helpers ────────────────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
 fn setup_vulkan_sdk_linux() {

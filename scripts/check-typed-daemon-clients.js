@@ -61,7 +61,7 @@ for (const root of ROOTS) {
 if (violations.length) {
   console.error("daemonInvoke used for commands that have typed clients:\n");
   for (const v of violations) {
-    console.error(`  ${v.file}: daemonInvoke("${v.cmd}") → use $lib/daemon/${v.via}`);
+    console.error(`  ${v.file}: daemonInvoke("${v.cmd}") → use #lib/daemon/${v.via}`);
   }
   console.error("\nSee docs/architecture.md (Frontend API rule).");
   process.exit(1);

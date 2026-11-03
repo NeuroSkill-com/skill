@@ -6,7 +6,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import type { HTMLAttributes } from "svelte/elements";
-import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
+import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 
 let {
   ref = $bindable(null),

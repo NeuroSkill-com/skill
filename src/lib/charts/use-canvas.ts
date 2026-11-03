@@ -15,7 +15,7 @@
 //   3. Runs a `requestAnimationFrame` loop calling `draw(ctx, cssW, cssH)`.
 //   4. Cleans up on destroy (cancels RAF, disconnects observer).
 
-import { getDpr } from "$lib/format";
+import { getDpr } from "#lib/format";
 
 export interface AnimatedCanvasOpts {
   /** Called every animation frame with the 2-D context and logical size. */

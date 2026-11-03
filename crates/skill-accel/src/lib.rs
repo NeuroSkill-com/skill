@@ -62,7 +62,10 @@ pub fn fallback_chain_excluding(preferred: Device, skip: &[Device]) -> Vec<Devic
 /// Parse a device setting (`auto`, `metal`, `gpu`, `wgpu`, `vulkan`, `cuda`,
 /// `rocm`, `mlx`, `ane`, `cpu`, …) into the device to try first. `auto` and
 /// unknown values mean the platform's best GPU. On macOS, `gpu` and `mlx`
-/// mean Metal first (wgpu follows in the chain anyway).
+/// mean Metal first (wgpu follows in the chain anyway). `vulkan` means rlx's
+/// Vulkan backend, not wgpu: wgpu runs on DX12 on Windows, so treating the two
+/// as one would quietly hand a Vulkan request to DX12. Where Vulkan isn't
+/// compiled in or present, [`fallback_chain`] skips it like any other device.
 pub fn parse_device(setting: &str) -> Device {
     let s = setting.trim().to_ascii_lowercase();
     let mac = cfg!(target_os = "macos");
@@ -70,7 +73,7 @@ pub fn parse_device(setting: &str) -> Device {
         "cpu" => Some(Device::Cpu),
         "metal" => Some(Device::Metal),
         "gpu" if mac => Some(Device::Metal),
-        "gpu" | "wgpu" | "vulkan" => Some(Device::Gpu),
+        "gpu" | "wgpu" => Some(Device::Gpu),
         "mlx" if mac && !feature_compiled(Device::Mlx) => Some(Device::Metal),
         other => other.parse::<Device>().ok(),
     };
@@ -174,6 +177,16 @@ mod tests {
             }
         }
         assert_eq!(fallback_chain(Device::Cpu), [Device::Cpu]);
+    }
+
+    #[test]
+    fn vulkan_setting_is_vulkan_not_wgpu() {
+        // wgpu runs on DX12 on Windows, so a Vulkan request must not become wgpu.
+        assert_eq!(parse_device("vulkan"), Device::Vulkan);
+        // Not built in or not present: skipped like any other device.
+        if !usable(Device::Vulkan) {
+            assert_ne!(best(Device::Vulkan), Device::Vulkan);
+        }
     }
 
     #[cfg(target_os = "macos")]

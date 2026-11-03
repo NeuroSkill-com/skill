@@ -6,12 +6,12 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { Separator } from "$lib/components/ui/separator";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { onDaemonEvent } from "$lib/daemon/ws";
-import { t } from "$lib/i18n/index.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
+import { Button } from "#lib/components/ui/button";
+import { Separator } from "#lib/components/ui/separator";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "#lib/daemon/ws";
+import { t } from "#lib/i18n/index.svelte";
+import { addToast } from "#lib/stores/toast.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ModelInfo {

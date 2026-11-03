@@ -315,7 +315,8 @@ fn resolve_mlx_device(config: &LlmConfig) -> rlx::runtime::Device {
         match config.rlx_device.to_ascii_lowercase().as_str() {
             "metal" if is_available(Device::Metal) => return Device::Metal,
             "cuda" if is_available(Device::Cuda) => return Device::Cuda,
-            "gpu" | "wgpu" | "vulkan" if is_available(Device::Gpu) => return Device::Gpu,
+            "gpu" | "wgpu" if is_available(Device::Gpu) => return Device::Gpu,
+            "vulkan" if is_available(Device::Vulkan) => return Device::Vulkan,
             _ => return Device::Mlx,
         }
     }
@@ -622,7 +623,8 @@ fn auto_options(config: &LlmConfig, mmproj: Option<&Path>) -> rlx_models::run::A
 fn resolve_rlx_device(config: &LlmConfig) -> rlx::runtime::Device {
     // Shared policy (skill_accel): the requested device if usable, else the
     // platform chain — macOS Metal → wgpu → CPU, elsewhere CUDA → wgpu → CPU.
-    // `cpu` pins CPU; `wgpu`/`vulkan` ask for wgpu explicitly; on a Mac `gpu`
+    // `cpu` pins CPU; `wgpu` asks for wgpu explicitly and `vulkan` for rlx's
+    // Vulkan backend (skipped where it isn't built in); on a Mac `gpu`
     // and `mlx` mean Metal first. Loading walks the same chain on failure
     // (`RlxTextRunner::load_with_mmproj`).
     if config.rlx_device.eq_ignore_ascii_case("cpu") {

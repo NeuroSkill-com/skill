@@ -14,7 +14,7 @@ the Free Software Foundation, version 3 only. -->
   a placeholder zero that reads as a measurement of zero.
 -->
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
 import CollapsibleSection from "./CollapsibleSection.svelte";
 import MetricBar from "./MetricBar.svelte";
 import MetricTooltip from "./MetricTooltip.svelte";

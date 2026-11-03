@@ -1,0 +1,10 @@
+# Lint rules for the Python helper scripts (`npm run lint:py`, CI).
+# Pinned explicitly so a ruff upgrade does not change what CI enforces.
+# The scripts use compact one-line `if x: y` statements, so the E7 style
+# rules are left out; F (pyflakes), E9 (syntax), B (bugbear) and I (import
+# order) catch the mistakes that matter.
+target-version = "py39"
+extend-exclude = ["patches"]
+
+[lint]
+select = ["F", "E9", "B", "I"]

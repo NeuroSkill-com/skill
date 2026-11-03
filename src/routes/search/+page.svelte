@@ -7,25 +7,24 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount, untrack } from "svelte";
-import { afterNavigate, replaceState } from "$app/navigation";
-import InteractiveGraph3D from "$lib/charts/InteractiveGraph3D.svelte";
-import { parseAssistantOutput } from "$lib/chat/chat-utils";
-import { generateUmapPlaceholder } from "$lib/compare/compare-types";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { Spinner } from "$lib/components/ui/spinner";
+import InteractiveGraph3D from "#lib/charts/InteractiveGraph3D.svelte";
+import { parseAssistantOutput } from "#lib/chat/chat-utils";
+import { generateUmapPlaceholder } from "#lib/compare/compare-types";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { Spinner } from "#lib/components/ui/spinner";
 import {
   JOB_POLL_INTERVAL_MS,
   SEARCH_PAGE_SIZE,
   UMAP_COLOR_A,
   UMAP_COLOR_B,
   UMAP_POLL_INTERVAL_MS,
-} from "$lib/constants";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { renameChatSession } from "$lib/daemon/chat";
-import { daemonGet, daemonPost } from "$lib/daemon/http";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { onDaemonEvent } from "$lib/daemon/ws";
+} from "#lib/constants";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { renameChatSession } from "#lib/daemon/chat";
+import { daemonGet, daemonPost } from "#lib/daemon/http";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "#lib/daemon/ws";
 import {
   dateToCompactKey,
   fmtDate,
@@ -39,9 +38,9 @@ import {
   fromUnix,
   pad,
   parseDateTimeLocalInput,
-} from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
+} from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import MarkdownRenderer from "#lib/MarkdownRenderer.svelte";
 import {
   buildTextKnnGraph,
   computeIxTimeHeatmap,
@@ -69,11 +68,12 @@ import {
   simPct,
   simWidth,
   turboColor,
-} from "$lib/search/search-types";
-import { getAppName } from "$lib/stores/app-name.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { UmapPoint, UmapResult } from "$lib/types";
-import UmapViewer3D from "$lib/umap/UmapViewer3D.svelte";
+} from "#lib/search/search-types";
+import { getAppName } from "#lib/stores/app-name.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { UmapPoint, UmapResult } from "#lib/types";
+import UmapViewer3D from "#lib/umap/UmapViewer3D.svelte";
+import { afterNavigate, goto } from "$app/navigation";
 
 // ── Formatting helpers ───────────────────────────────────────────────────
 function toInputValue(d: Date) {
@@ -157,7 +157,7 @@ onMount(() => {
   emitSearchMode(initialMode);
 
   // Load screenshot server port + auth token for image URLs
-  import("$lib/daemon/http")
+  import("#lib/daemon/http")
     .then(({ getDaemonBaseUrl }) =>
       getDaemonBaseUrl().then(({ port, token }) => {
         imgPort = port;
@@ -167,7 +167,7 @@ onMount(() => {
     .catch(() => {});
 
   // Stream corpus stats: fast tier arrives instantly, slow tier follows
-  import("$lib/daemon/http")
+  import("#lib/daemon/http")
     .then(({ getDaemonBaseUrl }) =>
       getDaemonBaseUrl().then(({ port, token }) => {
         const es = new EventSource(
@@ -243,7 +243,8 @@ $effect(() => {
       if (params.get("mode") !== currentMode) {
         params.set("mode", currentMode);
         const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
-        replaceState(next, {});
+        // Shallow replace: update the URL without re-running navigation.
+        void goto(next, { state: {}, shallow: true, replace: true });
       }
     }
     emitSearchMode(currentMode);
@@ -608,11 +609,11 @@ let ixSessions = $state<
     stddev_engagement: number;
   }>
 >([]);
-let ixSelectedNode = $state<import("$lib/search/search-types").GraphNode | null>(null); // selected node for detail panel
+let ixSelectedNode = $state<import("#lib/search/search-types").GraphNode | null>(null); // selected node for detail panel
 let ixSortByRelevance = $state(false); // sort displayed nodes by relevance_score
-let ixHiddenKinds = $state<import("$lib/search/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
+let ixHiddenKinds = $state<import("#lib/search/search-types").GraphNode["kind"][]>([]); // node kind filter for 3D graph
 let ixColorMode = $state<"timestamp" | "engagement" | "snr" | "session">("timestamp");
-let ixCompareNode = $state<import("$lib/search/search-types").GraphNode | null>(null); // second node for compare mode
+let ixCompareNode = $state<import("#lib/search/search-types").GraphNode | null>(null); // second node for compare mode
 let ixDetailTimeseries = $state<
   Array<{ t: number; ra: number; rb: number; rt: number; engagement: number; relaxation: number; snr: number }>
 >([]);
@@ -1557,7 +1558,7 @@ useWindowTitle("window.title.search");
         {#if searching}
           <Button onclick={() => {
             searchCancelled = true; searching = false; searchStatus = "";
-            import("$lib/daemon/invoke-proxy").then(m => m.cancelSearch());
+            import("#lib/daemon/invoke-proxy").then(m => m.cancelSearch());
           }}
                   variant="outline" size="sm"
                   class="gap-1 px-3 h-7 text-ui-base text-destructive border-destructive/30 hover:bg-destructive/10">
@@ -3611,7 +3612,7 @@ Reference specific metrics and timestamps.`;
                           // Wait a moment for the server to start
                           await new Promise(r => setTimeout(r, 3000));
                           // Retry the summary
-                          const { daemonPost } = await import("$lib/daemon/http");
+                          const { daemonPost } = await import("#lib/daemon/http");
                           const res2 = await daemonPost<{ choices?: Array<{ message?: { content?: string } }>; content?: string }>("/v1/llm/chat-completions", {
                             messages: [{ role: "user", content: ixLlmPrompt }],
                             temperature: 0.3,

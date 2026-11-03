@@ -129,11 +129,11 @@ error: package ID specification `btleplug` did not match any packages
 The table that used to live here is empty, and with it the
 `[patch.crates-io] btleplug` entry: cargo flags an unused patch out loud
 (`warning: patch btleplug v0.11.9 ... was not used in the crate graph`), so the
-entry had to go when the last holder left. `patches/btleplug-0.11.9` is retired
-in place — nothing compiles it, its own manifest says so at the top, and the
-directory can be deleted. Restoring it is one line if a future dependency drags
-btleplug back in, which is the case to watch for: plain btleplug from crates.io
-reintroduces exactly the bug the shim existed to prevent.
+entry had to go when the last holder left. `patches/btleplug-0.11.9` was deleted
+on 2026-11-02, since nothing compiled it. If a future dependency drags btleplug
+back in, restore it with `git checkout 4d7348f8 -- patches/btleplug-0.11.9` plus its
+one `[patch.crates-io]` line; that is the case to watch for, because plain
+btleplug from crates.io reintroduces exactly the bug the shim existed to prevent.
 
 Every BLE crate in the daemon now reaches one `Bluetooth::shared()` session
 directly:

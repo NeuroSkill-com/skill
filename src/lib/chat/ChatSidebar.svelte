@@ -19,9 +19,9 @@ import {
   listChatSessions,
   renameChatSession,
   unarchiveChatSession,
-} from "$lib/daemon/client";
-import { fmtDate } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/daemon/client";
+import { fmtDate } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

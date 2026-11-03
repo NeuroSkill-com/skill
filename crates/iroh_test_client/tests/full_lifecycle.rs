@@ -27,18 +27,18 @@ fn secret_from_b32(b32: &str) -> Vec<u8> {
 }
 
 fn generate_totp(secret: &[u8], name: &str) -> String {
-    totp_rs::TOTP::new(
-        totp_rs::Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret.to_vec(),
-        Some("Skill".to_string()),
-        name.to_string(),
-    )
-    .expect("totp")
-    .generate_current()
-    .expect("code")
+    totp_rs::Builder::new()
+        .with_algorithm(totp_rs::Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret)
+        .with_issuer(Some("Skill"))
+        .with_account_name(name)
+        .build()
+        .expect("totp")
+        .generate_current()
+        .to_string()
 }
 
 /// Server that mirrors the real Skill tunnel behavior:

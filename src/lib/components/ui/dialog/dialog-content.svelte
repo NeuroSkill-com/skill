@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { Dialog as DialogPrimitive } from "bits-ui";
 import type { ComponentProps, Snippet } from "svelte";
-import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 import DialogPortal from "./dialog-portal.svelte";
 import * as Dialog from "./index.js";
 

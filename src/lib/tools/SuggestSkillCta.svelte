@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { IconExternalLink } from "$lib/components/ui/icons";
-import { t } from "$lib/i18n/index.svelte";
+import { IconExternalLink } from "#lib/components/ui/icons";
+import { t } from "#lib/i18n/index.svelte";
 </script>
 
 <section>

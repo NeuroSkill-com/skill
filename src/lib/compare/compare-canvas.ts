@@ -7,9 +7,9 @@
  * Extracted from `routes/compare/+page.svelte`.
  */
 
-import { bandKeys, bandMeta, radarMetrics } from "$lib/compare/compare-types";
-import type { EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
-import { setupHiDpiCanvas } from "$lib/format";
+import { bandKeys, bandMeta, radarMetrics } from "#lib/compare/compare-types";
+import type { EpochRow, SessionMetrics } from "#lib/dashboard/SessionDetail.svelte";
+import { setupHiDpiCanvas } from "#lib/format";
 
 // ── Heatmap definitions ──────────────────────────────────────────────────────
 

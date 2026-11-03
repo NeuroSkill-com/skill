@@ -73,14 +73,6 @@ impl NeuTTS {
     /// is disabled — use [`infer_from_ipa`](Self::infer_from_ipa) to bypass
     /// phonemisation.
     pub fn infer(&self, text: &str, ref_codes: &[i32], ref_text: &str) -> Result<Vec<f32>> {
-        #[cfg(feature = "espeak")]
-        {
-            let ref_phones =
-                crate::phonemize::phonemize(ref_text, self.language()).context("Phonemisation of ref_text failed")?;
-            let input_phones =
-                crate::phonemize::phonemize(text, self.language()).context("Phonemisation of input text failed")?;
-            return self.infer_from_ipa(&input_phones, ref_codes, &ref_phones);
-        }
         #[cfg(not(feature = "espeak"))]
         {
             let _ = (text, ref_codes, ref_text);
@@ -88,6 +80,14 @@ impl NeuTTS {
                 "NeuTTS::infer requires the `espeak` Cargo feature.\n\
                  Enable it or use NeuTTS::infer_from_ipa() to bypass phonemisation."
             )
+        }
+        #[cfg(feature = "espeak")]
+        {
+            let ref_phones =
+                crate::phonemize::phonemize(ref_text, self.language()).context("Phonemisation of ref_text failed")?;
+            let input_phones =
+                crate::phonemize::phonemize(text, self.language()).context("Phonemisation of input text failed")?;
+            self.infer_from_ipa(&input_phones, ref_codes, &ref_phones)
         }
     }
 

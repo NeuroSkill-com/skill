@@ -3,9 +3,9 @@
 <!-- Chat input bar — message textarea, image attachments, prompt library button. -->
 <script lang="ts">
 import { tick } from "svelte";
-import type { Attachment, ServerStatus } from "$lib/chat/chat-types";
-import PromptLibrary from "$lib/chat/PromptLibrary.svelte";
-import { t } from "$lib/i18n/index.svelte";
+import type { Attachment, ServerStatus } from "#lib/chat/chat-types";
+import PromptLibrary from "#lib/chat/PromptLibrary.svelte";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   input: string;

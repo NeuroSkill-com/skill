@@ -8,7 +8,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { onMount } from "svelte";
-import Hypnogram from "$lib/charts/Hypnogram.svelte";
+import Hypnogram from "#lib/charts/Hypnogram.svelte";
 import {
   drawBandDiffHeatmap,
   drawBandHeatmap,
@@ -18,7 +18,7 @@ import {
   drawSpectrum,
   HEATMAP_LABEL_W,
   HEATMAP_ROW_H,
-} from "$lib/compare/compare-canvas";
+} from "#lib/compare/compare-canvas";
 // ── Extracted modules ──────────────────────────────────────────────────────
 import {
   advancedMetrics,
@@ -42,18 +42,18 @@ import {
   scoreDiff,
   scoreKeys,
   sdc,
-} from "$lib/compare/compare-types";
-import { Button } from "$lib/components/ui/button";
-import { IconCheck } from "$lib/components/ui/icons";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { Spinner } from "$lib/components/ui/spinner";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { onDaemonEvent } from "$lib/daemon/ws";
-import { TimeSeriesChart } from "$lib/dashboard";
-import type { EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
-import type { Series } from "$lib/dashboard/TimeSeriesChart.svelte";
+} from "#lib/compare/compare-types";
+import { Button } from "#lib/components/ui/button";
+import { IconCheck } from "#lib/components/ui/icons";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { Spinner } from "#lib/components/ui/spinner";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "#lib/daemon/ws";
+import { TimeSeriesChart } from "#lib/dashboard";
+import type { EpochRow, SessionMetrics } from "#lib/dashboard/SessionDetail.svelte";
+import type { Series } from "#lib/dashboard/TimeSeriesChart.svelte";
 import {
   dateToLocalKey,
   fmtDateIso,
@@ -66,14 +66,14 @@ import {
   fromUnix,
   pad,
   parseDateTimeLocalInput,
-} from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import type { JobPollResult, JobTicket } from "$lib/search/search-types";
-import { analyzeSleep, type SleepAnalysis } from "$lib/settings/sleep-analysis";
-import { getResolved } from "$lib/stores/theme.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { SleepEpoch, SleepStages, SleepSummary, UmapPoint, UmapProgress, UmapResult } from "$lib/types";
-import UmapViewer3D from "$lib/umap/UmapViewer3D.svelte";
+} from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import type { JobPollResult, JobTicket } from "#lib/search/search-types";
+import { analyzeSleep, type SleepAnalysis } from "#lib/settings/sleep-analysis";
+import { getResolved } from "#lib/stores/theme.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { SleepEpoch, SleepStages, SleepSummary, UmapPoint, UmapProgress, UmapResult } from "#lib/types";
+import UmapViewer3D from "#lib/umap/UmapViewer3D.svelte";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let sessions = $state<EmbeddingSession[]>([]);

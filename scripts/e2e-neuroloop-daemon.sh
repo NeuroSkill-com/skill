@@ -26,7 +26,6 @@ else
   SKILL_APP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/skill/daemon"
 fi
 TOKEN_PATH="$SKILL_APP_DIR/auth.token"
-NEUROLOOP_DIR="$ROOT_DIR/neuroloop"
 DAEMON_SCRIPT="$ROOT_DIR/scripts/daemon.ts"
 
 DO_BUILD=1
@@ -123,7 +122,7 @@ npx tsx "$DAEMON_SCRIPT" "${DAEMON_ARGS[@]}" &>/tmp/skill-daemon-neuroloop-e2e.l
 DAEMON_PID=$!
 
 # Wait up to 30s for daemon to be ready
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   if curl -sf "$BASE/healthz" >/dev/null 2>&1; then break; fi
   sleep 0.5
 done
@@ -136,7 +135,7 @@ info "daemon ready (wrapper PID $DAEMON_PID)"
 
 # Wait for virtual source to be started by daemon.ts
 info "waiting for virtual EEG setup..."
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   VCHECK=$(curl -sf -H "Authorization: Bearer $(cat "$TOKEN_PATH" 2>/dev/null | tr -d '[:space:]')" "$BASE/v1/lsl/virtual-source/running" 2>/dev/null || echo "")
   if echo "$VCHECK" | grep -q '"running":true'; then break; fi
   sleep 1
@@ -462,7 +461,7 @@ else
   # Wait for the LLM server to become ready (up to 60s).
   info "Waiting for LLM server to become ready (auto-selected by daemon --clean)..."
   LLM_READY=0
-  for i in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     LLM_POLL=$(curl -sf -H "Authorization: Bearer ${TOKEN}" "$BASE/v1/llm/server/status" 2>/dev/null || echo "")
     if echo "$LLM_POLL" | grep -q '"status".*"running"'; then
       LLM_READY=1

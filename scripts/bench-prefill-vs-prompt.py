@@ -19,7 +19,10 @@ measurement that only reports time-to-first-token sees half the bill.
 
     python3 scripts/bench-prefill-vs-prompt.py <gguf> [port]
 """
-import os, subprocess, sys, time
+import os
+import subprocess
+import sys
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "llm-daemon-e2e"))

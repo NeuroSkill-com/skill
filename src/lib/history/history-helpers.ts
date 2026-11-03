@@ -6,9 +6,9 @@
  * Extracted from `routes/history/+page.svelte`.
  */
 
-import type { EpochRow } from "$lib/dashboard/SessionDetail.svelte";
-import { fmtTimeShort, fromUnix, pad } from "$lib/format";
-import type { LabelRow } from "$lib/types";
+import type { EpochRow } from "#lib/dashboard/SessionDetail.svelte";
+import { fmtTimeShort, fromUnix, pad } from "#lib/format";
+import type { LabelRow } from "#lib/types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ export const GRID_BIN = 5;
 
 // ── Session colors ───────────────────────────────────────────────────────────
 
-export { SESSION_COLORS, sessionColor } from "$lib/constants";
+export { SESSION_COLORS, sessionColor } from "#lib/constants";
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ export function fmtDuration(start: number | null, end: number | null): string {
   return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-export { fmtBytes as fmtSize } from "$lib/format";
+export { fmtBytes as fmtSize } from "#lib/format";
 
 export function fmtSamples(n: number | null): string {
   if (!n) return "—";

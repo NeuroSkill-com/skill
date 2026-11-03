@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Onboarding checklist widget for the dashboard. -->
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Step {
   key: string;

@@ -7,7 +7,7 @@
  * and enable independent testing.
  */
 
-import type { UmapPoint } from "$lib/types";
+import type { UmapPoint } from "#lib/types";
 
 // ── Easing ───────────────────────────────────────────────────────────────────
 

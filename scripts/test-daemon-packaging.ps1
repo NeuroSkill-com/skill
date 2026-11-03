@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("windows")]
     [string]$OS = "windows",
     [switch]$Build,

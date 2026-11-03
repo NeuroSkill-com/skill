@@ -7,8 +7,8 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: LLM — local inference server, model management, tools, chat -->
 
 <script lang="ts">
-import { Separator } from "$lib/components/ui/separator";
-import { getLocale } from "$lib/i18n/index.svelte";
+import { Separator } from "#lib/components/ui/separator";
+import { getLocale } from "#lib/i18n/index.svelte";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
 import { getHelpContent } from "./help-loader";

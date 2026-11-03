@@ -275,8 +275,12 @@ mod tests {
                 created_at: 0,
                 revoked_at: None,
                 last_used_at: None,
+                last_used_step: None,
             };
-            let otp = skill_iroh::totp_from_entry(&entry).unwrap().generate_current().unwrap();
+            let otp = skill_iroh::totp_from_entry(&entry)
+                .unwrap()
+                .generate_current()
+                .to_string();
             let totp_id = raw["totp"][0]["id"].as_str().unwrap().to_string();
             auth.register_client(peer_id, &otp, Some(&totp_id), Some("phone"), None)
                 .unwrap();

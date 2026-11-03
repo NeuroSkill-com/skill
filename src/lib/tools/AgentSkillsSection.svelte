@@ -2,9 +2,9 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
 import { marked } from "marked";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { t } from "$lib/i18n/index.svelte";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { t } from "#lib/i18n/index.svelte";
 
 interface SkillInfo {
   name: string;

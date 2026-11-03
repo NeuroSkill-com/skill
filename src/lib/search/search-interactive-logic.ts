@@ -7,8 +7,8 @@
  * node serialisation. No Svelte reactivity — can be unit-tested independently.
  */
 
-import type { GraphEdge, GraphNode } from "$lib/search/search-types";
-import { dedupeFoundLabels } from "$lib/search/search-types";
+import type { GraphEdge, GraphNode } from "#lib/search/search-types";
+import { dedupeFoundLabels } from "#lib/search/search-types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

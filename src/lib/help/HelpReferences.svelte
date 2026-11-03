@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Science References — numbered list with DOIs and disclaimer -->
 
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
 import HelpSection from "./HelpSection.svelte";
 
 // ── Open-source projects used by Skill ──────────────────────────────────

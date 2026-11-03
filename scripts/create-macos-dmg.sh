@@ -334,7 +334,6 @@ rm -f "$DMG_OUT"
 # ── Build appdmg spec + run ──────────────────────────────────────────────
 # appdmg handles everything in one pass: creates DMG, copies files,
 # sets Finder view via AppleScript, compresses. No convert round-trip.
-ICON_ICNS="$TAURI_DIR/icons/icon.icns"
 
 node - <<NODEJS
 const appdmg = require('appdmg');

@@ -14,8 +14,8 @@ export interface ImuPacket {
 </script>
 
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import { animatedCanvas } from "$lib/charts/use-canvas";
+  import { t } from "#lib/i18n/index.svelte";
+  import { animatedCanvas } from "#lib/charts/use-canvas";
 
   const CANVAS_H  = 160;       // two stacked sub-charts (accel + gyro)
   const VISIBLE   = 512;       // ~10 s at ~52 Hz (3 samples/packet × ~17 packets/s)

@@ -271,7 +271,18 @@ export function normalizeUnreleasedFragmentCategoryCasing() {
  * @param {string} date     — ISO date string, e.g. "2026-03-15"
  * @returns {{ entryCount: number, categories: string[], consumedFiles: string[], categoryCounts: Record<string, number> }}
  */
+// Release files are named after the version, so anything else (a typo, `--help`)
+// would consume every unreleased fragment into a bogus release.
+const VERSION_RE = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export function compileChangelog(version, date) {
+  if (!VERSION_RE.test(version)) {
+    throw new Error(`[changelog] Not a release version: "${version}" (expected e.g. 0.1.1 or 0.2.0-rc.1)`);
+  }
+  if (!DATE_RE.test(date)) {
+    throw new Error(`[changelog] Not a date: "${date}" (expected YYYY-MM-DD)`);
+  }
   const validation = validateUnreleasedFragments();
   const files = validation.files;
 
@@ -352,8 +363,16 @@ if (process.argv[1]?.endsWith(scriptName)) {
   const version = process.argv[2];
   const date = process.argv[3] || new Date().toISOString().slice(0, 10);
 
-  if (!version) {
-    process.exit(1);
+  if (!version || version === "--help" || version === "-h") {
+    console.log(
+      [
+        "Usage: node scripts/compile-changelog.js <version> [YYYY-MM-DD]",
+        "         Move all unreleased fragments into changes/releases/<version>.md",
+        "       node scripts/compile-changelog.js --check     Validate unreleased fragments",
+        "       node scripts/compile-changelog.js --rebuild   Regenerate CHANGELOG.md",
+      ].join("\n"),
+    );
+    process.exit(version ? 0 : 1);
   }
 
   try {

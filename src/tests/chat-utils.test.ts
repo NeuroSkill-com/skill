@@ -8,7 +8,7 @@ import {
   parseAssistantOutput,
   processingLabelKey,
   stripToolCallFences,
-} from "$lib/chat/chat-utils";
+} from "#lib/chat/chat-utils";
 
 // ── stripToolCallFences ─────────────────────────────────────────────────────
 

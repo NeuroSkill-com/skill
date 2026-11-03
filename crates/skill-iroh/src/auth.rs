@@ -2,14 +2,21 @@
 
 use anyhow::Context as _;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use totp_rs::{Algorithm, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 
 use crate::scope::ClientScope;
 use crate::unix_secs;
 
 const IROH_AUTH_FILE: &str = "iroh_auth.json";
+
+/// Failed pairing codes tolerated in a row before registration locks.
+const FREE_OTP_FAILURES: u32 = 5;
+/// First lockout; doubles with each further failure up to the cap.
+const BASE_OTP_LOCKOUT: Duration = Duration::from_secs(60);
+const MAX_OTP_LOCKOUT: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IrohTotpEntry {
@@ -19,6 +26,11 @@ pub struct IrohTotpEntry {
     pub created_at: u64,
     pub revoked_at: Option<u64>,
     pub last_used_at: Option<u64>,
+    /// TOTP time step of the last accepted code. RFC 6238 §5.2: a code must
+    /// only be accepted once, so verification rejects any step at or before
+    /// this one (skew would otherwise let a replayed code through for ~60 s).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_used_step: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -108,6 +120,42 @@ pub struct IrohInvitePayload {
 pub struct IrohAuthStore {
     path: PathBuf,
     db: IrohAuthDb,
+    otp_throttle: OtpThrottle,
+}
+
+/// Brute-force guard for pairing codes. A 6-digit code with ±1 step of skew
+/// gives a guesser 3 chances in 10^6 per try, and unregistered iroh peers can
+/// reach the register endpoint, so unthrottled guessing succeeds in minutes.
+///
+/// The count is global rather than per caller: the caller picks its own
+/// endpoint ID and can rotate it freely. That lets an attacker delay a
+/// legitimate pairing, but not get in. Kept in memory only — a remote peer
+/// cannot restart the daemon to reset it.
+#[derive(Debug, Default)]
+struct OtpThrottle {
+    failures: u32,
+    locked_until: Option<Instant>,
+}
+
+impl OtpThrottle {
+    fn remaining(&self, now: Instant) -> Option<Duration> {
+        self.locked_until
+            .and_then(|until| until.checked_duration_since(now))
+            .filter(|d| !d.is_zero())
+    }
+
+    fn record_failure(&mut self, now: Instant) {
+        self.failures = self.failures.saturating_add(1);
+        if self.failures >= FREE_OTP_FAILURES {
+            let doublings = (self.failures - FREE_OTP_FAILURES).min(16);
+            let lockout = BASE_OTP_LOCKOUT.saturating_mul(1 << doublings).min(MAX_OTP_LOCKOUT);
+            self.locked_until = Some(now + lockout);
+        }
+    }
+
+    fn record_success(&mut self) {
+        *self = Self::default();
+    }
 }
 
 impl IrohAuthStore {
@@ -117,7 +165,13 @@ impl IrohAuthStore {
             .ok()
             .and_then(|s| serde_json::from_str::<IrohAuthDb>(&s).ok())
             .unwrap_or_default();
-        Self { path, db }
+        // Files written before saves were owner-only may still be world-readable.
+        restrict_to_owner(&path);
+        Self {
+            path,
+            db,
+            otp_throttle: OtpThrottle::default(),
+        }
     }
 
     pub fn list_totp(&self) -> Vec<IrohTotpView> {
@@ -144,11 +198,7 @@ impl IrohAuthStore {
             anyhow::bail!("name must not be empty");
         }
 
-        let secret = Secret::generate_secret();
-        let secret_b32 = match secret.to_encoded() {
-            Secret::Encoded(s) => s,
-            Secret::Raw(_) => anyhow::bail!("failed to encode TOTP secret"),
-        };
+        let secret_b32 = Secret::generate().to_base32();
 
         let now = unix_secs();
         let id = make_id("totp");
@@ -159,6 +209,7 @@ impl IrohAuthStore {
             created_at: now,
             revoked_at: None,
             last_used_at: None,
+            last_used_step: None,
         });
         self.save()?;
 
@@ -218,7 +269,23 @@ impl IrohAuthStore {
             anyhow::bail!("otp must not be empty");
         }
 
-        let matched_totp_id = self.verify_otp(otp, totp_id_hint)?;
+        let now = Instant::now();
+        if let Some(wait) = self.otp_throttle.remaining(now) {
+            anyhow::bail!(
+                "too many failed pairing attempts; try again in {} s",
+                wait.as_secs().max(1)
+            );
+        }
+        let matched_totp_id = match self.verify_otp(otp, totp_id_hint) {
+            Ok(id) => {
+                self.otp_throttle.record_success();
+                id
+            }
+            Err(e) => {
+                self.otp_throttle.record_failure(now);
+                return Err(e);
+            }
+        };
         let now = unix_secs();
 
         // Check if this endpoint is already registered (update path)
@@ -496,9 +563,11 @@ impl IrohAuthStore {
             .find(|t| t.id == id)
             .ok_or_else(|| anyhow::anyhow!("unknown totp id: {id}"))?;
         let t = totp_from_entry(totp_entry)?;
-        let otpauth_url = t.get_url();
+        let otpauth_url = t
+            .to_url()
+            .map_err(|e| anyhow::anyhow!("failed to build otpauth url: {e}"))?;
         let qr_b64 = t
-            .get_qr_base64()
+            .to_qr_base64()
             .map_err(|e| anyhow::anyhow!("failed to build QR: {e}"))?;
         Ok((otpauth_url, format!("data:image/png;base64,{qr_b64}")))
     }
@@ -508,44 +577,38 @@ impl IrohAuthStore {
             let Some(idx) = self.db.totp.iter().position(|t| t.id == id) else {
                 anyhow::bail!("unknown totp id: {id}");
             };
-            {
-                let t = &self.db.totp[idx];
-                if t.revoked_at.is_some() {
-                    anyhow::bail!("that TOTP credential is revoked");
-                }
-                let ok = totp_from_entry(t).and_then(|totp| {
-                    totp.check_current(otp)
-                        .map_err(|e| anyhow::anyhow!("failed to verify otp: {e}"))
-                })?;
-                if !ok {
-                    anyhow::bail!("invalid otp");
-                }
+            let t = &self.db.totp[idx];
+            if t.revoked_at.is_some() {
+                anyhow::bail!("that TOTP credential is revoked");
             }
-            self.db.totp[idx].last_used_at = Some(unix_secs());
-            self.save()?;
+            let Some(step) = totp_from_entry(t)?.check_current(otp) else {
+                anyhow::bail!("invalid otp");
+            };
+            if !is_fresh_step(t, step) {
+                anyhow::bail!("otp already used; wait for the next code");
+            }
+            self.mark_used(idx, step)?;
             return Ok(self.db.totp[idx].id.clone());
         }
 
-        let mut matched: Vec<String> = Vec::new();
-        for t in self.db.totp.iter_mut().filter(|t| t.revoked_at.is_none()) {
-            let ok = totp_from_entry(t).and_then(|totp| {
-                totp.check_current(otp)
-                    .map_err(|e| anyhow::anyhow!("failed to verify otp: {e}"))
-            })?;
-            if ok {
-                matched.push(t.id.clone());
+        let mut matched: Vec<(usize, u64)> = Vec::new();
+        let mut replayed = false;
+        for (idx, t) in self.db.totp.iter().enumerate().filter(|(_, t)| t.revoked_at.is_none()) {
+            if let Some(step) = totp_from_entry(t)?.check_current(otp) {
+                if is_fresh_step(t, step) {
+                    matched.push((idx, step));
+                } else {
+                    replayed = true;
+                }
             }
         }
 
-        match matched.len() {
-            0 => Err(anyhow::anyhow!("invalid otp")),
-            1 => {
-                let id = matched.remove(0);
-                if let Some(t) = self.db.totp.iter_mut().find(|t| t.id == id) {
-                    t.last_used_at = Some(unix_secs());
-                    self.save()?;
-                }
-                Ok(id)
+        match matched.as_slice() {
+            [] if replayed => Err(anyhow::anyhow!("otp already used; wait for the next code")),
+            [] => Err(anyhow::anyhow!("invalid otp")),
+            &[(idx, step)] => {
+                self.mark_used(idx, step)?;
+                Ok(self.db.totp[idx].id.clone())
             }
             _ => Err(anyhow::anyhow!(
                 "otp matched multiple active TOTP credentials; pass `totp_id` explicitly"
@@ -553,12 +616,20 @@ impl IrohAuthStore {
         }
     }
 
+    fn mark_used(&mut self, idx: usize, step: u64) -> anyhow::Result<()> {
+        let t = &mut self.db.totp[idx];
+        t.last_used_at = Some(unix_secs());
+        t.last_used_step = Some(step);
+        self.save()
+    }
+
     fn save(&self) -> anyhow::Result<()> {
         if let Some(parent) = self.path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
         let s = serde_json::to_string_pretty(&self.db).context("serialize auth db failed")?;
-        std::fs::write(&self.path, s).map_err(|e| anyhow::anyhow!("write {} failed: {e}", self.path.display()))
+        write_owner_only(&self.path, s.as_bytes())
+            .map_err(|e| anyhow::anyhow!("write {} failed: {e}", self.path.display()))
     }
 }
 
@@ -618,20 +689,59 @@ fn make_id(prefix: &str) -> String {
     format!("{prefix}_{now}_{r:016x}")
 }
 
-pub fn totp_from_entry(e: &IrohTotpEntry) -> anyhow::Result<TOTP> {
-    let secret = Secret::Encoded(e.secret_b32.clone())
-        .to_bytes()
-        .context("invalid TOTP secret")?;
-    TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret,
-        Some("Skill".to_string()),
-        e.name.clone(),
-    )
-    .map_err(|e| anyhow::anyhow!("failed to build TOTP: {e}"))
+/// Write `bytes` to `path` readable only by the owner: the file holds TOTP
+/// secrets, and anyone who can read it can mint pairing codes. Goes through a
+/// temp file + rename so a crash never leaves a truncated database behind.
+fn write_owner_only(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+    let mut f = opts.open(&tmp)?;
+    // `mode` only applies on create; tighten a leftover temp file too.
+    restrict_to_owner(&tmp);
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    drop(f);
+    std::fs::rename(&tmp, path)
+}
+
+/// Best effort: make an existing file owner-only. No-op off Unix, where the
+/// per-user data directory's ACL already keeps other accounts out.
+fn restrict_to_owner(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let loose = std::fs::metadata(path).is_ok_and(|m| m.permissions().mode() & 0o077 != 0);
+        if loose {
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
+fn is_fresh_step(t: &IrohTotpEntry, step: u64) -> bool {
+    t.last_used_step.is_none_or(|last| step > last)
+}
+
+pub fn totp_from_entry(e: &IrohTotpEntry) -> anyhow::Result<Totp> {
+    let secret = Secret::try_from_base32(&e.secret_b32).context("invalid TOTP secret")?;
+    Builder::new()
+        .with_algorithm(Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret)
+        .with_issuer(Some("Skill"))
+        .with_account_name(e.name.as_str())
+        .build()
+        .map_err(|e| anyhow::anyhow!("failed to build TOTP: {e}"))
 }
 
 #[cfg(test)]
@@ -660,13 +770,97 @@ mod tests {
         let otp = totp_from_entry(&tentry)
             .expect("build totp")
             .generate_current()
-            .expect("otp");
+            .to_string();
 
         let c = s
             .register_client("abc123", &otp, Some(&tentry.id), Some("device"), None)
             .expect("register");
         assert_eq!(c.scope, "read");
         assert_eq!(s.scope_for_endpoint("abc123").as_deref(), Some("read"));
+    }
+
+    #[test]
+    fn register_rejects_replayed_otp() {
+        let (_td, mut s) = tmp_store();
+        let (_t, _url, _qr) = s.create_totp("phone").expect("create totp");
+        let tentry = s.db.totp.first().expect("totp exists").clone();
+        let otp = totp_from_entry(&tentry)
+            .expect("build totp")
+            .generate_current()
+            .to_string();
+
+        s.register_client("ep-a", &otp, Some(&tentry.id), None, None)
+            .expect("first use accepted");
+        assert!(s.db.totp[0].last_used_step.is_some());
+
+        for hint in [Some(tentry.id.as_str()), None] {
+            let err = s
+                .register_client("ep-b", &otp, hint, None, None)
+                .expect_err("replay rejected");
+            assert!(err.to_string().contains("already used"), "{err}");
+        }
+    }
+
+    #[test]
+    fn register_locks_out_after_repeated_bad_otps() {
+        let (_td, mut s) = tmp_store();
+        s.create_totp("phone").expect("create totp");
+        let tentry = s.db.totp.first().expect("totp exists").clone();
+        let good = totp_from_entry(&tentry)
+            .expect("build totp")
+            .generate_current()
+            .to_string();
+        let bad = if good == "000000" { "111111" } else { "000000" };
+
+        for _ in 0..FREE_OTP_FAILURES {
+            let err = s.register_client("ep", bad, None, None, None).expect_err("bad otp");
+            assert!(!err.to_string().contains("too many"), "{err}");
+        }
+        // Locked: even the right code is refused until the lockout passes.
+        let err = s
+            .register_client("ep", &good, Some(&tentry.id), None, None)
+            .expect_err("locked out");
+        assert!(err.to_string().contains("too many failed pairing attempts"), "{err}");
+
+        // Once it expires, a correct code goes through and resets the count.
+        s.otp_throttle.locked_until = Some(Instant::now());
+        s.register_client("ep", &good, Some(&tentry.id), None, None)
+            .expect("accepted after lockout");
+        assert_eq!(s.otp_throttle.failures, 0);
+    }
+
+    #[test]
+    fn otp_lockout_doubles_and_caps() {
+        let now = Instant::now();
+        let mut t = OtpThrottle::default();
+        for _ in 0..FREE_OTP_FAILURES - 1 {
+            t.record_failure(now);
+        }
+        assert_eq!(t.remaining(now), None);
+        t.record_failure(now);
+        assert_eq!(t.remaining(now), Some(BASE_OTP_LOCKOUT));
+        t.record_failure(now);
+        assert_eq!(t.remaining(now), Some(BASE_OTP_LOCKOUT * 2));
+        for _ in 0..40 {
+            t.record_failure(now);
+        }
+        assert_eq!(t.remaining(now), Some(MAX_OTP_LOCKOUT));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn auth_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let (td, mut s) = tmp_store();
+        s.create_totp("phone").expect("create totp");
+        let path = td.path().join(IROH_AUTH_FILE);
+        let mode = |p: &Path| std::fs::metadata(p).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode(&path), 0o600);
+
+        // A file left world-readable by an older build is tightened on open.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+        let _ = IrohAuthStore::open(td.path());
+        assert_eq!(mode(&path), 0o600);
     }
 
     #[test]
@@ -677,7 +871,7 @@ mod tests {
         let otp = totp_from_entry(&tentry)
             .expect("build totp")
             .generate_current()
-            .expect("otp");
+            .to_string();
 
         let c = s
             .register_client("def456", &otp, Some(&tentry.id), Some("admin device"), Some("full"))
@@ -736,7 +930,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         let (tview, _, _) = s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let _c = s
             .register_client("ep1", &otp, Some(&tview.id), Some("dev"), None)
             .expect("reg");
@@ -776,7 +970,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         let (tview, _, _) = s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c = s.register_client("ep99", &otp, None, Some("dev"), None).expect("reg");
         assert_eq!(c.totp_id, tview.id);
     }
@@ -795,7 +989,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         let (tview, _, _) = s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         s.revoke_totp(&tview.id).expect("revoke");
         let result = s.register_client("ep1", &otp, Some(&tview.id), None, None);
         assert!(result.is_err());
@@ -816,7 +1010,7 @@ mod tests {
         let otp = totp_from_entry(&s.db.totp[0])
             .expect("totp")
             .generate_current()
-            .expect("otp");
+            .to_string();
         let result = s.register_client("ep1", &otp, None, None, None);
         assert!(result.is_err());
         assert!(result.expect_err("err").to_string().contains("multiple"));
@@ -825,7 +1019,7 @@ mod tests {
         let otp2 = totp_from_entry(&s.db.totp[0])
             .expect("totp")
             .generate_current()
-            .expect("otp");
+            .to_string();
         let c = s
             .register_client("ep1", &otp2, Some(&t1.id), None, None)
             .expect("reg with hint");
@@ -837,7 +1031,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let result = s.register_client("ep1", &otp, Some("fake_totp_id"), None, None);
         assert!(result.is_err());
     }
@@ -865,7 +1059,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c = s
             .register_client("abcdef1234567890", &otp, Some(&tentry.id), None, None)
             .expect("reg");
@@ -877,7 +1071,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let result = s.register_client("ep1", &otp, Some(&tentry.id), None, Some("admin"));
         assert!(result.is_err());
         assert!(result.expect_err("err").to_string().contains("invalid scope"));
@@ -889,11 +1083,15 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
 
-        let otp1 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp1 = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         s.register_client("ep1", &otp1, Some(&tentry.id), Some("first"), None)
             .expect("first reg");
 
-        let otp2 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        // A code is single-use, so the second device pairs with the next one.
+        let otp2 = totp_from_entry(&tentry)
+            .expect("totp")
+            .generate(unix_secs() + 30)
+            .to_string();
         let c2 = s
             .register_client("ep2", &otp2, Some(&tentry.id), Some("second"), None)
             .expect("second reg");
@@ -907,15 +1105,19 @@ mod tests {
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
 
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c1 = s
             .register_client("ep1", &otp, Some(&tentry.id), Some("old-name"), Some("read"))
             .expect("first");
         assert_eq!(c1.name, "old-name");
         assert_eq!(c1.scope, "read");
 
-        // Same endpoint_id with new name/scope should update in-place
-        let otp2 = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        // Same endpoint_id with new name/scope should update in-place (with
+        // the next code: the first one is spent).
+        let otp2 = totp_from_entry(&tentry)
+            .expect("totp")
+            .generate(unix_secs() + 30)
+            .to_string();
         let c2 = s
             .register_client("ep1", &otp2, Some(&tentry.id), Some("new-name"), Some("full"))
             .expect("update");
@@ -933,7 +1135,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), None)
             .expect("reg");
 
@@ -964,7 +1166,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), None)
             .expect("reg");
 
@@ -980,7 +1182,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c = s
             .register_client("ep1", &otp, Some(&tentry.id), None, None)
             .expect("reg");
@@ -1001,7 +1203,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c = s
             .register_client("ep1", &otp, Some(&tentry.id), None, Some("read"))
             .expect("reg");
@@ -1018,7 +1220,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c = s
             .register_client("ep1", &otp, Some(&tentry.id), None, None)
             .expect("reg");
@@ -1038,7 +1240,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         s.register_client("ABCDEF", &otp, Some(&tentry.id), None, None)
             .expect("reg");
         assert!(s.is_endpoint_allowed("abcdef"));
@@ -1059,7 +1261,7 @@ mod tests {
         let (_td, mut s) = tmp_store();
         s.create_totp("phone").expect("create");
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         let c = s
             .register_client("ep1", &otp, Some(&tentry.id), None, None)
             .expect("reg");
@@ -1085,7 +1287,7 @@ mod tests {
             let mut s = IrohAuthStore::open(td.path());
             s.create_totp("phone").expect("create");
             let tentry = s.db.totp.first().expect("exists").clone();
-            let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+            let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
             s.register_client("ep1", &otp, Some(&tentry.id), Some("dev"), Some("full"))
                 .expect("reg");
         }
@@ -1180,7 +1382,7 @@ mod tests {
             .is_none());
 
         let tentry = s.db.totp.first().expect("exists").clone();
-        let otp = totp_from_entry(&tentry).expect("totp").generate_current().expect("otp");
+        let otp = totp_from_entry(&tentry).expect("totp").generate_current().to_string();
         s.register_client("ep1", &otp, Some(&tview.id), None, None)
             .expect("reg");
 

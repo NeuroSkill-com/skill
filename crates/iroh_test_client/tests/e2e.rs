@@ -83,16 +83,16 @@ fn secret_from_otpauth(otpauth_url: &str) -> anyhow::Result<Vec<u8>> {
 
 /// Helper: generate a current TOTP code from secret bytes
 fn generate_totp_code(secret: &[u8], account_name: &str) -> anyhow::Result<String> {
-    let totp = totp_rs::TOTP::new(
-        totp_rs::Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret.to_vec(),
-        Some("Skill".to_string()),
-        account_name.to_string(),
-    )?;
-    Ok(totp.generate_current()?)
+    let totp = totp_rs::Builder::new()
+        .with_algorithm(totp_rs::Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret)
+        .with_issuer(Some("Skill"))
+        .with_account_name(account_name)
+        .build()?;
+    Ok(totp.generate_current().to_string())
 }
 
 /// Helper: send an HTTP POST over iroh and return the parsed JSON body

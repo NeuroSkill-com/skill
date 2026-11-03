@@ -7,13 +7,13 @@ the Free Software Foundation, version 3 only. -->
 <!-- Activity dashboard — daily stats, top files/projects, focus sessions, meetings. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
-import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
-import { Spinner } from "$lib/components/ui/spinner";
-import { daemonGet, daemonPost } from "$lib/daemon/http";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import SectionHeader from "#lib/components/ui/section-header/SectionHeader.svelte";
+import SettingsCard from "#lib/components/ui/settings-card/SettingsCard.svelte";
+import { Spinner } from "#lib/components/ui/spinner";
+import { daemonGet, daemonPost } from "#lib/daemon/http";
 import {
   type DailySummaryRow,
   type FocusSessionRow,
@@ -36,16 +36,16 @@ import {
   type SessionFileActivity,
   type StaleFileRow,
   type WeeklyDigest,
-} from "$lib/daemon/settings";
-import { t } from "$lib/i18n/index.svelte";
-import TerminalSessionsCard from "$lib/settings/TerminalSessionsCard.svelte";
+} from "#lib/daemon/settings";
+import { t } from "#lib/i18n/index.svelte";
+import TerminalSessionsCard from "#lib/settings/TerminalSessionsCard.svelte";
 import {
   getFatigue as brainFatigue,
   getFlow as brainFlow,
   getStreak as brainStreak,
   startBrainPolling,
   stopBrainPolling,
-} from "$lib/stores/brain.svelte";
+} from "#lib/stores/brain.svelte";
 
 // ── State ─────────────────────────────────────────────────────────────────
 let loading = $state(true);

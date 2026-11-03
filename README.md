@@ -18,9 +18,10 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 
 ## Quick links
 
-- **Downloads:** [macOS](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.dmg) · [Windows](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.exe) · [Linux](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.AppImage)
+- **Downloads:** [latest release](https://github.com/NeuroSkill-com/skill/releases/latest): macOS `.dmg` (Apple Silicon), Windows `-setup.exe`, Linux `.deb`, `.rpm` or portable `.tar.gz`
 - **Install (Homebrew):** `brew install --cask https://raw.githubusercontent.com/NeuroSkill-com/skill/main/Casks/neuroskill.rb`
 - **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Security:** [SECURITY.md](SECURITY.md): how to report a vulnerability, and how remote devices are paired
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ## What it does
@@ -31,7 +32,11 @@ NeuroSkill is a local-first desktop neurofeedback + BCI app built with **Tauri v
 - Labeling, similarity search, and screenshot-based search
 - Local LLM + TTS integration
 - LSL + remote rlsl-iroh streaming
+- Remote access from a phone over iroh, paired with single-use codes ([SECURITY.md](SECURITY.md))
 - WebSocket/HTTP API
+
+Models run on the GPU where there is one: Metal on macOS, CUDA or DirectX 12 on
+Windows, CUDA or Vulkan on Linux. Without a usable GPU they run on the CPU.
 
 ## Supported devices
 
@@ -104,6 +109,7 @@ Long-form documentation lives in `./docs`:
 
 - Docs index: [docs/README.md](docs/README.md)
 - Architecture overview: [docs/architecture.md](docs/architecture.md)
+- AI/ML model inventory (LLM, EXG, vision, OCR): [docs/AI.md](docs/AI.md)
 - Device support and integration notes: [docs/DEVICES.md](docs/DEVICES.md)
 - UI notes: [docs/UI.md](docs/UI.md)
 - Metrics reference and formulas: [docs/METRICS.md](docs/METRICS.md)
@@ -123,6 +129,13 @@ sync). Release builds enable one daemon OS umbrella (`apple` / `linux` /
 `windows`). PR CI runs clippy/tests; signed product builds run on release tags
 or Preview Build. Details: [CONTRIBUTING.md](CONTRIBUTING.md) ·
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+`npm run setup` checks that Rust is installed, offers to install Node.js 22 into
+`~/.local` if it is missing or older than 22.17, offers to install CMake, protoc
+and the other native build tools (Homebrew on macOS, the system package manager
+on Linux), and installs the JavaScript dependencies with
+`npm ci`, the same way CI does. On Windows, follow
+[docs/WINDOWS.md](docs/WINDOWS.md) instead.
 
 Install the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) (`curl -LsSf https://hf.co/cli/install.sh | bash` on macOS/Linux, `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"` on Windows), then:
 

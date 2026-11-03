@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Shared sleep-analysis helpers.
 
-import type { SleepStages } from "$lib/types";
+import type { SleepStages } from "#lib/types";
 
 export interface SleepAnalysis {
   efficiency: number; // % of non-wake time

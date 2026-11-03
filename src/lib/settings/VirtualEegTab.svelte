@@ -2,14 +2,14 @@
 <!-- Virtual EEG Device — streams synthetic EEG via daemon LSL pipeline. -->
 <script lang="ts">
 import { onDestroy } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { lslConnect, lslStartVirtualSourceConfigured, lslStopVirtualSource } from "$lib/daemon/lsl";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { lslConnect, lslStartVirtualSourceConfigured, lslStopVirtualSource } from "#lib/daemon/lsl";
+import { t } from "#lib/i18n/index.svelte";
 import {
   DEFAULT_CONFIG,
   generateSamples,
@@ -18,7 +18,7 @@ import {
   type SignalQuality,
   type SignalTemplate,
   type VirtualEegConfig,
-} from "$lib/virtual-eeg/generator";
+} from "#lib/virtual-eeg/generator";
 
 // ── State ──────────────────────────────────────────────────────────────────
 

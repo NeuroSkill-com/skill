@@ -165,12 +165,13 @@ function Fail ($msg) {
 
 # Run a command, or just print it in dry-run mode.
 function Run {
-    param([string]$Cmd, [string[]]$Args)
+    # Not $Args: that name shadows PowerShell's automatic $args variable.
+    param([string]$Cmd, [string[]]$CmdArgs)
     if ($DryRun) {
-        Dry "$Cmd $($Args -join ' ')"
+        Dry "$Cmd $($CmdArgs -join ' ')"
     } else {
-        & $Cmd @Args
-        if ($LASTEXITCODE -ne 0) { Fail "'$Cmd $($Args -join ' ')' exited with code $LASTEXITCODE" }
+        & $Cmd @CmdArgs
+        if ($LASTEXITCODE -ne 0) { Fail "'$Cmd $($CmdArgs -join ' ')' exited with code $LASTEXITCODE" }
     }
 }
 
@@ -286,21 +287,6 @@ Run "npm" @("ci", "--prefer-offline")
 
 Log "Building frontend…"
 Run "npm" @("run", "build")
-
-# ── Step 0: Ensure Vulkan SDK is installed ────────────────────────────────────
-#
-# Optional: some native deps / tooling may still look for Vulkan headers.
-# LLM GPU backends live on skill-daemon (`--features windows`), not the Tauri app.
-# install-vulkan-sdk.ps1 is a no-op when the SDK is already present; when it
-# is missing it downloads and silently installs the latest version (~200 MB).
-
-Log "Ensuring Vulkan SDK is installed…"
-if ($DryRun) {
-    Dry "powershell -NoProfile -ExecutionPolicy Bypass -File $REPO_ROOT\scripts\install-vulkan-sdk.ps1"
-} else {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File "$REPO_ROOT\scripts\install-vulkan-sdk.ps1"
-    if ($LASTEXITCODE -ne 0) { Fail "install-vulkan-sdk.ps1 failed (exit $LASTEXITCODE)" }
-}
 
 Log "Building skill-daemon (target: $TAURI_TARGET, OS umbrella: windows)…"
 $daemonBuildArgs = @("build", "-p", "skill-daemon", "--release", "--target", $TAURI_TARGET, "--features", "windows")

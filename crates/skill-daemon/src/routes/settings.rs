@@ -1324,6 +1324,43 @@ fn shell_rc_info(shell: &str) -> (&'static str, Option<std::path::PathBuf>) {
 }
 
 /// Generate the hook script content for a given shell. Self-contained — no external file deps.
+/// Terminal-app detection shared by the zsh and bash hooks.
+///
+/// `_neuroskill_terminal` names the terminal app the shell runs in, from the
+/// variables each app sets. `_neuroskill_skip_terminal` succeeds when that name
+/// is in `NEUROSKILL_SKIP_TERMINALS` (space- or comma-separated; unset means
+/// `warp`, set it to an empty string to record everywhere).
+///
+/// Warp is skipped by default: its shell integration bootstraps inside the
+/// shell and talks to Warp over the shell's own tty, so re-running the shell
+/// on a fresh PTY hides that handshake and Warp waits forever at startup
+/// (issue #69). Any other app with the same problem can be listed by name.
+const TERMINAL_DETECT_SH: &str = r#"_neuroskill_terminal() {
+  if [[ "$TERM_PROGRAM" == "WarpTerminal" || -n "$WARP_IS_LOCAL_SHELL_SESSION" ]]; then echo warp
+  elif [[ "$TERMINAL_EMULATOR" == "JetBrains-JediTerm" ]]; then echo jetbrains
+  elif [[ "$TERM_PROGRAM" == "vscode" ]]; then echo vscode
+  elif [[ "$TERM_PROGRAM" == "zed" ]]; then echo zed
+  elif [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then echo iterm2
+  elif [[ "$TERM_PROGRAM" == "Apple_Terminal" ]]; then echo apple-terminal
+  elif [[ "$TERM_PROGRAM" == "ghostty" ]]; then echo ghostty
+  elif [[ "$TERM_PROGRAM" == "WezTerm" ]]; then echo wezterm
+  elif [[ "$TERM_PROGRAM" == "Hyper" ]]; then echo hyper
+  elif [[ "$TERM_PROGRAM" == "tmux" || -n "$TMUX" ]]; then echo tmux
+  elif [[ -n "$KITTY_WINDOW_ID" ]]; then echo kitty
+  elif [[ -n "$ALACRITTY_WINDOW_ID" ]]; then echo alacritty
+  elif [[ -n "$KONSOLE_VERSION" ]]; then echo konsole
+  elif [[ -n "$GNOME_TERMINAL_SCREEN" || -n "$VTE_VERSION" ]]; then echo gnome-terminal
+  elif [[ -n "$TERM_PROGRAM" ]]; then echo "$TERM_PROGRAM" | tr '[:upper:]' '[:lower:]'
+  else echo unknown
+  fi
+}
+_neuroskill_skip_terminal() {
+  local list=" ${NEUROSKILL_SKIP_TERMINALS-warp} "
+  list="${list//,/ }"
+  [[ "$list" == *" $(_neuroskill_terminal) "* ]]
+}
+"#;
+
 pub(crate) fn generate_shell_hook(shell: &str) -> String {
     let port = 18444;
     // The PTY shim now lives in a sibling `skill-tty` binary. Splitting it
@@ -1343,6 +1380,7 @@ pub(crate) fn generate_shell_hook(shell: &str) -> String {
     // Sibling skill-tty location — see crate::util::resolve_skill_tty_path
     // for the macOS .app vs. flat-sibling layout it has to handle.
     let tty_path = crate::util::resolve_skill_tty_path().and_then(|p| p.to_str().map(String::from));
+    let terminal_detect = TERMINAL_DETECT_SH;
     let (tty_cmd, tty_guard) = match tty_path {
         Some(p) => (format!("\"{p}\""), p),
         None => (format!("\"{daemon_path}\" tty"), daemon_path.clone()),
@@ -1402,11 +1440,16 @@ fi
 # recording for a single shell without uninstalling the global hook.
 # NEUROSKILL_RECORDING=1 is set by the wrapper itself to prevent re-entry.
 #
+# Per-app opt-out: NEUROSKILL_SKIP_TERMINALS lists terminal apps whose shells
+# are never wrapped (default `warp`, whose startup hangs under a PTY wrapper).
+# Names: warp jetbrains vscode zed iterm2 apple-terminal ghostty wezterm hyper
+# tmux kitty alacritty konsole gnome-terminal, or a lowercased $TERM_PROGRAM.
+{terminal_detect}#
 # We intentionally avoid `exec` here: if the shim exits with code 126 it
 # means startup failed (not a tty, can't open PTY, etc.) and we fall
 # through to a plain interactive shell. For any other exit code (normal user
 # exit, Ctrl-D, …) we forward it and close this shell too.
-if [[ -z "$NEUROSKILL_RECORDING" && -z "$NEUROSKILL_SKIP_RECORDING" && -x "{tty_guard}" ]]; then
+if [[ -z "$NEUROSKILL_RECORDING" && -z "$NEUROSKILL_SKIP_RECORDING" && -x "{tty_guard}" ]] && ! _neuroskill_skip_terminal; then
   export NEUROSKILL_RECORDING=1
   {tty_cmd}
   _ns_rc=$?
@@ -1466,9 +1509,11 @@ fi
 # Session recording via the `skill-tty` PTY shim (forwards SIGWINCH).
 # Older installs invoke `skill-daemon tty`, which now execs into skill-tty.
 # Log path chosen internally — nothing leaks into argv or the tab title.
-# Set NEUROSKILL_SKIP_RECORDING=1 to skip recording for a single shell.
-# See zsh block above for the fallback-on-failure rationale.
-if [[ -z "$NEUROSKILL_RECORDING" && -z "$NEUROSKILL_SKIP_RECORDING" && -x "{tty_guard}" ]]; then
+# Set NEUROSKILL_SKIP_RECORDING=1 to skip recording for a single shell, or
+# list terminal apps in NEUROSKILL_SKIP_TERMINALS (default `warp`; see the zsh
+# hook for the names). See the zsh block for the fallback-on-failure rationale.
+{terminal_detect}
+if [[ -z "$NEUROSKILL_RECORDING" && -z "$NEUROSKILL_SKIP_RECORDING" && -x "{tty_guard}" ]] && ! _neuroskill_skip_terminal; then
   export NEUROSKILL_RECORDING=1
   {tty_cmd}
   _ns_rc=$?
@@ -1831,6 +1876,32 @@ mod tests {
         let td = TempDir::new().unwrap();
         let st = AppState::new_for_tests("t".into(), td.path().to_path_buf());
         (td, st)
+    }
+
+    /// Issue #69: Warp hangs at startup when the hook re-runs the shell on a
+    /// fresh PTY, so the recording wrapper must skip the listed terminal apps
+    /// (Warp by default).
+    #[test]
+    fn shell_hooks_do_not_wrap_warp_shells() {
+        for shell in ["zsh", "bash"] {
+            let hook = generate_shell_hook(shell);
+            let launch = hook
+                .lines()
+                .find(|l| l.starts_with("if ") && l.contains("NEUROSKILL_SKIP_RECORDING"))
+                .unwrap_or_else(|| panic!("{shell} hook has no recording launch line"));
+            assert!(
+                launch.contains("! _neuroskill_skip_terminal"),
+                "{shell} hook ignores NEUROSKILL_SKIP_TERMINALS: {launch}"
+            );
+            assert!(
+                hook.contains("_neuroskill_terminal() {"),
+                "{shell} hook lacks terminal detection"
+            );
+            assert!(
+                hook.contains("NEUROSKILL_SKIP_TERMINALS-warp"),
+                "{shell} hook does not skip Warp by default"
+            );
+        }
     }
 
     #[tokio::test]

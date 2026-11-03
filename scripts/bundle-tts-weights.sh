@@ -14,13 +14,18 @@
 # Usage:
 #   scripts/bundle-tts-weights.sh                 # auto-detects ../rlx-models
 #   RLX_MODELS_ROOT=/path/to/rlx-models scripts/bundle-tts-weights.sh
+#   echo /path/to/rlx-models > rlx-models.path    # same file ensure-rlx.sh reads
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RLX_MODELS_ROOT="${RLX_MODELS_ROOT:-$REPO_ROOT/../rlx-models}"
-if [ ! -d "$RLX_MODELS_ROOT/weights" ] && [ -d "/Users/Shared/rlx-models/weights" ]; then
-  RLX_MODELS_ROOT="/Users/Shared/rlx-models"
+# Same lookup order as ensure-rlx.sh: env var, then rlx-models.path, then sibling.
+if [ -z "${RLX_MODELS_ROOT:-}" ]; then
+  if [ -f "$REPO_ROOT/rlx-models.path" ]; then
+    RLX_MODELS_ROOT="$(tr -d '[:space:]' < "$REPO_ROOT/rlx-models.path")"
+  else
+    RLX_MODELS_ROOT="$REPO_ROOT/../rlx-models"
+  fi
 fi
 
 SRC_IN="$RLX_MODELS_ROOT/weights/inflect-nano-rlx"

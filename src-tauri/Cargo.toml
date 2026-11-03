@@ -49,7 +49,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
-dirs = "6"
+dirs = "7"
 log = "0.4"
 regex = "1"
 stacker = "0.1"
@@ -67,7 +67,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 llmfit-core = "1.1.17"
 # sysinfo gives gpu_stats.rs access to System::refresh_memory() for the
 # periodic free-RAM update on unified-memory Linux / Windows platforms.
-sysinfo = "0.38"
+sysinfo = "0.39"
 
 # Cross-platform global keyboard / mouse event listener (input activity tracking).
 # macOS: CGEventTap (requires Accessibility permission — degrades gracefully if absent).
@@ -119,10 +119,10 @@ csv = "1"
 neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
-rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
+rodio = { version = "0.23", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
 
 # SHA-256: NeuTTS WAV cache keys + daemon binary identity for upgrade flow.
-sha2 = "0.10"
+sha2 = "0.11"
 
 # WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
 hound = { version = "3", optional = true }
@@ -218,6 +218,10 @@ neutts = { path = "../crates/skill-neutts", package = "skill-neutts", features =
 
 # KittenTTS lives behind skill-tts (rlx-kittentts on macOS / Linux / Windows).
 # Windows builds use the cuda+gpu feature set on rlx-kittentts (runtime fallback).
+
+[dev-dependencies]
+# Test-only. It used to sit in the macOS table above, so the crate's tests did
+# not compile on Linux or Windows.
 tempfile = "3"
 
 # ── [patch] and [profile] ──────────────────────────────────────────────────────

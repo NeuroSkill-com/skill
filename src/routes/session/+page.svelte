@@ -7,17 +7,17 @@ the Free Software Foundation, version 3 only. -->
 <!-- Standalone Session Detail view — opened from search results or history. -->
 <script lang="ts">
 import { onMount } from "svelte";
-import Hypnogram from "$lib/charts/Hypnogram.svelte";
-import { Spinner } from "$lib/components/ui/spinner";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { SessionDetail } from "$lib/dashboard";
-import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
-import { fmtDateIso as fmtDate, fmtDuration, fmtTime } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { analyzeSleep, type SleepAnalysis } from "$lib/settings/sleep-analysis";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { SleepStages } from "$lib/types";
+import Hypnogram from "#lib/charts/Hypnogram.svelte";
+import { Spinner } from "#lib/components/ui/spinner";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { SessionDetail } from "#lib/dashboard";
+import type { CsvMetricsResult, EpochRow, SessionMetrics } from "#lib/dashboard/SessionDetail.svelte";
+import { fmtDateIso as fmtDate, fmtDuration, fmtTime } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { analyzeSleep, type SleepAnalysis } from "#lib/settings/sleep-analysis";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { SleepStages } from "#lib/types";
 
 // ── Parse query params ────────────────────────────────────────────────────
 let csvPath = $state("");

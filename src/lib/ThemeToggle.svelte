@@ -9,8 +9,8 @@ the Free Software Foundation, version 3 only. -->
      Teleports tooltip to body to escape overflow clipping. -->
 <script lang="ts">
 import { onDestroy } from "svelte";
-import { t } from "$lib/i18n/index.svelte";
-import { cycleTheme, getTheme } from "$lib/stores/theme.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import { cycleTheme, getTheme } from "#lib/stores/theme.svelte";
 
 const icon = $derived(getTheme() === "light" ? "sun" : getTheme() === "dark" ? "moon" : "auto");
 

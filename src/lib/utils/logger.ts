@@ -8,7 +8,7 @@
 // are self-documenting and easy to grep.
 //
 // Usage:
-//   import { log } from "$lib/utils/logger";
+//   import { log } from "#lib/utils/logger";
 //   log.info("device connected", { name: device.name });
 //   log.warn("retrying BLE scan");
 //   log.error("websocket closed", error);

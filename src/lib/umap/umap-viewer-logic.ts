@@ -7,7 +7,7 @@
  * for the 3D UMAP scatter plot. No Three.js or Svelte dependencies.
  */
 
-import type { UmapPoint } from "$lib/types";
+import type { UmapPoint } from "#lib/types";
 
 // ── Turbo colormap ────────────────────────────────────────────────────────────
 

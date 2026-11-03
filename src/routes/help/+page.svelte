@@ -9,22 +9,22 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import HelpApi from "$lib/help/HelpApi.svelte";
-import HelpDashboard from "$lib/help/HelpDashboard.svelte";
-import HelpElectrodes from "$lib/help/HelpElectrodes.svelte";
-import HelpFaqTab from "$lib/help/HelpFaqTab.svelte";
-import HelpHooks from "$lib/help/HelpHooks.svelte";
-import HelpLlm from "$lib/help/HelpLlm.svelte";
-import HelpPrivacy from "$lib/help/HelpPrivacy.svelte";
-import HelpReferences from "$lib/help/HelpReferences.svelte";
-import HelpSettings from "$lib/help/HelpSettings.svelte";
-import HelpTts from "$lib/help/HelpTts.svelte";
-import HelpWindows from "$lib/help/HelpWindows.svelte";
-import { getFaqContent, getHelpContent } from "$lib/help/help-loader";
-import { getLocale, t } from "$lib/i18n/index.svelte";
-import { helpTitlebarState } from "$lib/stores/titlebar.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import HelpApi from "#lib/help/HelpApi.svelte";
+import HelpDashboard from "#lib/help/HelpDashboard.svelte";
+import HelpElectrodes from "#lib/help/HelpElectrodes.svelte";
+import HelpFaqTab from "#lib/help/HelpFaqTab.svelte";
+import HelpHooks from "#lib/help/HelpHooks.svelte";
+import HelpLlm from "#lib/help/HelpLlm.svelte";
+import HelpPrivacy from "#lib/help/HelpPrivacy.svelte";
+import HelpReferences from "#lib/help/HelpReferences.svelte";
+import HelpSettings from "#lib/help/HelpSettings.svelte";
+import HelpTts from "#lib/help/HelpTts.svelte";
+import HelpWindows from "#lib/help/HelpWindows.svelte";
+import { getFaqContent, getHelpContent } from "#lib/help/help-loader";
+import { getLocale, t } from "#lib/i18n/index.svelte";
+import { helpTitlebarState } from "#lib/stores/titlebar.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 const modKey = isMac ? "⌘" : "Ctrl+";

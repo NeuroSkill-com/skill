@@ -11,7 +11,7 @@ the Free Software Foundation, version 3 only. -->
   layout that was previously duplicated across every Tab.
 -->
 <script lang="ts">
-import { cn } from "$lib/utils.js";
+import { cn } from "#lib/utils.js";
 
 let {
   checked,

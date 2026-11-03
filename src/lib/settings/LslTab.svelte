@@ -9,12 +9,12 @@ the Free Software Foundation, version 3 only. -->
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
 import {
   getStatus,
   listSecondarySessions,
@@ -35,11 +35,11 @@ import {
   lslSwitchSession,
   lslUnpairStream,
   lslVirtualSourceRunning,
-} from "$lib/daemon/client";
-import { t } from "$lib/i18n/index.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
-import type { DeviceStatus } from "$lib/types";
-import { formatPrefixedError } from "$lib/utils/error";
+} from "#lib/daemon/client";
+import { t } from "#lib/i18n/index.svelte";
+import { addToast } from "#lib/stores/toast.svelte";
+import type { DeviceStatus } from "#lib/types";
+import { formatPrefixedError } from "#lib/utils/error";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface LslStream {

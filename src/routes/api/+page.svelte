@@ -8,14 +8,14 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { fmtTime } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { fmtTime } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface WsClient {

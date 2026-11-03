@@ -10,7 +10,7 @@ the Free Software Foundation, version 3 only. -->
   description paragraph below it.
 -->
 <script lang="ts">
-import { cn } from "$lib/utils.js";
+import { cn } from "#lib/utils.js";
 
 let {
   label,

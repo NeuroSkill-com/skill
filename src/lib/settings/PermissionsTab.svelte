@@ -8,13 +8,13 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { IconExternalLink } from "$lib/components/ui/icons";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { StatusBadge, type StatusLevel } from "$lib/components/ui/status-badge";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { IconExternalLink } from "#lib/components/ui/icons";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { StatusBadge, type StatusLevel } from "#lib/components/ui/status-badge";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Platform detection ──────────────────────────────────────────────────────
 const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);

@@ -33,7 +33,7 @@ function _notifyStateChange(next: DaemonConnectionState, error?: string): void {
   // Skip the initial connecting→connected transition (normal startup)
   if (prev === "connecting" && next === "connected") return;
 
-  Promise.all([import("$lib/stores/toast.svelte"), import("$lib/i18n/index.svelte")]).then(([{ addToast }, { t }]) => {
+  Promise.all([import("#lib/stores/toast.svelte"), import("#lib/i18n/index.svelte")]).then(([{ addToast }, { t }]) => {
     if (next === "connected") {
       addToast("info", t("daemon.connection"), t("daemon.stateChangeConnected"), 4_000);
     } else if (next === "error") {
@@ -80,7 +80,7 @@ export function notifyDaemonError(error: string): void {
 
   setDaemonDisconnected(error);
 
-  Promise.all([import("$lib/stores/toast.svelte"), import("$lib/i18n/index.svelte")]).then(([{ addToast }, { t }]) => {
+  Promise.all([import("#lib/stores/toast.svelte"), import("#lib/i18n/index.svelte")]).then(([{ addToast }, { t }]) => {
     addToast("warning", t("daemon.connection"), t("daemon.unreachable", { error }), 8_000);
   });
 }

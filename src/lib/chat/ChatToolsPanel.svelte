@@ -2,9 +2,9 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat tools configuration panel — tool allow-list, execution mode, limits. -->
 <script lang="ts">
-import type { CompressionLevel, ToolConfig, ToolExecutionMode } from "$lib/chat/chat-types";
-import { TOOL_THINKING_LEVELS, type ToolThinkingLevel } from "$lib/chat/chat-types";
-import { t } from "$lib/i18n/index.svelte";
+import type { CompressionLevel, ToolConfig, ToolExecutionMode } from "#lib/chat/chat-types";
+import { TOOL_THINKING_LEVELS, type ToolThinkingLevel } from "#lib/chat/chat-types";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   toolConfig: ToolConfig;

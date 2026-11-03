@@ -1,12 +1,12 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { fmtGB } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { fmtGB } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
 import {
   autoSelectFamily,
   buildFamilies,
@@ -20,7 +20,7 @@ import {
   tagColor,
   tagLabel,
   vendorLabel,
-} from "$lib/llm/llm-helpers";
+} from "#lib/llm/llm-helpers";
 
 interface ModelHardwareFit {
   filename: string;

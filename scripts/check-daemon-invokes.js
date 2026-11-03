@@ -376,7 +376,7 @@ for (const file of targetFiles) {
 }
 
 if (offenders.length > 0) {
-  console.error("❌ Direct invoke(...) detected for daemon-owned commands. Use $lib/daemon/client wrappers instead.\n");
+  console.error("❌ Direct invoke(...) detected for daemon-owned commands. Use #lib/daemon/client wrappers instead.\n");
   for (const o of offenders) {
     console.error(`- ${o.file}:${o.line} -> ${o.cmd}`);
   }

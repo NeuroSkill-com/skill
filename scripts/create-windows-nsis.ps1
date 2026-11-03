@@ -71,7 +71,6 @@ if ($Version -match '^(\d+\.\d+\.\d+)(?:-[A-Za-z]+\.(\d+))?') {
 } else {
     $VIVersion = "0.0.0.0"
 }
-$Identifier = $Conf.identifier
 $BinaryName = "skill.exe"
 $TargetReleaseDir = Join-Path $TauriDir "target/$Target/release"
 $HostReleaseDir = Join-Path $TauriDir "target/release"

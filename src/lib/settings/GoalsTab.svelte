@@ -8,14 +8,14 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
-import { CardContent } from "$lib/components/ui/card";
-import ChipGroup from "$lib/components/ui/chip-group/ChipGroup.svelte";
-import FormRow from "$lib/components/ui/form-row/FormRow.svelte";
-import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
-import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
-import ToggleRow from "$lib/components/ui/toggle-row/ToggleRow.svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { t } from "$lib/i18n/index.svelte";
+import { CardContent } from "#lib/components/ui/card";
+import ChipGroup from "#lib/components/ui/chip-group/ChipGroup.svelte";
+import FormRow from "#lib/components/ui/form-row/FormRow.svelte";
+import SectionHeader from "#lib/components/ui/section-header/SectionHeader.svelte";
+import SettingsCard from "#lib/components/ui/settings-card/SettingsCard.svelte";
+import ToggleRow from "#lib/components/ui/toggle-row/ToggleRow.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Daily Goal ─────────────────────────────────────────────────────────────
 let dailyGoalMin = $state(60);

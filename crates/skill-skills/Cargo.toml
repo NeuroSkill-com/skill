@@ -10,7 +10,7 @@ anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"
-dirs        = "6"
+dirs        = "7"
 ignore      = "0.4"
 
 # Optional: skills auto-update from GitHub

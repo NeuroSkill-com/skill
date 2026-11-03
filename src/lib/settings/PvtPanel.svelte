@@ -16,9 +16,9 @@
 -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { daemonPost } from "$lib/daemon/http";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { daemonPost } from "#lib/daemon/http";
+import { t } from "#lib/i18n/index.svelte";
 import { computeStats, LAPSE_THRESHOLD_MS } from "./pvt-stats";
 
 let { onclose }: { onclose: () => void } = $props();

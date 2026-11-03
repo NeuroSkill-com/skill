@@ -528,7 +528,7 @@ fn convert_checkpoint_inner(
 
     std::fs::create_dir_all(out_path.parent().unwrap_or(std::path::Path::new(".")))
         .context("Cannot create models/ directory")?;
-    safetensors::serialize_to_file(views.iter().map(|(n, v)| (*n, v)), &Some(metadata), out_path)
+    safetensors::serialize_to_file(views.iter().map(|(n, v)| (*n, v)), Some(metadata), out_path)
         .with_context(|| format!("Failed to write {}", out_path.display()))?;
 
     let size_mb = std::fs::metadata(out_path)?.len() / 1_048_576;

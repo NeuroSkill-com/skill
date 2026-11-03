@@ -8,8 +8,8 @@
  * without referencing any reactive state.
  */
 
-import type { EpochRow } from "$lib/dashboard/SessionDetail.svelte";
-import { setupHiDpiCanvas } from "$lib/format";
+import type { EpochRow } from "#lib/dashboard/SessionDetail.svelte";
+import { setupHiDpiCanvas } from "#lib/format";
 import {
   assignLabelRainbowColors,
   GRID_BIN,
@@ -17,8 +17,8 @@ import {
   GRID_ROWS,
   SESSION_COLORS,
   type SessionEntry,
-} from "$lib/history/history-helpers";
-import type { LabelRow } from "$lib/types";
+} from "#lib/history/history-helpers";
+import type { LabelRow } from "#lib/types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

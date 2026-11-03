@@ -1,4 +1,4 @@
-# install-openblas-windows.ps1
+﻿# install-openblas-windows.ps1
 #
 # Installs OpenBLAS (with LAPACK) for Windows MSVC builds and exports
 # OPENBLAS_DIR + OPENBLAS_LIB_DIR so rlx-cpu, openblas-src, and any other

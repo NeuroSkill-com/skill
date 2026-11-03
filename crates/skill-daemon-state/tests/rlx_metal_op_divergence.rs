@@ -140,9 +140,12 @@ fn report_first_metal_cpu_divergence() {
     }
 }
 
+/// Graph, its named parameters in a stable order, and the sequence length.
+type EmbeddingGraph = (Graph, Vec<(String, Vec<f32>)>, usize);
+
 /// Build the real nomic-bert graph from the cached HF weights, the same way
 /// `text_embedder` does. Returns `None` when the model is not available.
-fn build_embedding_graph() -> Option<(Graph, Vec<(String, Vec<f32>)>, usize)> {
+fn build_embedding_graph() -> Option<EmbeddingGraph> {
     let repo_id = "nomic-ai/nomic-embed-text-v1.5";
     let repo = hf_hub::api::sync::ApiBuilder::new()
         .with_progress(false)

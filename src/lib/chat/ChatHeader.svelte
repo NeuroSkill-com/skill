@@ -4,8 +4,8 @@
 <script lang="ts">
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { BandSnapshot, ServerStatus } from "$lib/chat/chat-types";
-import { t } from "$lib/i18n/index.svelte";
+import type { BandSnapshot, ServerStatus } from "#lib/chat/chat-types";
+import { t } from "#lib/i18n/index.svelte";
 
 let savedBounds: { x: number; y: number; width: number; height: number } | null = null;
 let isManuallyMaximized = false;

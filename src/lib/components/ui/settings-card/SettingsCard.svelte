@@ -9,8 +9,8 @@ the Free Software Foundation, version 3 only. -->
   Provides consistent border, background, padding, and overflow styling.
 -->
 <script lang="ts">
-import { Card } from "$lib/components/ui/card";
-import { cn } from "$lib/utils.js";
+import { Card } from "#lib/components/ui/card";
+import { cn } from "#lib/utils.js";
 
 let {
   class: className,

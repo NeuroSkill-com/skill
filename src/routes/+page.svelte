@@ -10,20 +10,20 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
-import BandChart, { type BandSnapshot } from "$lib/charts/BandChart.svelte";
-import EegChart, { type EventMarker, type SpectrogramColumn } from "$lib/charts/EegChart.svelte";
-import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
-import FnirsChart from "$lib/charts/FnirsChart.svelte";
-import GpuChart from "$lib/charts/GpuChart.svelte";
-import ImuChart, { type ImuPacket } from "$lib/charts/ImuChart.svelte";
-import PpgChart, { type PpgPacket } from "$lib/charts/PpgChart.svelte";
+import BandChart, { type BandSnapshot } from "#lib/charts/BandChart.svelte";
+import EegChart, { type EventMarker, type SpectrogramColumn } from "#lib/charts/EegChart.svelte";
+import ElectrodeGuide from "#lib/charts/ElectrodeGuide.svelte";
+import FnirsChart from "#lib/charts/FnirsChart.svelte";
+import GpuChart from "#lib/charts/GpuChart.svelte";
+import ImuChart, { type ImuPacket } from "#lib/charts/ImuChart.svelte";
+import PpgChart, { type PpgPacket } from "#lib/charts/PpgChart.svelte";
 // Device capabilities are now pushed as part of DeviceStatus from Rust.
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { Spinner } from "$lib/components/ui/spinner";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { Spinner } from "#lib/components/ui/spinner";
 import {
   DEFAULT_FILTER_CONFIG,
   EEG_CH,
@@ -38,8 +38,8 @@ import {
   IDUN_COLOR,
   MW75_CH,
   MW75_COLOR,
-} from "$lib/constants";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+} from "#lib/constants";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
 import {
   cancelRetry as cancelRetryApi,
   forgetDevice as forgetDeviceApi,
@@ -48,10 +48,10 @@ import {
   pairDevice as pairDeviceCmd,
   retryConnect as retryConnectApi,
   setPreferredDevice,
-} from "$lib/daemon/devices";
-import { daemonGet } from "$lib/daemon/http";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { daemonStatus, setDaemonLatency } from "$lib/daemon/status.svelte";
+} from "#lib/daemon/devices";
+import { daemonGet } from "#lib/daemon/http";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { daemonStatus, setDaemonLatency } from "#lib/daemon/status.svelte";
 import {
   ArtifactEvents,
   BrainCard,
@@ -63,8 +63,8 @@ import {
   HeadPoseCard,
   PpgMetrics,
   VitalsCard,
-} from "$lib/dashboard";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/dashboard";
+import { t } from "#lib/i18n/index.svelte";
 import {
   openApi,
   openBtSettings,
@@ -74,13 +74,13 @@ import {
   openSearch,
   openSettingsTab,
   openUpdates,
-} from "$lib/navigation";
-import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
-import { setBtOff } from "$lib/stores/bt-status.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import { C_NEUTRAL, colorForLevel, QUALITY_COLORS, STATE_COLORS } from "$lib/theme";
-import type { DeviceStatus, DiscoveredDevice } from "$lib/types";
+} from "#lib/navigation";
+import OnboardingChecklist from "#lib/OnboardingChecklist.svelte";
+import { setBtOff } from "#lib/stores/bt-status.svelte";
+import { addToast } from "#lib/stores/toast.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import { C_NEUTRAL, colorForLevel, QUALITY_COLORS, STATE_COLORS } from "#lib/theme";
+import type { DeviceStatus, DiscoveredDevice } from "#lib/types";
 
 // ── Model download status (shown as a banner when downloading/retrying) ────
 interface ModelDownloadStatus {
@@ -1306,7 +1306,7 @@ onMount(async () => {
   }
 
   // EEG/PPG/IMU streaming via daemon WebSocket
-  const { subscribeEeg, subscribePpg, subscribeImu, subscribeVitals } = await import("$lib/daemon/eeg-stream");
+  const { subscribeEeg, subscribePpg, subscribeImu, subscribeVitals } = await import("#lib/daemon/eeg-stream");
   // Accumulate latest EEG values in a non-reactive buffer, then flush
   // into status.eeg at ~4 Hz to avoid N×256 Hz reactive updates.
   // Buffer grows dynamically for any channel count.
@@ -1363,7 +1363,7 @@ onMount(async () => {
   // bridges the gap — the settings window emits these events and we relay
   // them into the local injectDaemonEvent pipeline so subscribeEeg and
   // subscribeBands fire normally in this window.
-  const { injectDaemonEvent: relayEvent } = await import("$lib/daemon/ws");
+  const { injectDaemonEvent: relayEvent } = await import("#lib/daemon/ws");
   unlisteners.push(
     await listen<{ electrode: number; samples: number[]; timestamp: number }>("virtual-eeg-sample", (ev) =>
       relayEvent({ type: "EegSample", ts_unix_ms: Math.round(ev.payload.timestamp * 1000), payload: ev.payload }),
@@ -1426,7 +1426,7 @@ onMount(async () => {
 
   // Seed the band chart with whatever the backend already has (may be null
   // on a fresh start or before the 2-second warmup period completes).
-  const { getLatestBands, subscribeBands } = await import("$lib/daemon/eeg-stream");
+  const { getLatestBands, subscribeBands } = await import("#lib/daemon/eeg-stream");
   const latestBands = await getLatestBands();
   if (latestBands) {
     bandChartEl?.update(latestBands);
@@ -1451,7 +1451,7 @@ onMount(async () => {
   // VirtualEegTab lives in the separate settings window, so we listen via a
   // Tauri cross-window event ("virtual-device-status") as the primary path.
   // The onDaemonEvent handler below handles the same-window / test path.
-  const { onDaemonEvent } = await import("$lib/daemon/ws");
+  const { onDaemonEvent } = await import("#lib/daemon/ws");
 
   function applyVirtualStatus(payload: Partial<DeviceStatus>) {
     // Only apply when no real device is already connected.

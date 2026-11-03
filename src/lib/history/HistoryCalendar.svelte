@@ -3,7 +3,7 @@
 <!-- Calendar heatmap views (year / month / week) for session history. -->
 <script lang="ts">
 import { fade } from "svelte/transition";
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
 
 export interface CalendarCell {
   dayKey: string;

@@ -7,16 +7,16 @@ the Free Software Foundation, version 3 only. -->
 <!-- EXG tab — signal processing filters, EEG embedding config, model backend. -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { CardContent } from "$lib/components/ui/card";
-import { ChipGroup } from "$lib/components/ui/chip-group";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { DEFAULT_FILTER_CONFIG, EMBEDDING_EPOCH_SECS, EMBEDDING_OVERLAP_SECS } from "$lib/constants";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { getEegFftBackend, setEegFftBackend } from "$lib/daemon/misc";
-import { t } from "$lib/i18n/index.svelte";
-import EegModelTab from "$lib/settings/EegModelTab.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { CardContent } from "#lib/components/ui/card";
+import { ChipGroup } from "#lib/components/ui/chip-group";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { DEFAULT_FILTER_CONFIG, EMBEDDING_EPOCH_SECS, EMBEDDING_OVERLAP_SECS } from "#lib/constants";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { getEegFftBackend, setEegFftBackend } from "#lib/daemon/misc";
+import { t } from "#lib/i18n/index.svelte";
+import EegModelTab from "#lib/settings/EegModelTab.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type PowerlineFreq = "Hz60" | "Hz50";

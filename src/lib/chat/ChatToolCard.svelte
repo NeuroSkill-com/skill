@@ -2,9 +2,9 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Expandable tool-use card shown inside assistant messages. -->
 <script lang="ts">
-import type { ToolUseEvent } from "$lib/chat/chat-types";
-import { detectToolDanger } from "$lib/chat/chat-utils";
-import { t } from "$lib/i18n/index.svelte";
+import type { ToolUseEvent } from "#lib/chat/chat-types";
+import { detectToolDanger } from "#lib/chat/chat-utils";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   tu: ToolUseEvent;

@@ -2,8 +2,8 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
 import { tick } from "svelte";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { t } from "$lib/i18n/index.svelte";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { t } from "#lib/i18n/index.svelte";
 
 interface LlmLogEntry {
   ts: number;

@@ -10,7 +10,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { Canvas } from "@threlte/core";
 import { WebGLRenderer } from "three";
-import { Badge } from "$lib/components/ui/badge";
+import { Badge } from "#lib/components/ui/badge";
 import {
   electrodes as allElectrodes,
   type BrainRegion,
@@ -20,9 +20,9 @@ import {
   regionColors,
   regionDescriptions,
   regionLabels,
-} from "$lib/data/electrodes";
-import { t } from "$lib/i18n/index.svelte";
-import { getResolved } from "$lib/stores/theme.svelte";
+} from "#lib/data/electrodes";
+import { t } from "#lib/i18n/index.svelte";
+import { getResolved } from "#lib/stores/theme.svelte";
 
 interface Props {
   /** Optional per-channel quality values [0–1] for TP9, AF7, AF8, TP10. */
@@ -305,7 +305,7 @@ function createRenderer(canvas: HTMLCanvasElement) {
 }
 
 if (typeof window !== "undefined") {
-  import("$lib/charts/ElectrodeHead3D.svelte").then((m) => {
+  import("#lib/charts/ElectrodeHead3D.svelte").then((m) => {
     Head3D = m.default;
   });
 }

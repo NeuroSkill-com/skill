@@ -5,8 +5,8 @@
   Shows experimental / needs-bundle / downloadable badges; greys out unavailable.
 -->
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
-import { type AsrEngineInfo, asrEngineLabelKey, type TtsEngineInfo, ttsEngineLabelKey } from "$lib/llm/voice-catalog";
+import { t } from "#lib/i18n/index.svelte";
+import { type AsrEngineInfo, asrEngineLabelKey, type TtsEngineInfo, ttsEngineLabelKey } from "#lib/llm/voice-catalog";
 
 type Engine = TtsEngineInfo | AsrEngineInfo;
 

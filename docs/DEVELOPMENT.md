@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Rust stable (>= 1.95 — run `rustup update stable` if clippy fails)
-- Node.js ≥ 20 (CI uses 22; match CONTRIBUTING.md)
+- Node.js ≥ 22.17 (SvelteKit 3 and Vitest 5 need it; CI uses 22; match CONTRIBUTING.md)
 - Tauri CLI v2
 - Python 3 (optional — only for `huggingface_hub` model downloads)
 - Platform-specific build tools:
@@ -55,8 +55,11 @@ powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1 -Buil
 npm run setup:build-cache
 ```
 
+This offers [kache](https://github.com/kunobi-ninja/kache), the preferred compiler cache, and falls back to sccache; on Linux it also offers mold. The build scripts pick kache, then sccache, from your `PATH`. Run `kache init` to use kache for plain `cargo` commands as well.
+
 Environment toggles:
 
+- `SKILL_NO_KACHE=1` (use sccache instead of kache)
 - `SKILL_NO_SCCACHE=1`
 - `SKILL_NO_MOLD=1`
 - `unset LLAMA_PREBUILT_DIR` (force local llama.cpp build)
@@ -193,6 +196,25 @@ bash scripts/test-all.sh clippy vitest ci       # specific suites
 bash scripts/test-all.sh --continue all         # don't stop on first failure
 bash scripts/test-all.sh --list                 # show available suites
 ```
+
+## Scripts you run by hand
+
+These have no `npm run` entry and nothing else calls them.
+
+| Script | What it does |
+|---|---|
+| `scripts/build-macos.sh [--debug]` | Builds the WidgetKit widgets, then the app, and embeds the widget `.appex` in the bundle |
+| `scripts/e2e-neuroskill-daemon.sh` | Starts a fresh daemon with the virtual EEG device and runs every `neuroskill` CLI command against it |
+| `scripts/e2e-neuroloop-daemon.sh` | Same for neuroloop → neuroskill → daemon, including labels and LLM calls |
+| `scripts/test-upgrade-linux-docker.sh [A\|B\|both]` | Runs the daemon-upgrade end-to-end tests in a Linux container (`Dockerfile.upgrade-test`) |
+| `scripts/test-skill-tty-linux.sh` | Compile-checks `skill-tty` for Linux in a `rust:bookworm` container |
+| `scripts/create-windows-guest.sh [iso] [disk]` | Boots a QEMU Windows guest from an installer ISO for testing the Windows release build |
+| `scripts/generate-icons.js <image>` | Regenerates every Tauri app icon (PNG, `.ico`, `.icns`) from one source image |
+| `scripts/git-push-all.sh [-n] "message"` | Commits and pushes one change across the superproject and every submodule (`-n` previews) |
+| `scripts/tts-generate-wavs.sh` | Writes TTS samples to `output/tts-validate/`, one engine at a time to limit memory use |
+| `scripts/whisper_validate_tts.py` | Transcribes those samples with openai-whisper and scores how much of the text came through |
+| `scripts/orpheus-compare-quants.sh` | Runs Orpheus TTS with Whisper validation for each quantization in turn |
+| `scripts/prepare-daemon-sidecar.js` | Builds the daemon and stages it in `src-tauri/binaries/` as the Tauri sidecar |
 
 ## Git hooks
 

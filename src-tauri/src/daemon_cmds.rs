@@ -2010,6 +2010,25 @@ fn daemon_cmds_test_lock() -> &'static std::sync::Mutex<()> {
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
 }
 
+/// Point every config-dir lookup at `root` for the current test.
+///
+/// HOME / XDG_CONFIG_HOME / APPDATA alone do not isolate anything on Windows:
+/// `dirs::config_dir()` asks the shell for the roaming AppData folder and
+/// ignores the `APPDATA` variable, so these tests used to read and overwrite
+/// the real `%APPDATA%\skill\daemon\auth.token` (after which the app got 401s
+/// from its daemon). `SKILL_DAEMON_CONFIG_ROOT` is the override every path
+/// helper honours on every platform.
+#[cfg(test)]
+fn isolate_config_dirs(root: &std::path::Path) {
+    std::env::set_var("HOME", root);
+    std::env::set_var("XDG_CONFIG_HOME", root.join(".config"));
+    std::env::set_var("APPDATA", root.join("AppData/Roaming"));
+    std::env::set_var(
+        skill_daemon_common::paths::CONFIG_ROOT_ENV,
+        root.join(".config").join("skill").join("daemon"),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2094,9 +2113,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
         let addr = listener.local_addr().unwrap();
@@ -2230,9 +2247,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
         let addr = listener.local_addr().unwrap();
@@ -2509,9 +2524,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
@@ -2556,9 +2569,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
@@ -2582,9 +2593,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
@@ -2629,9 +2638,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let token_path = token_path().expect("token path");
         if let Some(parent) = token_path.parent() {
@@ -2670,9 +2677,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let token_path = token_path().expect("token path");
         if let Some(parent) = token_path.parent() {
@@ -2722,9 +2727,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::remove_var("SKILL_DAEMON_SERVICE_AUTOINSTALL");
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
@@ -2767,9 +2770,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
 
         let err = wait_for_protocol_compatibility(Duration::from_millis(1)).unwrap_err();
@@ -2817,9 +2818,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let tp = token_path().expect("token path");
         if let Some(parent) = tp.parent() {
@@ -2836,9 +2835,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let tp = token_path().expect("token path");
         if let Some(parent) = tp.parent() {
@@ -2853,9 +2850,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let p = get_daemon_token_path();
         assert!(p.contains("auth.token"), "expected auth.token in path: {p}");
@@ -2866,9 +2861,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
 
         // No token file exists
@@ -2891,9 +2884,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -2931,9 +2922,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -2969,9 +2958,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3016,9 +3003,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
         let addr = listener.local_addr().unwrap();
@@ -3087,9 +3072,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
         let addr = listener.local_addr().unwrap();
@@ -3119,9 +3102,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
         let addr = listener.local_addr().unwrap();
@@ -3184,9 +3165,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3226,9 +3205,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
 
         // No token file — should silently return without panicking
@@ -3242,9 +3219,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3277,9 +3252,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         // Use discard port — nothing listening
         std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
 
@@ -3301,9 +3274,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3334,9 +3305,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
 
         let err = get_daemon_bootstrap().unwrap_err();
@@ -3351,9 +3320,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         // Use discard port — nothing listening
         std::env::set_var("SKILL_DAEMON_ADDR", "127.0.0.1:9");
 
@@ -3380,9 +3347,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let p = daemon_rollback_bin_path().unwrap();
         let name = p.file_name().unwrap().to_str().unwrap();
@@ -3428,9 +3393,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3461,9 +3424,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3500,9 +3461,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3534,9 +3493,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3565,9 +3522,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3606,9 +3561,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         write_test_token();
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -3639,9 +3592,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         write_test_token();
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -3672,9 +3623,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
         write_test_token();
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -3707,9 +3656,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3743,9 +3690,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3776,9 +3721,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3808,9 +3751,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3841,9 +3782,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3882,9 +3821,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3915,9 +3852,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3948,9 +3883,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -3980,9 +3913,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -4012,9 +3943,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -4047,9 +3976,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -4080,9 +4007,7 @@ mod tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().unwrap();
@@ -4176,6 +4101,27 @@ mod async_contract_tests {
         let mut parts = head.lines().next().unwrap_or("").split_whitespace();
         let method = parts.next().unwrap_or("").to_string();
         let path = parts.next().unwrap_or("").to_string();
+
+        // Drain the body too. Closing a socket with unread request bytes makes
+        // Windows send RST instead of FIN, which can discard the response before
+        // the client reads it ("connection was forcibly closed", os error 10054).
+        let content_len = head
+            .lines()
+            .find_map(|l| {
+                let (k, v) = l.split_once(':')?;
+                k.eq_ignore_ascii_case("content-length")
+                    .then(|| v.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+            .unwrap_or(0);
+        let mut body_read = buf.len() - header_end;
+        while body_read < content_len {
+            let n = stream.read(&mut tmp).expect("read request body");
+            if n == 0 {
+                break;
+            }
+            body_read += n;
+        }
         (method, path, head)
     }
 
@@ -4193,9 +4139,7 @@ mod async_contract_tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
         let addr = listener.local_addr().unwrap();
@@ -4311,9 +4255,7 @@ mod async_contract_tests {
         let _guard = daemon_cmds_test_lock().lock().unwrap();
 
         let td = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", td.path());
-        std::env::set_var("XDG_CONFIG_HOME", td.path().join(".config"));
-        std::env::set_var("APPDATA", td.path().join("AppData/Roaming"));
+        isolate_config_dirs(td.path());
 
         let mut s = crate::daemon_upgrade::load_state();
         assert!(matches!(s.phase, crate::daemon_upgrade::Phase::Ready));

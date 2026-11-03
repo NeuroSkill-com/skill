@@ -263,6 +263,23 @@ impl LlmCatalog {
             .and_then(|e| e.local_path.clone())
     }
 
+    /// The model file to load: the selected model when it is downloaded, else
+    /// the configured `model_path`, but only when nothing is selected or that
+    /// file *is* the selected model.
+    ///
+    /// A selected model that isn't downloaded must not quietly load some other
+    /// file (issue #92: picking Qwen3.5 in the dropdown still loaded
+    /// Qwen3-0.6B, because the old path was still in the saved config).
+    pub fn model_path_to_load(&self, configured: Option<&std::path::Path>) -> Option<PathBuf> {
+        if let Some(p) = self.active_model_path() {
+            return Some(p);
+        }
+        let p = configured?;
+        let is_selected =
+            self.active_model.is_empty() || p.file_name().and_then(|n| n.to_str()) == Some(self.active_model.as_str());
+        is_selected.then(|| p.to_path_buf())
+    }
+
     /// Local path of the active mmproj if it is downloaded.
     pub fn active_mmproj_path(&self) -> Option<PathBuf> {
         if self.active_mmproj.is_empty() {
@@ -355,5 +372,64 @@ impl LlmCatalog {
             return path;
         }
         self.best_mmproj_for_active_model().and_then(|e| e.local_path.clone())
+    }
+}
+
+#[cfg(test)]
+mod model_path_tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Bundled catalog with the first two non-mmproj entries' filenames.
+    fn catalog() -> (LlmCatalog, String, String) {
+        let cat = LlmCatalog::default();
+        let mut names = cat
+            .entries
+            .iter()
+            .filter(|e| !e.is_mmproj())
+            .map(|e| e.filename.clone());
+        let a = names.next().expect("bundled model");
+        let b = names.find(|n| *n != a).expect("second bundled model");
+        (cat, a, b)
+    }
+
+    fn mark_downloaded(cat: &mut LlmCatalog, filename: &str, path: &Path) {
+        let e = cat.entries.iter_mut().find(|e| e.filename == filename).unwrap();
+        e.state = DownloadState::Downloaded;
+        e.local_path = Some(path.to_path_buf());
+    }
+
+    #[test]
+    fn a_downloaded_selection_wins_over_the_configured_path() {
+        let (mut cat, a, b) = catalog();
+        mark_downloaded(&mut cat, &a, Path::new("/models/a.gguf"));
+        cat.active_model = a;
+        let old = PathBuf::from(format!("/models/{b}"));
+        assert_eq!(
+            cat.model_path_to_load(Some(&old)),
+            Some(PathBuf::from("/models/a.gguf"))
+        );
+    }
+
+    /// Issue #92: selecting a model that isn't downloaded loaded the old one.
+    #[test]
+    fn a_selection_that_isnt_downloaded_never_loads_another_model() {
+        let (mut cat, a, b) = catalog();
+        cat.active_model = a;
+        let old = PathBuf::from(format!("/models/{b}"));
+        assert_eq!(cat.model_path_to_load(Some(&old)), None);
+    }
+
+    #[test]
+    fn the_configured_path_is_used_when_it_is_the_selection_or_nothing_is_selected() {
+        let (mut cat, a, _) = catalog();
+        let same = PathBuf::from(format!("/elsewhere/{a}"));
+        cat.active_model = a;
+        assert_eq!(cat.model_path_to_load(Some(&same)), Some(same.clone()));
+
+        cat.active_model.clear();
+        let any = PathBuf::from("/models/custom.gguf");
+        assert_eq!(cat.model_path_to_load(Some(&any)), Some(any));
+        assert_eq!(cat.model_path_to_load(None), None);
     }
 }

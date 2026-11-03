@@ -8,7 +8,7 @@
  * Internationalisation store — Svelte 5 reactive state.
  *
  * Usage:
- *   import { t, locale, setLocale, SUPPORTED_LOCALES } from "$lib/i18n/index.svelte";
+ *   import { t, locale, setLocale, SUPPORTED_LOCALES } from "#lib/i18n/index.svelte";
  *   t("search.pageOf", { page: 1, total: 5 }) → "Page 1 of 5"
  *
  * The `{app}` placeholder is automatically injected into every string
@@ -16,7 +16,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { getAppName } from "$lib/stores/app-name.svelte";
+import { getAppName } from "#lib/stores/app-name.svelte";
 import en from "./en/index";
 import type { TranslationKey } from "./keys";
 

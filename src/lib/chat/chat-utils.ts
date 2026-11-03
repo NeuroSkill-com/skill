@@ -8,7 +8,7 @@
  * allow independent unit testing.
  */
 
-import type { TranslationKey } from "$lib/i18n/keys";
+import type { TranslationKey } from "#lib/i18n/keys";
 
 // ── Generation-phase progress labels ────────────────────────────────────────
 

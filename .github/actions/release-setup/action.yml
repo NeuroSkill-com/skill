@@ -1,7 +1,7 @@
 name: Release setup
 description: >-
-  Shared release-job bootstrap: Rust toolchain + Swatinem/rust-cache (sole CI
-  compile cache — do not re-add sccache here), Node 22 + npm ci, optional
+  Shared release-job bootstrap: Rust toolchain + Swatinem/rust-cache (registry
+  only; no compiler cache in release jobs, see the step comment), Node 22 + npm ci, optional
   frontend build, and platform hooks (mac tools, Windows protoc, Linux
   Vulkan/apt/bootstrap).
 
@@ -115,8 +115,12 @@ runs:
       with:
         targets: ${{ inputs.target }}
 
-    # Sole CI compile cache. Local builds may still use sccache via tauri-build.js;
-    # do not add Mozilla sccache-action here (dual caches thrash and hide misses).
+    # Registry cache only (cache-targets: false). Release builds deliberately run
+    # without a compiler cache: they trigger on tags, and GitHub caches saved on a
+    # tag ref are invisible to the next tag, while ci.yml's kache store (main) holds
+    # dev/clippy-profile artifacts, not release-profile ones, so kache-action here
+    # would cost a restore/save per job for ~0 hits. Do not add sccache/kache here
+    # without a remote (S3) store that main can populate with release artifacts.
     - name: Cache Cargo registry + build artifacts
       uses: Swatinem/rust-cache@v2.9.1
       with:
@@ -134,7 +138,7 @@ runs:
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
         cache: npm
 
     - name: Update npm to latest

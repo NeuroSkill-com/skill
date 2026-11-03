@@ -78,9 +78,15 @@ STEP=0
 FAILURES=()
 T_START=$(date +%s)
 
-# Speed up Rust builds with sccache if available
-if command -v sccache >/dev/null 2>&1; then
-  export RUSTC_WRAPPER=sccache
+# Speed up Rust builds with a compiler cache if available (kache preferred;
+# an exported RUSTC_WRAPPER overrides ~/.cargo/config.toml, so pick kache
+# whenever it is installed). A caller-set RUSTC_WRAPPER is left alone.
+if [ -z "${RUSTC_WRAPPER:-}" ]; then
+  if command -v kache >/dev/null 2>&1; then
+    export RUSTC_WRAPPER=kache
+  elif command -v sccache >/dev/null 2>&1; then
+    export RUSTC_WRAPPER=sccache
+  fi
 fi
 
 run_suite() {
@@ -88,7 +94,8 @@ run_suite() {
   shift
   STEP=$((STEP + 1))
   printf "\n\033[1;36m[%d] %s\033[0m\n" "$STEP" "$name"
-  local t0=$(date +%s)
+  local t0
+  t0=$(date +%s)
 
   if "$@"; then
     local elapsed=$(( $(date +%s) - t0 ))
@@ -122,6 +129,21 @@ for suite in "${SUITES[@]}"; do
       ;;
     lint)
       run_suite "biome check" npx biome check src/ scripts/ || { $STOP_ON_FAIL && break; }
+      if command -v shellcheck >/dev/null 2>&1; then
+        run_suite "shellcheck" bash scripts/lint-shell.sh || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "shellcheck" "not installed (brew install shellcheck); CI runs it"
+      fi
+      if command -v ruff >/dev/null 2>&1; then
+        run_suite "ruff" ruff check . || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "ruff" "not installed (brew install ruff); CI runs it"
+      fi
+      if command -v pwsh >/dev/null 2>&1; then
+        run_suite "PSScriptAnalyzer" pwsh -NoProfile -File scripts/lint-powershell.ps1 || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "PSScriptAnalyzer" "pwsh not installed; CI runs it"
+      fi
       ;;
     tiny-text)
       # Bans arbitrary `text-[<11px]` classes that bypass the design
@@ -220,6 +242,11 @@ for suite in "${SUITES[@]}"; do
     pre-push)
       run_suite "changelog fragments" npm run -s check:changelog || { $STOP_ON_FAIL && break; }
       run_suite "biome check" npx biome check src/ scripts/ || { $STOP_ON_FAIL && break; }
+      if command -v shellcheck >/dev/null 2>&1; then
+        run_suite "shellcheck" bash scripts/lint-shell.sh || { $STOP_ON_FAIL && break; }
+      else
+        skip_suite "shellcheck" "not installed (brew install shellcheck); CI runs it"
+      fi
       run_suite "vitest run" npx vitest run || { $STOP_ON_FAIL && break; }
       run_suite "cargo deny" cargo deny check -A no-license-field -A parse-error -A license-not-encountered || { $STOP_ON_FAIL && break; }
       run_suite "cargo clippy (workspace)" cargo clippy --locked --workspace --exclude skill -- -D warnings || { $STOP_ON_FAIL && break; }

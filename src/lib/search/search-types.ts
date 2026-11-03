@@ -290,8 +290,8 @@ export const PRESETS: [string, number][] = [
   ["24h", 1440],
 ];
 
-import { dateToCompactKey, fromUnix } from "$lib/format";
-import type { UmapPoint, UmapResult } from "$lib/types";
+import { dateToCompactKey, fromUnix } from "#lib/format";
+import type { UmapPoint, UmapResult } from "#lib/types";
 
 /**
  * Build a client-side UmapResult for text kNN results:

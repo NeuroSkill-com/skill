@@ -10,18 +10,18 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
-import Hypnogram from "$lib/charts/Hypnogram.svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { ConfirmAction } from "$lib/components/ui/confirm-action";
-import { IconExternalLink } from "$lib/components/ui/icons";
-import { Separator } from "$lib/components/ui/separator";
-import { Spinner } from "$lib/components/ui/spinner";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { type FileInteractionRow, getFilesInRange, type SessionFileActivity } from "$lib/daemon/settings";
-import { SessionDetail } from "$lib/dashboard";
-import type { CsvMetricsResult, EpochRow, SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
+import Hypnogram from "#lib/charts/Hypnogram.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { ConfirmAction } from "#lib/components/ui/confirm-action";
+import { IconExternalLink } from "#lib/components/ui/icons";
+import { Separator } from "#lib/components/ui/separator";
+import { Spinner } from "#lib/components/ui/spinner";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { type FileInteractionRow, getFilesInRange, type SessionFileActivity } from "#lib/daemon/settings";
+import { SessionDetail } from "#lib/dashboard";
+import type { CsvMetricsResult, EpochRow, SessionMetrics } from "#lib/dashboard/SessionDetail.svelte";
 import {
   dateToLocalKey,
   fmtDateTimeLocale,
@@ -32,10 +32,10 @@ import {
   getDpr,
   pad,
   setupHiDpiCanvas,
-} from "$lib/format";
-import BidsExportDialog from "$lib/history/BidsExportDialog.svelte";
-import HistoryCalendar from "$lib/history/HistoryCalendar.svelte";
-import HistoryStatsBar from "$lib/history/HistoryStatsBar.svelte";
+} from "#lib/format";
+import BidsExportDialog from "#lib/history/BidsExportDialog.svelte";
+import HistoryCalendar from "#lib/history/HistoryCalendar.svelte";
+import HistoryStatsBar from "#lib/history/HistoryStatsBar.svelte";
 import {
   type CalendarOverlayEvent,
   type GridData,
@@ -44,7 +44,7 @@ import {
   renderDayGrid as renderDayGridCanvas,
   renderSparkline,
   type TsAccessor,
-} from "$lib/history/history-canvas";
+} from "#lib/history/history-canvas";
 import {
   assignLabelRainbowColors,
   dateKey,
@@ -66,14 +66,14 @@ import {
   type SessionEntry,
   sessionColor,
   totalDurationSecs,
-} from "$lib/history/history-helpers";
-import type { GpsPoint } from "$lib/history/SessionMap.svelte";
-import SessionMap from "$lib/history/SessionMap.svelte";
-import { t } from "$lib/i18n/index.svelte";
-import { getResolved } from "$lib/stores/theme.svelte";
-import { type HistoryViewMode, hBar, hCbs } from "$lib/stores/titlebar.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { LabelRow, SleepStages } from "$lib/types";
+} from "#lib/history/history-helpers";
+import type { GpsPoint } from "#lib/history/SessionMap.svelte";
+import SessionMap from "#lib/history/SessionMap.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import { getResolved } from "#lib/stores/theme.svelte";
+import { type HistoryViewMode, hBar, hCbs } from "#lib/stores/titlebar.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { LabelRow, SleepStages } from "#lib/types";
 
 // ── Pagination state ────────────────────────────────────────────────────
 /** The client's timezone offset in seconds east of UTC.
@@ -782,7 +782,7 @@ function navigateToDay(dayKey: string) {
   }
 }
 
-// heatColor is imported from $lib/history-canvas
+// heatColor is imported from #lib/history-canvas
 
 // ── Week/day epoch dot timeline ─────────────────────────────────────────
 
@@ -1011,7 +1011,7 @@ let gridTooltip = $state<{
   values: { label: string; val: string; color: string }[];
 } | null>(null);
 
-// GridData type is imported from $lib/history-canvas
+// GridData type is imported from #lib/history-canvas
 
 /** Svelte action: render the 24×720 heatmap grid on canvas. */
 function drawDayGrid(canvas: HTMLCanvasElement, data: GridData) {
@@ -1441,7 +1441,7 @@ function drawSparkline(canvas: HTMLCanvasElement, ts: EpochRow[]) {
     },
   };
 }
-// renderSparkline is imported from $lib/history-canvas
+// renderSparkline is imported from #lib/history-canvas
 
 // ── Grid↔session cross-highlighting (#8) ─────────────────────────────────
 /** Session index (into `sessions[]`) hovered from the grid canvas.

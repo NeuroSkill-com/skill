@@ -9,7 +9,7 @@ description = "Cross-platform GPU utilisation and memory stats (macOS IOKit, Lin
 serde = { workspace = true }
 serde_json = { workspace = true }
 llmfit-core = "1.1.17"
-sysinfo    = "0.38"
+sysinfo    = "0.39"
 libc       = "0.2"
 
 [lints]

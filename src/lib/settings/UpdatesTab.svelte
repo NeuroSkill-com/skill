@@ -11,12 +11,12 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { ChipGroup } from "$lib/components/ui/chip-group";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { ChipGroup } from "#lib/components/ui/chip-group";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Phase ─────────────────────────────────────────────────────────────────
 // Single state enum — avoids the boolean-soup that caused the previous bugs.

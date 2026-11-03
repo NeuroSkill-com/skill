@@ -10,9 +10,9 @@
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
 import {
   getLlmConfig,
   getSkillsLastSync,
@@ -30,14 +30,14 @@ import {
   webCacheRemoveDomain,
   webCacheRemoveEntry,
   webCacheStats,
-} from "$lib/daemon/client";
-import { t } from "$lib/i18n/index.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
-import AgentSkillsSection from "$lib/tools/AgentSkillsSection.svelte";
-import ChatToolsSection from "$lib/tools/ChatToolsSection.svelte";
-import SkillsRefreshSection from "$lib/tools/SkillsRefreshSection.svelte";
-import SuggestSkillCta from "$lib/tools/SuggestSkillCta.svelte";
-import { formatPrefixedError } from "$lib/utils/error";
+} from "#lib/daemon/client";
+import { t } from "#lib/i18n/index.svelte";
+import { addToast } from "#lib/stores/toast.svelte";
+import AgentSkillsSection from "#lib/tools/AgentSkillsSection.svelte";
+import ChatToolsSection from "#lib/tools/ChatToolsSection.svelte";
+import SkillsRefreshSection from "#lib/tools/SkillsRefreshSection.svelte";
+import SuggestSkillCta from "#lib/tools/SuggestSkillCta.svelte";
+import { formatPrefixedError } from "#lib/utils/error";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
