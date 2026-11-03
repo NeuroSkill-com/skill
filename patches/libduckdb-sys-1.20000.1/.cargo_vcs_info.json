@@ -1,0 +1,6 @@
+{
+  "git": {
+    "sha1": "db918f65ca165828dc0277c5b02c10f8fd1c4b82"
+  },
+  "path_in_vcs": "crates/libduckdb-sys"
+}
