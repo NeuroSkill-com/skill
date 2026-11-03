@@ -8,6 +8,19 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.2] — 2026-11-03
+
+### Build
+
+- **Linux builds no longer install the Vulkan SDK.** CI, the release setup action and `npm run tauri` added LunarG's apt repo and installed `vulkan-sdk` (or Ubuntu's `libvulkan-dev`) on every Linux build, but nothing compiles or links against it: the only Vulkan code is wgpu's `ash`, which loads the system `libvulkan1` at run time. LunarG publishes no repo for Ubuntu 26.04, so on `ubuntu-latest` the step 404'd and failed the Rust job on `main`. The step, `setup-vulkan-linux`, `install-vulkan-sdk.sh` and the `linux-vulkan-packages` input are gone; apt cache keys are bumped.
+
+- **Removed lockfiles Dependabot flagged but Cargo never reads.** `patches/eegdino-0.2.0/Cargo.lock` and `patches/libduckdb-sys-1.20000.1/Cargo.lock` came with the vendored crates and pinned vulnerable rustls/zip versions; path dependencies resolve through the root `Cargo.lock`. The standalone `crates/skill-tts/e2e` workspace is gone too: it could no longer resolve (no rlx git patches) and duplicated the `kitten-e2e` binary already in `skill-tts`.
+
+### Dependencies
+
+- **keyring 3.6 → 4.2.** One `keyring = "4.2"` line replaces the three per-OS feature blocks: the default `v1` mode picks Keychain on macOS, Credential Manager on Windows (same `user.service` target names as 3.x) and Secret Service on Linux, now through pure-Rust zbus instead of libdbus. 3.x's Linux persistent mode also wrote to Secret Service, so saved secrets stay readable after the upgrade. This also unblocks Dependabot's grouped cargo update, which failed to resolve keyring 4's renamed features.
+- **Dependabot ignores hf-hub 1.x.** 1.0 rewrites the API and drops the `ureq` feature, which broke the grouped update; rlx-models still uses 0.5, so both move together later.
+
 ## [0.1.1-rc.1] — 2026-11-03
 
 ### Bugfixes
@@ -770,16 +783,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
   `Cargo.toml`: `cargo tree -p skill-daemon -i webbluetooth` must print exactly
   one node.
 
-## [0.0.131-rc.29] — 2026-09-22
-
-### Features
-
-- MSVC vs LLD
-
 ## Earlier releases
 
-The 157 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 158 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.29](changes/releases/0.0.131-rc.29.md)
 - [0.0.131-rc.28](changes/releases/0.0.131-rc.28.md)
 - [0.0.131-rc.27](changes/releases/0.0.131-rc.27.md)
 - [0.0.131-rc.26](changes/releases/0.0.131-rc.26.md)
