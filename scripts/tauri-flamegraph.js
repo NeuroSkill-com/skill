@@ -171,7 +171,6 @@ if (isMac) {
   run("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1");
   espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 } else {
-  run("bash scripts/install-vulkan-sdk.sh");
   run("bash scripts/build-espeak-static.sh");
   espeakLib = resolve(root, "src-tauri/espeak-static/lib");
 }

@@ -3,8 +3,6 @@
 //!
 //! ```bash
 //! cargo run -p skill-tts --features tts-kitten,whisper-validate --release --bin kitten-e2e
-//! # or isolated:
-//! cargo run --manifest-path crates/skill-tts/e2e/Cargo.toml --release
 //! ```
 
 use std::path::PathBuf;

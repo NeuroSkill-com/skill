@@ -17,8 +17,7 @@ name: Trial — Linux arm64 packages
 # question. Artifacts are uploaded to the workflow run, never to a Release, so a
 # trial cannot publish anything.
 #
-# Known arm64 deltas from the x86_64 job, both handled below:
-#   * LunarG publishes `vulkan-sdk` for amd64 only -> Ubuntu's libvulkan-dev.
+# Known arm64 delta from the x86_64 job, handled below:
 #   * CUDA: the `linux` umbrella pulls rlx-cuda -> cudarc, which defaults to
 #     `fallback-dynamic-loading` and dlopens libcuda at run time, so it builds
 #     with no CUDA toolkit present and simply finds no device at run time
@@ -79,8 +78,6 @@ jobs:
         with:
           target: aarch64-unknown-linux-gnu
           linux-deps: "true"
-          # LunarG is amd64-only; use Ubuntu's loader + headers instead.
-          linux-vulkan-packages: "libvulkan-dev libvulkan1"
           cache-key: linux-trial-aarch64-unknown-linux-gnu-v1
           build-frontend: "false"
 
