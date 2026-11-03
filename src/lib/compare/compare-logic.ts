@@ -6,7 +6,7 @@
  * Timeline helpers, date/time conversions, and range computations.
  */
 
-import type { EmbeddingSession } from "$lib/compare/compare-types";
+import type { EmbeddingSession } from "#lib/compare/compare-types";
 import {
   dateToLocalKey,
   fmtDateTime,
@@ -15,7 +15,7 @@ import {
   fmtDuration as fmtDurationSecs,
   fromUnix,
   parseDateTimeLocalInput,
-} from "$lib/format";
+} from "#lib/format";
 
 // ── Date / time helpers ──────────────────────────────────────────────────────
 

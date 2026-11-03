@@ -9,12 +9,12 @@
 -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { t } from "$lib/i18n/index.svelte";
-import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
-import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
-import { fetchTtsEngines, TTS_ENGINE_FALLBACK_LIST, type TtsEngineInfo } from "$lib/llm/voice-catalog";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { t } from "#lib/i18n/index.svelte";
+import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "#lib/llm/tts";
+import VoiceEnginePicker from "#lib/llm/VoiceEnginePicker.svelte";
+import { fetchTtsEngines, TTS_ENGINE_FALLBACK_LIST, type TtsEngineInfo } from "#lib/llm/voice-catalog";
 
 let cfg = $state<TtsEngineConfig>(loadTtsEngine());
 let engines = $state<TtsEngineInfo[]>([...TTS_ENGINE_FALLBACK_LIST]);

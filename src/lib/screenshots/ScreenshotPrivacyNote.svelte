@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
 </script>
 
 <div class="rounded-xl border border-violet-500/20 bg-violet-500/5 dark:bg-violet-500/10 px-4 py-3 flex gap-3">

@@ -3,9 +3,10 @@
 ## Prerequisites
 
 - **Rust** (latest stable) via [rustup](https://rustup.rs/)
-- **Node.js** ≥ 20 with npm
-- **Tauri CLI**: installed via `npm install` (workspace devDependency)
+- **Node.js** ≥ 22.17 with npm (SvelteKit 3 and Vitest 5 need it; CI uses 22). `npm run setup` offers to install Node 22 into `~/.local` if it is missing or older
+- **Tauri CLI**: installed via `npm ci` (workspace devDependency; `npm ci` follows the lockfile, as CI does)
 - **Platform SDKs**: Xcode (macOS), Visual Studio Build Tools + LLVM (Windows), build-essential (Linux)
+- **CMake** and **protoc** (`brew install cmake protobuf` on macOS); `npm run setup` checks for both
 - **Vulkan SDK** (optional Linux tooling; LLM GPU backends use OS umbrellas `apple` / `linux` / `windows`)
 
 ## Quick Start
@@ -153,8 +154,10 @@ Tests are split into tiers by compilation cost so you get fast feedback:
 | **3** | + screenshots, devices, llm (adds ML, TLS, heavy native deps) | ~65 s | ~15 s | ~650 |
 | **E2E** | LLM download → inference → tool calling (manual/CI dispatch) | ~15 s | ~12 s | 1 |
 
-> **Tip:** Install [sccache](https://github.com/mozilla/sccache) (`brew install sccache`) and
-> set `RUSTC_WRAPPER=sccache` for faster clean rebuilds.
+> **Tip:** Install [kache](https://github.com/kunobi-ninja/kache)
+> (`brew install kunobi-ninja/kunobi/kache && kache init`) for faster clean rebuilds and
+> cache reuse across worktrees. [sccache](https://github.com/mozilla/sccache)
+> (`RUSTC_WRAPPER=sccache`) also works; the npm build scripts prefer kache when both exist.
 
 See [docs/TEST-COVERAGE.md](docs/TEST-COVERAGE.md) for a detailed coverage analysis and gaps.
 
@@ -207,8 +210,8 @@ cargo check $FLAGS
 # Or check only core app lib target
 cargo check -p skill --lib
 
-# Optional: speed up rebuilds with sccache
-export RUSTC_WRAPPER=sccache
+# Optional: speed up rebuilds with kache (or sccache)
+kache init            # once; or: export RUSTC_WRAPPER=sccache
 ```
 
 ### Commit Checklist

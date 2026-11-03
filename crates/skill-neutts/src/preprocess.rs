@@ -291,7 +291,7 @@ fn unit_expansion(unit: &str) -> &'static str {
 
 pub fn expand_ordinals(text: &str) -> String {
     RE_ORDINAL
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let n: i64 = caps[1].parse().unwrap_or(0);
             ordinal_suffix(n)
         })
@@ -300,7 +300,7 @@ pub fn expand_ordinals(text: &str) -> String {
 
 pub fn expand_percentages(text: &str) -> String {
     RE_PERCENT
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let raw = caps[1].replace(',', "");
             let words = if raw.contains('.') {
                 float_to_words(&raw)
@@ -314,7 +314,7 @@ pub fn expand_percentages(text: &str) -> String {
 
 pub fn expand_currency(text: &str) -> String {
     RE_CURRENCY
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let symbol = &caps[1];
             let raw = caps[2].replace(',', "");
             let scale_suffix = caps.get(3).map(|m| m.as_str()).unwrap_or("");
@@ -369,7 +369,7 @@ pub fn expand_currency(text: &str) -> String {
 
 pub fn expand_time(text: &str) -> String {
     RE_TIME
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let h: i64 = caps[1].parse().unwrap_or(0);
             let mins: i64 = caps[2].parse().unwrap_or(0);
             let suffix = caps
@@ -394,7 +394,7 @@ pub fn expand_time(text: &str) -> String {
 
 pub fn expand_ranges(text: &str) -> String {
     RE_RANGE
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let lo = number_to_words(caps[1].parse().unwrap_or(0));
             let hi = number_to_words(caps[2].parse().unwrap_or(0));
             format!("{} to {}", lo, hi)
@@ -404,13 +404,13 @@ pub fn expand_ranges(text: &str) -> String {
 
 pub fn expand_model_names(text: &str) -> String {
     RE_MODEL_VER
-        .replace_all(text, |caps: &Captures| format!("{} {}", &caps[1], &caps[2]))
+        .replace_all(text, |caps: &Captures<str>| format!("{} {}", &caps[1], &caps[2]))
         .into_owned()
 }
 
 pub fn expand_units(text: &str) -> String {
     RE_UNIT
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let raw = &caps[1];
             let unit = &caps[2];
             let expanded = unit_expansion(unit);
@@ -427,7 +427,7 @@ pub fn expand_units(text: &str) -> String {
 
 pub fn expand_scale_suffixes(text: &str) -> String {
     RE_SCALE
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let raw = &caps[1];
             let suffix = &caps[2];
             let scale_word = scale_suffix_word(suffix);
@@ -443,7 +443,7 @@ pub fn expand_scale_suffixes(text: &str) -> String {
 
 pub fn expand_scientific_notation(text: &str) -> String {
     RE_SCI
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let coeff = &caps[1];
             let exp: i64 = caps[2].parse().unwrap_or(0);
             let coeff_words = if coeff.contains('.') {
@@ -460,7 +460,7 @@ pub fn expand_scientific_notation(text: &str) -> String {
 
 pub fn expand_fractions(text: &str) -> String {
     RE_FRACTION
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let num: i64 = caps[1].parse().unwrap_or(0);
             let den: i64 = caps[2].parse().unwrap_or(1);
             if den == 0 {
@@ -498,7 +498,7 @@ pub fn expand_decades(text: &str) -> String {
         (9, "nineties"),
     ];
     RE_DECADE
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let base: i64 = caps[1].parse().unwrap_or(0);
             let decade_digit = (base % 10) as usize;
             let decade_word = decade_map
@@ -518,7 +518,7 @@ pub fn expand_decades(text: &str) -> String {
 
 pub fn expand_ip_addresses(text: &str) -> String {
     RE_IP
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let octets: Vec<String> = (1..=4).map(|i| digits_to_words(&caps[i])).collect();
             octets.join(" dot ")
         })
@@ -529,30 +529,32 @@ pub fn expand_phone_numbers(text: &str) -> String {
     let join_groups =
         |groups: Vec<&str>| -> String { groups.iter().map(|g| digits_to_words(g)).collect::<Vec<_>>().join(" ") };
     let text = RE_PHONE_11
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             join_groups(vec![&caps[1], &caps[2], &caps[3], &caps[4]])
         })
         .into_owned();
     let text = RE_PHONE_10
-        .replace_all(&text, |caps: &Captures| join_groups(vec![&caps[1], &caps[2], &caps[3]]))
+        .replace_all(&text, |caps: &Captures<str>| {
+            join_groups(vec![&caps[1], &caps[2], &caps[3]])
+        })
         .into_owned();
     RE_PHONE_7
-        .replace_all(&text, |caps: &Captures| join_groups(vec![&caps[1], &caps[2]]))
+        .replace_all(&text, |caps: &Captures<str>| join_groups(vec![&caps[1], &caps[2]]))
         .into_owned()
 }
 
 pub fn normalize_leading_decimals(text: &str) -> String {
     let text = RE_NEG_LEAD_DEC
-        .replace_all(text, |caps: &Captures| format!("{}0.{}", &caps[1], &caps[2]))
+        .replace_all(text, |caps: &Captures<str>| format!("{}0.{}", &caps[1], &caps[2]))
         .into_owned();
     RE_LEAD_DEC
-        .replace_all(&text, |caps: &Captures| format!("0.{}", &caps[1]))
+        .replace_all(&text, |caps: &Captures<str>| format!("0.{}", &caps[1]))
         .into_owned()
 }
 
 pub fn replace_numbers(text: &str) -> String {
     RE_NUMBER
-        .replace_all(text, |caps: &Captures| {
+        .replace_all(text, |caps: &Captures<str>| {
             let raw = caps[0].replace(',', "");
             if raw.contains('.') {
                 float_to_words(&raw)

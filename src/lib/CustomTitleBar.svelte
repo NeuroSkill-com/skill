@@ -8,12 +8,12 @@ the Free Software Foundation, version 3 only. -->
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { t } from "$lib/i18n/index.svelte";
-import type { LlmCatalog, LlmModelEntry } from "$lib/llm/llm-helpers";
-import { openHelp, openLabel } from "$lib/navigation";
-import { isBtOff } from "$lib/stores/bt-status.svelte";
-import { chatTitlebarState, hBar, hCbs, helpTitlebarState, labelTitlebarState } from "$lib/stores/titlebar.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { t } from "#lib/i18n/index.svelte";
+import type { LlmCatalog, LlmModelEntry } from "#lib/llm/llm-helpers";
+import { openHelp, openLabel } from "#lib/navigation";
+import { isBtOff } from "#lib/stores/bt-status.svelte";
+import { chatTitlebarState, hBar, hCbs, helpTitlebarState, labelTitlebarState } from "#lib/stores/titlebar.svelte";
 import LanguagePicker from "./LanguagePicker.svelte";
 import ThemeToggle from "./ThemeToggle.svelte";
 

@@ -7,25 +7,25 @@ the Free Software Foundation, version 3 only. -->
 <!-- Virtual Devices window — start pre-configured virtual EEG devices via daemon. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { getDeviceStatus } from "$lib/daemon/devices";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { getDeviceStatus } from "#lib/daemon/devices";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
 import {
   lslConnect,
   lslStartVirtualSourceConfigured,
   lslStopVirtualSource,
   lslVirtualSourceRunning,
-} from "$lib/daemon/lsl";
-import type { DaemonEvent } from "$lib/daemon/ws";
-import { t } from "$lib/i18n/index.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { LineNoise, SignalQuality, SignalTemplate, VirtualEegConfig } from "$lib/virtual-eeg/generator";
+} from "#lib/daemon/lsl";
+import type { DaemonEvent } from "#lib/daemon/ws";
+import { t } from "#lib/i18n/index.svelte";
+import { addToast } from "#lib/stores/toast.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { LineNoise, SignalQuality, SignalTemplate, VirtualEegConfig } from "#lib/virtual-eeg/generator";
 // Preview only — offline JS signal shape, not live data
-import { generateSamples, getChannelLabels } from "$lib/virtual-eeg/generator";
+import { generateSamples, getChannelLabels } from "#lib/virtual-eeg/generator";
 
 useWindowTitle("window.title.virtualDevices");
 
@@ -246,7 +246,7 @@ function emitVirtualStatus(cfg: VirtualEegConfig, connected: boolean) {
         eeg_channel_count: 0,
         eeg_sample_rate_hz: 0,
       };
-  import("$lib/daemon/ws")
+  import("#lib/daemon/ws")
     .then(({ injectDaemonEvent }) => {
       injectDaemonEvent({
         type: "VirtualDeviceStatus",

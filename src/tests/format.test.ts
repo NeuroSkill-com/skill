@@ -23,7 +23,7 @@ import {
   thresholdColor,
   toUnix,
   unixToLocalKey,
-} from "$lib/format";
+} from "#lib/format";
 
 describe("pad", () => {
   it("pads single digit", () => expect(pad(5)).toBe("05"));

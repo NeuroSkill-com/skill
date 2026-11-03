@@ -370,8 +370,9 @@ mod tests {
                 created_at: 0,
                 revoked_at: None,
                 last_used_at: None,
+                last_used_step: None,
             };
-            totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
+            totp_from_entry(&entry).expect("totp").generate_current().to_string()
         };
 
         {
@@ -509,8 +510,9 @@ mod tests {
                 created_at: 0,
                 revoked_at: None,
                 last_used_at: None,
+                last_used_step: None,
             };
-            totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
+            totp_from_entry(&entry).expect("totp").generate_current().to_string()
         };
 
         let totp_id = auth.lock().expect("lock").list_totp()[0].id.clone();
@@ -554,8 +556,9 @@ mod tests {
                 created_at: 0,
                 revoked_at: None,
                 last_used_at: None,
+                last_used_step: None,
             };
-            totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
+            totp_from_entry(&entry).expect("totp").generate_current().to_string()
         };
         let totp_id = auth.lock().expect("lock").list_totp()[0].id.clone();
         auth.lock()
@@ -595,8 +598,9 @@ mod tests {
                 created_at: 0,
                 revoked_at: None,
                 last_used_at: None,
+                last_used_step: None,
             };
-            totp_from_entry(&entry).expect("totp").generate_current().expect("otp")
+            totp_from_entry(&entry).expect("totp").generate_current().to_string()
         };
         let totp_id = auth.lock().expect("lock").list_totp()[0].id.clone();
         auth.lock()

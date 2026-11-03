@@ -136,15 +136,15 @@ export interface CsvMetricsResult {
 </script>
 
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import { TimeSeriesChart, MetricTooltip } from "$lib/dashboard";
-  import { Spinner } from "$lib/components/ui/spinner";
+  import { t } from "#lib/i18n/index.svelte";
+  import { TimeSeriesChart, MetricTooltip } from "#lib/dashboard";
+  import { Spinner } from "#lib/components/ui/spinner";
   import {
     C_DELTA, C_THETA, C_ALPHA, C_BETA, C_GAMMA,
     C_RELAX, C_ENGAGE, C_MED, C_COG, C_DROW, C_MOOD,
     C_HR, C_HRV_G, C_HRV_B, C_HRV_A, C_BLINK,
     C_PITCH, C_ROLL, C_STILL, C_STRESS,
-  } from "$lib/constants";
+  } from "#lib/constants";
 
   interface Props {
     metrics?:    SessionMetrics | null;

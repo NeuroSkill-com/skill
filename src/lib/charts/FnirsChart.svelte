@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <script lang="ts">
-import { animatedCanvas } from "$lib/charts/use-canvas";
-import { SectionHeader } from "$lib/components/ui/section-header";
+import { animatedCanvas } from "#lib/charts/use-canvas";
+import { SectionHeader } from "#lib/components/ui/section-header";
 
 const N = 600;
 const hbo = new Float64Array(N);

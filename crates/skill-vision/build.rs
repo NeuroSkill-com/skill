@@ -1,5 +1,12 @@
 fn main() {
-    #[cfg(target_os = "macos")]
+    // A build script's `#[cfg]` describes the HOST running it, not the target,
+    // so cross-compiling from a Mac to Windows or Linux used to hand this
+    // Objective-C file to the target's C compiler. Same fix as skill-calendar:
+    // read CARGO_CFG_TARGET_OS (`cc` is an unconditional build-dependency).
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+
     {
         println!("cargo:rerun-if-changed=src/vision_ocr.m");
 

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
   "files": {
     "includes": ["src/**/*.ts", "src/**/*.svelte", "scripts/**/*.ts", "scripts/**/*.js"],
     "ignoreUnknown": true
@@ -14,7 +14,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "warn",
         "noConsole": "warn"
@@ -60,6 +60,9 @@
           },
           "suspicious": {
             "noConsole": "off"
+          },
+          "performance": {
+            "useDomNodeTextContent": "off"
           }
         }
       }

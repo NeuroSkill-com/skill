@@ -18,7 +18,7 @@ import { onDestroy, onMount } from "svelte";
 import type * as THREE_NS from "three";
 import type { Color as ThreeColor, Vector3 as ThreeVector3 } from "three";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
-import { Spinner } from "$lib/components/ui/spinner";
+import { Spinner } from "#lib/components/ui/spinner";
 import {
   UMAP_ANIM_MS,
   UMAP_BG,
@@ -36,11 +36,11 @@ import {
   UMAP_TRACE_GROW_MS,
   UMAP_TRACE_INTERVAL_MS,
   UMAP_TRACE_NODE_COLOR,
-} from "$lib/constants";
-import { dateToLocalKey, fmtTimeShort, fromUnix } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { getResolved } from "$lib/stores/theme.svelte";
-import type { UmapPoint, UmapProgress, UmapResult } from "$lib/types";
+} from "#lib/constants";
+import { dateToLocalKey, fmtTimeShort, fromUnix } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { getResolved } from "#lib/stores/theme.svelte";
+import type { UmapPoint, UmapProgress, UmapResult } from "#lib/types";
 import {
   easeOut,
   fmtGradientTs,
@@ -50,7 +50,7 @@ import {
   labelHex,
   turboRaw,
   utcToLocalDate,
-} from "$lib/umap/umap-helpers";
+} from "#lib/umap/umap-helpers";
 
 type ThreeModule = typeof import("three");
 type LabelCloudGroup = THREE_NS.Group & { __updatePositions?: (pos: Float32Array) => void };

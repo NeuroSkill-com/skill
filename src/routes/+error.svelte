@@ -2,14 +2,14 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Root error boundary — catches unhandled errors in any route. -->
 <script lang="ts">
-import { page } from "$app/stores";
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import { page } from "$app/state";
 </script>
 
 <div class="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6 text-center">
   <div class="text-5xl opacity-30 select-none">⚠</div>
   <h1 class="text-lg font-semibold text-foreground">
-    {$page.error?.message ?? t("common.error")}
+    {page.error?.message ?? t("common.error")}
   </h1>
   <p class="text-sm text-muted-foreground max-w-md leading-relaxed">
     {t("error.description")}
@@ -27,9 +27,9 @@ import { t } from "$lib/i18n/index.svelte";
       {t("error.reload")}
     </button>
   </div>
-  {#if $page.status && $page.status !== 500}
+  {#if page.status && page.status !== 500}
     <p class="text-xs text-muted-foreground/50 mt-4 font-mono">
-      HTTP {$page.status}
+      HTTP {page.status}
     </p>
   {/if}
 </div>

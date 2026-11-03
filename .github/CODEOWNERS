@@ -12,7 +12,6 @@
 # CI and release automation
 /.github/workflows/ @eugenehp
 /scripts/ @eugenehp
-/release.sh @eugenehp
 
 # Project docs and process
 /README.md @eugenehp

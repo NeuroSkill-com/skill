@@ -1,0 +1,3 @@
+### Build
+
+- **kache compiler cache.** CI's Linux and Windows Rust jobs now cache compiled crates with [kache](https://github.com/kunobi-ninja/kache) (`kunobi-ninja/kache-action`, pinned by SHA). "Rust — clippy + test" and "Windows — cargo clippy" each write one store, and the LLM and LSL E2E jobs restore the Linux store read-only. `Swatinem/rust-cache` still caches the Cargo registry. Release jobs still run without a compiler cache. Locally, `npm run tauri dev/build`, the flamegraph script, `scripts/test-all.sh` and the pre-push hook now prefer kache over sccache. An exported `RUSTC_WRAPPER=sccache` used to override a machine-wide kache setup. Set `SKILL_NO_KACHE=1` to fall back to sccache.

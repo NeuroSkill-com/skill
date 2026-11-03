@@ -19,7 +19,9 @@ echo "=== Building NeuroSkill macOS ==="
 # ── Step 1: Build WidgetKit extension ──────────────────────────────────
 echo ""
 echo "── Building WidgetKit widgets ($CONFIG) ──"
-"$WIDGET_DIR/build-widgets.sh" $([ "$CONFIG" = "Release" ] && echo "--release" || true)
+WIDGET_ARGS=()
+[ "$CONFIG" = "Release" ] && WIDGET_ARGS+=(--release)
+"$WIDGET_DIR/build-widgets.sh" "${WIDGET_ARGS[@]+"${WIDGET_ARGS[@]}"}"
 
 # ── Step 2: Build Tauri app ────────────────────────────────────────────
 echo ""

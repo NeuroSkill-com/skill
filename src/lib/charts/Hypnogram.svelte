@@ -12,9 +12,9 @@ the Free Software Foundation, version 3 only. -->
     summary  — { total_epochs, wake_epochs, n1_epochs, n2_epochs, n3_epochs, rem_epochs, epoch_secs }
 -->
 <script lang="ts">
-import TimeSeriesChart from "$lib/dashboard/TimeSeriesChart.svelte";
-import { t } from "$lib/i18n/index.svelte";
-import type { SleepEpoch, SleepSummary } from "$lib/types";
+import TimeSeriesChart from "#lib/dashboard/TimeSeriesChart.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import type { SleepEpoch, SleepSummary } from "#lib/types";
 
 let {
   epochs,

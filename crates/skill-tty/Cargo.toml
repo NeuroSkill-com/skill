@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow  = { workspace = true }
 libc    = "0.2"
-dirs    = "6"
+dirs    = "7"
 chrono  = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [lints]

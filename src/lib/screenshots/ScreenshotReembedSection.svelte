@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { Button } from "$lib/components/ui/button";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { t } from "#lib/i18n/index.svelte";
 
 interface ReembedEstimate {
   total: number;

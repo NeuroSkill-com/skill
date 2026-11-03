@@ -7,18 +7,18 @@ the Free Software Foundation, version 3 only. -->
 <!-- Labels List — browse, search, edit, and delete all EEG annotations. -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { ConfirmAction } from "$lib/components/ui/confirm-action";
-import { Separator } from "$lib/components/ui/separator";
-import { Spinner } from "$lib/components/ui/spinner";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { fmtElapsed, fmtDateTimeLocale as formatDate } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { openHistory } from "$lib/navigation";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { LabelRow } from "$lib/types";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { ConfirmAction } from "#lib/components/ui/confirm-action";
+import { Separator } from "#lib/components/ui/separator";
+import { Spinner } from "#lib/components/ui/spinner";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { fmtElapsed, fmtDateTimeLocale as formatDate } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { openHistory } from "#lib/navigation";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { LabelRow } from "#lib/types";
 
 // ── Actions ───────────────────────────────────────────────────────────────
 function focusOnMount(node: HTMLElement) {

@@ -14,15 +14,15 @@
 -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { fmtGB } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { discoveredSource, type LlmModelEntry, sourceLabel } from "$lib/llm/llm-helpers";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { fmtGB } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { discoveredSource, type LlmModelEntry, sourceLabel } from "#lib/llm/llm-helpers";
 
 interface DiscoveryConfig {
   enabled: boolean;

@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Windows & Overlays — all text pulled from markdown -->
 
 <script lang="ts">
-import { getLocale } from "$lib/i18n/index.svelte";
+import { getLocale } from "#lib/i18n/index.svelte";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
 import { getHelpContent } from "./help-loader";

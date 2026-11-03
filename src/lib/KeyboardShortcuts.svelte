@@ -14,8 +14,8 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
-import { t } from "$lib/i18n/index.svelte";
-import { prettyAccelerator } from "$lib/utils/accelerator";
+import { t } from "#lib/i18n/index.svelte";
+import { prettyAccelerator } from "#lib/utils/accelerator";
 
 let open = $state(false);
 

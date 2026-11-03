@@ -69,7 +69,8 @@ members = [
 # shim that stood in for all of them, is therefore RETIRED: nothing compiles it,
 # and cargo says so out loud if the patch entry is left in place —
 # `warning: patch btleplug v0.11.9 ... was not used in the crate graph`.
-# The directory is kept for now as the record of what it did; it can be deleted.
+# The directory was deleted on 2026-11-02; restore it with
+# `git checkout 4d7348f8 -- patches/btleplug-0.11.9` if it is ever needed again.
 #
 # Keep it in mind if a new BLE crate is ever added that wants btleplug: without
 # the shim, btleplug comes from crates.io and brings back the bug it existed to
@@ -148,14 +149,12 @@ gpu-allocator    = { path = "patches/gpu-allocator-0.28.0" }
 # The vendored copy differs from crates.io only in that version bump; see the
 # patch's Cargo.toml. Drop it when upstream ships a reqwest 0.12 release.
 oura-api         = { path = "patches/oura-api-0.1.2" }
-# libduckdb-sys 1.20000.0: links its static-extension autoregister archive
-# `+whole-archive`, which rustc bundles into the rlib and repacks at the final
-# link. On macOS that repacked archive's member is not 8-byte aligned and ld64
-# refuses it ("not 8-byte aligned", v0.1.0-rc.4 release). The vendored copy only
-# adds `-bundle` to that one link-lib line, so the cc-built archive is used as is.
-# It must be built with Apple ar, not GNU ar (gar misaligns it the same way).
-# Drop when upstream ships the fix.
-libduckdb-sys    = { path = "patches/libduckdb-sys-1.20000.0" }
+# (A vendored libduckdb-sys 1.20000.0 used to sit here, adding `-bundle` to the
+# `+whole-archive` link of its static-extension autoregister archive after the
+# v0.1.0-rc.4 macOS link failed with "not 8-byte aligned". It stopped applying
+# when duckdb moved to 1.20000.1, and v0.1.0's macOS release linked fine without
+# it, since that release setup no longer forces GNU ar. If the error returns,
+# vendor the current libduckdb-sys with the same one-line change.)
 # Minimal [patch] set that keeps crates.io out of the lock (verified): rlx-models
 # still declares `version = "^0.2.x"` registry deps on the runtime stack, and
 # third-party crates (tribev2, …) pull registry `rlx-models-*`. Dropping any of
@@ -198,6 +197,16 @@ rlx-umap         = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main"
 rlx-search       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-rng          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-tensor       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+# rlx-models 0.2.20 takes these two from the registry at `^0.2.20`. `rlx-mcu` is
+# not published at all (`cargo update` failed: "no matching package named
+# rlx-mcu"), and `rlx-optim` was resolving from crates.io beside the git stack.
+# rlx-models also asks the registry for rlx-opscope, rlx-collectives and
+# rlx-fpga, which nothing here enables yet; Cargo warns on every build about an
+# unused patch, so add them when a feature pulls one in. Missing a new rlx
+# crate fails `cargo update` loudly while crates.io lags behind git, but once
+# the version is published it splits silently into a second copy.
+rlx-mcu          = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
+rlx-optim        = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-macros       = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-distributed  = { git = "https://github.com/MIT-RLX/rlx.git", branch = "main" }
 rlx-models-core   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main" }
@@ -218,8 +227,8 @@ rlx-assets        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch 
 [workspace.dependencies]
 anyhow = "1"
 thiserror = "2"
-base64 = "0.22"
-rusqlite = { version = "0.39", features = ["bundled"] }
+base64 = "0.23"
+rusqlite = { version = "0.41", features = ["bundled"] }
 # DuckDB — one version for the whole graph: libduckdb-sys declares
 # `links = "duckdb"`, so bids-layout (via bids-eeg) and our own stores must
 # agree on it.

@@ -7,9 +7,9 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
-import { t } from "$lib/i18n/index.svelte";
-import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import MarkdownRenderer from "#lib/MarkdownRenderer.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
 import changelogRaw from "../../../CHANGELOG.md?raw";
 
 useWindowTitle("whatsNew.title");
@@ -50,7 +50,7 @@ const allVersions = extractAllVersions(changelogRaw);
 // Default to the first released version (skip [Unreleased] as the landing
 // view so users see actual shipped changes when the window opens).
 const firstRelIdx = allVersions.findIndex((v) => v.version.toLowerCase() !== "unreleased");
-const defaultIdx = firstRelIdx >= 0 ? firstRelIdx : 0;
+const defaultIdx = Math.max(firstRelIdx, 0);
 
 // ── State ──────────────────────────────────────────────────────────────────
 let currentIdx = $state(defaultIdx);

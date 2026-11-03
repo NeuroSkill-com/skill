@@ -2,16 +2,16 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Full context viewer modal — shows the entire prompt as it would be sent to the LLM. -->
 <script lang="ts">
-import { buildEegBlock } from "$lib/chat/chat-eeg";
+import { buildEegBlock } from "#lib/chat/chat-eeg";
 import {
   type BandSnapshot,
   buildUserContent,
   estimateTokens,
   type Message,
   type ToolConfig,
-} from "$lib/chat/chat-types";
-import { IconCheck } from "$lib/components/ui/icons";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/chat/chat-types";
+import { IconCheck } from "#lib/components/ui/icons";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   messages: Message[];

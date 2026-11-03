@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+# Fedora harness for verifying a NeuroSkill .rpm actually installs and works.
+# Driven by scripts/verify-rpm-docker.sh; the checks live in
+# scripts/lib/verify-rpm.sh, which is mounted at run time so editing a check
+# does not rebuild the image.
+#
+# Why Fedora rather than the Ubuntu we build on: the .rpm targets
+# Fedora/RHEL/openSUSE, and the interesting failures are distro-side — whether
+# `dnf` can satisfy the dependencies rpmbuild generated, and whether the
+# binary's NEEDED libraries exist under those package names. Building the rpm on
+# Ubuntu tells us nothing about that.
+#
+# Arch is chosen by the caller via --platform, so the same image definition
+# verifies both x86_64 and aarch64.
+FROM fedora:41
+
+# - rpm-build: rpmbuild, for constructing a test package when no real one exists
+# - binutils / file: ELF arch + linkage inspection
+# - findutils, which: used by the checks
+#
+# `dnf install` of the package under test pulls its own dependencies at run
+# time; deliberately not pre-installed here, because whether that resolution
+# succeeds is one of the things being verified.
+RUN dnf -y install --setopt=install_weak_deps=False \
+        rpm-build binutils file findutils which \
+    && dnf clean all
+
+WORKDIR /work
+ENTRYPOINT ["/bin/bash"]

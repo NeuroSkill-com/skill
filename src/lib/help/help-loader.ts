@@ -13,7 +13,7 @@
  * locale-specific file is missing.
  */
 
-import { getAppName } from "$lib/stores/app-name.svelte";
+import { getAppName } from "#lib/stores/app-name.svelte";
 import type { FaqEntry, HelpSectionData } from "./parse-help-md";
 import { parseFaqMd, parseHelpMd } from "./parse-help-md";
 

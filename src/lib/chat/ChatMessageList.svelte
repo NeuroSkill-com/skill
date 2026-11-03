@@ -4,12 +4,12 @@
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { tick } from "svelte";
-import ChatToolCard from "$lib/chat/ChatToolCard.svelte";
-import type { Message, ServerStatus } from "$lib/chat/chat-types";
-import { cleanLeadInForDisplay, processingLabelKey } from "$lib/chat/chat-utils";
-import { fmtMs } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
+import ChatToolCard from "#lib/chat/ChatToolCard.svelte";
+import type { Message, ServerStatus } from "#lib/chat/chat-types";
+import { cleanLeadInForDisplay, processingLabelKey } from "#lib/chat/chat-utils";
+import { fmtMs } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import MarkdownRenderer from "#lib/MarkdownRenderer.svelte";
 
 interface Props {
   messages: Message[];
@@ -25,7 +25,7 @@ interface Props {
   /** Callback to update a single message by id */
   onUpdateMessage: (id: number, patch: Partial<Message>) => void;
   /** Callback to update a specific toolUse entry */
-  onUpdateToolUse: (msgId: number, tuIdx: number, patch: Partial<import("$lib/chat/chat-types").ToolUseEvent>) => void;
+  onUpdateToolUse: (msgId: number, tuIdx: number, patch: Partial<import("#lib/chat/chat-types").ToolUseEvent>) => void;
   onCancelToolCall: (msgId: number, tuIdx: number, toolCallId: string | undefined) => void;
   onEditAndResend: (msg: Message) => void;
   onRegenerate: () => void;

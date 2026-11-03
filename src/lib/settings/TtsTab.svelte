@@ -10,21 +10,21 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import TtsTestWidget from "$lib/help/TtsTestWidget.svelte";
-import { t } from "$lib/i18n/index.svelte";
-import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "$lib/llm/tts";
-import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import TtsTestWidget from "#lib/help/TtsTestWidget.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import { fetchTtsEngine, loadTtsEngine, saveTtsEngine, type TtsEngineConfig } from "#lib/llm/tts";
+import VoiceEnginePicker from "#lib/llm/VoiceEnginePicker.svelte";
 import {
   fetchTtsEngines,
   TTS_ENGINE_FALLBACK_LIST,
   type TtsEngineInfo,
   ttsEngineLabelKey,
-} from "$lib/llm/voice-catalog";
+} from "#lib/llm/voice-catalog";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -277,7 +277,7 @@ let neuttsConfig = $state<NeuttsConfig>({
 });
 let kittenVoices = $state<string[]>(["Jasper"]);
 let kittenVoice = $state("Jasper");
-// Canonical engine selection (mirrors daemon `tts_engine`; see $lib/llm/tts).
+// Canonical engine selection (mirrors daemon `tts_engine`; see #lib/llm/tts).
 let ttsCfg = $state<TtsEngineConfig>(loadTtsEngine());
 let ttsPreload = $state(true);
 let logConfig = $state<LogConfig>({

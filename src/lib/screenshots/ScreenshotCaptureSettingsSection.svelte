@@ -1,16 +1,16 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { Separator } from "$lib/components/ui/separator";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { Separator } from "#lib/components/ui/separator";
 import {
   EMBEDDING_EPOCH_SECS,
   SCREENSHOT_INTERVAL_MAX_SECS,
   SCREENSHOT_INTERVAL_MIN_SECS,
   SCREENSHOT_INTERVAL_STEP_SECS,
-} from "$lib/constants";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/constants";
+import { t } from "#lib/i18n/index.svelte";
 
 interface ScreenshotCaptureConfig {
   enabled: boolean;

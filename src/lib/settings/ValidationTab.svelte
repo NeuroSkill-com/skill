@@ -14,13 +14,13 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import { daemonGet, daemonPatch, daemonPost } from "$lib/daemon/http";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import { daemonGet, daemonPatch, daemonPost } from "#lib/daemon/http";
+import { t } from "#lib/i18n/index.svelte";
 import PvtPanel from "./PvtPanel.svelte";
 import TlxForm from "./TlxForm.svelte";
 

@@ -203,15 +203,16 @@ if (useRelease && !process.env.CARGO_PROFILE_RELEASE_DEBUG) {
 }
 
 // ── Build cache + fast linker detection ──────────────────────────────────────
-// Mirror the sccache / mold detection from tauri-build.js so the flamegraph
+// Mirror the kache / sccache / mold detection from tauri-build.js so the flamegraph
 // build uses the same compilation environment and cargo fingerprints match.
 // Without this, switching between `tauri dev` and `tauri:flamegraph` causes
 // full rebuilds because the env (RUSTC_WRAPPER, linker flags) differs.
 
-function detectSccache() {
-  if (process.env.SKILL_NO_SCCACHE === "1") return false;
-  if (process.env.RUSTC_WRAPPER) return false;
-  return commandExists("sccache");
+function detectCompilerCache() {
+  if (process.env.RUSTC_WRAPPER) return null;
+  if (process.env.SKILL_NO_KACHE !== "1" && commandExists("kache")) return "kache";
+  if (process.env.SKILL_NO_SCCACHE !== "1" && commandExists("sccache")) return "sccache";
+  return null;
 }
 
 function detectMold() {
@@ -220,11 +221,11 @@ function detectMold() {
   return commandExists("mold") && commandExists("clang");
 }
 
-const hasSccache = detectSccache();
+const compilerCache = detectCompilerCache();
 const hasMold = detectMold();
 
-if (hasSccache) {
-  process.env.RUSTC_WRAPPER = "sccache";
+if (compilerCache) {
+  process.env.RUSTC_WRAPPER = compilerCache;
 }
 
 if (hasMold) {

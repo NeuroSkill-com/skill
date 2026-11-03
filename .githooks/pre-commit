@@ -81,7 +81,11 @@ if echo "$STAGED_FILES" | grep -q '\.rs$'; then
     echo "   Install rustup (https://rustup.rs) or add ~/.cargo/bin to your shell's PATH." >&2
   else
     cargo fmt
-    git add $( echo "$STAGED_FILES" | grep '\.rs$' )
+    # Re-stage the staged Rust files fmt may have rewritten, one path per line
+    # so names with spaces survive.
+    echo "$STAGED_FILES" | grep '\.rs$' | while IFS= read -r f; do
+      if [ -f "$f" ]; then git add -- "$f"; fi
+    done
   fi
 fi
 

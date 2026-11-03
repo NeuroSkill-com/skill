@@ -7,9 +7,9 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Voice (TTS) — how it works, requirements, API, logging -->
 
 <script lang="ts">
-import { IconExternalLink } from "$lib/components/ui/icons";
-import { Separator } from "$lib/components/ui/separator";
-import { getLocale, t } from "$lib/i18n/index.svelte";
+import { IconExternalLink } from "#lib/components/ui/icons";
+import { Separator } from "#lib/components/ui/separator";
+import { getLocale, t } from "#lib/i18n/index.svelte";
 import HelpItem from "./HelpItem.svelte";
 import HelpSection from "./HelpSection.svelte";
 import { getHelpContent } from "./help-loader";

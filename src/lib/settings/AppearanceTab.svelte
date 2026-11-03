@@ -6,16 +6,16 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Appearance tab — Font Size · Theme · Chart Color Scheme -->
 <script lang="ts">
-import { CardContent } from "$lib/components/ui/card";
-import { ChipGroup } from "$lib/components/ui/chip-group";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import { EEG_CH } from "$lib/constants";
-import { t } from "$lib/i18n/index.svelte";
-import { CHART_SCHEMES, type ChartScheme, getChartScheme, setChartScheme } from "$lib/stores/chart-colors.svelte";
-import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
-import type { ThemeMode } from "$lib/stores/theme.svelte";
+import { CardContent } from "#lib/components/ui/card";
+import { ChipGroup } from "#lib/components/ui/chip-group";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import { EEG_CH } from "#lib/constants";
+import { t } from "#lib/i18n/index.svelte";
+import { CHART_SCHEMES, type ChartScheme, getChartScheme, setChartScheme } from "#lib/stores/chart-colors.svelte";
+import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "#lib/stores/font-size.svelte";
+import type { ThemeMode } from "#lib/stores/theme.svelte";
 import {
   ACCENT_PRESETS,
   getAccentId,
@@ -24,7 +24,7 @@ import {
   setAccent,
   setTheme,
   toggleHighContrast,
-} from "$lib/stores/theme.svelte";
+} from "#lib/stores/theme.svelte";
 
 const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
   { value: "system", icon: "💻", labelKey: "appearance.themeSystem" },

@@ -8,24 +8,24 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { ChipGroup } from "$lib/components/ui/chip-group";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { ChipGroup } from "#lib/components/ui/chip-group";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
 import {
   CALIBRATION_ACTION_DURATION_SECS,
   CALIBRATION_ACTION1_LABEL,
   CALIBRATION_ACTION2_LABEL,
   CALIBRATION_BREAK_DURATION_SECS,
   CALIBRATION_LOOP_COUNT,
-} from "$lib/constants";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { daemonStatus } from "$lib/daemon/status.svelte";
-import { fmtDateTimeLocale } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/constants";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { daemonStatus } from "#lib/daemon/status.svelte";
+import { fmtDateTimeLocale } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface CalibrationAction {

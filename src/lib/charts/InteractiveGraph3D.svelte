@@ -20,9 +20,9 @@ the Free Software Foundation, version 3 only. -->
 import { onDestroy, onMount, untrack } from "svelte";
 import type * as THREE_NS from "three";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
-import { fmtDateTimeLocale } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { getResolved } from "$lib/stores/theme.svelte";
+import { fmtDateTimeLocale } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { getResolved } from "#lib/stores/theme.svelte";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface GraphNode {

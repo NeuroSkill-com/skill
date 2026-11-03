@@ -11,10 +11,10 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
-import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
-import { getDeviceStatus } from "$lib/daemon/client";
-import { t } from "$lib/i18n/index.svelte";
-import type { DeviceStatus } from "$lib/types";
+import ElectrodeGuide from "#lib/charts/ElectrodeGuide.svelte";
+import { getDeviceStatus } from "#lib/daemon/client";
+import { t } from "#lib/i18n/index.svelte";
+import type { DeviceStatus } from "#lib/types";
 
 let quality = $state<string[]>(["no_signal", "no_signal", "no_signal", "no_signal"]);
 let connected = $state(false);

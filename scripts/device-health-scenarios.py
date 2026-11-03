@@ -16,7 +16,14 @@ Walks one recording through the ways real sessions go wrong and checks that:
 
 Runs isolated (own config/data dirs); never touches your profile. ~5 minutes.
 """
-import argparse, json, os, shutil, subprocess, sys, tempfile, time, urllib.request
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 VIRTUAL = "lsl:SkillVirtualEEG"

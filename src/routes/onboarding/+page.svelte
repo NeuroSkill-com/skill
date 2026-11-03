@@ -12,15 +12,15 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onDestroy, onMount } from "svelte";
 import { fade, fly } from "svelte/transition";
-import ElectrodeGuide from "$lib/charts/ElectrodeGuide.svelte";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { Progress } from "$lib/components/ui/progress";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-import { getDeviceStatus, retryConnect } from "$lib/daemon/devices";
-import { daemonPost } from "$lib/daemon/http";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import ElectrodeGuide from "#lib/charts/ElectrodeGuide.svelte";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { Progress } from "#lib/components/ui/progress";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import DisclaimerFooter from "#lib/DisclaimerFooter.svelte";
+import { getDeviceStatus, retryConnect } from "#lib/daemon/devices";
+import { daemonPost } from "#lib/daemon/http";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
 import {
   getActiveWindowTracking,
   getCalendarTracking,
@@ -34,12 +34,12 @@ import {
   setFileActivityTracking,
   setInputActivityTracking,
   setLocationEnabled,
-} from "$lib/daemon/settings";
-import { onDaemonEvent } from "$lib/daemon/ws";
-import { t } from "$lib/i18n/index.svelte";
-import { openSettings } from "$lib/navigation";
+} from "#lib/daemon/settings";
+import { onDaemonEvent } from "#lib/daemon/ws";
+import { t } from "#lib/i18n/index.svelte";
+import { openSettings } from "#lib/navigation";
 // Single definition of onboarding's model-selection rules — this page used to
-// carry its own copy, which drifted from the tested one in $lib/settings.
+// carry its own copy, which drifted from the tested one in #lib/settings.
 import {
   type DownloadState,
   isDiscoveredEntry,
@@ -47,11 +47,11 @@ import {
   llmCardTitle as llmCardTitleFor,
   pickFamilyTarget,
   pickLlmTarget,
-} from "$lib/settings/onboarding-logic";
-import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
-import type { DeviceStatus } from "$lib/types";
-import { log } from "$lib/utils/logger";
+} from "#lib/settings/onboarding-logic";
+import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "#lib/stores/font-size.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
+import type { DeviceStatus } from "#lib/types";
+import { log } from "#lib/utils/logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface CalibrationAction {

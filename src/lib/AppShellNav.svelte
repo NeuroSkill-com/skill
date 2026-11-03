@@ -14,9 +14,9 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onMount } from "svelte";
-import { t } from "$lib/i18n/index.svelte";
-import { openChat, openHistory, openLive, openSearch } from "$lib/navigation";
-import { prettyAccelerator } from "$lib/utils/accelerator";
+import { t } from "#lib/i18n/index.svelte";
+import { openChat, openHistory, openLive, openSearch } from "#lib/navigation";
+import { prettyAccelerator } from "#lib/utils/accelerator";
 
 type Dest = "live" | "find" | "ask" | "history";
 

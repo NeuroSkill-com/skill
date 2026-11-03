@@ -16,13 +16,13 @@ import {
   fetchAsrDefaults,
   loadAsrDefaults,
   saveAsrDefaults,
-} from "$lib/chat/asr";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
-import { t } from "$lib/i18n/index.svelte";
-import VoiceEnginePicker from "$lib/llm/VoiceEnginePicker.svelte";
-import { ASR_ENGINE_FALLBACK_LIST, type AsrEngineInfo, fetchAsrEngines } from "$lib/llm/voice-catalog";
+} from "#lib/chat/asr";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
+import { t } from "#lib/i18n/index.svelte";
+import VoiceEnginePicker from "#lib/llm/VoiceEnginePicker.svelte";
+import { ASR_ENGINE_FALLBACK_LIST, type AsrEngineInfo, fetchAsrEngines } from "#lib/llm/voice-catalog";
 
 let defaults = $state<AsrDefaults>(loadAsrDefaults());
 let engines = $state<AsrEngineInfo[]>([...ASR_ENGINE_FALLBACK_LIST]);

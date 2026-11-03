@@ -9,7 +9,7 @@ import type {
   SessionFileActivity,
   StaleFileRow,
   WeeklyDigest,
-} from "$lib/daemon/settings";
+} from "#lib/daemon/settings";
 
 describe("activity types", () => {
   it("FileInteractionRow includes undo_count", () => {

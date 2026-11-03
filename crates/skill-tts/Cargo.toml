@@ -34,10 +34,10 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio      = { version = "1", features = ["sync"] }
 hf-hub     = "0.5"
-dirs       = "6"
+dirs       = "7"
 
-rodio      = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
-sha2       = { version = "0.10", optional = true }
+rodio      = { version = "0.23", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
+sha2       = { version = "0.11", optional = true }
 hound      = { version = "3", optional = true }
 
 neutts     = { path = "../skill-neutts", package = "skill-neutts", features = ["espeak"], optional = true }

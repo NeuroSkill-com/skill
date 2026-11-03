@@ -90,7 +90,7 @@ fn run(mode: &AsrMode, on_event: &EventSink, ptt: &Arc<AtomicBool>, stop_rx: &Re
 
     let (audio_tx, audio_rx) = mpsc::channel::<Vec<f32>>();
     let err_sink = on_event.clone();
-    let err_fn = move |e: cpal::StreamError| {
+    let err_fn = move |e: cpal::Error| {
         err_sink(AsrEvent::Error {
             message: format!("audio stream error: {e}"),
         });
@@ -450,12 +450,12 @@ fn build_input_stream(
     format: cpal::SampleFormat,
     channels: usize,
     tx: mpsc::Sender<Vec<f32>>,
-    err_fn: impl FnMut(cpal::StreamError) + Send + 'static,
+    err_fn: impl FnMut(cpal::Error) + Send + 'static,
 ) -> Result<cpal::Stream> {
     use cpal::SampleFormat as SF;
     let stream = match format {
         SF::F32 => device.build_input_stream(
-            config,
+            *config,
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
                 let _ = tx.send(downmix(data, channels));
             },
@@ -463,7 +463,7 @@ fn build_input_stream(
             None,
         )?,
         SF::I16 => device.build_input_stream(
-            config,
+            *config,
             move |data: &[i16], _: &cpal::InputCallbackInfo| {
                 let f: Vec<f32> = data.iter().map(|s| *s as f32 / 32768.0).collect();
                 let _ = tx.send(downmix(&f, channels));
@@ -472,7 +472,7 @@ fn build_input_stream(
             None,
         )?,
         SF::U16 => device.build_input_stream(
-            config,
+            *config,
             move |data: &[u16], _: &cpal::InputCallbackInfo| {
                 let f: Vec<f32> = data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0).collect();
                 let _ = tx.send(downmix(&f, channels));

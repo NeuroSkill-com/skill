@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Ensure VC++ Redistributable CRT DLLs are available for app-local bundling.
 

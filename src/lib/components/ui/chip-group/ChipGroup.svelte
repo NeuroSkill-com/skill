@@ -11,7 +11,7 @@ the Free Software Foundation, version 3 only. -->
   markup found across every settings Tab.
 -->
 <script lang="ts" generics="T">
-import { cn } from "$lib/utils.js";
+import { cn } from "#lib/utils.js";
 
 let {
   items,

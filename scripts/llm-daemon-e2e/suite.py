@@ -6,8 +6,16 @@ page's max_tokens=0 warm pass, SSE streaming, growing multi-turn history —
 and samples RSS throughout so memory growth is attributable to a phase
 rather than guessed at.
 """
-import json, os, shutil, signal, socket, subprocess, sys, threading, time
-import urllib.request, urllib.error
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import threading
+import time
+import urllib.error
+import urllib.request
 
 ROOT = os.environ.get("SKILL_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 RUNS = os.environ.get("E2E_RUNS", "/tmp/skill-llm-daemon-e2e")
@@ -54,7 +62,6 @@ class Daemon:
         self.token = open(f"{self.dir}/config/auth.token").read().strip()
 
     def _sample(self):
-        import resource
         while not self._stop.is_set() and self.proc.poll() is None:
             try:
                 out = subprocess.run(["ps", "-o", "rss=", "-p", str(self.proc.pid)],

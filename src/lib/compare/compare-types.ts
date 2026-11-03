@@ -6,8 +6,8 @@
  * Extracted from `routes/compare/+page.svelte`.
  */
 
-import { BANDS } from "$lib/constants";
-import type { SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
+import { BANDS } from "#lib/constants";
+import type { SessionMetrics } from "#lib/dashboard/SessionDetail.svelte";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ export interface ClusterAnalysis {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-export { SESSION_COLORS } from "$lib/constants";
+export { SESSION_COLORS } from "#lib/constants";
 
 export const bandKeys = ["rel_delta", "rel_theta", "rel_alpha", "rel_beta", "rel_gamma"] as const;
 export type BK = (typeof bandKeys)[number];
@@ -193,8 +193,8 @@ export function sdc(a: number, b: number): string {
 
 // ── UMAP analysis ────────────────────────────────────────────────────────────
 
-import type { UmapPoint, UmapResult } from "$lib/types";
-import { gauss } from "$lib/umap/umap-helpers";
+import type { UmapPoint, UmapResult } from "#lib/types";
+import { gauss } from "#lib/umap/umap-helpers";
 
 export function analyzeUmapClusters(result: UmapResult): ClusterAnalysis | null {
   const pts = result.points;

@@ -39,8 +39,8 @@ import {
 } from "three";
 
 // ── Types ────────────────────────────────────────────────────────────────
-import type { UmapPoint, UmapResult } from "$lib/types";
-import { gauss } from "$lib/umap/umap-helpers";
+import type { UmapPoint, UmapResult } from "#lib/types";
+import { gauss } from "#lib/umap/umap-helpers";
 
 // ── Props ────────────────────────────────────────────────────────────────
 let {

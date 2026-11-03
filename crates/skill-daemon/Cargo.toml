@@ -152,7 +152,7 @@ base64 = { workspace = true }
 # be torn down for a connect to succeed (see scanner.rs).
 webbluetooth = { version = "0.0.4", features = ["uuid"] }
 cognionics = { version = "0.0.1", default-features = false }
-dirs = "6"
+dirs = "7"
 rand = "0.10"
 regex = "1"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
@@ -164,7 +164,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 serialport = "4"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "fs"] }
+tower-http = { version = "0.7", features = ["cors", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "registry"] }
 ureq       = { version = "3", features = ["native-tls", "json"] }
@@ -172,7 +172,7 @@ urlencoding = "2"
 hex = "0.4"
 async-trait = "0.1"
 hf-hub = "0.5"
-sha2 = "0.10"
+sha2 = "0.11"
 image = { version = "0.25", default-features = false, features = ["png"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 skill-daemon-common = { path = "../skill-daemon-common" }
@@ -218,7 +218,7 @@ skill-iroh           = { path = "../skill-iroh" }
 skill-daemon-routes  = { path = "../skill-daemon-routes" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
-sysinfo              = "0.38"
+sysinfo              = "0.39"
 
 [build-dependencies]
 
@@ -229,7 +229,7 @@ tempfile             = "3"
 mendi                = { version = "0.0.3", features = ["simulate"] }
 mw75                 = { version = "0.0.8" }
 rlsl                 = { version = "0.0.6" }
-tokio-tungstenite    = "0.28"
+tokio-tungstenite    = "0.29"
 
 # macOS: enable Metal backend for ZUNA/LUNA/TRIBEv2 GPU paths (embed-*-gpu).
 [target.'cfg(target_os = "macos")'.dependencies]

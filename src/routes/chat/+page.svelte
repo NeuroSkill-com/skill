@@ -29,17 +29,17 @@ import {
   type AsrTrigger,
   fetchAsrDefaults,
   loadAsrDefaults,
-} from "$lib/chat/asr";
-import ChatContextBreakdown, { type ContextSegment } from "$lib/chat/ChatContextBreakdown.svelte";
-import ChatContextViewer from "$lib/chat/ChatContextViewer.svelte";
-import ChatHeader from "$lib/chat/ChatHeader.svelte";
-import ChatInputBar from "$lib/chat/ChatInputBar.svelte";
-import ChatMessageList from "$lib/chat/ChatMessageList.svelte";
-import ChatSettingsPanel from "$lib/chat/ChatSettingsPanel.svelte";
-import ChatSidebar from "$lib/chat/ChatSidebar.svelte";
-import ChatToolsPanel from "$lib/chat/ChatToolsPanel.svelte";
-import ChatVoiceControls from "$lib/chat/ChatVoiceControls.svelte";
-import { buildEegBlock } from "$lib/chat/chat-eeg";
+} from "#lib/chat/asr";
+import ChatContextBreakdown, { type ContextSegment } from "#lib/chat/ChatContextBreakdown.svelte";
+import ChatContextViewer from "#lib/chat/ChatContextViewer.svelte";
+import ChatHeader from "#lib/chat/ChatHeader.svelte";
+import ChatInputBar from "#lib/chat/ChatInputBar.svelte";
+import ChatMessageList from "#lib/chat/ChatMessageList.svelte";
+import ChatSettingsPanel from "#lib/chat/ChatSettingsPanel.svelte";
+import ChatSidebar from "#lib/chat/ChatSidebar.svelte";
+import ChatToolsPanel from "#lib/chat/ChatToolsPanel.svelte";
+import ChatVoiceControls from "#lib/chat/ChatVoiceControls.svelte";
+import { buildEegBlock } from "#lib/chat/chat-eeg";
 import {
   type Attachment,
   type BandSnapshot,
@@ -61,13 +61,13 @@ import {
   type ToolConfig,
   type ToolUseEvent,
   type UsageInfo,
-} from "$lib/chat/chat-types";
-import { parseAssistantOutput } from "$lib/chat/chat-utils";
-import { cancelToolCall as cancelToolCallApi, renameChatSession } from "$lib/daemon/chat";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { type DaemonEvent, onDaemonEvent } from "$lib/daemon/ws";
-import { t } from "$lib/i18n/index.svelte";
-import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
+} from "#lib/chat/chat-types";
+import { parseAssistantOutput } from "#lib/chat/chat-utils";
+import { cancelToolCall as cancelToolCallApi, renameChatSession } from "#lib/daemon/chat";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { type DaemonEvent, onDaemonEvent } from "#lib/daemon/ws";
+import { t } from "#lib/i18n/index.svelte";
+import { chatTitlebarState } from "#lib/stores/titlebar.svelte";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1479,7 +1479,7 @@ onMount(async () => {
 
   // EEG bands via daemon WebSocket
   try {
-    const { getLatestBands, subscribeBands } = await import("$lib/daemon/eeg-stream");
+    const { getLatestBands, subscribeBands } = await import("#lib/daemon/eeg-stream");
     const b = await getLatestBands();
     if (b) latestBands = b;
     const unsub = subscribeBands((snap) => {

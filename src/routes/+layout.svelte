@@ -12,26 +12,26 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Snippet } from "svelte";
 import { onDestroy, onMount } from "svelte";
 // Side-effect: initialises locale from localStorage / navigator.language
-import "$lib/i18n/index.svelte";
-import { initLocaleFromSettings } from "$lib/i18n/index.svelte";
+import "#lib/i18n/index.svelte";
+import { initLocaleFromSettings } from "#lib/i18n/index.svelte";
 // Side-effect: initialises theme from localStorage / system preference
-import "$lib/stores/theme.svelte";
-import { initFromSettings as initThemeFromSettings, toggleTheme } from "$lib/stores/theme.svelte";
+import "#lib/stores/theme.svelte";
+import { initFromSettings as initThemeFromSettings, toggleTheme } from "#lib/stores/theme.svelte";
 // Side-effect: initialises font size from localStorage
-import "$lib/stores/font-size.svelte";
+import "#lib/stores/font-size.svelte";
 // Side-effect: initialises chart color scheme from localStorage
-import "$lib/stores/chart-colors.svelte";
+import "#lib/stores/chart-colors.svelte";
 // Side-effect: fetches canonical app name from Rust backend
-import "$lib/stores/app-name.svelte";
-import AppShellNav from "$lib/AppShellNav.svelte";
-import CommandPalette from "$lib/CommandPalette.svelte";
-import CustomTitleBar from "$lib/CustomTitleBar.svelte";
-import { ToastContainer } from "$lib/components/ui/toast";
-import { ensureDaemonCompatible } from "$lib/daemon/http";
-import KeyboardShortcuts from "$lib/KeyboardShortcuts.svelte";
-import PairBrowserModal from "$lib/PairBrowserModal.svelte";
-import { addToast, type ToastLevel } from "$lib/stores/toast.svelte";
-import WhatsNew from "$lib/WhatsNew.svelte";
+import "#lib/stores/app-name.svelte";
+import AppShellNav from "#lib/AppShellNav.svelte";
+import CommandPalette from "#lib/CommandPalette.svelte";
+import CustomTitleBar from "#lib/CustomTitleBar.svelte";
+import { ToastContainer } from "#lib/components/ui/toast";
+import { ensureDaemonCompatible } from "#lib/daemon/http";
+import KeyboardShortcuts from "#lib/KeyboardShortcuts.svelte";
+import PairBrowserModal from "#lib/PairBrowserModal.svelte";
+import { addToast, type ToastLevel } from "#lib/stores/toast.svelte";
+import WhatsNew from "#lib/WhatsNew.svelte";
 
 let { children }: { children: Snippet } = $props();
 

@@ -9,12 +9,12 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { SettingsCard } from "$lib/components/ui/settings-card";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { SettingsCard } from "#lib/components/ui/settings-card";
 import {
   forgetDevice,
   getCortexWsState,
@@ -31,11 +31,11 @@ import {
   setOpenbciConfig,
   setPreferredDevice,
   setScannerConfig,
-} from "$lib/daemon/client";
-import { t } from "$lib/i18n/index.svelte";
-import { applyPreferred } from "$lib/settings/devices-logic";
-import { getSupportedCompanies, loadSupportedCompanies, type SupportedCompanyId } from "$lib/supported-devices";
-import { colorForRssi } from "$lib/theme";
+} from "#lib/daemon/client";
+import { t } from "#lib/i18n/index.svelte";
+import { applyPreferred } from "#lib/settings/devices-logic";
+import { getSupportedCompanies, loadSupportedCompanies, type SupportedCompanyId } from "#lib/supported-devices";
+import { colorForRssi } from "#lib/theme";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface DiscoveredDevice {

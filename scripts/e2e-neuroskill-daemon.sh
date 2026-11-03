@@ -122,7 +122,7 @@ npx tsx "$DAEMON_SCRIPT" "${DAEMON_ARGS[@]}" &>/tmp/skill-daemon-e2e.log &
 DAEMON_PID=$!
 
 # Wait up to 30s for daemon to be ready (build + virtual EEG setup takes time)
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   if curl -sf "$BASE/healthz" >/dev/null 2>&1; then break; fi
   sleep 0.5
 done
@@ -135,7 +135,7 @@ info "daemon ready (wrapper PID $DAEMON_PID)"
 
 # Wait for virtual source to be started by daemon.ts (it settles 6s after healthz)
 info "waiting for virtual EEG setup..."
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   VCHECK=$(curl -sf -H "Authorization: Bearer $(cat "$TOKEN_PATH" 2>/dev/null | tr -d '[:space:]')" "$BASE/v1/lsl/virtual-source/running" 2>/dev/null || echo "")
   if echo "$VCHECK" | grep -q '"running":true'; then break; fi
   sleep 1
@@ -572,7 +572,6 @@ if [[ -n "$A_START" && -n "$A_END" && -n "$B_START" && -n "$B_END" && "$A_START"
   info "UMAP: starting (may take 30-60s)..."
   OUT=$(npx tsx "$ROOT_DIR/neuroskill/cli.ts" --port "$PORT" --json umap --a-start "$A_START" --a-end "$A_END" --b-start "$B_START" --b-end "$B_END" 2>/dev/null || true)
   if has "$OUT" '"ok":\s*true'; then
-    NPOINTS=$(echo "$OUT" | grep -oE '"points":\s*\[' | wc -l)
     pass "umap (3D projection)"
   elif has "$OUT" '"points"'; then
     pass "umap (points returned)"

@@ -4,13 +4,13 @@
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { onDaemonEvent } from "$lib/daemon/ws";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "#lib/daemon/ws";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ExgFamily {

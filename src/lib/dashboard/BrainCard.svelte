@@ -2,7 +2,7 @@
 <!-- Brain state card for the EEG dashboard — shows flow, fatigue, streak. -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { getFatigue, getFlow, getStreak, startBrainPolling } from "$lib/stores/brain.svelte";
+import { getFatigue, getFlow, getStreak, startBrainPolling } from "#lib/stores/brain.svelte";
 
 onMount(() => startBrainPolling());
 </script>

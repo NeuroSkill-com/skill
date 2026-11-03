@@ -2,11 +2,11 @@
 <!-- API Tokens — create, revoke, delete daemon API tokens with ACLs + expiration. -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { SettingsCard } from "$lib/components/ui/settings-card";
+import { Button } from "#lib/components/ui/button";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { SettingsCard } from "#lib/components/ui/settings-card";
 import {
   type TokenAcl as Acl,
   type ApiToken,
@@ -16,8 +16,8 @@ import {
   listAuthTokens,
   refreshDefaultToken as refreshDefaultTokenApi,
   revokeAuthToken,
-} from "$lib/daemon/tokens";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/daemon/tokens";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Options ────────────────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ async function refreshDefaultToken() {
       defaultToken = r.token;
       defaultTokenRevealed = true;
       // Invalidate the cached bootstrap so Tauri picks up the new token
-      const { invalidateDaemonBootstrap } = await import("$lib/daemon/http");
+      const { invalidateDaemonBootstrap } = await import("#lib/daemon/http");
       invalidateDaemonBootstrap();
     }
   } catch {

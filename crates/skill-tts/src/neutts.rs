@@ -609,7 +609,8 @@ fn wav_cache_path(backbone: &str, voice_key: &str, text: &str) -> PathBuf {
     h.update(voice_key.as_bytes());
     h.update(b"\0");
     h.update(text.as_bytes());
-    wav_cache_dir().join(format!("{:x}.wav", h.finalize()))
+    let hex: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    wav_cache_dir().join(format!("{hex}.wav"))
 }
 
 // ─── Speak: cache check → synthesise → write cache → play ────────────────────

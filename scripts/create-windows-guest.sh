@@ -116,7 +116,7 @@ swtpm socket \
   --tpmstate "dir=$TPM_STATE_DIR" \
   --ctrl "type=unixio,path=$TPM_SOCKET" &
 SWTPM_PID=$!
-for attempt in {1..50}; do
+for _ in {1..50}; do
   [[ -S "$TPM_SOCKET" ]] && break
   if ! kill -0 "$SWTPM_PID" 2>/dev/null; then
     echo "ERROR: swtpm exited before creating its control socket." >&2
@@ -140,6 +140,8 @@ if [[ -z "${QEMU_ACCEL:-}" && "$(uname -s)" == "Darwin" && \
   ACCEL=hvf
 fi
 
+# Commas inside the elements are QEMU option syntax, not array separators.
+# shellcheck disable=SC2054
 QEMU_ARGS=(
   qemu-system-x86_64 \
   -machine "$MACHINE",accel="$ACCEL",smm=on \
@@ -159,8 +161,9 @@ QEMU_ARGS=(
   -rtc base=localtime
 )
 if [[ "$NETWORK_ENABLED" == "1" ]]; then
+  # shellcheck disable=SC2054
   QEMU_ARGS+=(
-    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:3389-:3389,hostfwd=tcp:127.0.0.1:${SSH_HOST_PORT}-:22
+    -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:3389-:3389,hostfwd=tcp:127.0.0.1:${SSH_HOST_PORT}-:22"
     -device "$NIC_MODEL",netdev=net0
   )
 fi

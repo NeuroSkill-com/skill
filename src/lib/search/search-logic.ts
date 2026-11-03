@@ -7,9 +7,9 @@
  * Keep UI state management in the Svelte component; keep data transformations here.
  */
 
-import { fmtDateTimeLocalInput, fmtDuration as fmtDurationSecs, parseDateTimeLocalInput } from "$lib/format";
-import type { SearchAnalysis, SearchResult } from "$lib/search/search-types";
-import type { UmapPoint, UmapResult } from "$lib/types";
+import { fmtDateTimeLocalInput, fmtDuration as fmtDurationSecs, parseDateTimeLocalInput } from "#lib/format";
+import type { SearchAnalysis, SearchResult } from "#lib/search/search-types";
+import type { UmapPoint, UmapResult } from "#lib/types";
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 

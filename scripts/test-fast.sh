@@ -20,7 +20,7 @@
 #
 # With warm incremental cache, tier 1 runs in ~1 s.
 #
-# Tip: Use RUSTC_WRAPPER=sccache for faster clean rebuilds.
+# Tip: Use kache (`kache init`) or RUSTC_WRAPPER=sccache for faster clean rebuilds.
 
 set -euo pipefail
 
@@ -53,7 +53,6 @@ done
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 BOLD='\033[1m'
 RESET='\033[0m'
 

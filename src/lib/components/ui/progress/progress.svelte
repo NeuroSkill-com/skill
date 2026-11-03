@@ -6,7 +6,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { Progress as ProgressPrimitive } from "bits-ui";
-import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
 let {
   ref = $bindable(null),

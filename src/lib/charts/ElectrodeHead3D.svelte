@@ -26,8 +26,8 @@ import {
   type ElectrodeSystem,
   getElectrodes,
   regionColors,
-} from "$lib/data/electrodes";
-import { getResolved } from "$lib/stores/theme.svelte";
+} from "#lib/data/electrodes";
+import { getResolved } from "#lib/stores/theme.svelte";
 
 interface Props {
   system: ElectrodeSystem;

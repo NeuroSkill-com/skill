@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

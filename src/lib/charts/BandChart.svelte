@@ -97,9 +97,9 @@ export interface BandSnapshot {
     BAND_TILE_ML  as ML,
     BAND_TILE_MR  as MR,
     BAND_TAU_MS   as TAU_MS,
-  } from "$lib/constants";
-  import { animatedCanvas } from "$lib/charts/use-canvas";
-  import { getActiveScheme } from "$lib/stores/chart-colors.svelte";
+  } from "#lib/constants";
+  import { animatedCanvas } from "#lib/charts/use-canvas";
+  import { getActiveScheme } from "#lib/stores/chart-colors.svelte";
 
   let { chNames = EEG_CH as readonly string[], chColors = EEG_COLOR as readonly string[] }: {
     chNames?: readonly string[];

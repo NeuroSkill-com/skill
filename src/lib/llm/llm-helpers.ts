@@ -4,7 +4,7 @@
 // Pure helper functions for the LLM settings tab.
 // Extracted so they can be unit-tested without mounting the Svelte component.
 
-import hfDownloadsCacheJson from "$lib/generated/hf-downloads-cache.json";
+import hfDownloadsCacheJson from "#lib/generated/hf-downloads-cache.json";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

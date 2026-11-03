@@ -25,7 +25,7 @@ export interface EventMarker {
 
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils";
   import {
     CHART_H, TIME_H, WAVE_H, ROW_PAD as PAD,
     EEG_CH, EEG_COLOR, EEG_CHANNELS_4,
@@ -36,10 +36,10 @@ export interface EventMarker {
     SPEC_LOG_INIT, SPEC_LOG_DECAY as LOG_DECAY,
     SPEC_LOG_RANGE as LOG_RANGE, SPEC_LOG_FLOOR as LOG_FLOOR,
     DC_BETA, WP_TAU_MS as WP_TAU,
-  } from "$lib/constants";
-  import { getResolved } from "$lib/stores/theme.svelte";
-  import { getDpr } from "$lib/format";
-  import { readChartTheme } from "$lib/charts/chart-theme";
+  } from "#lib/constants";
+  import { getResolved } from "#lib/stores/theme.svelte";
+  import { getDpr } from "#lib/format";
+  import { readChartTheme } from "#lib/charts/chart-theme";
 
   // ── Props ──────────────────────────────────────────────────────────────────
   /** Number of channels to render (defaults to 4 for Muse/Ganglion). */

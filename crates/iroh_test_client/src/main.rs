@@ -89,17 +89,17 @@ async fn main() -> anyhow::Result<()> {
     println!("Connected to remote: {}", conn.remote_id());
 
     // Generate current TOTP using totp-rs
-    let totp = totp_rs::TOTP::new(
-        totp_rs::Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret_bytes,
-        Some("Skill".to_string()),
-        opt.name.clone().unwrap_or_else(|| "client".to_string()),
-    )
-    .unwrap();
-    let code = totp.generate_current().unwrap();
+    let totp = totp_rs::Builder::new()
+        .with_algorithm(totp_rs::Algorithm::SHA1)
+        .with_digits(6)
+        .with_skew(1)
+        .with_step_duration(30)
+        .with_secret(secret_bytes)
+        .with_issuer(Some("Skill"))
+        .with_account_name(opt.name.clone().unwrap_or_else(|| "client".to_string()))
+        .build()
+        .unwrap();
+    let code = totp.generate_current().to_string();
 
     // Prepare HTTP POST to /v1/iroh/clients/register
     let body = serde_json::json!({

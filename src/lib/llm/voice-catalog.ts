@@ -7,7 +7,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { daemonGet } from "$lib/daemon/http";
+import { daemonGet } from "#lib/daemon/http";
 
 export interface TtsEngineInfo {
   id: string;

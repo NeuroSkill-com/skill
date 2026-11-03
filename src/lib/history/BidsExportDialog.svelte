@@ -8,14 +8,14 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { onDestroy } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import * as Dialog from "$lib/components/ui/dialog";
-import { Spinner } from "$lib/components/ui/spinner";
-import { ToggleSwitch } from "$lib/components/ui/toggle-switch";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { onDaemonEvent } from "$lib/daemon/ws";
-import { fmtBytes } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import * as Dialog from "#lib/components/ui/dialog";
+import { Spinner } from "#lib/components/ui/spinner";
+import { ToggleSwitch } from "#lib/components/ui/toggle-switch";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { onDaemonEvent } from "#lib/daemon/ws";
+import { fmtBytes } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   open: boolean;

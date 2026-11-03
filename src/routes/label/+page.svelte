@@ -7,13 +7,13 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { Textarea } from "$lib/components/ui/textarea";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { fmtElapsed } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { Button } from "#lib/components/ui/button";
+import { Textarea } from "#lib/components/ui/textarea";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { fmtElapsed } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { labelTitlebarState } from "#lib/stores/titlebar.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let text = $state("");

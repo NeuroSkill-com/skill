@@ -9,12 +9,12 @@
 -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import SectionHeader from "$lib/components/ui/section-header/SectionHeader.svelte";
-import SettingsCard from "$lib/components/ui/settings-card/SettingsCard.svelte";
-import { Spinner } from "$lib/components/ui/spinner";
-import { daemonPost } from "$lib/daemon/http";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import SectionHeader from "#lib/components/ui/section-header/SectionHeader.svelte";
+import SettingsCard from "#lib/components/ui/settings-card/SettingsCard.svelte";
+import { Spinner } from "#lib/components/ui/spinner";
+import { daemonPost } from "#lib/daemon/http";
 
 interface SessionRow {
   id: string;

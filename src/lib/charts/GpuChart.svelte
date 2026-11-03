@@ -19,12 +19,12 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { animatedCanvas } from "$lib/charts/use-canvas";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { t } from "$lib/i18n/index.svelte";
-import { getResolved } from "$lib/stores/theme.svelte";
-import { C_NEUTRAL, colorForLoad, rgba as toRgba } from "$lib/theme";
+import { animatedCanvas } from "#lib/charts/use-canvas";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { t } from "#lib/i18n/index.svelte";
+import { getResolved } from "#lib/stores/theme.svelte";
+import { C_NEUTRAL, colorForLoad, rgba as toRgba } from "#lib/theme";
 
 interface GpuStats {
   render: number;

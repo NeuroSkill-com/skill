@@ -14,7 +14,10 @@ would care about:
 (b) is the app-level analogue of the matrix's logit-delta column: a user does
 not see logits, they see whether switching the device changed the answer.
 """
-import os, sys, time
+import os
+import sys
+import time
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from suite import Daemon
 

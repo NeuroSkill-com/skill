@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
     device   – "muse" | "ganglion" | "mw75" | "hermes" | "emotiv" | "idun" | "unknown"
 -->
 <script lang="ts">
-import { t } from "$lib/i18n/index.svelte";
+import { t } from "#lib/i18n/index.svelte";
 
 interface ElectrodePos {
   id: string;

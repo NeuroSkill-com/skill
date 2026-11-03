@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { describe, expect, it } from "vitest";
-import type { UmapPoint } from "$lib/types";
+import type { UmapPoint } from "#lib/types";
 import {
   buildDatePaletteRaw,
   buildTraceTimeTicks,
@@ -16,7 +16,7 @@ import {
   randomPositions,
   turboRaw,
   utcToLocalDate,
-} from "$lib/umap/umap-helpers";
+} from "#lib/umap/umap-helpers";
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 

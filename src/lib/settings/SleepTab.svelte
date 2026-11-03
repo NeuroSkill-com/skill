@@ -7,10 +7,10 @@ the Free Software Foundation, version 3 only. -->
 <!-- Sleep tab — configure sleeping hours with presets. -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { CardContent } from "$lib/components/ui/card";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { t } from "$lib/i18n/index.svelte";
+import { CardContent } from "#lib/components/ui/card";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { t } from "#lib/i18n/index.svelte";
 
 interface SleepConfig {
   bedtime: string; // "HH:MM"

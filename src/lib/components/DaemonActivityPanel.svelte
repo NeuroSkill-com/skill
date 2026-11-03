@@ -15,12 +15,12 @@
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
 
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { type DaemonBackgroundTask, getDaemonActivity } from "$lib/daemon/misc";
-import { onDaemonEvent } from "$lib/daemon/ws";
-import { t } from "$lib/i18n/index.svelte";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { type DaemonBackgroundTask, getDaemonActivity } from "#lib/daemon/misc";
+import { onDaemonEvent } from "#lib/daemon/ws";
+import { t } from "#lib/i18n/index.svelte";
 
 let tasks = $state<DaemonBackgroundTask[]>([]);
 let loading = $state(true);

@@ -11,13 +11,13 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { onDestroy, onMount } from "svelte";
 
-import DaemonActivityPanel from "$lib/components/DaemonActivityPanel.svelte";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { ToggleRow } from "$lib/components/ui/toggle-row";
+import DaemonActivityPanel from "#lib/components/DaemonActivityPanel.svelte";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { ToggleRow } from "#lib/components/ui/toggle-row";
 import {
   getActiveWindow,
   getActiveWindowTracking,
@@ -42,7 +42,7 @@ import {
   setMainWindowAutoFit,
   setStorageFormat,
   setWsConfig,
-} from "$lib/daemon/client";
+} from "#lib/daemon/client";
 import {
   getCalendarTracking,
   getClipboardTracking,
@@ -50,9 +50,9 @@ import {
   setCalendarTracking,
   setClipboardTracking,
   setFileActivityTracking,
-} from "$lib/daemon/settings";
-import { t } from "$lib/i18n/index.svelte";
-import { openOnboarding } from "$lib/navigation";
+} from "#lib/daemon/settings";
+import { t } from "#lib/i18n/index.svelte";
+import { openOnboarding } from "#lib/navigation";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface LogConfig {

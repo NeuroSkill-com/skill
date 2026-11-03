@@ -2,8 +2,8 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- History stats bar — recording streak, session counts, week trend. -->
 <script lang="ts">
-import type { HistoryStatsData } from "$lib/history/history-helpers";
-import { t } from "$lib/i18n/index.svelte";
+import type { HistoryStatsData } from "#lib/history/history-helpers";
+import { t } from "#lib/i18n/index.svelte";
 
 interface WeekTrend {
   thisWeek: number;

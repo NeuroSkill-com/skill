@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { flip } from "svelte/animate";
 import { fly } from "svelte/transition";
-import { dismissToast, type Toast, type ToastLevel, toasts } from "$lib/stores/toast.svelte";
+import { dismissToast, type Toast, type ToastLevel, toasts } from "#lib/stores/toast.svelte";
 
 const ICONS: Record<ToastLevel, string> = {
   info: "ℹ",

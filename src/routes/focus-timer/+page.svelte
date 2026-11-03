@@ -11,13 +11,13 @@ the Free Software Foundation, version 3 only. -->
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { ChipGroup } from "$lib/components/ui/chip-group";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { dateToCompactKey, fmtCountdown, fmtDuration, fmtTimeShort as fmtTime } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
-import { openLabel } from "$lib/navigation";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { Button } from "#lib/components/ui/button";
+import { ChipGroup } from "#lib/components/ui/chip-group";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { dateToCompactKey, fmtCountdown, fmtDuration, fmtTimeShort as fmtTime } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
+import { openLabel } from "#lib/navigation";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
 
 // ── Presets ────────────────────────────────────────────────────────────────
 type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";

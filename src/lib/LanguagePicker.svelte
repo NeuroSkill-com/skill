@@ -15,7 +15,7 @@ import {
   setLocale,
   t,
   useSystemLocale,
-} from "$lib/i18n/index.svelte";
+} from "#lib/i18n/index.svelte";
 
 let open = $state(false);
 let btnEl = $state<HTMLButtonElement>();

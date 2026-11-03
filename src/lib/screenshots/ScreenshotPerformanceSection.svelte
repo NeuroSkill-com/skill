@@ -1,10 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-import { Card, CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { t } from "$lib/i18n/index.svelte";
+import { Card, CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { t } from "#lib/i18n/index.svelte";
 
 interface PipelineMetrics {
   captures: number;

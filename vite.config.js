@@ -6,6 +6,8 @@
 // the Free Software Foundation, version 3 only.
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import adapter from "@sveltejs/adapter-static";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { execSync } from "node:child_process";
@@ -115,7 +117,15 @@ export default defineConfig(({ mode }) => ({
 
   plugins: [
     settingsSearchIndexPlugin(),
-    sveltekit(),
+    // SvelteKit 3 takes its config here; svelte.config.js is no longer read.
+    // Tauri has no Node.js server for SSR, so adapter-static with an
+    // index.html fallback runs the app as an SPA
+    // (https://svelte.dev/docs/kit/single-page-apps,
+    // https://v2.tauri.app/start/frontend/sveltekit/).
+    sveltekit({
+      preprocess: vitePreprocess(),
+      adapter: adapter({ fallback: "index.html" }),
+    }),
     ...patchTailwindForSvelte(),
     suppressUnusedImportWarnings,
   ],

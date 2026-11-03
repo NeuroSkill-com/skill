@@ -8,8 +8,8 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onMount } from "svelte";
-import { t } from "$lib/i18n/index.svelte";
-import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { t } from "#lib/i18n/index.svelte";
+import { useWindowTitle } from "#lib/stores/window-title.svelte";
 
 useWindowTitle("window.title.about");
 

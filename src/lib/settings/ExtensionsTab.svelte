@@ -7,12 +7,12 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,7 +186,7 @@ async function installFork(fork: VsForkUI): Promise<void> {
 
 async function copyAuthToken(): Promise<void> {
   try {
-    const { getDaemonBaseUrl } = await import("$lib/daemon/http");
+    const { getDaemonBaseUrl } = await import("#lib/daemon/http");
     const { token } = await getDaemonBaseUrl();
     await navigator.clipboard.writeText(token);
     statusMessage = t("extensions.tokenCopied");
@@ -207,7 +207,7 @@ async function copyAuthToken(): Promise<void> {
  */
 async function copyPairingToken(): Promise<void> {
   try {
-    const { daemonPost } = await import("$lib/daemon/http");
+    const { daemonPost } = await import("#lib/daemon/http");
     const result = await daemonPost<{ pin: string; token: string; expires_in_secs: number }>("/v1/pair/start");
     // Prefix lets the extension popup recognize it (and ignore unrelated clipboard data)
     const payload = `neuroskill-pair:${result.token}`;
@@ -229,7 +229,7 @@ async function pairViaBrowser(): Promise<void> {
   pairingInProgress = true;
   statusMessage = "";
   try {
-    const { daemonPost } = await import("$lib/daemon/http");
+    const { daemonPost } = await import("#lib/daemon/http");
     const result = await daemonPost<{ code: string; url: string }>("/v1/pair/generate-code");
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(result.url);

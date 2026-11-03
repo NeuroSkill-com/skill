@@ -7,14 +7,14 @@ the Free Software Foundation, version 3 only. -->
 <!-- UMAP projection settings — repulsion, epochs, timeout -->
 <script lang="ts">
 import { onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { ChipGroup } from "$lib/components/ui/chip-group";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { ChipGroup } from "#lib/components/ui/chip-group";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface UmapConfig {

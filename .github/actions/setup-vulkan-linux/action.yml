@@ -13,10 +13,19 @@ runs:
         set -eo pipefail
         CODENAME="$(lsb_release -cs 2>/dev/null || (source /etc/os-release && echo "${VERSION_CODENAME:-noble}"))"
         if [[ ! -f "/etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list" ]]; then
+          # LunarG only publishes lists for some Ubuntu releases (24.04 noble and
+          # 22.04 jammy as of 2026-11; not 26.04). Fail with the reason instead of
+          # a bare `curl: (22)`: pin the job to a supported runner image, or
+          # install Ubuntu's own `libvulkan-dev libvulkan1 glslang-tools` instead.
+          LIST_URL="https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list"
+          if ! curl -fsSI "$LIST_URL" > /dev/null; then
+            echo "::error title=No LunarG Vulkan repo for Ubuntu ${CODENAME}::${LIST_URL} does not exist. Pin this job to runs-on: ubuntu-24.04 (what release-linux.yml uses), or install libvulkan-dev libvulkan1 glslang-tools from Ubuntu instead of vulkan-sdk."
+            exit 1
+          fi
           curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
             | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null
           sudo curl -fsSLo \
             "/etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list" \
-            "https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list"
+            "$LIST_URL"
           sudo apt-get update -y -q
         fi

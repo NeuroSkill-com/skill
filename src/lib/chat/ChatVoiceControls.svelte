@@ -13,8 +13,8 @@
   component is presentational + intent-emitting only.
 -->
 <script lang="ts">
-import type { AsrPhase, AsrRouting, AsrTrigger } from "$lib/chat/asr";
-import { t } from "$lib/i18n/index.svelte";
+import type { AsrPhase, AsrRouting, AsrTrigger } from "#lib/chat/asr";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   trigger: AsrTrigger;

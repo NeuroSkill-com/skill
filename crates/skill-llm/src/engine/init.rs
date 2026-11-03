@@ -79,13 +79,18 @@ pub fn init(
         return None;
     }
 
-    let model_path = catalog
-        .active_model_path()
-        .or_else(|| config.model_path.clone())
-        .or_else(|| {
-            push_log(&app, &log_buf, "warn", "no model selected — LLM server disabled");
-            None
-        })?;
+    let model_path = catalog.model_path_to_load(config.model_path.as_deref()).or_else(|| {
+        let msg = if catalog.active_model.is_empty() {
+            "no model selected — LLM server disabled".to_string()
+        } else {
+            format!(
+                "selected model '{}' is not downloaded — LLM server disabled",
+                catalog.active_model
+            )
+        };
+        push_log(&app, &log_buf, "warn", &msg);
+        None
+    })?;
 
     if !model_path.exists() {
         push_log(

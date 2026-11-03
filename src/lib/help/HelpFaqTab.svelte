@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: FAQ -->
 
 <script lang="ts">
-import { getLocale } from "$lib/i18n/index.svelte";
+import { getLocale } from "#lib/i18n/index.svelte";
 import HelpSection from "./HelpSection.svelte";
 import { getFaqContent } from "./help-loader";
 

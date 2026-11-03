@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Tauri wrapper — handles platform-specific setup (Vulkan SDK, linker
+ * Tauri wrapper — handles platform-specific setup (Linux Vulkan SDK, linker
  * flags, macOS target) before delegating to the Tauri CLI.
  *
  * Handles: dev, build (and passes everything else straight through).
@@ -53,21 +53,6 @@ function commandExists(cmd) {
   }
 }
 
-const powerShellCommand = isWin ? (commandExists("pwsh") ? "pwsh" : "powershell") : null;
-
-function runPowerShell(args, options = {}) {
-  if (!isWin || !powerShellCommand) {
-    throw new Error("runPowerShell() called on non-Windows host");
-  }
-
-  return execFileSync(powerShellCommand, ["-NoProfile", "-ExecutionPolicy", "Bypass", ...args], {
-    cwd: root,
-    env: process.env,
-    windowsHide: true,
-    ...options,
-  });
-}
-
 function resolveTauriCliBaseCommand() {
   const useCargo = process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
   if (useCargo) return ["cargo", "tauri"];
@@ -109,31 +94,6 @@ function isExecutableResolvable(cmd) {
   if (!cmd) return false;
   if (existsSync(cmd)) return true;
   return commandExists(cmd);
-}
-
-function detectWindowsVulkanSdkDir() {
-  if (!isWin) return null;
-
-  if (process.env.VULKAN_SDK && existsSync(resolve(process.env.VULKAN_SDK, "Include", "vulkan", "vulkan.h"))) {
-    return process.env.VULKAN_SDK;
-  }
-
-  const sdkRoot = "C:\\VulkanSDK";
-  if (!existsSync(sdkRoot)) return null;
-
-  const dirs = readdirSync(sdkRoot, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" }));
-
-  for (const versionDir of dirs) {
-    const candidate = resolve(sdkRoot, versionDir);
-    if (existsSync(resolve(candidate, "Include", "vulkan", "vulkan.h"))) {
-      return candidate;
-    }
-  }
-
-  return null;
 }
 
 function linuxTrayRuntimeLooksPresent() {
@@ -350,7 +310,7 @@ if (isLinux && explicitTarget?.endsWith("-unknown-linux-gnu") && process.env.ALL
 // ── Platform-specific setup ──────────────────────────────────────────────────
 //
 // espeak-ng is now a pure Rust dependency (espeak-ng crate) — no C build
-// scripts needed.  This section handles platform flags, Vulkan SDK, and
+// scripts needed.  This section handles platform flags, the Linux Vulkan SDK, and
 // macOS/Windows/Linux quirks.
 
 let platformFlags = []; // extra flags injected before the user's subArgs
@@ -388,18 +348,9 @@ if (isMingwTarget) {
     platformFlags = [...platformFlags, "--no-bundle"];
   }
 } else if (isWin) {
-  runPowerShell(["-File", "scripts\\install-vulkan-sdk.ps1"], {
-    stdio: "inherit",
-  });
-
-  // Ensure this process has VULKAN_SDK set for cargo/CMake grandchildren.
-  // (The install script may set machine/user env, but current process env is immutable.)
-  if (!process.env.VULKAN_SDK) {
-    const detected = detectWindowsVulkanSdkDir();
-    if (detected) {
-      process.env.VULKAN_SDK = detected;
-    }
-  }
+  // No Vulkan SDK on Windows: GPU work goes through wgpu, which uses DX12 and
+  // only falls back to the Vulkan runtime (vulkan-1.dll, shipped with GPU
+  // drivers) at run time. Nothing links against or compiles with the SDK.
 
   // ── Windows: skip Tauri bundling for `build` subcommand ────────────────────
   //
@@ -506,16 +457,21 @@ if (!isWin && !isMac && !process.env.CARGO_BUILD_JOBS) {
 
 // ── Build cache + fast linker detection ────────────────────────────────────────
 //
-// sccache caches both rustc and C/C++ (-sys crate) compilation outputs,
-// reducing clean-rebuild time by ~50%.  mold is a fast linker for Linux.
-// Both are auto-detected; neither is required.
+// kache (preferred) or sccache caches rustc and C/C++ (-sys crate)
+// compilation outputs, reducing clean-rebuild time by ~50%.  kache also shares
+// entries across worktrees and keeps incremental builds for crates being
+// edited.  mold is a fast linker for Linux.  All are auto-detected; none is
+// required.  Exporting RUSTC_WRAPPER here overrides ~/.cargo/config.toml, so
+// kache must win whenever it is installed or a machine-wide kache setup would
+// be silently bypassed.
 //
-// To disable: SKILL_NO_SCCACHE=1 or SKILL_NO_MOLD=1
+// To disable: SKILL_NO_KACHE=1, SKILL_NO_SCCACHE=1 or SKILL_NO_MOLD=1
 
-function detectSccache() {
-  if (process.env.SKILL_NO_SCCACHE === "1") return false;
-  if (process.env.RUSTC_WRAPPER) return false; // already set by caller
-  return commandExists("sccache");
+function detectCompilerCache() {
+  if (process.env.RUSTC_WRAPPER) return null; // already set by caller
+  if (process.env.SKILL_NO_KACHE !== "1" && commandExists("kache")) return "kache";
+  if (process.env.SKILL_NO_SCCACHE !== "1" && commandExists("sccache")) return "sccache";
+  return null;
 }
 
 if (process.env.RUSTC_WRAPPER) {
@@ -534,17 +490,11 @@ function detectMold() {
   return commandExists("mold") && commandExists("clang");
 }
 
-const hasSccache = detectSccache();
+const compilerCache = detectCompilerCache();
 const hasMold = detectMold();
 
-if (hasSccache) {
-  process.env.RUSTC_WRAPPER = "sccache";
-} else if (!process.env.RUSTC_WRAPPER) {
-  const _sccacheHint = isMac
-    ? "brew install sccache"
-    : isWin
-      ? "scoop install sccache  (or: cargo install sccache)"
-      : "cargo install sccache  (or: sudo apt install sccache)";
+if (compilerCache) {
+  process.env.RUSTC_WRAPPER = compilerCache;
 }
 
 if (hasMold) {
@@ -965,7 +915,10 @@ if (subcommand === "dev") {
     if (needsBuild) {
       console.log("\n🧩 Building VS Code extension…");
       try {
-        execSync("npm install --silent", { cwd: extDir, stdio: "ignore" });
+        // `npm ci` installs what the extension's lockfile pins; `npm install`
+        // would re-resolve versions on every rebuild.
+        const lock = existsSync(resolve(extDir, "package-lock.json"));
+        execSync(lock ? "npm ci --silent" : "npm install --silent", { cwd: extDir, stdio: "ignore" });
         execSync("./node_modules/.bin/tsc -p tsconfig.json", { cwd: extDir, stdio: "ignore" });
         console.log("   ✓ extension built");
       } catch (e) {

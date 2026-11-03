@@ -2,15 +2,15 @@
 <!-- Clients tab — pair phones via QR, manage connected devices and their permissions. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { getApiToken, getWsPort } from "$lib/daemon/client";
-import { daemonGet, daemonPost } from "$lib/daemon/http";
-import { createAuthToken, type TokenAcl } from "$lib/daemon/tokens";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { getApiToken, getWsPort } from "#lib/daemon/client";
+import { daemonGet, daemonPost } from "#lib/daemon/http";
+import { createAuthToken, type TokenAcl } from "#lib/daemon/tokens";
+import { t } from "#lib/i18n/index.svelte";
 
 type Totp = { id: string; name: string; created_at: number; revoked_at?: number | null; last_used_at?: number | null };
 type Permissions = {

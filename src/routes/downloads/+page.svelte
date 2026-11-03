@@ -2,10 +2,10 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { Button } from "$lib/components/ui/button";
-import { daemonInvoke } from "$lib/daemon/invoke-proxy";
-import { fmtDateTimeLocale, fmtGB } from "$lib/format";
-import { t } from "$lib/i18n/index.svelte";
+import { Button } from "#lib/components/ui/button";
+import { daemonInvoke } from "#lib/daemon/invoke-proxy";
+import { fmtDateTimeLocale, fmtGB } from "#lib/format";
+import { t } from "#lib/i18n/index.svelte";
 
 type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
 

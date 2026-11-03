@@ -17,8 +17,8 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { getGpuStats } from "$lib/daemon/client";
-import { colorForLoad } from "$lib/theme";
+import { getGpuStats } from "#lib/daemon/client";
+import { colorForLoad } from "#lib/theme";
 
 interface GpuStats {
   render: number;

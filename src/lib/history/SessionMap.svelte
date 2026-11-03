@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { getResolved } from "$lib/stores/theme.svelte";
+import { getResolved } from "#lib/stores/theme.svelte";
 
 export interface GpsPoint {
   ts: number;

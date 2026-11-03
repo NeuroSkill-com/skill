@@ -4,7 +4,7 @@
  * Shared across all components: status bar, dashboard, activity tab, tray.
  */
 
-import { daemonGet, daemonPost } from "$lib/daemon/http";
+import { daemonGet, daemonPost } from "#lib/daemon/http";
 
 export interface FlowState {
   in_flow: boolean;

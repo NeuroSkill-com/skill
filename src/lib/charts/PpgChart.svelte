@@ -21,8 +21,8 @@ export interface PpgMarker {
 </script>
 
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import { animatedCanvas } from "$lib/charts/use-canvas";
+  import { t } from "#lib/i18n/index.svelte";
+  import { animatedCanvas } from "#lib/charts/use-canvas";
 
   /** Channel labels, colors matching optical wavelengths. */
   const CH = ["Ambient", "IR", "Red"] as const;

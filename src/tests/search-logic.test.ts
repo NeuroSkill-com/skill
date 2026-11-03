@@ -8,9 +8,9 @@ import {
   fromInputValue,
   normalizeSearchMode,
   toInputValue,
-} from "$lib/search/search-logic";
-import type { SearchResult } from "$lib/search/search-types";
-import type { UmapPoint, UmapResult } from "$lib/types";
+} from "#lib/search/search-logic";
+import type { SearchResult } from "#lib/search/search-types";
+import type { UmapPoint, UmapResult } from "#lib/types";
 
 describe("normalizeSearchMode", () => {
   it("passes through valid modes", () => {

@@ -304,7 +304,7 @@ pub(crate) async fn llm_server_start_impl(State(state): State<AppState>) -> Json
             return Json(serde_json::json!({"ok": true, "result": "already_running"}));
         }
 
-        if cat.active_model_path().or_else(|| cfg.model_path.clone()).is_none() {
+        if cat.model_path_to_load(cfg.model_path.as_deref()).is_none() {
             let error = if !cat.active_model.is_empty() {
                 format!(
                     "selected model '{}' is not downloaded — download it in Settings → LLM \
@@ -478,6 +478,9 @@ pub(crate) async fn llm_server_switch_model_impl(
                 None
             };
         }
+        // Persist the new model, as llm_set_active_model_impl does (issue #92).
+        let model_path = state.llm_config.lock().ok().and_then(|c| c.model_path.clone());
+        patch_user_settings_sync(&state, move |s| s.llm.model_path = model_path);
         skill_llm::shutdown_cell(&state.llm_state_cell);
         let _ = llm_server_start_impl(State(state.clone())).await;
     }
@@ -1069,10 +1072,17 @@ pub(crate) async fn llm_set_active_model_impl(
     persist_llm_catalog(&state);
     #[cfg(feature = "llm")]
     {
+        let model_path = state
+            .llm_catalog
+            .lock()
+            .map(|c| c.active_model_path())
+            .unwrap_or_default();
         if let Ok(mut cfg) = state.llm_config.lock() {
-            let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
-            cfg.model_path = cat.active_model_path();
+            cfg.model_path = model_path.clone();
         }
+        // Save it too: otherwise the previous model's path stays in
+        // settings.json and comes back on the next start (issue #92).
+        patch_user_settings_sync(&state, move |s| s.llm.model_path = model_path);
     }
     Json(serde_json::json!({"ok": true}))
 }

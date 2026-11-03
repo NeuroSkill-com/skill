@@ -29,7 +29,6 @@ if [[ ! -x "${DAEMON_BIN}" ]]; then
 fi
 PLIST_PATH="$HOME/Library/LaunchAgents/com.skill.daemon.plist"
 LOG_DIR="$HOME/Library/Logs/NeuroSkill"
-TOKEN_PATH="$HOME/Library/Application Support/skill/daemon/auth.token"
 TEST_TOKEN="e2e-test-token-$(date +%s)"
 
 export SKILL_DAEMON_ADDR="${TEST_ADDR}"
@@ -257,7 +256,6 @@ sleep 1
 
 # C2: --uninstall flag
 "${DAEMON_BIN}" --uninstall 2>&1 || true
-exit_code=$?
 # The command should exit (not hang). We consider it clean if we get here.
 pass "C2: --uninstall exited cleanly"
 
@@ -321,7 +319,7 @@ else
 fi
 
 # D3: Idempotent install
-resp1=$(daemon_curl POST /service/install 2>&1)
+daemon_curl POST /service/install >/dev/null 2>&1
 resp2=$(daemon_curl POST /service/install 2>&1)
 if echo "${resp2}" | grep -q '"ok"'; then
   pass "D3: second /service/install returned ok (idempotent)"
@@ -346,7 +344,6 @@ header "E. Service Installer Edge Cases"
 # E1: Install with different binary path — verify plist is updated
 daemon_curl POST /service/install >/dev/null 2>&1 || true
 if [[ -f "${PLIST_PATH}" ]]; then
-  old_content=$(cat "${PLIST_PATH}")
   # Manually edit the plist to have a fake binary path, then reinstall
   sed -i '' "s|${DAEMON_BIN}|/tmp/fake-skill-daemon|g" "${PLIST_PATH}"
   daemon_curl POST /service/install >/dev/null 2>&1 || true

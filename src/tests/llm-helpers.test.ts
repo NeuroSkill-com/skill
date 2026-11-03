@@ -27,7 +27,7 @@ import {
   tagColor,
   tagLabel,
   vendorLabel,
-} from "$lib/llm/llm-helpers";
+} from "#lib/llm/llm-helpers";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 

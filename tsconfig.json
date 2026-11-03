@@ -1,5 +1,9 @@
 {
-  "extends": "./.svelte-kit/tsconfig.json",
+  "extends": "$app/tsconfig",
+  "include": ["src", "test", "*"],
+  // test.ts is the standalone API smoke script (run by scripts/smoke-test.sh
+  // via tsx); the type-check never covered it.
+  "exclude": ["src/service-worker", "test.ts"],
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -9,11 +13,15 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    // `#lib` comes from package.json "imports" (SvelteKit 3 dropped `$lib`).
+    // TypeScript maps "imports" targets literally and never tries extensions,
+    // so the extensionless `#lib/foo` imports also need this path mapping.
+    "paths": {
+      "#lib": ["./src/lib"],
+      "#lib/*": ["./src/lib/*"]
+    }
   }
-  // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-  // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
-  //
-  // If you want to overwrite includes/excludes, make sure to copy over the relevant includes/excludes
-  // from the referenced tsconfig.json - TypeScript does not merge them in
+  // SvelteKit 3: `$app/tsconfig` carries the generated types. The
+  // include/exclude above are the ones `svelte-kit sync` asks for.
 }

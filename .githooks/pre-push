@@ -9,11 +9,19 @@ set -euo pipefail
 FULL_MODE="${PREPUSH_FULL:-0}"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-# Speed up local Rust builds if sccache is available.
-if command -v sccache >/dev/null 2>&1; then
-  export RUSTC_WRAPPER=sccache
-  export CMAKE_C_COMPILER_LAUNCHER=sccache
-  export CMAKE_CXX_COMPILER_LAUNCHER=sccache
+# Speed up local Rust builds with a compiler cache (kache preferred). An
+# exported RUSTC_WRAPPER overrides ~/.cargo/config.toml, so prefer kache when
+# installed, and leave a caller-set wrapper alone.
+if [ -z "${RUSTC_WRAPPER:-}" ]; then
+  if command -v kache >/dev/null 2>&1; then
+    export RUSTC_WRAPPER=kache
+    export CMAKE_C_COMPILER_LAUNCHER=kache
+    export CMAKE_CXX_COMPILER_LAUNCHER=kache
+  elif command -v sccache >/dev/null 2>&1; then
+    export RUSTC_WRAPPER=sccache
+    export CMAKE_C_COMPILER_LAUNCHER=sccache
+    export CMAKE_CXX_COMPILER_LAUNCHER=sccache
+  fi
 fi
 
 if [ "$FULL_MODE" = "1" ]; then
@@ -29,6 +37,11 @@ if [ "$FULL_MODE" = "1" ]; then
   echo "🔎 Pre-push: frontend checks"
   npm run -s check
   npm test
+
+  if command -v shellcheck >/dev/null 2>&1; then
+    echo "🔎 Pre-push: shellcheck"
+    bash scripts/lint-shell.sh
+  fi
 
   echo "🔎 Pre-push: cargo deny"
   cargo deny check -A no-license-field -A parse-error -A license-not-encountered
@@ -101,6 +114,23 @@ CI_CHANGED="$(echo "$CHANGED_FILES" | grep -E '^scripts/ci\.mjs$|^\.github/workf
 if [ -n "$CI_CHANGED" ]; then
   echo "🔎 Pre-push: CI script self-test"
   node scripts/ci.mjs self-test
+fi
+
+# Shell scripts: same rules as `npm run lint:sh` and CI, changed files only.
+SHELL_CHANGED="$(echo "$CHANGED_FILES" | grep -E '\.sh$|^\.githooks/|^scripts/rlx$|^scripts/pkg-scripts/' | grep -v '^patches/' || true)"
+if [ -n "$SHELL_CHANGED" ]; then
+  if command -v shellcheck >/dev/null 2>&1; then
+    echo "🔎 Pre-push: shellcheck (changed scripts)"
+    SHELL_FILES=()
+    while IFS= read -r f; do
+      if [ -f "$f" ]; then SHELL_FILES+=("$f"); fi
+    done <<< "$SHELL_CHANGED"
+    if [ "${#SHELL_FILES[@]}" -gt 0 ]; then
+      shellcheck --severity=warning "${SHELL_FILES[@]}"
+    fi
+  else
+    echo "ℹ️  shellcheck not installed; skipping (CI runs it). brew install shellcheck"
+  fi
 fi
 
 RUST_CHANGED="$(echo "$CHANGED_FILES" | grep -E '\.rs$|^Cargo.toml$|^Cargo.lock$|^src-tauri/Cargo.toml$|^crates/.*/Cargo.toml$' || true)"

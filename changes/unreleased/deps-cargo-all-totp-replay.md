@@ -1,0 +1,16 @@
+### Bugfixes
+
+- **A pairing code now works only once.** Registering a remote device over iroh used to accept any TOTP code that was still within its ±30 s window, so a code someone had seen or intercepted could be reused for about a minute. Each TOTP credential now remembers the time step of the last code it accepted and rejects that step or any earlier one with "otp already used; wait for the next code" (RFC 6238 §5.2). Pairing a second device, or re-registering one, with the same credential therefore waits for the next code, up to 30 s. See [SECURITY.md](SECURITY.md).
+- **Guessing pairing codes is now throttled.** Devices that weren't registered yet could try codes without limit, and a 6-digit code can be guessed in minutes at that rate. After 5 wrong codes in a row, registration is refused for 60 s, doubling with each further wrong code up to an hour; a successful registration resets it.
+- **The iroh pairing database is no longer readable by other accounts.** `iroh_auth.json` holds the TOTP secrets but was written with default permissions, typically readable by every local user. On macOS and Linux it is now owner-only (`0600`), existing files are tightened when the daemon opens them, and saves go through a temporary file so a crash can't truncate it.
+- **Choosing "vulkan" as a device now means Vulkan.** The device setting treated `vulkan` as another name for wgpu, which on Windows runs on DX12, so asking for Vulkan quietly got DX12. It now asks for rlx's Vulkan backend, and where that isn't built in or present the usual fallback applies (CUDA, then wgpu, then CPU).
+- **GPU work on Windows uses DX12 only** (with rlx `main` after 0.2.19). wgpu could pick a Vulkan adapter instead, running models on a second GPU API with different drivers and results. Set `WGPU_BACKEND=vulkan` to use Vulkan anyway.
+- **Machines without a GPU run models on the CPU backend again** (with rlx `main` after 0.2.19). On a Windows PC, VM or remote session with no GPU, wgpu picked Microsoft's WARP software renderer (Mesa's llvmpipe on Linux) and skill counted it as a GPU, so models ran on an emulated GPU instead of rlx's native CPU backend. Software adapters are now skipped and the fallback reaches the CPU. `RLX_WGPU_ALLOW_SOFTWARE=1` keeps them.
+
+### Dependencies
+
+- **Dependency update** (#95): base64 0.23, rusqlite 0.41, dirs 7, sysinfo 0.39, rodio 0.23, sha2 0.11, rand 0.10, tower-http 0.7, tokio-tungstenite 0.29, tao 0.37, wry 0.57, totp-rs 6, hotpath 0.30, jsonschema 0.60, safetensors 0.7, fancy-regex 0.19, espeak-ng 0.2, cpal 0.18 and tokenizers 0.23. Code was updated for the breaking API changes in totp-rs, cpal, sha2, fancy-regex and safetensors; stored TOTP secrets still load unchanged.
+
+### Build
+
+- **Windows builds no longer install the Vulkan SDK.** The app's build script downloaded LunarG's Vulkan SDK 1.3.280 and ran its installer silently whenever `C:\VulkanSDK` was missing, and `npm run tauri` and the local Windows release script (`release-windows.ps1`) ran `install-vulkan-sdk.ps1` on every build. Nothing needed it: GPU work on Windows goes through wgpu on DirectX 12, and the app makes no Vulkan calls of its own. All three installs and the script are gone; Linux, which does use Vulkan, is unchanged.

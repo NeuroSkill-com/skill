@@ -10,7 +10,7 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
 import { Canvas } from "@threlte/core";
-import type { UmapPoint, UmapResult } from "$lib/types";
+import type { UmapPoint, UmapResult } from "#lib/types";
 import UmapScene from "./UmapScene.svelte";
 
 let {

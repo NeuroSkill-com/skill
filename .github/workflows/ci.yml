@@ -54,7 +54,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
 
       # Source of truth: repo-root VERSION. Fails if package.json /
       # tauri.conf.json / src-tauri/Cargo.toml drift (bump.js keeps them synced).
@@ -73,7 +73,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: Validate changelog fragment format (if present)
         run: |
@@ -92,7 +92,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
 
       # Offline integrity check only (no Hub crawl on every PR). The weekly
       # hf-downloads-cache workflow refreshes counts and opens a PR.
@@ -112,9 +112,37 @@ jobs:
   #
   # mold (fast linker) is installed to match the release-linux workflow and
   # shave 30-60 s off every link-heavy operation.
+  scripts-lint:
+    name: Scripts — shellcheck + ruff + PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      # Pinned image rather than the runner's apt shellcheck (older, so its
+      # findings drift from what `npm run lint:sh` reports locally).
+      - name: shellcheck (warnings and errors)
+        env:
+          SHELLCHECK: docker run --rm -v ${{ github.workspace }}:/mnt -w /mnt koalaman/shellcheck:v0.11.0
+        run: bash scripts/lint-shell.sh
+
+      # Rules come from ruff.toml; the version is pinned so CI matches local runs.
+      - name: ruff (Python scripts)
+        run: pipx run ruff==0.17.3 check .
+
+      # pwsh ships on GitHub's Ubuntu runners; the script installs the pinned
+      # PSScriptAnalyzer and applies PSScriptAnalyzerSettings.psd1.
+      - name: PSScriptAnalyzer (PowerShell scripts)
+        shell: pwsh
+        run: ./scripts/lint-powershell.ps1
+
   rust-check:
     name: Rust — clippy + test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # Pinned, not ubuntu-latest: LunarG publishes its Vulkan SDK apt repo only
+    # for Ubuntu 24.04/22.04, and ubuntu-latest moved to 26.04 (no LunarG list,
+    # so setup-vulkan-linux 404s). 24.04 is also what release-linux.yml builds on.
     steps:
       # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
       # ubuntu-latest ships Android SDK, .NET, Swift, Haskell, CodeQL, large
@@ -148,6 +176,19 @@ jobs:
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
           cache-targets: false
           cache-on-failure: false
+
+      # kache = the compile cache (rustc outputs, content-addressed). rust-cache
+      # above only covers the ~/.cargo registry (cache-targets: false), so the
+      # two don't overlap. This job is the sole writer of the Linux store: the
+      # action keys on platform + Cargo.lock only (not job), keys are immutable,
+      # and the e2e jobs restore it read-only.
+      - name: Compiler cache (kache)
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+        with:
+          version: v2.0.0
+          cache-key-prefix: kache-linux-ci
+          max-size: 3GiB
+          pr-comment: false
 
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
@@ -379,7 +420,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: 'npm'
 
       - name: Update npm to latest
@@ -544,6 +585,17 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
+      # kache = the compile cache (rustc outputs). rust-cache above only covers
+      # the ~/.cargo registry (cache-targets: false). Sole writer of the Windows
+      # store; MSVC cl.exe compiles pass through uncached.
+      - name: Compiler cache (kache)
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+        with:
+          version: v2.0.0
+          cache-key-prefix: kache-windows-ci
+          max-size: 3GiB
+          pr-comment: false
+
       # Always lint against the latest rlx / rlx-models main (rewrites Cargo.lock
       # pins before the `--locked` clippy step below).
       - name: Refresh rlx to main
@@ -555,7 +607,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: 'npm'
 
       - name: Update npm to latest
@@ -653,7 +705,8 @@ jobs:
 
   llm-e2e:
     name: LLM — E2E integration test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # Pinned to 24.04 for LunarG's Vulkan apt repo; see rust-check.
     # Run after rust-check so we reuse its cached build artifacts (clippy
     # already compiled the full workspace including skill-llm).  This
     # turns the E2E compilation into a cheap incremental build (~30 s)
@@ -680,6 +733,16 @@ jobs:
           save-if: false
           cache-targets: false
           cache-on-failure: false
+
+      # kache compile cache, restore-only (rust-check is the sole writer).
+      - name: Compiler cache (kache)
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+        with:
+          version: v2.0.0
+          cache-key-prefix: kache-linux-ci
+          max-size: 3GiB
+          pr-comment: false
+          save-cache: false
 
       - name: Setup Vulkan SDK repository
         uses: ./.github/actions/setup-vulkan-linux
@@ -785,6 +848,16 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
+      # kache compile cache, restore-only (rust-check is the sole writer).
+      - name: Compiler cache (kache)
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+        with:
+          version: v2.0.0
+          cache-key-prefix: kache-linux-ci
+          max-size: 3GiB
+          pr-comment: false
+          save-cache: false
+
       # rlsl is pure Rust (no liblsl system dependency) so only the minimal
       # set of packages is needed: mold+clang for the fast linker, and the
       # basic dev headers shared with the workspace build.
@@ -846,7 +919,8 @@ jobs:
   # ── Rust code coverage ────────────────────────────────────────────────────────
   coverage:
     name: Rust — code coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # Pinned to 24.04 for LunarG's Vulkan apt repo; see rust-check.
     needs: rust-check
     timeout-minutes: 90
     if: github.event_name == 'workflow_dispatch' && inputs.run_coverage == true
@@ -949,7 +1023,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: 'npm'
 
       - name: Update npm to latest

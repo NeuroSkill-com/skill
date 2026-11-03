@@ -2,7 +2,7 @@
 <!-- Persistent brain status bar — shown at the bottom of the app layout. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import { getFatigue, getFlow, getStreak, startBrainPolling, stopBrainPolling } from "$lib/stores/brain.svelte";
+import { getFatigue, getFlow, getStreak, startBrainPolling, stopBrainPolling } from "#lib/stores/brain.svelte";
 
 onMount(() => startBrainPolling());
 onDestroy(() => stopBrainPolling());

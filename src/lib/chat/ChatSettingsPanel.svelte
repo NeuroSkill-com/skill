@@ -9,8 +9,8 @@ import {
   SYSTEM_PROMPT_PRESETS,
   THINKING_LEVELS,
   type ThinkingLevel,
-} from "$lib/chat/chat-types";
-import { t } from "$lib/i18n/index.svelte";
+} from "#lib/chat/chat-types";
+import { t } from "#lib/i18n/index.svelte";
 
 interface Props {
   systemPrompt: string;

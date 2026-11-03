@@ -12,19 +12,19 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
 import { fade } from "svelte/transition";
-import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "$lib/daemon/client";
-import { getDeviceStatus } from "$lib/daemon/devices";
-import { daemonPost } from "$lib/daemon/http";
-import { getLocale, t } from "$lib/i18n/index.svelte";
-import * as nav from "$lib/navigation";
-import { SYNONYMS } from "$lib/search/settings-search-index";
-import { getRecentIds, recordUsage, usageBoost } from "$lib/stores/cmdk-history.svelte";
-import { getHighContrast, getResolved, setTheme, toggleHighContrast, toggleTheme } from "$lib/stores/theme.svelte";
-import { addToast } from "$lib/stores/toast.svelte";
-import { typoMatch } from "$lib/utils/fuzzy-utils";
+import { lslDiscover, lslIrohStart, lslIrohStop, retryConnect } from "#lib/daemon/client";
+import { getDeviceStatus } from "#lib/daemon/devices";
+import { daemonPost } from "#lib/daemon/http";
+import { getLocale, t } from "#lib/i18n/index.svelte";
+import * as nav from "#lib/navigation";
+import { SYNONYMS } from "#lib/search/settings-search-index";
+import { getRecentIds, recordUsage, usageBoost } from "#lib/stores/cmdk-history.svelte";
+import { getHighContrast, getResolved, setTheme, toggleHighContrast, toggleTheme } from "#lib/stores/theme.svelte";
+import { addToast } from "#lib/stores/toast.svelte";
+import { typoMatch } from "#lib/utils/fuzzy-utils";
 
 // Load all locale indexes at build time via Vite glob import
-const indexModules = import.meta.glob<{ default: SearchIndexEntry[] }>("$lib/generated/settings-search-index.*.json", {
+const indexModules = import.meta.glob<{ default: SearchIndexEntry[] }>("#lib/generated/settings-search-index.*.json", {
   eager: true,
 });
 
@@ -393,7 +393,7 @@ function commands(): Command[] {
       toggle: {
         get: getHighContrast,
         set: (v) => {
-          import("$lib/stores/theme.svelte").then((m) => m.setHighContrast(v));
+          import("#lib/stores/theme.svelte").then((m) => m.setHighContrast(v));
         },
       },
       action: () => {

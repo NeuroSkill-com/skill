@@ -8,13 +8,13 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { onDestroy, onMount } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
-import { Button } from "$lib/components/ui/button";
-import { CardContent } from "$lib/components/ui/card";
-import { SectionHeader } from "$lib/components/ui/section-header";
-import { Separator } from "$lib/components/ui/separator";
-import { SettingsCard } from "$lib/components/ui/settings-card";
-import { t } from "$lib/i18n/index.svelte";
+import { Badge } from "#lib/components/ui/badge";
+import { Button } from "#lib/components/ui/button";
+import { CardContent } from "#lib/components/ui/card";
+import { SectionHeader } from "#lib/components/ui/section-header";
+import { Separator } from "#lib/components/ui/separator";
+import { SettingsCard } from "#lib/components/ui/settings-card";
+import { t } from "#lib/i18n/index.svelte";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let shortcut = $state("");
