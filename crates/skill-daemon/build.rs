@@ -3,10 +3,9 @@
 //!
 //! - Embeds repo-root `VERSION` as `SKILL_PRODUCT_VERSION` (source of truth for
 //!   `/v1/version` and support diagnostics).
-//! - On Linux, emits the extra link directives the daemon binary needs but that
-//!   the crates providing those symbols don't emit themselves:
-//!   - `cargo:rustc-link-lib=vulkan` (Vulkan loader symbols for wgpu)
-//!   - OpenBLAS search path + rpath (see `build-support/linux_openblas.rs`)
+//! - On Linux, emits the OpenBLAS search path + rpath the daemon binary needs but
+//!   that the crates providing those symbols don't emit themselves (see
+//!   `build-support/linux_openblas.rs`).
 
 use std::path::PathBuf;
 
@@ -61,7 +60,6 @@ fn main() {
     // Linker warnings are the cheaper problem. Leave unwinding alone.
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
-        println!("cargo:rustc-link-lib=vulkan");
         linux_openblas::link_system_openblas(true);
     }
 }

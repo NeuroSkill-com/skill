@@ -3,10 +3,10 @@ name: Release PR checks
 # Soft-enforces the merge strategy required by the RC pipeline.
 #
 # The promote workflow keys off the *head commit's message* on main matching
-# the version string (`0.5.1-rc.3`). Rebase merge and squash merge both
-# preserve that message; a regular merge commit doesn't, so promote would
-# silently skip and the stable channel would stay pinned to the previous
-# release.
+# the version string (`0.5.1-rc.3`). A rebase merge preserves that message; a
+# regular merge commit doesn't, and a squash takes the PR title, so promote
+# would silently skip and the stable channel would stay pinned to the previous
+# release. `npm run release` merges the right way.
 #
 # This workflow doesn't block merging — repo-level merge-strategy settings
 # can do that, and GitHub's merge dropdown is the right place to enforce
@@ -43,15 +43,15 @@ jobs:
 
           BODY=$(cat <<'EOF'
           <!-- release-merge-reminder -->
-          ### Merge strategy: **rebase** or **squash** only
+          ### Merge strategy: **rebase** only
 
           This PR is labeled `release`. Promotion of the most recent RC to stable depends on the merged commit message on `main` matching the version string exactly (e.g. `0.5.1-rc.3`).
 
-          A regular merge commit would:
+          Run `npm run release` from the release branch: it checks the RC, then rebase-merges this PR. A regular merge commit or a squash would:
           - create a different commit hash than the tested RC → **break bit-identity** between RC and stable
-          - carry a generic merge message → **the promote workflow silently skips**, leaving stable pointing at the previous release
+          - carry a different message → **the promote workflow silently skips**, leaving stable pointing at the previous release
 
-          When merging, click the dropdown next to the green button and pick **Rebase and merge** or **Squash and merge**.
+          If you merge by hand, click the dropdown next to the green button and pick **Rebase and merge**.
           EOF
           )
 

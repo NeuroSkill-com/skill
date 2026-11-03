@@ -297,7 +297,7 @@ npm run bump --force
 
 ### Cutting a release
 
-Releases are PR-driven. Cutting an RC opens a release PR; merging the PR (rebase or squash) promotes the most recent RC to stable with no rebuild.
+Releases are PR-driven. Cutting an RC opens a release PR; `npm run release` checks the RC, rebase-merges that PR and promotes the RC to stable with no rebuild.
 
 ```bash
 # Cut the first RC for the next release (run from main)
@@ -306,8 +306,8 @@ npm run release -- --rc
 # Iterate as bugs surface (from the release/X.Y.Z branch)
 npm run release -- --rc
 
-# Approve and merge the PR with rebase or squash merge.
-# promote.yml flips the matching tag to "latest" automatically.
+# Ship the latest RC to stable (from the release/X.Y.Z branch)
+npm run release
 ```
 
 See [docs/DEVELOPMENT.md → Release](docs/DEVELOPMENT.md#release) for the full flow, channel system (stable / rc), and the moving parts.

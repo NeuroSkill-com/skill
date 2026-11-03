@@ -1,15 +1,15 @@
 name: Promote RC to stable
 
-# Fired when a release PR is merged to main using rebase or squash merge.
+# Fired when a release PR is rebase-merged to main (`npm run release` does this).
 # bump.js commits with the version string as the message (e.g. "0.5.1-rc.3"),
-# and rebase/squash preserves that commit hash + message on main. We detect it
+# and a rebase preserves that commit message on main. We detect it
 # here and promote the matching RC release: clear the prerelease flag and mark
 # it as latest. The promoted artifacts are byte-identical to the tested RC —
 # no rebuild, no re-notarization. GitHub's `releases/latest` URL semantics do
 # the rest, and stable channel users see the new version on their next poll.
 #
-# A regular merge commit creates a different head SHA whose message doesn't
-# match the version regex, so promote silently skips. The companion workflow
+# A regular merge commit or a squash (which takes the PR title) leaves a head
+# message that doesn't match the version regex, so promote silently skips. The companion workflow
 # (pr-checks.yml) flags release PRs that would create such a merge commit.
 
 on:
