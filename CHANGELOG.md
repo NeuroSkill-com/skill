@@ -8,6 +8,67 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.1] — 2026-11-03
+
+### Bugfixes
+
+- **A pairing code now works only once.** Registering a remote device over iroh used to accept any TOTP code that was still within its ±30 s window, so a code someone had seen or intercepted could be reused for about a minute. Each TOTP credential now remembers the time step of the last code it accepted and rejects that step or any earlier one with "otp already used; wait for the next code" (RFC 6238 §5.2). Pairing a second device, or re-registering one, with the same credential therefore waits for the next code, up to 30 s. See [SECURITY.md](SECURITY.md).
+- **Guessing pairing codes is now throttled.** Devices that weren't registered yet could try codes without limit, and a 6-digit code can be guessed in minutes at that rate. After 5 wrong codes in a row, registration is refused for 60 s, doubling with each further wrong code up to an hour; a successful registration resets it.
+- **The iroh pairing database is no longer readable by other accounts.** `iroh_auth.json` holds the TOTP secrets but was written with default permissions, typically readable by every local user. On macOS and Linux it is now owner-only (`0600`), existing files are tightened when the daemon opens them, and saves go through a temporary file so a crash can't truncate it.
+- **Choosing "vulkan" as a device now means Vulkan.** The device setting treated `vulkan` as another name for wgpu, which on Windows runs on DX12, so asking for Vulkan quietly got DX12. It now asks for rlx's Vulkan backend, and where that isn't built in or present the usual fallback applies (CUDA, then wgpu, then CPU).
+- **GPU work on Windows uses DX12 only** (with rlx `main` after 0.2.19). wgpu could pick a Vulkan adapter instead, running models on a second GPU API with different drivers and results. Set `WGPU_BACKEND=vulkan` to use Vulkan anyway.
+- **Machines without a GPU run models on the CPU backend again** (with rlx `main` after 0.2.19). On a Windows PC, VM or remote session with no GPU, wgpu picked Microsoft's WARP software renderer (Mesa's llvmpipe on Linux) and skill counted it as a GPU, so models ran on an emulated GPU instead of rlx's native CPU backend. Software adapters are now skipped and the fallback reaches the CPU. `RLX_WGPU_ALLOW_SOFTWARE=1` keeps them.
+
+- **Warp no longer hangs when the zsh or bash hook is installed** (#69). Session recording re-runs the shell on a fresh PTY, which hides Warp's shell-integration handshake, so Warp waited forever at startup. The hooks now recognise the terminal app they run in (Warp, JetBrains, VS Code, Zed, iTerm2, Apple Terminal, Ghostty, WezTerm, Hyper, tmux, kitty, Alacritty, Konsole, GNOME Terminal, or a lowercased `$TERM_PROGRAM`) and skip recording in any app listed in `NEUROSKILL_SKIP_TERMINALS` (space- or comma-separated). It defaults to `warp`; set it to an empty string to record everywhere, or add another app that misbehaves. `NEUROSKILL_SKIP_RECORDING=1` still skips a single shell. Takes effect when the hook is regenerated, which the daemon does on startup.
+- **The model picked in Settings → LLM is the one that loads** (#92). Choosing a model only updated the in-memory config, so the previous model's path stayed in `settings.json`, and the LLM page also wrote its stale copy back on every toggle. When the new selection wasn't marked downloaded, Start quietly loaded the old model instead. The daemon now saves the new path when you pick or switch a model, and loads the configured path only when nothing is selected or it is the selected file; otherwise Start says the selected model isn't downloaded.
+
+### Refactor
+
+- **SvelteKit 3 migration.** SvelteKit 3 no longer reads `svelte.config.js`, so its settings (static adapter with the `index.html` fallback, Vite preprocessing) moved into the `sveltekit()` plugin in `vite.config.js`. It also removed the `$lib` import alias: the 907 `$lib/…` imports are now `#lib/…`, mapped in `package.json` `"imports"` (with a matching TypeScript `paths` entry, since TypeScript does not add file extensions to `"imports"` targets). `tsconfig.json` now extends `$app/tsconfig`, the error page reads `page` from `$app/state` instead of the removed `$app/stores`, and the search page updates its URL with a shallow `goto` instead of the deprecated `replaceState`.
+- **Biome 2.6 configuration.** `biome.json` was migrated to the 2.6 schema (`"preset": "recommended"`). The new `useDomNodeTextContent` rule is off for the Playwright tests, where it misreads `locator.innerText()` as the DOM property and its fix would change what the tests assert.
+
+### Build
+
+- **kache compiler cache.** CI's Linux and Windows Rust jobs now cache compiled crates with [kache](https://github.com/kunobi-ninja/kache) (`kunobi-ninja/kache-action`, pinned by SHA). "Rust — clippy + test" and "Windows — cargo clippy" each write one store, and the LLM and LSL E2E jobs restore the Linux store read-only. `Swatinem/rust-cache` still caches the Cargo registry. Release jobs still run without a compiler cache. Locally, `npm run tauri dev/build`, the flamegraph script, `scripts/test-all.sh` and the pre-push hook now prefer kache over sccache. An exported `RUSTC_WRAPPER=sccache` used to override a machine-wide kache setup. Set `SKILL_NO_KACHE=1` to fall back to sccache.
+
+- **The RPM and daemon-upgrade container checks run again.** `Dockerfile.rpm-verify` and `Dockerfile.upgrade-test` were deleted in an unrelated commit, so `npm run verify:rpm` and `scripts/test-upgrade-linux-docker.sh` stopped at building their image. Both are restored, and `verify:rpm --synthetic` passes all 24 checks again.
+- **`compile-changelog.js` rejects anything that isn't a version.** Any argument counted as the release version, so a typo or `--help` moved every unreleased fragment into a bogus release file. It now requires a version such as `0.1.1` or `0.2.0-rc.1` and a `YYYY-MM-DD` date before touching anything, and `--help` prints usage. `bump.js` gets the same check.
+- **Build-cache setup prefers kache.** `npm run setup:build-cache` (and its Windows counterpart) offers kache first and sccache only as a fallback, and reports which one the build will use. `npm run setup` no longer suggests sccache when kache is installed. The build scripts already preferred kache; the setup scripts still offered only sccache.
+- **CI reads the Node version from `.nvmrc`**, so it has one source instead of eleven `node-version: 22` lines.
+- **Shell scripts are linted.** `npm run lint:sh` runs shellcheck on every tracked shell script and git hook, and a new CI job runs it with a pinned shellcheck 0.11. The existing warnings were fixed: unused variables, unquoted expansions, and a pre-commit step that broke on Rust file names containing spaces.
+- **`npm run stop` matches the daemon by name**, and works on Windows. `pkill -f skill-daemon` matched whole command lines, so on Linux it also killed the shell npm ran it in. `npm run pull` now checks out the submodule commits the repo pins; `npm run pull:latest` keeps the old move-to-latest behaviour.
+- `bundle-tts-weights.sh` finds rlx-models the way `ensure-rlx.sh` does (`RLX_MODELS_ROOT`, then `rlx-models.path`, then `../rlx-models`) instead of falling back to one machine's absolute path.
+- **The app crate's tests compile on Linux and Windows.** `tempfile`, which 50 of the `skill` crate's tests use, was declared in the macOS-only dependency table, so `cargo test -p skill` failed to compile everywhere else. It is now a dev-dependency. The daemon-upgrade container image also gained `libopenblas-dev`, which the tests need to link.
+- **Running the app's tests on Windows no longer overwrites your daemon token.** The `daemon_cmds` tests isolated themselves by setting `HOME`, `XDG_CONFIG_HOME` and `APPDATA`, but on Windows the config directory comes from the shell's known-folder API, which ignores `APPDATA`. So `cargo test -p skill` wrote `test-token` into the real `%APPDATA%\skill\daemon\auth.token`, after which the installed app got 401s from its own daemon. The tests now also set `SKILL_DAEMON_CONFIG_ROOT`, which every path helper honours. One mock server also left the request body unread, so Windows sometimes reset the connection before the client read the reply. All 93 of the crate's library tests now pass on Windows (verified twice, with the real token file left untouched) and all 107 on Linux.
+- **`cargo update` works with rlx-models 0.2.20.** rlx-models now depends on `rlx-mcu`, a new rlx crate that isn't on crates.io, so `cargo update` failed with "no matching package named `rlx-mcu`". It is now patched to rlx's git `main` like the other rlx crates, and so is `rlx-optim`, which had been resolving from crates.io beside the git copies. Every rlx crate in the lock now comes from one source.
+- **The vendored `libduckdb-sys` patch applies again.** It adds `-bundle` to the link of DuckDB's static-extension autoregister archive (the v0.1.0-rc.4 macOS link fix), but it was vendored as 1.20000.0, and once duckdb moved to 1.20000.1 Cargo stopped applying it. Without it, rustc repacks that archive in a temporary directory, and every `skill-daemon` link on macOS printed `warning: (arm64) deps/rustcXXXX/libduckdb_static_extension_autoregister.a(...) unable to open object file`. It is now vendored as 1.20000.1 with the same two-line change, and the warning is gone.
+- **`patches/` holds only the four vendored crates still in use** (openbci, eegdino, gpu-allocator, oura-api), each still needed because crates.io has no fixed release. Deleted: the retired btleplug shim, which nothing has compiled since the BLE crates moved to webbluetooth (the `Cargo.toml` comment gives the `git checkout` to restore it), muda and phf_generator, whose patch entries were removed in May, and brainjepa and reve-rs, which are no longer dependencies.
+- **Cross-compiled builds pick platform code by target, not by build machine.** Two build scripts used `#[cfg(target_os = …)]`, which describes the machine running the script. So a Windows build cross-compiled from a Mac tried to compile `skill-vision`'s macOS Objective-C OCR shim and failed, and the app's Windows manifest was skipped whenever the Windows binary wasn't built on Windows. Both now read `CARGO_CFG_TARGET_OS`, as `skill-calendar` already did. Native builds, including the CI release jobs, were unaffected.
+- **`tsx` is a pinned dev dependency.** Nine npm scripts, including the settings-index step of every `npm run dev` and `npm run build`, called `npx tsx` without `tsx` being installed, so npx fetched whatever version was newest from the registry. They now run the locked version.
+- **`npm run neuroskill` and the VS Code extension build use `npm ci`**, installing what their lockfiles pin instead of re-resolving versions.
+- **Python and PowerShell scripts are linted too.** `npm run lint:py` runs ruff with the rules in `ruff.toml`, and `npm run lint:ps` runs PSScriptAnalyzer with `PSScriptAnalyzerSettings.psd1`; both run in the same CI job as shellcheck, and `scripts/test-all.sh lint` runs whichever linters are installed. The pre-push hook shellchecks the shell scripts a push changes. Fixes from the first run: unused imports (one of them a Unix-only module that would fail on Windows), three PowerShell scripts with non-ASCII text but no byte-order mark, which Windows PowerShell 5.1 misreads, and a `$Args` parameter that shadowed PowerShell's automatic variable.
+- **Removed obsolete scripts:** the root `release.sh` (an old manual macOS release pipeline whose paths no longer resolve; releases go through `npm run release` and CI), `test_daemon_hooks.sh`, `scripts/fix-daemon-rpath.sh` (copied llama.cpp libraries the build no longer produces) and `scripts/extract-help-to-md.mjs` (a finished one-time migration).
+
+- **Linux CI runs again.** GitHub's `ubuntu-latest` image moved to Ubuntu 26.04, and LunarG publishes its Vulkan SDK apt repository only for 24.04 and 22.04, so the "Rust — clippy + test", LLM E2E and coverage jobs failed at setup with `curl: (22) … 404` before compiling anything. Those three jobs now run on `ubuntu-24.04`, the image the Linux release build already uses. The Vulkan setup action now names the cause when LunarG has no list for the runner's Ubuntu release, instead of a bare curl error.
+
+- **Windows builds no longer install the Vulkan SDK.** The app's build script downloaded LunarG's Vulkan SDK 1.3.280 and ran its installer silently whenever `C:\VulkanSDK` was missing, and `npm run tauri` and the local Windows release script (`release-windows.ps1`) ran `install-vulkan-sdk.ps1` on every build. Nothing needed it: GPU work on Windows goes through wgpu on DirectX 12, and the app makes no Vulkan calls of its own. All three installs and the script are gone; Linux, which does use Vulkan, is unchanged.
+
+- **The Homebrew cask follows releases again** (#80). The workflow that bumps `Casks/neuroskill.rb` after a stable release opened a pull request, which GitHub Actions is not allowed to do in this repository, so it failed and the cask stayed at 0.0.129 after 0.1.0 shipped. It now commits the bump (version and the release asset's sha256 digest) straight to `main`, and the cask is updated to 0.1.0.
+- **`npm run setup` installs CMake on macOS and uses `npm ci`** (#78). CMake is needed to build `sentencepiece-sys` and `highs-sys` but was only checked on Linux. Dependencies now install with `npm ci` when `package-lock.json` exists, the way CI installs them, instead of `npm install`, which re-resolves versions and can fail on peer ranges the lockfile already settled (#81).
+- **Building the frontend needs Node.js 22.17 or newer**, up from 20. SvelteKit 3 requires 22.17 and Vitest 5 requires 22.12, so on Node 20 the dependencies install but the frontend does not build or test. `package.json` `engines`, CONTRIBUTING and the development guide now say 22.17, and `npm run setup` checks the version, which it used to print as fine whatever it was. When Node is missing or older, setup now offers to install the latest Node 22 LTS from nodejs.org into `~/.local` (checksum-verified against the release's `SHASUMS256.txt`, no sudo needed), links `node`, `npm` and `npx` into `~/.local/bin`, and prints the line to add to your shell profile if that directory is not on your `PATH`. A new `.nvmrc` pins Node 22 for nvm, fnm and similar version managers. CI already runs Node 22.
+
+### Docs
+
+- **The development guide lists the scripts you run by hand**, such as the WidgetKit build, the CLI end-to-end tests, the Windows test VM, icon generation and the TTS validation tools, and explains the kache setup.
+
+- **The README's download links work** (#82). They pointed at unversioned file names under `releases/latest/download/` that no release has ever had, and promised a Linux AppImage that isn't built. They now link the latest release page and name the real files: the macOS `.dmg`, the Windows `-setup.exe`, and the Linux `.deb`, `.rpm` or portable `.tar.gz`.
+
+### Dependencies
+
+- **Dependency update** (#95): base64 0.23, rusqlite 0.41, dirs 7, sysinfo 0.39, rodio 0.23, sha2 0.11, rand 0.10, tower-http 0.7, tokio-tungstenite 0.29, tao 0.37, wry 0.57, totp-rs 6, hotpath 0.30, jsonschema 0.60, safetensors 0.7, fancy-regex 0.19, espeak-ng 0.2, cpal 0.18 and tokenizers 0.23. Code was updated for the breaking API changes in totp-rs, cpal, sha2, fancy-regex and safetensors; stored TOTP secrets still load unchanged.
+
+- **Frontend dependency update** (#94): SvelteKit 3.1, adapter-static 4, Vitest 5, Biome 2.6, maplibre-gl 6, tailwind-variants 4, three 0.187, sharp 0.35, Playwright 1.64, svelte-check 4.7 and 18 smaller bumps.
+
 ## [0.1.0] — 2026-11-02
 
 ### Build
@@ -715,16 +776,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 - MSVC vs LLD
 
-## [0.0.131-rc.28] — 2026-09-22
-
-### Features
-
-- updated release windows action
-
 ## Earlier releases
 
-The 156 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 157 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.28](changes/releases/0.0.131-rc.28.md)
 - [0.0.131-rc.27](changes/releases/0.0.131-rc.27.md)
 - [0.0.131-rc.26](changes/releases/0.0.131-rc.26.md)
 - [0.0.131-rc.25](changes/releases/0.0.131-rc.25.md)
