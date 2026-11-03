@@ -85,6 +85,7 @@ describe.skipIf(!canRun)("tauri runtime e2e via real daemon", () => {
         "has_full_montage",
         "has_imu",
         "has_ppg",
+        "has_vitals",
         "imu_channel_names",
         "imu_sample_count",
         "iroh_client_name",
