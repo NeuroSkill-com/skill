@@ -8,6 +8,12 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.4] — 2026-11-05
+
+### Features
+
+- **Empatica EmbracePlus**: connect the wristband over BLE via the `empatica` crate. Skin temperature streams as vitals; EDA, steps and ambient light are logged as metadata. Compressed PPG/IMU are not decoded live.
+
 ## [0.1.1-rc.3] — 2026-11-03
 
 ### Build
@@ -695,17 +701,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
   *it* for an ELF architecture and running `ldd` against it passed for the wrong
   reason. The checks now inspect the real executables under `/opt/neuroskill`.
 
-## [0.0.131-rc.31] — 2026-09-28
-
-### Features
-
-- fix the session drop issue
-- improve cli
-
 ## Earlier releases
 
-The 159 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 160 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.31](changes/releases/0.0.131-rc.31.md)
 - [0.0.131-rc.30](changes/releases/0.0.131-rc.30.md)
 - [0.0.131-rc.29](changes/releases/0.0.131-rc.29.md)
 - [0.0.131-rc.28](changes/releases/0.0.131-rc.28.md)
