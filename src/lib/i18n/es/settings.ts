@@ -81,6 +81,12 @@ const settings: Record<string, string> = {
     "Abre Dispositivos, busca y elige la banda. Las bandas sin nombre o renombradas también se encuentran, por el servicio que anuncian.",
   "settings.supportedDevices.instruction.whoop3":
     "La frecuencia cardíaca, los intervalos R-R que hay detrás y la batería se transmiten a la sesión. No hace falta cuenta de WHOOP.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "Ponte la banda y asegúrate de que no esté conectada en la app de Empatica: una banda acepta una conexión a la vez.",
+  "settings.supportedDevices.instruction.empatica2":
+    "Abre Dispositivos, busca y elige la banda. La temperatura de la piel se transmite a la sesión; la EDA y los pasos se registran como metadatos.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Obtener un token de acceso personal desde cloud.ouraring.com/personal-access-tokens.",

@@ -256,6 +256,26 @@ pub(super) async fn connect_whoop(paired_name: Option<String>) -> anyhow::Result
     Ok(Box::new(WhoopAdapter::new(rx, handle)))
 }
 
+// ── Empatica EmbracePlus (BLE) ───────────────────────────────────────────────
+
+/// Connect to an Empatica EmbracePlus wristband.
+pub(super) async fn connect_empatica(paired_name: Option<String>) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::empatica::prelude::*;
+    use skill_devices::session::empatica::{EmpaticaAdapter, EmpaticaConfig};
+
+    // A paired name only narrows the scan; the band's advertised name varies by
+    // firmware, so with none any band advertising the Embrace service matches.
+    let config = EmpaticaConfig {
+        name_prefix: paired_name.unwrap_or_default(),
+        ..Default::default()
+    };
+    info!(name_prefix = %config.name_prefix, "connecting to Empatica EmbracePlus…");
+
+    let client = EmbraceClient::new(config.to_client_config());
+    let (rx, handle) = client.connect().await.context("Empatica connect")?;
+    Ok(Box::new(EmpaticaAdapter::new(rx, handle)))
+}
+
 // ── Oura Ring (BLE) ──────────────────────────────────────────────────────────
 
 /// Connect to an Oura ring over its vendor BLE protocol — no Oura account.

@@ -103,6 +103,12 @@ const settings: Record<string, string> = {
     "デバイスを開いてスキャンし、ストラップを選びます。名前のないストラップや名前を変えたストラップも、広告しているサービスから見つかります。",
   "settings.supportedDevices.instruction.whoop3":
     "心拍数、その基になった R-R 間隔、バッテリー残量がセッションに流れ込みます。WHOOP アカウントは不要です。",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "バンドを装着し、Empatica アプリで接続されていないことを確認してください。バンドは同時に 1 つの接続しか受け付けません。",
+  "settings.supportedDevices.instruction.empatica2":
+    "デバイスを開いてスキャンし、バンドを選びます。皮膚温度がセッションに流れ込み、EDA と歩数はメタデータとして記録されます。",
   "settings.supportedDevices.device.ouraRing": "Oura Ring（第3世代/第4世代）",
   "settings.supportedDevices.instruction.oura1":
     "cloud.ouraring.com/personal-access-tokensで個人アクセストークンを取得してください。",

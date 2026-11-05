@@ -62,6 +62,7 @@ Windows, CUDA or Vulkan on Linux. Without a usable GPU they run on the CPU.
 - **Brain Products:** BrainVision RDA
 - **RE-AK:** Nucleus-Hermès
 - **Vital Neuro:** Vital Neuro Headphones
+- **Empatica:** Empatica EmbracePlus
 - **WHOOP:** WHOOP 4.0 / 5.0 / MG strap
 
 Plus any compatible **LSL** source (e.g. BrainFlow, MATLAB, pylsl).

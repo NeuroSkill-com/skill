@@ -94,6 +94,12 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.whoop2":
     "打开设备、扫描并选择该手环。没有名称或已改名的手环同样能被找到，依据是它广播的服务。",
   "settings.supportedDevices.instruction.whoop3": "心率、其背后的 R-R 间隔以及电量都会进入会话。无需 WHOOP 账号。",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "戴上手环，并确认它没有在 Empatica 手机应用中处于连接状态——手环一次只接受一个连接。",
+  "settings.supportedDevices.instruction.empatica2":
+    "打开设备、扫描并选择该手环。皮肤温度会进入会话；EDA 和步数作为元数据记录。",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1": "从 cloud.ouraring.com/personal-access-tokens 获取个人访问令牌。",
   "settings.supportedDevices.instruction.oura2": "打开设备 API → Oura Ring 并粘贴您的令牌，然后保存。",

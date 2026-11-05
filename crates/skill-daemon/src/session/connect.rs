@@ -252,6 +252,7 @@ enum ConnectRoute {
     Mendi,
     Oura,
     Whoop,
+    Empatica,
     IrohRemote,
     AntNeuro,
     /// Recognised, but deliberately unsupported: the driver has been removed.
@@ -331,6 +332,11 @@ fn is_whoop(s: &str) -> bool {
     // routed from the service UUID the scanner recorded.
     skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Whoop
 }
+fn is_empatica(s: &str) -> bool {
+    // Registry-owned, like WHOOP: firmware names vary, and a nameless band
+    // arrives as `ble:<id>`, routed from the service UUID the scanner saw.
+    skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Empatica
+}
 fn is_oura(s: &str) -> bool {
     // Narrow for the same reason as the registry's `from_name`: "oura" is a
     // substring of unrelated product names, and a mis-route hands the ring's
@@ -366,6 +372,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_mendi, ConnectRoute::Mendi),
     (is_oura, ConnectRoute::Oura),
     (is_whoop, ConnectRoute::Whoop),
+    (is_empatica, ConnectRoute::Empatica),
     (is_antneuro, ConnectRoute::AntNeuro),
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
@@ -418,6 +425,7 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
         ConnectRoute::Oura => connect_ble::connect_oura(target, paired_name_for(state, target)).await,
         ConnectRoute::Whoop => connect_ble::connect_whoop(paired_name_for(state, target)).await,
+        ConnectRoute::Empatica => connect_ble::connect_empatica(paired_name_for(state, target)).await,
         ConnectRoute::AntNeuro => connect_wired::connect_antneuro(state, target).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
         ConnectRoute::Removed(device) => anyhow::bail!(
@@ -493,6 +501,9 @@ fn infer_kind_from_target(target: &str) -> &'static str {
     if lower.contains("mendi") {
         return "mendi";
     }
+    if skill_data::device::DeviceKind::from_name(Some(&lower)) == skill_data::device::DeviceKind::Empatica {
+        return "empatica";
+    }
     if lower.starts_with("antneuro:") || lower.contains("antneuro") || lower.contains("eego") {
         return "antneuro";
     }
@@ -533,6 +544,7 @@ mod tests {
             ("AWEAR-E04A8471", "awear"),
             ("Vital Neuro", "vital"),
             ("Mendi-XY", "mendi"),
+            ("EmbracePlus", "empatica"),
             ("ganglion", "ganglion"),
             ("openbci", "openbci"),
             ("usb:COM3", "openbci/cyton"),
@@ -649,6 +661,7 @@ mod tests {
             ("Oura", ConnectRoute::Oura),
             ("Oura Ring Gen3", ConnectRoute::Oura),
             ("WHOOP", ConnectRoute::Whoop),
+            ("EmbracePlus", ConnectRoute::Empatica),
             ("whoop-4A2B", ConnectRoute::Whoop),
             ("antneuro:0", ConnectRoute::AntNeuro),
             ("totally-unknown-device", ConnectRoute::Muse),

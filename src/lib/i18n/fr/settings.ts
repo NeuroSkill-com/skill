@@ -457,6 +457,12 @@ const settings: Record<string, string> = {
     "Ouvrez Appareils, lancez la recherche et choisissez le bracelet. Les bracelets sans nom ou renommés sont trouvés quand même, via le service qu'ils annoncent.",
   "settings.supportedDevices.instruction.whoop3":
     "La fréquence cardiaque, les intervalles R-R correspondants et la batterie alimentent la session. Aucun compte WHOOP n'est nécessaire.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "Portez le bracelet et vérifiez qu'il n'est pas connecté dans l'application Empatica : un bracelet n'accepte qu'une connexion à la fois.",
+  "settings.supportedDevices.instruction.empatica2":
+    "Ouvrez Appareils, lancez la recherche et choisissez le bracelet. La température cutanée alimente la session ; l'EDA et les pas sont enregistrés comme métadonnées.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Obtenir un jeton d'accès personnel depuis cloud.ouraring.com/personal-access-tokens.",
