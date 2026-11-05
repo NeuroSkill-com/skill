@@ -757,10 +757,11 @@ const hasPpg = $derived(status.has_ppg);
 const hasImuCap = $derived(status.has_imu);
 const isOura = $derived(status.device_kind === "oura");
 const isWhoop = $derived(status.device_kind === "whoop");
+const isEmpatica = $derived(status.device_kind === "empatica");
 // Device-reported vitals, as opposed to the PPG waveform `hasPpg` gates. A
 // ring has an optical sensor but does its own beat detection, so there is no
 // waveform to chart — only values.
-const hasVitals = $derived(status.has_vitals === true || isOura || isWhoop);
+const hasVitals = $derived(status.has_vitals === true || isOura || isWhoop || isEmpatica);
 const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
 const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi || isVital || isOura || isWhoop);
@@ -785,6 +786,7 @@ const sourceLabel = $derived.by(() => {
     case "idun":
     case "mendi":
     case "vital":
+    case "empatica":
       return "BLE";
     default:
       return null;
@@ -937,6 +939,7 @@ const deviceImage = $derived(
     if (isIdun) return "/devices/idun-guardian.png";
     if (isMendi) return "/devices/mendi-headband.png";
     if (isVital) return "/devices/vital-headphones.webp";
+    if (isEmpatica) return "/devices/empatica-embraceplus.jpg";
     return null;
   })(),
 );
@@ -953,6 +956,7 @@ const deviceImageAlt = $derived(
     if (isIdun) return "IDUN Guardian";
     if (isMendi) return "Mendi";
     if (isVital) return "Vital Neuro";
+    if (isEmpatica) return "Empatica EmbracePlus";
     return status.device_name ?? "";
   })(),
 );

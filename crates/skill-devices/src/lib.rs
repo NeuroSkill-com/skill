@@ -10,6 +10,7 @@ pub mod session;
 
 pub use awear;
 pub use emotiv;
+pub use empatica;
 pub use idun;
 pub use mendi;
 pub use muse_rs;

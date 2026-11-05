@@ -25,13 +25,14 @@
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
 //! * [`oura::OuraAdapter`] — Oura Ring 3/4/5 (vitals + motion, no EEG)
 //! * [`whoop::WhoopAdapter`] — WHOOP 4.0 / 5.0 / MG straps (vitals, no EEG)
-//! * [`whoop::WhoopAdapter`] — WHOOP 4.0 / 5.0 / MG straps (vitals, no EEG)
+//! * [`empatica::EmpaticaAdapter`] — Empatica EmbracePlus (skin temperature + sensor telemetry, no EEG)
 //! * [`vital::VitalAdapter`] — Vital Neuro headphones (3 ch @ 250 Hz, IMU)
 
 pub mod antneuro;
 pub mod awear;
 pub mod cognionics;
 pub mod emotiv;
+pub mod empatica;
 pub mod idun;
 pub mod iroh_remote;
 pub mod mendi;

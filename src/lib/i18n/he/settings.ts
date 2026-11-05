@@ -436,6 +436,12 @@ const settings: Record<string, string> = {
     "פתחו מכשירים, סרקו ובחרו את הרצועה. גם רצועות ללא שם או ששמן שונה מזוהות, לפי השירות שהן משדרות.",
   "settings.supportedDevices.instruction.whoop3":
     "הדופק, מרווחי ה-R-R שמאחוריו ומצב הסוללה זורמים אל ההפעלה. אין צורך בחשבון WHOOP.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "ענדו את הרצועה וודאו שאינה מחוברת באפליקציית Empatica — רצועה מקבלת חיבור אחד בכל רגע.",
+  "settings.supportedDevices.instruction.empatica2":
+    "פתחו מכשירים, סרקו ובחרו את הרצועה. טמפרטורת העור זורמת אל ההפעלה; EDA וצעדים נרשמים כמטא-נתונים.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1": "קבל טוקן גישה אישי מ-cloud.ouraring.com/personal-access-tokens.",
   "settings.supportedDevices.instruction.oura2": "פתח API מכשיר → Oura Ring, הדבק את הטוקן ושמור.",

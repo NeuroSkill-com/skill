@@ -31,7 +31,7 @@ pub(crate) fn is_known_eeg_ble_name(name: &str) -> bool {
     // connect route then declines to treat as a ring.
     if matches!(
         DeviceKind::from_name(Some(name)),
-        DeviceKind::Vital | DeviceKind::Oura | DeviceKind::Whoop
+        DeviceKind::Vital | DeviceKind::Oura | DeviceKind::Whoop | DeviceKind::Empatica
     ) {
         return true;
     }
@@ -116,6 +116,13 @@ const SERVICE_KIND_TABLE: &[(BluetoothUuid, &str)] = &[
     // that drifts from the driver is a strap that advertises but never routes.
     (whoop_service(skill_devices::poop::protocol::WHOOP4_SERVICE), "whoop"),
     (whoop_service(skill_devices::poop::protocol::WHOOP5_SERVICE), "whoop"),
+    // Empatica EmbracePlus: the advertised name varies by firmware ("Empatica",
+    // "EmbracePlus", or serial-derived), so the vendor service is the reliable
+    // key. Taken from the driver's constant, same reasoning as WHOOP above.
+    (
+        whoop_service(skill_devices::empatica::protocol::EMBRACE_SERVICE_UUID),
+        "empatica",
+    ),
 ];
 
 /// `poop` states its services as `uuid::Uuid`; the scanner speaks
@@ -167,6 +174,7 @@ fn service_kind_display_name(kind: &'static str) -> &'static str {
         "vital" => "Vital Neuro",
         "oura" => "Oura Ring",
         "whoop" => "WHOOP",
+        "empatica" => "Empatica EmbracePlus",
         other => other,
     }
 }
@@ -1282,6 +1290,17 @@ mod tests {
             skill_devices::poop::protocol::WHOOP4_SERVICE,
             skill_devices::poop::protocol::WHOOP5_SERVICE
         );
+    }
+
+    #[test]
+    fn empatica_is_recognised_by_service() {
+        let service = BluetoothUuid::from_u128(skill_devices::empatica::protocol::EMBRACE_SERVICE_UUID.as_u128());
+        let adv = Advertisement {
+            service_uuids: vec![service],
+            ..Default::default()
+        };
+        assert_eq!(kind_from_advertisement(&adv), Some("empatica"));
+        assert_eq!(service_kind_display_name("empatica"), "Empatica EmbracePlus");
     }
 
     #[test]

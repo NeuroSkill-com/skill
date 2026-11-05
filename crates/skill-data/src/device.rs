@@ -88,6 +88,12 @@ pub enum DeviceKind {
     /// it, plus battery. Read directly over the strap's own BLE protocol — no
     /// WHOOP account.
     Whoop,
+    /// Empatica EmbracePlus wristband (BLE).
+    ///
+    /// Not an EEG device: it reports skin temperature live, plus EDA, steps and
+    /// ambient light as metadata. Its PPG/IMU streams are delta-compressed and
+    /// need a session sensor profile, so they are not decoded live.
+    Empatica,
     /// Oura Ring Gen 3 / Ring 4 / Ring 5 — sleep and vitals wearable (BLE).
     ///
     /// Not an EEG device: it reports derived heart rate, SpO2, skin
@@ -248,6 +254,11 @@ impl DeviceKind {
         // WHOOP service UUID it advertises instead.
         if n == "whoop" || n.starts_with("whoop ") || n.starts_with("whoop-") || n.starts_with("whoop_") {
             return Self::Whoop;
+        }
+        // Firmware-dependent: "EmbracePlus", "Empatica …", or serial-derived.
+        // The scanner also recognises the band by its vendor service UUID.
+        if n.starts_with("empatica") || n.starts_with("embraceplus") || n.starts_with("embrace plus") {
+            return Self::Empatica;
         }
         if n.contains("cognionics")
             || n.contains("cgx")
@@ -446,6 +457,16 @@ impl DeviceKind {
                 sample_rate_hz: 0.0,
                 electrode_names: Vec::new(),
             },
+            Self::Empatica => DeviceCapabilities {
+                kind: Self::Empatica,
+                channel_count: 0, // a wristband has no electrodes
+                has_ppg: false,   // PPG is delta-compressed; not decoded live
+                has_imu: false,   // likewise
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 0.0,
+                electrode_names: Vec::new(),
+            },
             Self::Oura => DeviceCapabilities {
                 kind: Self::Oura,
                 channel_count: 0, // a ring has no electrodes
@@ -588,6 +609,7 @@ impl DeviceKind {
             Self::Neurosity => "neurosity",
             Self::BrainVision => "brainvision",
             Self::Whoop => "whoop",
+            Self::Empatica => "empatica",
             Self::Oura => "oura",
             Self::Unknown => "unknown",
         }
@@ -622,6 +644,7 @@ impl DeviceKind {
             "neurosity" => Self::Neurosity,
             "brainvision" | "rda" => Self::BrainVision,
             "whoop" => Self::Whoop,
+            "empatica" => Self::Empatica,
             "oura" => Self::Oura,
             "unknown" => Self::Unknown,
             other => {
@@ -1104,6 +1127,21 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
                 "settings.supportedDevices.instruction.vital3".into(),
             ],
         },
+        // ── E (Empatica) ──────────────────────────────────────────────────
+        SupportedCompany {
+            id: "empatica".into(),
+            name_key: "settings.supportedDevices.company.empatica".into(),
+            logo: "/devices/empatica-embraceplus.jpg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.empaticaEmbracePlus".into(),
+                ios_only: false,
+                image: "/devices/empatica-embraceplus.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.empatica1".into(),
+                "settings.supportedDevices.instruction.empatica2".into(),
+            ],
+        },
         // ── W ─────────────────────────────────────────────────────────────
         SupportedCompany {
             id: "whoop".into(),
@@ -1239,6 +1277,15 @@ mod tests {
         assert_eq!(DeviceKind::from_name(Some("Quick-32r")), DeviceKind::Cognionics);
         assert_eq!(DeviceKind::from_name(Some("AIM-2 device")), DeviceKind::Cognionics);
         assert_eq!(DeviceKind::from_name(Some("Patch-v2")), DeviceKind::Cognionics);
+    }
+
+    #[test]
+    fn from_name_empatica() {
+        assert_eq!(DeviceKind::from_name(Some("EmbracePlus")), DeviceKind::Empatica);
+        assert_eq!(DeviceKind::from_name(Some("Empatica-A1B2")), DeviceKind::Empatica);
+        assert_eq!(DeviceKind::from_kind_str("empatica"), DeviceKind::Empatica);
+        assert_eq!(DeviceKind::Empatica.as_str(), "empatica");
+        assert_eq!(DeviceKind::Empatica.capabilities().kind, DeviceKind::Empatica);
     }
 
     #[test]

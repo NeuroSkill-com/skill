@@ -106,6 +106,7 @@ export type DeviceKind =
   | "vital"
   | "oura"
   | "whoop"
+  | "empatica"
   | "unknown";
 
 export function isMuseDevice(kind: DeviceKind): boolean {
@@ -121,6 +122,7 @@ export function hasBattery(kind: DeviceKind): boolean {
     kind === "mendi" ||
     kind === "vital" ||
     kind === "oura" ||
-    kind === "whoop"
+    kind === "whoop" ||
+    kind === "empatica"
   );
 }

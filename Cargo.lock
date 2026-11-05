@@ -2908,6 +2908,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "empatica"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "207c4f914463d8b1cb97e5976d2386a7a0c5a2897385a9a79a478dbd353ea2ed"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "uuid",
+ "webbluetooth",
+ "webbluetooth-wasm",
+]
+
+[[package]]
 name = "encode_unicode"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13696,6 +13713,7 @@ dependencies = [
  "bitflags 2.13.2",
  "cognionics",
  "emotiv",
+ "empatica",
  "futures",
  "hex",
  "idun",

@@ -96,6 +96,12 @@ const settings: Record<string, string> = {
     "기기를 열고 검색한 뒤 스트랩을 선택하세요. 이름이 없거나 변경된 스트랩도 광고하는 서비스로 찾을 수 있습니다.",
   "settings.supportedDevices.instruction.whoop3":
     "심박수와 그 근거가 되는 R-R 간격, 배터리가 세션으로 전달됩니다. WHOOP 계정은 필요하지 않습니다.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "밴드를 착용하고 Empatica 앱에서 연결되어 있지 않은지 확인하세요 — 밴드는 한 번에 하나의 연결만 받습니다.",
+  "settings.supportedDevices.instruction.empatica2":
+    "기기를 열고 검색한 뒤 밴드를 선택하세요. 피부 온도는 세션으로 전달되고, EDA와 걸음 수는 메타데이터로 기록됩니다.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "cloud.ouraring.com/personal-access-tokens에서 개인 액세스 토큰을 받으세요.",

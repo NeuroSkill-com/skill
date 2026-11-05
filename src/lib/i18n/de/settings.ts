@@ -454,6 +454,12 @@ const settings: Record<string, string> = {
     "Öffnen Sie Geräte, suchen Sie und wählen Sie das Armband. Auch namenlose oder umbenannte Armbänder werden über den angekündigten Dienst gefunden.",
   "settings.supportedDevices.instruction.whoop3":
     "Herzfrequenz, die zugrunde liegenden R-R-Intervalle und der Akkustand fließen in die Sitzung. Ein WHOOP-Konto ist nicht nötig.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "Tragen Sie das Armband und stellen Sie sicher, dass es nicht in der Empatica-App verbunden ist — ein Armband akzeptiert jeweils eine Verbindung.",
+  "settings.supportedDevices.instruction.empatica2":
+    "Öffnen Sie Geräte, suchen Sie und wählen Sie das Armband. Die Hauttemperatur fließt in die Sitzung; EDA und Schritte werden als Metadaten protokolliert.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Persönlichen Zugriffstoken von cloud.ouraring.com/personal-access-tokens erhalten.",

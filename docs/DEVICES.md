@@ -67,8 +67,10 @@ metrics (band powers, meditation / cognitive-load scores) do not apply.
 |--------|-------------|---------|-----------|-------|-------|
 | **Oura Ring** (Gen 3 / Ring 4 / Ring 5) | Ōura Health | Heart rate + IBI, SpO2, skin temperature, 3-axis motion, battery | BLE | `oura-link` / `oura-protocol` ([open_oura]) | Cloud-free, reads the ring directly. **Needs the ring's 16-byte BLE app-auth key** — see below. Live samples record to a `_vitals` sidecar |
 
+| **Empatica EmbracePlus** | Empatica | Skin temperature (live); EDA, steps, ambient light as metadata; seizure-detection events | BLE | [`empatica`] | Cloud-free. Compressed PPG / accelerometer / gyroscope need a per-session sensor profile and are **not decoded live** |
 | **WHOOP** (4.0 / 5.0 / MG) | WHOOP | Heart rate + R-R intervals, battery | BLE | [`poop`] ([whoop-rs]) | Cloud-free, reads the strap directly. No account and no key needed |
 
+[`empatica`]: https://crates.io/crates/empatica
 [open_oura]: https://github.com/Th0rgal/open_oura
 [`poop`]: https://docs.rs/poop
 [whoop-rs]: https://github.com/eugenehp/whoop-rs
@@ -188,7 +190,7 @@ of work, not yet built (the ring's equivalent is).
 
 | Transport | Devices | Protocol |
 |-----------|---------|----------|
-| **BLE** | Muse, MW75, Vital Neuro, Ganglion, IDUN, Mendi, Oura Ring, WHOOP, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth, or a vendor SDK for BrainBit / g.tec) |
+| **BLE** | Muse, MW75, Vital Neuro, Ganglion, IDUN, Mendi, Oura Ring, WHOOP, Empatica, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth, or a vendor SDK for BrainBit / g.tec) |
 | **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster, NeuroSky | FTDI/CDC serial at 57600–115200 baud |
 | **WiFi** | Cyton WiFi, Cyton+Daisy WiFi, Ganglion WiFi | TCP via OpenBCI WiFi Shield |
 | **UDP** | Galea | Direct UDP streaming |
@@ -246,7 +248,7 @@ of work, not yet built (the ring's equivalent is).
 
 | Prefix | Example | Device |
 |--------|---------|--------|
-| `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse, Vital Neuro, Oura Ring, WHOOP, MW75, Mendi, Ganglion, IDUN, AWEAR — all on `webbluetooth`, one shared session |
+| `ble:` | `ble:AA:BB:CC:DD:EE:FF` | Muse, Vital Neuro, Oura Ring, WHOOP, Empatica, MW75, Mendi, Ganglion, IDUN, AWEAR — all on `webbluetooth`, one shared session |
 | `usb:` | `usb:COM3`, `usb:/dev/ttyUSB0` | OpenBCI Cyton/Daisy, BrainMaster serial |
 | `cgx:` | `cgx:/dev/ttyUSB1` | Cognionics CGX |
 | `wifi:` | `wifi:192.168.1.100` | OpenBCI WiFi Shield |

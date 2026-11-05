@@ -135,6 +135,11 @@ oura-protocol = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5
 # `cfg(target_arch = "wasm32")`-gated and never enters a native build.
 poop = { version = "0.0.2", default-features = false }
 
+# Empatica EmbracePlus wristband (BLE).  Already on `webbluetooth 0.0.4`, so it
+# unifies onto the one `Bluetooth::shared()` session.  `avro` (off by default)
+# is a file-export feature nothing here uses.
+empatica = { version = "0.1.0", default-features = false }
+
 # Same `webbluetooth 0.0.4` lockstep requirement as muse-rs / vital / skill-daemon.
 webbluetooth = { version = "0.0.4", features = ["uuid"] }
 

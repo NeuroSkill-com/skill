@@ -111,6 +111,12 @@ const settings: Record<string, string> = {
     "Open Devices, scan, and pick the strap. Nameless or renamed straps are still found, by the service they advertise.",
   "settings.supportedDevices.instruction.whoop3":
     "Heart rate, the R-R intervals behind it, and battery stream into the session. No WHOOP account is needed.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "Wear the EmbracePlus and make sure it is not connected to the Empatica phone app — a band accepts one connection at a time.",
+  "settings.supportedDevices.instruction.empatica2":
+    "Open Devices, scan, and pick the band. Skin temperature streams into the session; EDA and steps are logged as metadata.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Get a Personal Access Token from cloud.ouraring.com/personal-access-tokens.",

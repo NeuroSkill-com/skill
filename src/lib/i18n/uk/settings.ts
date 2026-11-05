@@ -452,6 +452,12 @@ const settings: Record<string, string> = {
     "Відкрийте Пристрої, виконайте пошук і виберіть ремінець. Ремінці без назви або з переназваною назвою теж знаходяться — за службою, яку вони оголошують.",
   "settings.supportedDevices.instruction.whoop3":
     "Пульс, інтервали R-R за ним і заряд батареї надходять у сеанс. Обліковий запис WHOOP не потрібен.",
+  "settings.supportedDevices.company.empatica": "Empatica",
+  "settings.supportedDevices.device.empaticaEmbracePlus": "Empatica EmbracePlus",
+  "settings.supportedDevices.instruction.empatica1":
+    "Надіньте браслет і переконайтеся, що він не підключений у застосунку Empatica — браслет приймає лише одне з'єднання водночас.",
+  "settings.supportedDevices.instruction.empatica2":
+    "Відкрийте Пристрої, виконайте пошук і виберіть браслет. Температура шкіри надходить у сеанс; EDA та кроки записуються як метадані.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Отримайте персональний токен доступу з cloud.ouraring.com/personal-access-tokens.",
