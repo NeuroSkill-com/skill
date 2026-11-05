@@ -843,9 +843,9 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bbtree"
-version = "0.1.7"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00fb36d1cd69152b5f7ba6f9e014b834e233d89618086f8287aac28488cc7cf8"
+checksum = "e7012e5cc4167da28dd29f82e6a5c5dd934946741f4d6b8c51f2eea2ccc29652"
 dependencies = [
  "vstd",
 ]
@@ -3219,6 +3219,17 @@ name = "fancy-regex"
 version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+dependencies = [
+ "bit-set 0.8.0",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20ed7f62ce0ae0da1a8b93c3c7104ab7e0760a74491e097c701fff966e945390"
 dependencies = [
  "bit-set 0.8.0",
  "regex-automata",
@@ -5761,7 +5772,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "sysinfo",
+ "sysinfo 0.39.6",
  "ureq 3.5.1",
  "which",
  "yaml_serde",
@@ -12761,6 +12772,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "safetensors"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79b079b829cb27a1c3c374341345ed2e8b2c0c839034522cee576c140bd7f846"
+dependencies = [
+ "hashbrown 0.16.1",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13416,7 +13440,7 @@ dependencies = [
  "skill-tts",
  "skill-vision",
  "stacker",
- "sysinfo",
+ "sysinfo 0.40.1",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
@@ -13589,12 +13613,12 @@ dependencies = [
  "skill-skills",
  "skill-tools",
  "skill-tts",
- "sysinfo",
+ "sysinfo 0.40.1",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-stream",
- "tokio-tungstenite 0.29.0",
+ "tokio-tungstenite 0.30.0",
  "tower",
  "tower-http 0.7.1",
  "tracing",
@@ -13687,7 +13711,7 @@ dependencies = [
  "skill-gpu",
  "skill-health",
  "skill-oura",
- "sysinfo",
+ "sysinfo 0.40.1",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -13778,7 +13802,7 @@ dependencies = [
  "llmfit-core",
  "serde",
  "serde_json",
- "sysinfo",
+ "sysinfo 0.40.1",
 ]
 
 [[package]]
@@ -13947,12 +13971,12 @@ dependencies = [
  "bbtree",
  "dirs 7.0.0",
  "espeak-ng",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.0",
  "hf-hub",
  "hound",
  "once_cell",
  "rlx-neutts",
- "safetensors 0.7.0",
+ "safetensors 0.8.0",
  "sha2 0.11.1",
  "zip",
 ]
@@ -14631,6 +14655,21 @@ name = "sysinfo"
 version = "0.39.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2071df9448915b71c4fe6d25deaf1c22f12bd234f01540b77312bb8e41361e6"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "objc2-open-directory",
+ "windows",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e8a3edbe0394ce115f3917a00349dd242be09eb5a091ed509eaf67b55cfb8a8"
 dependencies = [
  "libc",
  "memchr",
@@ -15553,6 +15592,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.30.0",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15987,6 +16038,22 @@ dependencies = [
  "log",
  "rand 0.9.5",
  "sha1 0.10.7",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.10.3",
+ "sha1 0.11.0",
  "thiserror 2.0.21",
 ]
 

@@ -218,7 +218,7 @@ skill-iroh           = { path = "../skill-iroh" }
 skill-daemon-routes  = { path = "../skill-daemon-routes" }
 notify-rust          = "4"
 uuid                 = { version = "1", features = ["v4"] }
-sysinfo              = "0.39"
+sysinfo              = "0.40"
 
 [build-dependencies]
 
@@ -229,7 +229,7 @@ tempfile             = "3"
 mendi                = { version = "0.0.3", features = ["simulate"] }
 mw75                 = { version = "0.0.8" }
 rlsl                 = { version = "0.0.6" }
-tokio-tungstenite    = "0.29"
+tokio-tungstenite    = "0.30"
 
 # macOS: enable Metal backend for ZUNA/LUNA/TRIBEv2 GPU paths (embed-*-gpu).
 [target.'cfg(target_os = "macos")'.dependencies]
