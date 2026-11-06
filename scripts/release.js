@@ -12,18 +12,25 @@
 //   npm run release                    promote the current RC to stable
 //   npm run release -- --dry-run       run the promotion checks, change nothing
 //   npm run release -- --yes           promote without the confirmation prompt
+//   npm run release -- --stable        cut a clean x.y.z build (no -rc in the version)
+//   npm run release -- --stable        ...and, once its builds are green, merge the PR
 //   npm run release -- --rc            cut/iterate an RC
 //   npm run release -- --rc --dry-run  print what would happen, do nothing
 //   npm run release -- --rc --force    pass --force through to bump
 //
 // Promoting rebase-merges the release PR; promote.yml then flips the RC to
 // latest. Nothing is rebuilt: the bytes that ship to stable users must be
-// byte-identical to the tested RC.
+// byte-identical to the tested RC. The cost is that the shipped app still
+// reports itself as `x.y.z-rc.N`.
+//
+// --stable is the other trade: it bumps to the bare `x.y.z`, tags it and lets
+// the release workflows build it fresh, so the app, the updater manifest and
+// the GitHub release all say `x.y.z`. It is a new build, not the tested RC.
 
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { baseVersion, bumpVersion, readVersionFile } from "./version-utils.mjs";
+import { baseVersion, bumpVersion, isRc, readVersionFile } from "./version-utils.mjs";
 
 // GitHub caps PR/issue bodies at 65_536 chars. Leave headroom for the
 // surrounding template; truncate the embedded notes if they exceed this.
@@ -209,11 +216,13 @@ function dim(msg) {
 function parseArgs() {
   const args = process.argv.slice(2);
   let rc = false;
+  let stable = false;
   let dryRun = false;
   let force = false;
   let yes = false;
   for (const a of args) {
     if (a === "--rc") rc = true;
+    else if (a === "--stable") stable = true;
     else if (a === "--dry-run") dryRun = true;
     else if (a === "--force") force = true;
     else if (a === "--yes" || a === "-y") yes = true;
@@ -222,14 +231,16 @@ function parseArgs() {
       process.exit(0);
     } else fail(`Unknown flag: ${a}`);
   }
-  if (force && !rc) fail("--force only applies to --rc.");
-  if (yes && rc) fail("--yes only applies to promotion (no --rc).");
-  return { rc, dryRun, force, yes };
+  if (rc && stable) fail("--rc and --stable are different releases; pass one.");
+  if (force && !rc && !stable) fail("--force only applies to --rc and --stable.");
+  if (yes && rc) fail("--yes only applies to promotion and --stable (no --rc).");
+  return { rc, stable, dryRun, force, yes };
 }
 
 function printHelp() {
   console.log(`
 Usage: npm run release [-- --dry-run] [-- --yes]
+       npm run release -- --stable [--dry-run] [--yes] [--force]
        npm run release -- --rc [--dry-run] [--force]
 
 Without --rc, promotes the current RC to stable. Run it from the release/X.Y.Z
@@ -242,6 +253,23 @@ branch. It checks that:
 
 Then it asks for confirmation, rebase-merges the PR and waits for promote.yml to
 mark the release as latest. Nothing is rebuilt.
+
+With --stable, ships the bare version instead of promoting the RC. Run it from
+the release/X.Y.Z branch. Two steps, told apart by VERSION:
+
+  VERSION is x.y.z-rc.N → cut the stable build
+    1. Bump to x.y.z (no -rc); the release notes are the RCs' entries merged,
+       plus any new fragments
+    2. Push, tag vx.y.z → the release workflows build it fresh and publish it
+       as a regular (non-pre-release) release, which becomes "latest"
+    3. Comment on the release PR
+
+  VERSION is x.y.z → finish it, once the builds are green
+    Checks the PR, the workflows and latest.json, then rebase-merges the PR.
+    There is nothing to promote: the release is already stable.
+
+Unlike promotion this is a new build, not the tested RC's bytes — but the app
+reports x.y.z, not x.y.z-rc.N.
 
 With --rc, cuts or iterates a release candidate. State-aware:
 
@@ -262,8 +290,9 @@ With --rc, cuts or iterates a release candidate. State-aware:
 
 Flags:
   --rc          Cut or iterate an RC instead of promoting.
+  --stable      Ship a clean x.y.z build instead of promoting an RC.
   --dry-run     Print what would happen; do not modify anything.
-  --yes, -y     Promote without the confirmation prompt.
+  --yes, -y     Promote / merge without the confirmation prompt.
   --force       Forwarded to bump (skip the version-tagged-on-remote check).
 `);
 }
@@ -272,7 +301,7 @@ Flags:
 
 /// Everything that must hold before an RC may go to stable. Returns one entry
 /// per check, so a failed run lists all that's wrong rather than the first.
-function promotionChecks({ version, branch, pr }) {
+function promotionChecks({ version, branch, pr, stable = false }) {
   const tag = `v${version}`;
   const head = captureOut("git rev-parse HEAD");
   const checks = [];
@@ -297,7 +326,16 @@ function promotionChecks({ version, branch, pr }) {
   const release = ghJson(["release", "view", tag, "--json", "isPrerelease,isDraft"]);
   check(`release ${tag} exists`, Boolean(release));
   if (release) {
-    check("release is a published pre-release", release.isPrerelease && !release.isDraft, "already stable or a draft");
+    // Promotion flips a pre-release; a stable build is born non-pre-release.
+    if (stable) {
+      check("release is published and stable", !release.isPrerelease && !release.isDraft, "a pre-release or a draft");
+    } else {
+      check(
+        "release is a published pre-release",
+        release.isPrerelease && !release.isDraft,
+        "already stable or a draft",
+      );
+    }
   }
 
   for (const workflow of RELEASE_WORKFLOWS) {
@@ -333,6 +371,20 @@ function promotionChecks({ version, branch, pr }) {
   return checks;
 }
 
+function findReleasePr(branch) {
+  const prs = ghJson([
+    "pr",
+    "list",
+    "--head",
+    branch,
+    "--state",
+    "open",
+    "--json",
+    "number,url,baseRefName,mergeable,headRefOid",
+  ]);
+  return prs?.[0];
+}
+
 async function confirmPromotion(version) {
   if (!process.stdin.isTTY)
     fail("Refusing to promote without a terminal to confirm on. Pass --yes to skip the prompt.");
@@ -365,17 +417,7 @@ async function promote({ dryRun, yes }) {
   }
 
   log(`promoting ${tag} from ${branch}`);
-  const prs = ghJson([
-    "pr",
-    "list",
-    "--head",
-    branch,
-    "--state",
-    "open",
-    "--json",
-    "number,url,baseRefName,mergeable,headRefOid",
-  ]);
-  const pr = prs?.[0];
+  const pr = findReleasePr(branch);
 
   const checks = promotionChecks({ version, branch, pr });
   for (const { name, passed, detail } of checks) {
@@ -412,12 +454,193 @@ async function promote({ dryRun, yes }) {
   ok(`${tag} is live on the stable channel`);
 }
 
+// ── Stable (no RC in the shipped version) ───────────────────────────────────
+
+const UNRELEASED_DIR = "changes/unreleased";
+
+function unreleasedFragments() {
+  if (!existsSync(UNRELEASED_DIR)) return [];
+  return readdirSync(UNRELEASED_DIR).filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md");
+}
+
+/// One fragment carrying everything the RCs of `base` announced.
+///
+/// By the time a stable build is cut, every RC has already consumed its
+/// fragments into `changes/releases/<base>-rc.N.md`, so without this the stable
+/// release would carry only what is new since the last RC (or, with nothing new,
+/// raw commit subjects). Its notes are the union of its RCs', deduplicated,
+/// under the same categories; new fragments are added to them by bump.
+function fragmentFromRcNotes(base) {
+  const dir = "changes/releases";
+  if (!existsSync(dir)) return null;
+  const rcRe = new RegExp(`^${base.replace(/\./g, "\\.")}-rc\\.(\\d+)\\.md$`);
+  const files = readdirSync(dir)
+    .map((f) => ({ f, n: Number(rcRe.exec(f)?.[1]) }))
+    .filter((x) => !Number.isNaN(x.n))
+    .sort((a, b) => a.n - b.n);
+  if (files.length === 0) return null;
+
+  /** @type {Map<string, Set<string>>} */
+  const byCategory = new Map();
+  for (const { f } of files) {
+    // The text before the first `### ` is the `## [version]` header.
+    const [, ...sections] = readFileSync(`${dir}/${f}`, "utf8").split(/^### /m);
+    for (const section of sections) {
+      const [heading, ...rest] = section.split("\n");
+      const items = rest
+        .join("\n")
+        .split(/\n(?=- )/)
+        .map((i) => i.trim())
+        .filter((i) => i.startsWith("- "));
+      if (items.length === 0) continue;
+      const category = heading.trim();
+      if (!byCategory.has(category)) byCategory.set(category, new Set());
+      for (const item of items) byCategory.get(category).add(item);
+    }
+  }
+  if (byCategory.size === 0) return null;
+
+  const body = [...byCategory.entries()].map(([c, items]) => `### ${c}\n\n${[...items].join("\n")}\n`).join("\n");
+  const path = `${UNRELEASED_DIR}/release-${base}.md`;
+  writeFileSync(path, body, "utf8");
+  return { path, count: [...byCategory.values()].reduce((n, set) => n + set.size, 0), from: files.length };
+}
+
+/// First half: turn the current RC into a bare `x.y.z`, tag it, and let CI build it.
+async function cutStable({ dryRun, force }) {
+  const currentVersion = readVersionFile();
+  const newVersion = baseVersion(currentVersion);
+  const branchName = `release/${newVersion}`;
+  const tag = `v${newVersion}`;
+  const currentBranch = gitCurrentBranch();
+
+  if (currentBranch !== branchName) {
+    fail(`Cut ${tag} from ${branchName}. You are on '${currentBranch}'.`);
+  }
+  if (gitDirty()) fail("Working tree is dirty. Commit or stash changes before running release.");
+
+  log(`current: ${currentVersion}    stable: ${newVersion}    tag: ${tag}    branch: ${branchName}`);
+
+  const newFragments = unreleasedFragments().length;
+  if (dryRun) {
+    dim(
+      `[dry-run] would bump to ${newVersion}, push, tag ${tag} (CI then builds it fresh), and comment on the release PR. ` +
+        `Release notes: the ${newVersion} RCs' notes, merged${newFragments ? ` with ${newFragments} new fragment${newFragments === 1 ? "" : "s"}` : ""}.`,
+    );
+    return;
+  }
+
+  // Same self-heal as --rc: bump refuses to run on an untagged version.
+  ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch: true });
+
+  // Always merge the RCs' notes: fragments still in changes/unreleased are new
+  // since the last RC and go in alongside them, never instead of them.
+  const generated = fragmentFromRcNotes(newVersion);
+  if (generated) {
+    ok(`release notes: ${generated.count} entries merged from ${generated.from} RC${generated.from === 1 ? "" : "s"}`);
+  } else if (newFragments === 0) {
+    dim("no RC notes to merge; bump will fall back to the git log");
+  }
+
+  const bumpArgs = ["run", "bump", "--", newVersion];
+  if (force) bumpArgs.push("--force");
+  log(`npm ${bumpArgs.join(" ")}`);
+  try {
+    sh("npm", bumpArgs, { check: true });
+  } catch (e) {
+    // bump reverts what it changed, but this fragment predates it.
+    if (generated && existsSync(generated.path)) sh("git", ["rm", "-f", "--quiet", generated.path], { capture: true });
+    if (generated && existsSync(generated.path)) sh("rm", ["-f", generated.path], { capture: true });
+    throw e;
+  }
+
+  if (!gitTracksRemote(branchName)) {
+    log(`git push -u origin ${branchName}`);
+    sh("git", ["push", "--no-verify", "-u", "origin", branchName], { check: true });
+  } else {
+    log("git push");
+    sh("git", ["push", "--no-verify"], { check: true });
+  }
+
+  log("npm run tag");
+  sh("npm", ["run", "tag"], { check: true });
+
+  const pr = findReleasePr(branchName);
+  if (pr) {
+    const notes = readReleaseNotes(newVersion);
+    const sections = [
+      `🚀 Stable build: \`${tag}\``,
+      "",
+      "CI is building this fresh, as a regular (non-pre-release) release, so it becomes **latest** as soon as it publishes. The shipped app reports `" +
+        newVersion +
+        "`, not an RC.",
+      "",
+      `Once the builds are green, finish with \`npm run release -- --stable\` (rebase-merges this PR).`,
+    ];
+    if (notes) sections.push("", "<details><summary>Release notes</summary>", "", notes, "", "</details>");
+    log(`gh pr comment ${pr.number}`);
+    sh("gh", ["pr", "comment", String(pr.number), "--body", sections.join("\n")], { check: true });
+  } else {
+    dim(`no open release PR for ${branchName}; nothing to comment on`);
+  }
+
+  console.log("");
+  ok(`Stable release pipeline kicked off for ${tag}`);
+  dim(`  branch: ${branchName}`);
+  dim(`  tag:    ${tag}`);
+  dim("  When the Mac / Windows / Linux builds are green: npm run release -- --stable");
+}
+
+/// Second half: the stable build is out; check it and merge the PR into main.
+async function finishStable({ dryRun, yes }) {
+  const version = readVersionFile();
+  const branch = gitCurrentBranch();
+  const tag = `v${version}`;
+
+  if (branch !== `release/${version}`) {
+    fail(`Finish ${tag} from release/${version}. You are on '${branch}'.`);
+  }
+
+  log(`finishing ${tag} from ${branch}`);
+  const pr = findReleasePr(branch);
+  const checks = promotionChecks({ version, branch, pr, stable: true });
+  for (const { name, passed, detail } of checks) {
+    if (passed) ok(name);
+    else console.error(`\x1b[1;31m✗\x1b[0m ${name}${detail ? ` (${detail})` : ""}`);
+  }
+  if (checks.some((c) => !c.passed)) {
+    fail(`${tag} isn't ready to merge. Wait for the builds, or fix the above and cut a new one.`);
+  }
+
+  if (dryRun) {
+    dim(`[dry-run] would rebase-merge PR #${pr.number}`);
+    return;
+  }
+  if (!yes && !(await confirmPromotion(version))) fail("Not confirmed. Nothing changed.");
+
+  // Rebase, as for a promotion: it keeps the bare-version commit message, and
+  // --match-head-commit refuses the merge if the branch moved since the checks.
+  log(`gh pr merge ${pr.number} --rebase`);
+  sh("gh", ["pr", "merge", String(pr.number), "--rebase", "--match-head-commit", captureOut("git rev-parse HEAD")], {
+    check: true,
+  });
+
+  console.log("");
+  ok(`${tag} is live on the stable channel and merged to main`);
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const { rc, dryRun, force, yes } = parseArgs();
+  const { rc, stable, dryRun, force, yes } = parseArgs();
 
   ensureGhReady();
+
+  if (stable) {
+    if (isRc(readVersionFile())) await cutStable({ dryRun, force });
+    else await finishStable({ dryRun, yes });
+    return;
+  }
 
   if (!rc) {
     await promote({ dryRun, yes });
