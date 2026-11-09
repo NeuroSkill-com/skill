@@ -21,7 +21,7 @@ parquet     = { version = "60", default-features = false, features = ["arrow", "
 arrow-array = { version = "60", optional = true }
 arrow-schema = { version = "60", optional = true }
 llmfit-core = "1.1.17"
-sysinfo     = "0.39"
+sysinfo     = "0.40"
 libc        = "0.2"
 chrono      = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
