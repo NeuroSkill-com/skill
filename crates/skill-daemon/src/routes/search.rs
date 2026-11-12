@@ -1156,7 +1156,8 @@ fn interactive_search_impl(
         sysinfo::RefreshKind::nothing()
             .with_cpu(sysinfo::CpuRefreshKind::everything())
             .with_memory(sysinfo::MemoryRefreshKind::everything()),
-    );
+    )
+    .ok();
     let perf = serde_json::json!({
         "embed_ms": embed_ms,
         "graph_ms": graph_ms,
@@ -1164,9 +1165,9 @@ fn interactive_search_impl(
         "node_count": nodes.len(),
         "edge_count": edges.len(),
         "snr_positive_only": snr_positive_only,
-        "cpu_usage_pct": sys_info.global_cpu_usage(),
-        "mem_used_mb": sys_info.used_memory() / (1024 * 1024),
-        "mem_total_mb": sys_info.total_memory() / (1024 * 1024),
+        "cpu_usage_pct": sys_info.as_ref().map_or(0.0, |s| s.global_cpu_usage()),
+        "mem_used_mb": sys_info.as_ref().map_or(0, |s| s.used_memory()) / (1024 * 1024),
+        "mem_total_mb": sys_info.as_ref().map_or(0, |s| s.total_memory()) / (1024 * 1024),
     });
 
     let mut result = serde_json::json!({
