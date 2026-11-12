@@ -721,6 +721,7 @@ function parseArgs() {
   let versionArg = null;
   let force = false;
   let rc = false;
+  let skipChecks = false;
 
   for (const a of args) {
     if (a === "--dry-run") {
@@ -731,9 +732,11 @@ function parseArgs() {
       force = true;
     } else if (a === "--rc") {
       rc = true;
+    } else if (a === "--skip-checks") {
+      skipChecks = true;
     } else if (a === "--help" || a === "-h") {
       console.log(`
-Usage: npm run bump [version] [--rc] [--dry-run] [--clean] [--force]
+Usage: npm run bump [version] [--rc] [--dry-run] [--clean] [--force] [--skip-checks]
 
 Arguments:
   version       Optional specific version (e.g., 1.2.3 or 1.2.3-rc.1).
@@ -748,6 +751,11 @@ Flags:
   --dry-run     Run all checks without making any changes
   --clean       Clean Rust build artifacts after successful bump
   --force       Bypass version tag check (use with caution)
+  --skip-checks Skip the preflight: frontend checks, the i18n check, vitest, clippy
+                and cargo test are NOT run, and neither are the competing-cargo and
+                Linux-deps guards. The version/tag safety checks still run. Use it
+                when the tree is already known good (or CI will judge it); the
+                pre-commit hook still runs on the bump commit.
 
 Note: VERSION is the source of truth. bump writes VERSION then syncs
       package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
@@ -764,7 +772,7 @@ Note: VERSION is the source of truth. bump writes VERSION then syncs
     }
   }
 
-  return { dryRun, clean, versionArg, force, rc };
+  return { dryRun, clean, versionArg, force, rc, skipChecks };
 }
 
 // ── auto-generate changelog fragment from git log ────────────────────────────
@@ -886,7 +894,7 @@ function generateFragmentFromGitLog(currentVersion) {
 // ── main (async) ─────────────────────────────────────────────────────────────
 
 async function main() {
-  const { dryRun, clean, versionArg, force, rc } = parseArgs();
+  const { dryRun, clean, versionArg, force, rc, skipChecks } = parseArgs();
 
   // ── resolve new version ─────────────────────────────────────────────────────
 
@@ -935,7 +943,14 @@ async function main() {
 
   // ── preflight checks (must pass before any file is modified) ──────────────
 
-  await runPreflightChecks();
+  if (skipChecks) {
+    console.warn(
+      "\x1b[1;33m[bump] --skip-checks: preflight skipped.\x1b[0m Frontend checks, the i18n check, vitest, " +
+        "clippy and cargo test were NOT run, so CI will be the first to see this commit.",
+    );
+  } else {
+    await runPreflightChecks();
+  }
 
   // ── In dry-run mode stop here — no files are modified ─────────────────────
 

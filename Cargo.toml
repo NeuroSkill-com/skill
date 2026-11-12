@@ -274,7 +274,7 @@ zip = { version = "9", features = ["deflate"] }
 # and `verus_state_machines_macros`, all exact-pinned to dated 0.0.0
 # prereleases. All four are MIT, so the license gate is satisfied, but the
 # `=` pins mean nothing else in the graph may ever want a different `vstd`.
-bbtree = "0.1.6"
+bbtree = "0.2.0"
 
 # RLX — from GitHub (`branch = "main"`; Cargo.lock pins the resolved commit).
 #   rlx        — https://github.com/MIT-RLX/rlx — runtime + IR (+ rlx-runtime, rlx-umap, …)
@@ -384,7 +384,22 @@ codegen-units = 8
 #
 # `debug = 1` keeps line tables and drops variable/type info — the useful part
 # of a backtrace at a fraction of the size and link time of `debug = 2`.
-debug = 1
+#
+# `line-tables-only` is the same backtrace information minus variable/type
+# DIEs, and `split-debuginfo = "unpacked"` stops macOS from running dsymutil on
+# every link (the .dSYM bundles were over half of target/debug). Dependencies
+# below get no debuginfo at all; workspace crates keep line tables.
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = 0
+opt-level = 1
+
+# DuckDB is C++ built by `cc`, which takes its -O level from this profile; at
+# opt-level 0 it is large, slow to run, and slow to link.
+[profile.dev.package.libduckdb-sys]
+opt-level = 1
 
 # ── Release profile ──────────────────────────────────────────────────────────
 #

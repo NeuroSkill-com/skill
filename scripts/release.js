@@ -126,7 +126,7 @@ function gitHeadVersion() {
 /// create + push the tag before we try to bump. Without this, every aborted
 /// push (failed pre-push hook, killed CI, network blip) wedges the release
 /// branch until someone runs `npm run tag` by hand.
-function ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch }) {
+function ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch, skipChecks }) {
   if (!onReleaseBranch) return; // Cutting from main — there's no prior version on this branch to tag.
 
   const tag = `v${currentVersion}`;
@@ -159,9 +159,15 @@ function ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranc
   }
 
   log("npm run tag (recovery)");
-  sh("npm", ["run", "tag"], { check: true });
+  sh("npm", tagArgs(skipChecks), { check: true });
 
   ok(`recovered: ${tag} tagged and pushed; resuming next-RC iteration`);
+}
+
+/// `npm run tag` arguments. With `skipChecks` the tag push skips the pre-push
+/// hook, which would otherwise re-run clippy and tests for the changed crates.
+function tagArgs(skipChecks) {
+  return skipChecks ? ["run", "tag", "--", "--no-verify"] : ["run", "tag"];
 }
 
 function ensureGhReady() {
@@ -212,11 +218,13 @@ function parseArgs() {
   let dryRun = false;
   let force = false;
   let yes = false;
+  let skipChecks = false;
   for (const a of args) {
     if (a === "--rc") rc = true;
     else if (a === "--dry-run") dryRun = true;
     else if (a === "--force") force = true;
     else if (a === "--yes" || a === "-y") yes = true;
+    else if (a === "--skip-checks") skipChecks = true;
     else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
@@ -224,13 +232,14 @@ function parseArgs() {
   }
   if (force && !rc) fail("--force only applies to --rc.");
   if (yes && rc) fail("--yes only applies to promotion (no --rc).");
-  return { rc, dryRun, force, yes };
+  if (skipChecks && !rc) fail("--skip-checks only applies to --rc: promotion runs no local checks.");
+  return { rc, dryRun, force, yes, skipChecks };
 }
 
 function printHelp() {
   console.log(`
 Usage: npm run release [-- --dry-run] [-- --yes]
-       npm run release -- --rc [--dry-run] [--force]
+       npm run release -- --rc [--dry-run] [--force] [--skip-checks]
 
 Without --rc, promotes the current RC to stable. Run it from the release/X.Y.Z
 branch. It checks that:
@@ -265,6 +274,11 @@ Flags:
   --dry-run     Print what would happen; do not modify anything.
   --yes, -y     Promote without the confirmation prompt.
   --force       Forwarded to bump (skip the version-tagged-on-remote check).
+  --skip-checks Forwarded to bump and tag: no preflight (frontend checks, i18n check,
+                vitest, clippy, cargo test) and no pre-push hook on the tag push, so the
+                run does no local testing or compilation. The version/tag safety checks
+                still run, and CI is the first thing to see the commit. The pre-commit
+                hook (i18n locales, cargo fmt) still runs on the bump commit.
 `);
 }
 
@@ -415,7 +429,7 @@ async function promote({ dryRun, yes }) {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const { rc, dryRun, force, yes } = parseArgs();
+  const { rc, dryRun, force, yes, skipChecks } = parseArgs();
 
   ensureGhReady();
 
@@ -455,7 +469,10 @@ async function main() {
   log(`next:    ${newVersion}    tag: ${tag}    target branch: ${branchName}`);
 
   if (dryRun) {
-    dim("[dry-run] would create/checkout branch, run bump --rc, push, run tag, then open or comment on PR");
+    dim(
+      `[dry-run] would create/checkout branch, run bump --rc${skipChecks ? " --skip-checks" : ""}, push, ` +
+        `run tag${skipChecks ? " --no-verify" : ""}, then open or comment on PR`,
+    );
     return;
   }
 
@@ -477,11 +494,12 @@ async function main() {
   // leaves the release branch in a state where bump's preflight refuses to
   // run because the current version isn't tagged. Detect + recover here so
   // the user doesn't need to remember the manual `npm run tag` dance.
-  ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch });
+  ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch, skipChecks });
 
   // ── 3. Run bump (mutates files, runs preflight, creates commit) ────────
   const bumpArgs = ["run", "bump", "--", "--rc"];
   if (force) bumpArgs.push("--force");
+  if (skipChecks) bumpArgs.push("--skip-checks");
   log(`npm ${bumpArgs.join(" ")}`);
   try {
     sh("npm", bumpArgs, { check: true });
@@ -508,8 +526,8 @@ async function main() {
   }
 
   // ── 4. Tag + push tag (existing primitive) ─────────────────────────────
-  log("npm run tag");
-  sh("npm", ["run", "tag"], { check: true });
+  log(`npm ${tagArgs(skipChecks).join(" ")}`);
+  sh("npm", tagArgs(skipChecks), { check: true });
 
   // ── 5. Open or update PR ────────────────────────────────────────────────
   const prList = sh("gh", ["pr", "list", "--head", branchName, "--state", "open", "--json", "number,url"], {

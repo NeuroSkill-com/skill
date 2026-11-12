@@ -356,7 +356,7 @@ pub(super) async fn cmd_llm_discover(state: &AppState) -> Result<Value, String> 
 pub(super) async fn cmd_llm_hardware_fit(state: &AppState) -> Result<Value, String> {
     let cat = state.llm_catalog.lock().map(|g| g.clone()).unwrap_or_default();
     let gpu = skill_data::gpu_stats::read();
-    let sys_ram_gb = sysinfo::System::new_all().total_memory() as f64 / 1_073_741_824.0;
+    let sys_ram_gb = sysinfo::System::new_all().map_or(0, |s| s.total_memory()) as f64 / 1_073_741_824.0;
     let vram_gb = gpu
         .as_ref()
         .and_then(|g| g.total_memory_bytes.map(|b| b as f64 / 1_073_741_824.0))

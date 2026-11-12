@@ -191,6 +191,11 @@ export function compileProduct(opts = {}) {
   }
 
   const osFeature = daemonOsFeature(triple);
+  // An explicit --target gives cargo a separate target/<triple>/ tree and a full
+  // dependency rebuild. For debug builds on the host triple that only duplicates
+  // target/debug, so omit it there. Release builds keep it (packaging expects
+  // target/<triple>/release), as does any explicit or cross target.
+  const useTargetFlag = release || Boolean(rawTarget) || triple !== detectHostTriple();
   const ttyOpt = opts.tty ?? "auto";
   const buildTty = ttyOpt === "auto" ? !triple.includes("windows") : Boolean(ttyOpt);
 
@@ -203,7 +208,7 @@ export function compileProduct(opts = {}) {
     if (release) args.push("--release");
     if (locked) args.push("--locked");
     if (flags.timings) args.push("--timings");
-    if (triple) args.push("--target", triple);
+    if (triple && useTargetFlag) args.push("--target", triple);
     return args;
   }
 
@@ -237,7 +242,7 @@ export function compileProduct(opts = {}) {
   }
 
   if (stageSidecar && buildDaemon) {
-    stageDaemonSidecars({ triple, release, includeTty: buildTty });
+    stageDaemonSidecars({ triple, release, includeTty: buildTty, targetFlag: useTargetFlag });
   }
 
   return {
@@ -252,7 +257,7 @@ export function compileProduct(opts = {}) {
  * Copy built daemon (and tty) into src-tauri/binaries/ for Tauri sidecar wiring.
  * @param {{ triple: string, release: boolean, includeTty: boolean, targetDir?: string }} opts
  */
-export function stageDaemonSidecars({ triple, release, includeTty, targetDir }) {
+export function stageDaemonSidecars({ triple, release, includeTty, targetDir, targetFlag = true }) {
   const cargoTarget = targetDir ?? resolveCargoTargetDir();
   const binDir = resolve(REPO_ROOT, "src-tauri", "binaries");
   const profileDir = release ? "release" : "debug";
@@ -263,10 +268,10 @@ export function stageDaemonSidecars({ triple, release, includeTty, targetDir }) 
   mkdirSync(binDir, { recursive: true });
 
   for (const name of crates) {
-    const candidates = [
-      triple ? resolve(cargoTarget, triple, profileDir, `${name}${ext}`) : null,
-      resolve(cargoTarget, profileDir, `${name}${ext}`),
-    ].filter(Boolean);
+    const withTriple = triple ? resolve(cargoTarget, triple, profileDir, `${name}${ext}`) : null;
+    const plain = resolve(cargoTarget, profileDir, `${name}${ext}`);
+    // Look where this build actually wrote, so a stale binary in the other tree can't win.
+    const candidates = (targetFlag ? [withTriple, plain] : [plain, withTriple]).filter(Boolean);
 
     const src = candidates.find((p) => existsSync(p));
     if (!src) {

@@ -319,8 +319,12 @@ if (isMingwTarget) {
   // MinGW cross-compilation — no special setup needed.
 } else if (isMac) {
   // Release builds target Apple Silicon; dev builds use the host triple.
+  // `--debug` builds also stay on the host triple: an explicit --target makes
+  // cargo use a separate target/<triple>/ tree and rebuild every dependency,
+  // which doubled target/ size. Without it they share target/debug with
+  // `cargo test`/`check`. (rawSubArgs is checked directly: it is the user's flags.)
   if (subcommand === "build" && !explicitTarget) {
-    platformFlags = ["--target", defaultMacBuildTarget(), "--no-sign"];
+    platformFlags = rawSubArgs.includes("--debug") ? ["--no-sign"] : ["--target", defaultMacBuildTarget(), "--no-sign"];
   }
 
   // Homebrew cmake/sccache are not on the default PATH when cargo invokes
