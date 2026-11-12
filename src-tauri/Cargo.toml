@@ -43,7 +43,10 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [lib]
 name = "skill_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# staticlib/cdylib only matter for Tauri mobile builds (no gen/android|apple
+# project exists here); each re-links the whole app (~1.4 GB in dev) for nothing.
+# Restore ["staticlib", "cdylib", "rlib"] if a mobile target is added.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.6", features = [] }
@@ -67,7 +70,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "logg
 llmfit-core = "1.1.17"
 # sysinfo gives gpu_stats.rs access to System::refresh_memory() for the
 # periodic free-RAM update on unified-memory Linux / Windows platforms.
-sysinfo = "0.39"
+sysinfo = "0.40"
 
 # Cross-platform global keyboard / mouse event listener (input activity tracking).
 # macOS: CGEventTap (requires Accessibility permission — degrades gracefully if absent).

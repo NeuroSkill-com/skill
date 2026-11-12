@@ -59,3 +59,21 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+# Benchmark / eval tools: run with `cargo run --bin <name>`. They have no unit
+# tests, so `test = false` keeps `cargo test` from building ~120 MB of
+# test-harness binary for each.
+[[bin]]
+name = "bench_skill_prompt"
+path = "src/bin/bench_skill_prompt.rs"
+test = false
+
+[[bin]]
+name = "bench_text_embeddings"
+path = "src/bin/bench_text_embeddings.rs"
+test = false
+
+[[bin]]
+name = "eval_skill_retrieval"
+path = "src/bin/eval_skill_retrieval.rs"
+test = false

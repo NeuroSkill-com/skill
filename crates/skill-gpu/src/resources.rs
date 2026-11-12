@@ -48,16 +48,16 @@ impl SystemResources {
 /// free space for (e.g. the model download dir); `None` skips the disk read.
 pub fn system_resources(disk_path: Option<&Path>) -> SystemResources {
     use sysinfo::{MemoryRefreshKind, RefreshKind, System};
-    let mut sys = System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()));
-    sys.refresh_memory();
+    // sysinfo 0.40 returns a Result; on failure report no memory figures.
+    let sys = System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::everything())).ok();
 
     let nz = |v: u64| (v > 0).then_some(v);
     let (on_battery, low_power) = power_state();
     SystemResources {
-        total_ram_bytes: nz(sys.total_memory()),
-        free_ram_bytes: nz(sys.available_memory()),
-        total_swap_bytes: nz(sys.total_swap()),
-        used_swap_bytes: Some(sys.used_swap()),
+        total_ram_bytes: sys.as_ref().and_then(|s| nz(s.total_memory())),
+        free_ram_bytes: sys.as_ref().and_then(|s| nz(s.available_memory())),
+        total_swap_bytes: sys.as_ref().and_then(|s| nz(s.total_swap())),
+        used_swap_bytes: sys.as_ref().map(|s| s.used_swap()),
         free_disk_bytes: disk_path.and_then(statvfs_free_bytes),
         cpu_count: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
         on_battery,

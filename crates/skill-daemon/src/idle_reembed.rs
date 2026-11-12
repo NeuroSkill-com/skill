@@ -39,9 +39,11 @@ impl Drop for RunGuard {
 /// Sample system memory usage and return (used_percent, used_bytes, total_bytes).
 /// Cheap enough to call once per 10s tick.
 fn sample_memory_percent() -> (u8, u64, u64) {
-    let sys = sysinfo::System::new_with_specifics(
+    let Ok(sys) = sysinfo::System::new_with_specifics(
         sysinfo::RefreshKind::nothing().with_memory(sysinfo::MemoryRefreshKind::everything()),
-    );
+    ) else {
+        return (0, 0, 0);
+    };
     let used = sys.used_memory();
     let total = sys.total_memory();
     if total == 0 {

@@ -40,10 +40,12 @@ rlx-runtime     = { workspace = true, features = ["cpu"] }
 [[bin]]
 name = "image_encode_bench"
 path = "src/bin/image_encode_bench.rs"
+test = false
 
 [[bin]]
 name = "bench_image_embed"
 path = "src/bin/bench_image_embed.rs"
+test = false
 required-features = ["text-embeddings-rlx"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
