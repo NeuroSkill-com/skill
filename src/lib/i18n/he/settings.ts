@@ -436,6 +436,12 @@ const settings: Record<string, string> = {
     "פתחו מכשירים, סרקו ובחרו את הרצועה. גם רצועות ללא שם או ששמן שונה מזוהות, לפי השירות שהן משדרות.",
   "settings.supportedDevices.instruction.whoop3":
     "הדופק, מרווחי ה-R-R שמאחוריו ומצב הסוללה זורמים אל ההפעלה. אין צורך בחשבון WHOOP.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "לוח חיישנים EmotiBit (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "הפעילו את הלוח וענדו אותו על פרק היד או הזרוע. לוח עם הקושחה הרגילה משדר ב-WiFi (אותה רשת 2.4 GHz); לוח עם הקושחה emotibit-ble משדר ב-Bluetooth. סגרו קודם את אוסצילוסקופ EmotiBit — לוח מתחבר למארח אחד בלבד.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "פתחו את מכשירים, סרקו ובחרו את הלוח. לוח WiFi שאינו מופיע אפשר להוסיף בצורה emotibit:192.168.1.40 (כתובת ה-IP או המזהה שלו). קצב לב, מרווחים בין פעימות, SpO2, טמפרטורת עור, תנועה וסוללה זורמים אל ההקלטה; EDA עדיין אינו נרשם.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1": "קבל טוקן גישה אישי מ-cloud.ouraring.com/personal-access-tokens.",
   "settings.supportedDevices.instruction.oura2": "פתח API מכשיר → Oura Ring, הדבק את הטוקן ושמור.",

@@ -452,6 +452,12 @@ const settings: Record<string, string> = {
     "Відкрийте Пристрої, виконайте пошук і виберіть ремінець. Ремінці без назви або з переназваною назвою теж знаходяться — за службою, яку вони оголошують.",
   "settings.supportedDevices.instruction.whoop3":
     "Пульс, інтервали R-R за ним і заряд батареї надходять у сеанс. Обліковий запис WHOOP не потрібен.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "Плата датчиків EmotiBit (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "Увімкніть плату й одягніть її на зап'ястя або руку. Зі стандартною прошивкою вона передає дані через WiFi (та сама мережа 2,4 ГГц), з прошивкою emotibit-ble — через Bluetooth. Спершу закрийте осцилограф EmotiBit: плата підключається лише до одного хоста.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "Відкрийте «Пристрої», скануйте й виберіть плату. WiFi-плату, яка не з'явилася, можна додати як emotibit:192.168.1.40 (її IP-адреса або id). Пульс, інтервали між ударами, SpO2, температура шкіри, рух і заряд акумулятора надходять у сесію; EDA поки не записується.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Отримайте персональний токен доступу з cloud.ouraring.com/personal-access-tokens.",

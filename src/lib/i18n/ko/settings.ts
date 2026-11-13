@@ -96,6 +96,12 @@ const settings: Record<string, string> = {
     "기기를 열고 검색한 뒤 스트랩을 선택하세요. 이름이 없거나 변경된 스트랩도 광고하는 서비스로 찾을 수 있습니다.",
   "settings.supportedDevices.instruction.whoop3":
     "심박수와 그 근거가 되는 R-R 간격, 배터리가 세션으로 전달됩니다. WHOOP 계정은 필요하지 않습니다.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "EmotiBit 센서 보드 (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "보드의 전원을 켜고 손목이나 팔에 착용하세요. 기본 펌웨어는 WiFi(같은 2.4 GHz 네트워크)로, emotibit-ble 펌웨어는 Bluetooth로 전송합니다. 먼저 EmotiBit 오실로스코프를 닫으세요. 보드는 한 번에 하나의 호스트에만 연결됩니다.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "기기를 열고 검색한 뒤 보드를 선택하세요. 나타나지 않는 WiFi 보드는 emotibit:192.168.1.40(IP 주소 또는 id) 형식으로 추가할 수 있습니다. 심박수, 박동 간격, SpO2, 피부 온도, 움직임, 배터리가 세션에 기록되며 EDA는 아직 기록되지 않습니다.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "cloud.ouraring.com/personal-access-tokens에서 개인 액세스 토큰을 받으세요.",

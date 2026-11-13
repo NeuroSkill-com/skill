@@ -54,6 +54,13 @@ const ui: Record<string, string> = {
     "L'intervalle entre deux battements à partir duquel la fréquence cardiaque a été calculée, en millisecondes.",
   "tip.skinTemperature":
     "Température cutanée mesurée au capteur. Valeur absolue, et non l'écart par rapport à votre référence.",
+  "tip.scl":
+    "Niveau de conductance cutanée : la base, qui varie lentement, de l'activité des glandes sudoripares, en microsiemens. Il reflète l'activation générale.",
+  "tip.scrRate":
+    "Réponses de conductance cutanée par minute sur la dernière minute : de brèves hausses qui suivent des événements précis.",
+  "tip.scrAmplitude": "Taille moyenne de ces réponses sur la dernière minute.",
+  "tip.arousal":
+    "Niveau de conductance cutanée comparé à la ligne de base de cette séance (score z). Positif signifie plus activé que d'habitude pour vous ; vide tant que la ligne de base n'est pas apprise.",
   "tip.rmssd": "Racine carrée des différences successives. Métrique parasympathique clé de la VFC.",
   "tip.sdnn": "Écart type des intervalles battement par battement. Reflète la VFC globale.",
   "tip.pnn50": "Pourcentage d'intervalles successifs différant de > 50 ms. Plus élevé = tonus vagal plus fort.",

@@ -111,6 +111,12 @@ const settings: Record<string, string> = {
     "Open Devices, scan, and pick the strap. Nameless or renamed straps are still found, by the service they advertise.",
   "settings.supportedDevices.instruction.whoop3":
     "Heart rate, the R-R intervals behind it, and battery stream into the session. No WHOOP account is needed.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "EmotiBit sensor board (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "Power the board on and wear it on your wrist or arm. A board on the stock firmware streams over WiFi (same 2.4 GHz network); one on the emotibit-ble firmware streams over Bluetooth. Close the EmotiBit Oscilloscope first — a board connects to one host at a time.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "Open Devices, scan, and pick the board. A WiFi board that does not appear can be added as emotibit:192.168.1.40 (its IP address or id). Heart rate, inter-beat intervals, SpO2, skin temperature, motion and battery stream into the session; EDA is not recorded yet.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Get a Personal Access Token from cloud.ouraring.com/personal-access-tokens.",

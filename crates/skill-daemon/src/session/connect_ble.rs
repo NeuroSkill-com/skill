@@ -225,6 +225,58 @@ pub(super) async fn connect_mendi(paired_name: Option<String>) -> anyhow::Result
     Ok(Box::new(MendiAdapter::new(rx, handle)))
 }
 
+// ── EmotiBit (WiFi or BLE) ───────────────────────────────────────────────────
+
+/// Connect to an EmotiBit board, over BLE (`emotibit-ble` firmware) or WiFi
+/// (stock firmware) — whichever is found.
+///
+/// `target` selects the board: `emotibit:<id or ip>` names one explicitly (the
+/// way to address a WiFi board), and a BLE advertised name such as
+/// `EmotiBit-BLE-E848` selects that one. A bare `emotibit` or an unrelated
+/// paired name takes the first available board.
+pub(super) async fn connect_emotibit(
+    target: &str,
+    paired_name: Option<String>,
+) -> anyhow::Result<Box<dyn DeviceAdapter>> {
+    use skill_devices::emotibit::prelude::*;
+    use skill_devices::session::emotibit::{EmotibitAdapter, EmotibitConfig};
+
+    let device = emotibit_device_filter(target, paired_name.as_deref());
+    let config = EmotibitConfig {
+        device,
+        ..Default::default()
+    };
+    info!(device = ?config.device, "connecting to EmotiBit…");
+
+    let client = EmotiBitClient::new(config.to_client_config());
+    let (rx, handle) = client.connect().await.context("EmotiBit connect")?;
+    Ok(Box::new(EmotibitAdapter::new(rx, handle)))
+}
+
+/// Which board to restrict the scan to, if any.
+///
+/// The crate matches `device` against a board's exact id or IP, so only a value
+/// that can be one is passed: an explicit `emotibit:<x>`, or a BLE name. A
+/// display name that merely resembles a board would otherwise match nothing
+/// and fail a connect that "first available" would have satisfied.
+fn emotibit_device_filter(target: &str, paired_name: Option<&str>) -> Option<String> {
+    const PREFIX: &str = "emotibit:";
+    let explicit = target
+        .get(PREFIX.len()..)
+        .filter(|_| target[..PREFIX.len()].eq_ignore_ascii_case(PREFIX))
+        .map(str::trim)
+        .filter(|rest| !rest.is_empty());
+    if let Some(rest) = explicit {
+        return Some(rest.to_string());
+    }
+    [Some(target), paired_name]
+        .into_iter()
+        .flatten()
+        // The bare firmware name carries no board suffix, so it is not an id.
+        .find(|n| *n != skill_devices::emotibit::ble::DEVICE_NAME && skill_devices::emotibit::ble::is_device_name(n))
+        .map(str::to_string)
+}
+
 // ── WHOOP strap (BLE) ────────────────────────────────────────────────────────
 
 /// Connect to a WHOOP 4.0 / 5.0 / MG strap — no WHOOP account.
@@ -589,6 +641,42 @@ impl skill_devices::session::DeviceAdapter for GtecAdapter {
 mod tests {
     use super::*;
     use skill_devices::session::DeviceAdapter;
+
+    #[test]
+    fn emotibit_filter_takes_an_explicit_id_or_ip() {
+        assert_eq!(
+            emotibit_device_filter("emotibit:MD-V6-0000356", None).as_deref(),
+            Some("MD-V6-0000356")
+        );
+        assert_eq!(
+            emotibit_device_filter("EmotiBit:192.168.1.40", None).as_deref(),
+            Some("192.168.1.40")
+        );
+    }
+
+    #[test]
+    fn emotibit_filter_takes_a_ble_board_name() {
+        assert_eq!(
+            emotibit_device_filter("EmotiBit-BLE-E848", None).as_deref(),
+            Some("EmotiBit-BLE-E848")
+        );
+        // A paired name is used when the target itself says nothing.
+        assert_eq!(
+            emotibit_device_filter("emotibit", Some("EmotiBit-BLE-A1B2")).as_deref(),
+            Some("EmotiBit-BLE-A1B2")
+        );
+    }
+
+    /// A value the crate could not match would fail a connect that "first
+    /// available" would have satisfied.
+    #[test]
+    fn emotibit_filter_ignores_names_that_cannot_be_an_id() {
+        assert_eq!(emotibit_device_filter("emotibit", None), None);
+        assert_eq!(emotibit_device_filter("emotibit:", None), None);
+        assert_eq!(emotibit_device_filter("emotibit:   ", None), None);
+        assert_eq!(emotibit_device_filter("EmotiBit-BLE", None), None);
+        assert_eq!(emotibit_device_filter("EmotiBit", Some("My wristband")), None);
+    }
 
     #[tokio::test]
     async fn brainbit_adapter_emits_connected_first() {

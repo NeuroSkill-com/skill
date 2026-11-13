@@ -6,7 +6,7 @@
 //! Orpheus needs a pre-exported SNAC decoder; set `ORPHEUS_SNAC_PATH`:
 //!   python3 scripts/export_snac_decoder.py ~/.cache/rlx-orpheus-snac
 //!   ORPHEUS_SNAC_PATH=~/.cache/rlx-orpheus-snac/snac_24khz_decoder.safetensors \
-//!     cargo test -p skill-tts --features "tts-engines,whisper-validate" \
+//!     cargo test -p skill-tts --features "tts-engines,whisper-validate,slow-tests" \
 //!     --test tts_validate_e2e -- --ignored --nocapture
 //!
 //! With `whisper-validate`, rlx-whisper runs in-process (set `RLX_WHISPER_DIR` or

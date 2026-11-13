@@ -7,6 +7,11 @@ description = "ASR + VAD voice-input engine for NeuroSkill — rlx-whisper (ASR)
 build = "build.rs"
 
 [features]
+# Opt-in: builds the model-, GPU- and measurement-dependent integration tests
+# listed below. Off by default so `cargo test --workspace` does not link ~60 MB
+# of test executables that are ignored or skip themselves without cached models.
+# `cargo test-slow` (see .cargo/config.toml) turns this on for every crate.
+slow-tests = []
 default = []
 # OS umbrellas — product builds pass one of these (via skill-daemon).
 # Leaf `asr-*` features remain for targeted tests.
@@ -68,3 +73,13 @@ rlx-asr          = { workspace = true, features = ["cuda", "gpu"], optional = tr
 
 [lints]
 workspace = true
+
+[[test]]
+name = "asr_e2e"
+path = "tests/asr_e2e.rs"
+required-features = ["slow-tests"]
+
+[[test]]
+name = "asr_funasr_nemotron_smoke"
+path = "tests/asr_funasr_nemotron_smoke.rs"
+required-features = ["slow-tests"]

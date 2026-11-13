@@ -6,11 +6,19 @@ license = "GPL-3.0-only"
 description = "Shared state types for skill-daemon — extracted for parallel compilation"
 
 [features]
+# Opt-in: builds the model-, GPU- and measurement-dependent integration tests
+# listed below. Off by default so `cargo test --workspace` does not link ~60 MB
+# of test executables that are ignored or skip themselves without cached models.
+# `cargo test-slow` (see .cargo/config.toml) turns this on for every crate.
+slow-tests = []
 # Text embeddings run on the RLX runtime via `rlx-embed`
 # (RlxBertModel / RlxNomicModel — BGE / Nomic / E5 families). The tier
 # suffixes below add GPU backends; the base feature is the CPU baseline.
 # Product builds: enable one OS umbrella (`apple` / `linux` / `windows`).
 default = ["llm"]
+# Opt-in: builds the benchmark / eval binaries below. Off by default so that
+# `cargo test --workspace` does not link four ~80 MB tools nobody is running.
+bench-tools = []
 llm = ["skill-llm/llm"]
 apple   = ["text-embeddings-rlx-metal", "text-embeddings-rlx-wgpu"]  # Metal → wgpu → CPU; no MLX
 linux   = ["text-embeddings-rlx-wgpu", "text-embeddings-rlx-cuda"]
@@ -60,20 +68,29 @@ tempfile = "3"
 [lints]
 workspace = true
 
-# Benchmark / eval tools: run with `cargo run --bin <name>`. They have no unit
-# tests, so `test = false` keeps `cargo test` from building ~120 MB of
-# test-harness binary for each.
+# Benchmark / eval tools: run with `cargo run --features bench-tools --bin <name>`.
+# They have no unit tests (`test = false`) and sit behind `bench-tools`, which
+# nothing enables by default — `required-features` on an existing feature would
+# not do, since the app turns those on workspace-wide.
 [[bin]]
 name = "bench_skill_prompt"
 path = "src/bin/bench_skill_prompt.rs"
 test = false
+required-features = ["bench-tools"]
 
 [[bin]]
 name = "bench_text_embeddings"
 path = "src/bin/bench_text_embeddings.rs"
 test = false
+required-features = ["bench-tools"]
 
 [[bin]]
 name = "eval_skill_retrieval"
 path = "src/bin/eval_skill_retrieval.rs"
 test = false
+required-features = ["bench-tools"]
+
+[[test]]
+name = "rlx_semantic"
+path = "tests/rlx_semantic.rs"
+required-features = ["slow-tests"]

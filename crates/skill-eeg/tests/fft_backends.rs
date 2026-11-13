@@ -5,7 +5,7 @@
 //! forward + inverse). A backend only counts if `fft::set_backend` accepts it,
 //! i.e. it passed the parity probe against rustfft.
 //!
-//! `cargo test --release -p skill-eeg --features rlx-fft-metal,rlx-fft-mlx,rlx-fft-ane \
+//! `cargo test --release -p skill-eeg --features slow-tests,rlx-fft-metal,rlx-fft-mlx,rlx-fft-ane \
 //!     --test fft_backends -- --ignored --nocapture`
 
 use std::time::{Duration, Instant};

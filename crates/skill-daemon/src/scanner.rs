@@ -31,7 +31,7 @@ pub(crate) fn is_known_eeg_ble_name(name: &str) -> bool {
     // connect route then declines to treat as a ring.
     if matches!(
         DeviceKind::from_name(Some(name)),
-        DeviceKind::Vital | DeviceKind::Oura | DeviceKind::Whoop
+        DeviceKind::Vital | DeviceKind::Oura | DeviceKind::Whoop | DeviceKind::Emotibit
     ) {
         return true;
     }
@@ -116,7 +116,14 @@ const SERVICE_KIND_TABLE: &[(BluetoothUuid, &str)] = &[
     // that drifts from the driver is a strap that advertises but never routes.
     (whoop_service(skill_devices::poop::protocol::WHOOP4_SERVICE), "whoop"),
     (whoop_service(skill_devices::poop::protocol::WHOOP5_SERVICE), "whoop"),
+    // The `emotibit-ble` firmware's GATT service. A literal rather than the
+    // crate's `&str` constant (a `const` table cannot parse one);
+    // `emotibit_service_matches_the_driver` fails the build if they drift.
+    (EMOTIBIT_SERVICE, "emotibit"),
 ];
+
+/// `6e6f7469-6269-7400-0000-000000000001` — the ASCII bytes spell "notibit".
+const EMOTIBIT_SERVICE: BluetoothUuid = BluetoothUuid::from_u128(0x6e6f_7469_6269_7400_0000_0000_0000_0001);
 
 /// `poop` states its services as `uuid::Uuid`; the scanner speaks
 /// `BluetoothUuid`. Both constructors are `const`, so this costs nothing and
@@ -167,6 +174,7 @@ fn service_kind_display_name(kind: &'static str) -> &'static str {
         "vital" => "Vital Neuro",
         "oura" => "Oura Ring",
         "whoop" => "WHOOP",
+        "emotibit" => "EmotiBit",
         other => other,
     }
 }
@@ -1281,6 +1289,25 @@ mod tests {
         assert_ne!(
             skill_devices::poop::protocol::WHOOP4_SERVICE,
             skill_devices::poop::protocol::WHOOP5_SERVICE
+        );
+    }
+
+    #[test]
+    fn emotibit_is_recognised_by_service() {
+        let mut adv = Advertisement::default();
+        adv.service_uuids.push(EMOTIBIT_SERVICE);
+        assert_eq!(kind_from_advertisement(&adv), Some("emotibit"));
+        assert_eq!(service_kind_display_name("emotibit"), "EmotiBit");
+        assert!(is_known_eeg_ble_name("EmotiBit-BLE-E848"));
+    }
+
+    /// The table holds a literal; the driver is the source of truth.
+    #[test]
+    fn emotibit_service_matches_the_driver() {
+        let driver = uuid::Uuid::parse_str(skill_devices::emotibit::ble::SERVICE_UUID).unwrap();
+        assert!(
+            EMOTIBIT_SERVICE == whoop_service(driver),
+            "scanner literal drifted from the emotibit crate"
         );
     }
 

@@ -9,6 +9,7 @@
 pub mod session;
 
 pub use awear;
+pub use emotibit;
 pub use emotiv;
 pub use idun;
 pub use mendi;

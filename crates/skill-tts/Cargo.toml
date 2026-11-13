@@ -7,6 +7,11 @@ description = "TTS engine for NeuroSkill — extracted workspace crate"
 build = "build.rs"
 
 [features]
+# Opt-in: builds the model-, GPU- and measurement-dependent integration tests
+# listed below. Off by default so `cargo test --workspace` does not link ~60 MB
+# of test executables that are ignored or skip themselves without cached models.
+# `cargo test-slow` (see .cargo/config.toml) turns this on for every crate.
+slow-tests = []
 default     = []
 tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio", "dep:skill-accel"]
 tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
@@ -79,3 +84,13 @@ workspace = true
 name = "kitten-e2e"
 path = "src/bin/kitten_e2e.rs"
 required-features = ["tts-kitten", "whisper-validate"]
+
+[[test]]
+name = "qwen3_tts_e2e"
+path = "tests/qwen3_tts_e2e.rs"
+required-features = ["slow-tests"]
+
+[[test]]
+name = "tts_validate_e2e"
+path = "tests/tts_validate_e2e.rs"
+required-features = ["slow-tests"]

@@ -454,6 +454,12 @@ const settings: Record<string, string> = {
     "Öffnen Sie Geräte, suchen Sie und wählen Sie das Armband. Auch namenlose oder umbenannte Armbänder werden über den angekündigten Dienst gefunden.",
   "settings.supportedDevices.instruction.whoop3":
     "Herzfrequenz, die zugrunde liegenden R-R-Intervalle und der Akkustand fließen in die Sitzung. Ein WHOOP-Konto ist nicht nötig.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "EmotiBit-Sensorplatine (WLAN / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "Schalte die Platine ein und trage sie am Handgelenk oder Arm. Mit der Standard-Firmware sendet sie über WLAN (gleiches 2,4-GHz-Netz), mit der emotibit-ble-Firmware über Bluetooth. Schließe zuerst das EmotiBit-Oszilloskop — eine Platine verbindet sich nur mit einem Host.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "Öffne Geräte, suche und wähle die Platine. Eine WLAN-Platine, die nicht erscheint, kannst du als emotibit:192.168.1.40 (IP-Adresse oder ID) hinzufügen. Herzfrequenz, Schlagabstände, SpO2, Hauttemperatur, Bewegung und Akkustand fließen in die Sitzung; EDA wird noch nicht aufgezeichnet.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Persönlichen Zugriffstoken von cloud.ouraring.com/personal-access-tokens erhalten.",

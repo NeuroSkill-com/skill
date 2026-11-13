@@ -7,7 +7,7 @@
 //! and prints the cost of each rendering preset beside it.
 //!
 //! ```sh
-//! cargo run --release -p skill-daemon-state --features text-embeddings-rlx-metal \
+//! cargo run --release -p skill-daemon-state --features bench-tools,text-embeddings-rlx-metal \
 //!   --bin eval_skill_retrieval -- skills/skills
 //! ```
 //!

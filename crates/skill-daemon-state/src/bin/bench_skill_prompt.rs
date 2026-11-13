@@ -6,7 +6,7 @@
 //! would actually save.
 //!
 //! ```sh
-//! cargo run --release -p skill-daemon-state --features text-embeddings-rlx-metal \
+//! cargo run --release -p skill-daemon-state --features bench-tools,text-embeddings-rlx-metal \
 //!   --bin bench_skill_prompt -- skills/skills
 //! ```
 use skill_daemon_state::text_embedder::SharedTextEmbedder;

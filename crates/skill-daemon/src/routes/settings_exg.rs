@@ -560,10 +560,7 @@ fn find_eeg_csvs(day_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
             let name = p.file_name()?.to_str()?;
             let is_eeg = name.starts_with("exg_")
                 && (name.ends_with(".csv") || name.ends_with(".parquet"))
-                && !name.contains("metrics")
-                && !name.contains("ppg")
-                && !name.contains("imu")
-                && !name.contains("fnirs");
+                && !skill_data::session_paths::is_sidecar_file(name);
             if is_eeg {
                 Some(p)
             } else {
@@ -1405,6 +1402,9 @@ mod tests {
         std::fs::write(d.join("exg_100_metrics.csv"), "").unwrap();
         std::fs::write(d.join("exg_100_ppg.csv"), "").unwrap();
         std::fs::write(d.join("exg_100_imu.csv"), "").unwrap();
+        // Written by the recorder too, and used to be loaded as EEG.
+        std::fs::write(d.join("exg_100_vitals.csv"), "").unwrap();
+        std::fs::write(d.join("exg_100_sensors.csv"), "").unwrap();
         std::fs::write(d.join("exg_200.csv"), "").unwrap();
         std::fs::write(d.join("other.csv"), "").unwrap();
 

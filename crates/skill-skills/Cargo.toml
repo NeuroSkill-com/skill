@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "skill-skills"
 version = "0.0.1"
 edition = "2021"
@@ -24,3 +25,7 @@ sync    = ["ureq", "flate2", "tar"]
 
 [lints]
 workspace = true
+
+[[test]]
+name = "it"
+path = "tests/it.rs"

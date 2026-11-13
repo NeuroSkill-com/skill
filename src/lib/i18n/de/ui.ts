@@ -51,6 +51,13 @@ const ui: Record<string, string> = {
   "tip.hr": "Herzfrequenz aus PPG-Intervallen zwischen Herzschlägen.",
   "tip.ibi": "Das Intervall zwischen zwei Herzschlägen, aus dem die Herzfrequenz berechnet wurde, in Millisekunden.",
   "tip.skinTemperature": "Am Sensor gemessene Hauttemperatur. Absolutwert, nicht die Abweichung von Ihrem Normalwert.",
+  "tip.scl":
+    "Hautleitfähigkeitsniveau: die sich langsam ändernde Basis der Schweißdrüsenaktivität in Mikrosiemens. Es spiegelt die allgemeine Erregung wider.",
+  "tip.scrRate":
+    "Hautleitfähigkeitsreaktionen pro Minute in der letzten Minute: kurze Anstiege nach einzelnen Ereignissen.",
+  "tip.scrAmplitude": "Durchschnittliche Größe dieser Reaktionen in der letzten Minute.",
+  "tip.arousal":
+    "Hautleitfähigkeitsniveau im Vergleich zur eigenen Basislinie dieser Sitzung (z-Wert). Positiv heißt erregter als bei dir üblich; leer, bis die Basislinie gelernt ist.",
   "tip.rmssd": "Quadratischer Mittelwert aufeinanderfolgender Differenzen. Wichtige parasympathische HRV-Metrik.",
   "tip.sdnn": "Standardabweichung der Schlag-zu-Schlag-Intervalle. Spiegelt die gesamte HRV wider.",
   "tip.pnn50": "Prozent aufeinanderfolgender Intervalle mit > 50 ms Differenz. Höher = stärkerer Vagustonus.",

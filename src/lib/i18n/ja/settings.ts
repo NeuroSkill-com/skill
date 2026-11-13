@@ -103,6 +103,12 @@ const settings: Record<string, string> = {
     "デバイスを開いてスキャンし、ストラップを選びます。名前のないストラップや名前を変えたストラップも、広告しているサービスから見つかります。",
   "settings.supportedDevices.instruction.whoop3":
     "心拍数、その基になった R-R 間隔、バッテリー残量がセッションに流れ込みます。WHOOP アカウントは不要です。",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "EmotiBit センサーボード (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "ボードの電源を入れ、手首または腕に装着します。標準ファームウェアでは WiFi (同じ 2.4 GHz ネットワーク)、emotibit-ble ファームウェアでは Bluetooth で送信します。先に EmotiBit オシロスコープを閉じてください。ボードは 1 台のホストにしか接続できません。",
+  "settings.supportedDevices.instruction.emotibit2":
+    "「デバイス」を開き、スキャンしてボードを選択します。表示されない WiFi ボードは emotibit:192.168.1.40 (IP アドレスまたは ID) の形式で追加できます。心拍数、拍動間隔、SpO2、皮膚温、動き、バッテリー残量がセッションに記録されます。EDA はまだ記録されません。",
   "settings.supportedDevices.device.ouraRing": "Oura Ring（第3世代/第4世代）",
   "settings.supportedDevices.instruction.oura1":
     "cloud.ouraring.com/personal-access-tokensで個人アクセストークンを取得してください。",

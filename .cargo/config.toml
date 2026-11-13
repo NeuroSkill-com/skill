@@ -206,3 +206,12 @@ rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
 
 [target.i686-pc-windows-gnu]
 rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
+
+# ── Aliases ───────────────────────────────────────────────────────────────────
+#
+# `cargo test --workspace` skips the heavy, model- or GPU-dependent integration
+# tests (each crate gates them behind a `slow-tests` feature), which keeps ~0.5 GB
+# of test executables out of target/. `cargo test-slow` runs everything,
+# including them; pass `-- --ignored` to also run the `#[ignore]`d ones.
+[alias]
+test-slow = "test --workspace --features skill-eeg/slow-tests,skill-tts/slow-tests,skill-asr/slow-tests,skill-screenshots/slow-tests,skill-daemon-state/slow-tests"
