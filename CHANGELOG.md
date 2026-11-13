@@ -8,6 +8,28 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.4] — 2026-11-13
+
+### Features
+
+- **EmotiBit support**: connect an EmotiBit board over Bluetooth (`emotibit-ble` firmware) or WiFi (stock firmware). Heart rate, inter-beat intervals, SpO2 and skin temperature record as device vitals, accelerometer and gyroscope as motion, and battery as battery. A BLE board is found by its GATT service; add a WiFi board as `emotibit:<id or ip>`.
+- **Electrodermal activity and other scalar sensor streams are recorded**: a new `_sensors` sidecar (CSV or Parquet) stores one `timestamp_s, channel, unit, value` row per sample, so EDA, the SCR metrics, thermopile, humidity, magnetometer and raw PPG share one file regardless of rate. Subscribers also receive a live `SensorSample` event. Other devices with a scalar stream and no dedicated event can use the same `DeviceEvent::Sensor`.
+- **EDA analysis**: skin conductance is analysed as it is recorded. Every five seconds you get the tonic level (SCL), skin conductance responses per minute and their size, and arousal as a z-score against the session's own baseline. Artifacts (lost contact, impossible jumps) are rejected rather than counted. The results are stored beside the raw samples as `eda_*` channels.
+- **Live EDA card**: the dashboard shows the skin-conductance trace with the derived metrics, for an EmotiBit or any device that reports an `eda` channel. It says when the baseline is still being learned and warns about poor skin contact.
+
+### Bugfixes
+
+- **Sidecar files were miscounted and left behind**: `_vitals` and `_fnirs` files were treated as sessions by history listing, loaded as EEG by the EEG-file filter, and not removed when a session was deleted. One shared list of sidecar suffixes now drives all three.
+
+### Build
+
+- **Heavy integration tests are opt-in**: nine model-, GPU- and measurement-dependent test targets (`fft_*`, `qwen3_tts_e2e`, `tts_validate_e2e`, `asr_e2e`, `asr_funasr_nemotron_smoke`, `rlx_image_embed`, `rlx_semantic`) sit behind a per-crate `slow-tests` feature, so `cargo test --workspace` no longer links them. Most were `#[ignore]`d or skip themselves without cached models. `cargo test-slow` runs everything; the documented run commands and the two TTS scripts pass the feature.
+- **Smaller dev builds**: dependency crates build with no debug info and DuckDB at `opt-level = 1`, `split-debuginfo = "off"` stops kache writing `.dSYM` bundles, the `skill` library is built as an `rlib` only, benchmark binaries sit behind a `bench-tools` feature, and seven crates link their fast integration tests into one `it` binary each. A full workspace test build is about 6 GB instead of over 49 GB.
+
+### i18n
+
+- **EDA card strings** in all nine languages.
+
 ## [0.1.1-rc.3] — 2026-11-03
 
 ### Build
@@ -695,17 +717,11 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
   *it* for an ELF architecture and running `ldd` against it passed for the wrong
   reason. The checks now inspect the real executables under `/opt/neuroskill`.
 
-## [0.0.131-rc.31] — 2026-09-28
-
-### Features
-
-- fix the session drop issue
-- improve cli
-
 ## Earlier releases
 
-The 159 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
+The 160 releases before this point are kept in full under [`changes/releases/`](changes/releases/), one file each.
 
+- [0.0.131-rc.31](changes/releases/0.0.131-rc.31.md)
 - [0.0.131-rc.30](changes/releases/0.0.131-rc.30.md)
 - [0.0.131-rc.29](changes/releases/0.0.131-rc.29.md)
 - [0.0.131-rc.28](changes/releases/0.0.131-rc.28.md)
