@@ -60,6 +60,17 @@ runs:
     #              shipped ELFs. Present via build-essential on the hosted
     #              runners; named explicitly so a slimmer image cannot silently
     #              fall back to the incomplete hand-written dependency list.
+    # Refresh the apt index first. The runner image's index can be days old and the
+    # mirror drops superseded package versions; cache-apt-pkgs-action resolves exact
+    # versions from that index, so without this it can request files that are gone
+    # (404). The install then fails as a whole while the step still reports success,
+    # and the build dies much later on a missing glib / libsoup / webkit
+    # ("glib-2.0 was not found", v0.1.1 and v0.1.2-rc.1).
+    - name: Refresh apt package index (Linux)
+      if: inputs.linux-deps == 'true'
+      shell: bash
+      run: sudo apt-get update -o Acquire::Retries=5
+
     - name: Cache + install system dependencies (Linux)
       if: inputs.linux-deps == 'true'
       uses: awalsh128/cache-apt-pkgs-action@v1
@@ -85,6 +96,18 @@ runs:
           protobuf-compiler
           libopenblas-dev
         version: ${{ inputs.linux-apt-version }}
+
+    # Fail here, with a clear message, rather than minutes later inside a *-sys
+    # build script: the apt step above can report success after a failed install.
+    - name: Verify system libraries (Linux)
+      if: inputs.linux-deps == 'true'
+      shell: bash
+      run: |
+        missing=0
+        for m in glib-2.0 gtk+-3.0 libsoup-3.0 webkit2gtk-4.1; do
+          pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
+        done
+        exit $missing
 
     - name: Setup Rust bootstrap (Linux)
       if: inputs.linux-deps == 'true'
