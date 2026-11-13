@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "skill-history"
 version = "0.0.1"
 edition = "2021"
@@ -27,3 +28,11 @@ rusqlite = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "it"
+path = "tests/it.rs"
+
+[[test]]
+name = "e2e_test"
+path = "tests/e2e_test.rs"

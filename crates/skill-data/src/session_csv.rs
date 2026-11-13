@@ -57,6 +57,12 @@ pub fn vitals_csv_path(eeg_path: &Path) -> PathBuf {
     eeg_path.with_file_name(format!("{stem}_vitals.csv"))
 }
 
+/// Sidecar path for scalar sensor streams (`_sensors.csv`).
+pub fn sensors_csv_path(eeg_path: &Path) -> PathBuf {
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    eeg_path.with_file_name(format!("{stem}_sensors.csv"))
+}
+
 // ── Metrics CSV column header ─────────────────────────────────────────────────
 
 /// Column headers for the `_metrics.csv` file.
@@ -305,6 +311,9 @@ pub struct CsvState {
     fnirs_written: u64,
     vitals_wtr: Option<csv::Writer<std::fs::File>>,
     vitals_written: u64,
+    /// Scalar sensor streams, one long-format row per sample (created lazily).
+    sensors_wtr: Option<csv::Writer<std::fs::File>>,
+    sensors_written: u64,
     /// IMU rows written.
     imu_written: u64,
 }
@@ -339,6 +348,8 @@ impl CsvState {
             fnirs_written: 0,
             vitals_wtr: None,
             vitals_written: 0,
+            sensors_wtr: None,
+            sensors_written: 0,
         })
     }
 
@@ -740,6 +751,38 @@ impl CsvState {
         }
     }
 
+    /// Write one sample of a scalar sensor stream to `_sensors.csv`.
+    ///
+    /// Long format, one row per sample: `timestamp_s,channel,unit,value`. A
+    /// stream with no dedicated file (electrodermal activity, raw PPG counts,
+    /// humidity...) lands here, and channels of different rates share the file
+    /// without padding or nulls, so a new channel needs no schema change.
+    pub fn push_sensor(&mut self, eeg_csv_path: &Path, channel: &str, unit: &str, timestamp_s: f64, value: f64) {
+        if self.sensors_wtr.is_none() {
+            let path = sensors_csv_path(eeg_csv_path);
+            match csv::Writer::from_path(&path) {
+                Ok(mut w) => {
+                    let _ = w.write_record(["timestamp_s", "channel", "unit", "value"]);
+                    eprintln!("[csv] Sensors file opened: {}", path.display());
+                    self.sensors_wtr = Some(w);
+                }
+                Err(e) => {
+                    eprintln!("[csv] failed to create sensors file {}: {e}", path.display());
+                    return;
+                }
+            }
+        }
+        if let Some(ref mut wtr) = self.sensors_wtr {
+            let _ = wtr.write_record([&format!("{timestamp_s:.6}"), channel, unit, &value.to_string()]);
+            self.sensors_written += 1;
+            // These are slow streams, but several share the file, so a 64-row
+            // buffer is a few seconds of data at risk rather than minutes.
+            if self.sensors_written.is_multiple_of(64) {
+                let _ = wtr.flush();
+            }
+        }
+    }
+
     /// Flush all open CSV writers to disk.
     pub fn flush(&mut self) {
         let _ = self.wtr.flush();
@@ -756,6 +799,9 @@ impl CsvState {
             let _ = w.flush();
         }
         if let Some(ref mut w) = self.vitals_wtr {
+            let _ = w.flush();
+        }
+        if let Some(ref mut w) = self.sensors_wtr {
             let _ = w.flush();
         }
     }
@@ -848,6 +894,64 @@ mod round_trip_tests {
         assert_eq!(lines[0], "timestamp_s,hr_bpm,ibi_ms,spo2_pct,temperature_c");
         assert_eq!(lines[1], "1000.000000,52.0,1153.0,,");
         assert_eq!(lines[2], "1001.000000,,,97.0,");
+    }
+
+    #[test]
+    fn sensors_csv_path_derives_correctly() {
+        let p = sensors_csv_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, PathBuf::from("/data/exg_1700000000_sensors.csv"));
+    }
+
+    /// Channels of different rates share one file as long-format rows.
+    #[test]
+    fn sensors_csv_is_long_format_with_unit_and_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut st = CsvState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+
+        st.push_sensor(&csv_path, "eda", "µS", 1000.5, 0.42);
+        st.push_sensor(&csv_path, "ppg_red", "", 1000.5, 12345.0);
+        st.push_sensor(&csv_path, "eda", "µS", 1000.6, 0.43);
+        st.flush();
+
+        let text = std::fs::read_to_string(sensors_csv_path(&csv_path)).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "timestamp_s,channel,unit,value");
+        assert_eq!(lines[1], "1000.500000,eda,µS,0.42");
+        assert_eq!(lines[2], "1000.500000,ppg_red,,12345");
+        assert_eq!(lines[3], "1000.600000,eda,µS,0.43");
+    }
+
+    /// Values must survive a text round trip exactly: they are the data.
+    #[test]
+    fn sensors_csv_values_round_trip_exactly() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut st = CsvState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+        let v = 0.123_456_789_012_345_6_f64;
+        st.push_sensor(&csv_path, "eda", "µS", 1.0, v);
+        st.flush();
+        let text = std::fs::read_to_string(sensors_csv_path(&csv_path)).unwrap();
+        let back: f64 = text
+            .lines()
+            .nth(1)
+            .unwrap()
+            .rsplit(',')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(back, v);
+    }
+
+    #[test]
+    fn sensors_csv_is_not_created_until_a_sample_arrives() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut st = CsvState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+        st.push_eeg(0, &[1.0], 1000.0, 256.0);
+        st.flush();
+        assert!(!sensors_csv_path(&csv_path).exists());
     }
 
     /// The sidecar must not be created by a session that never reports vitals.

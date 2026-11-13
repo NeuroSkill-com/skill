@@ -7,7 +7,7 @@
 //! Run:
 //! ```sh
 //! cargo test -p skill-screenshots --test rlx_image_embed \
-//!   --features text-embeddings-rlx-metal -- --nocapture
+//!   --features slow-tests,text-embeddings-rlx-metal -- --nocapture
 //! ```
 
 #![cfg(feature = "text-embeddings-rlx")]

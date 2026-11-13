@@ -6,6 +6,11 @@ license = "GPL-3.0-only"
 description = "EEG signal processing for NeuroSkill — extracted workspace crate"
 
 [features]
+# Opt-in: builds the model-, GPU- and measurement-dependent integration tests
+# listed below. Off by default so `cargo test --workspace` does not link ~60 MB
+# of test executables that are ignored or skip themselves without cached models.
+# `cargo test-slow` (see .cargo/config.toml) turns this on for every crate.
+slow-tests = []
 default = []
 # GPU-accelerated FFT via RLX — Metal on macOS, CUDA/wgpu/CPU elsewhere.
 # rlx-fft enables the rlx CPU baseline; the tier suffixes add GPU backends.
@@ -34,3 +39,18 @@ harness = false
 
 [lints]
 workspace = true
+
+[[test]]
+name = "fft_batch_sweep"
+path = "tests/fft_batch_sweep.rs"
+required-features = ["slow-tests"]
+
+[[test]]
+name = "fft_backends"
+path = "tests/fft_backends.rs"
+required-features = ["slow-tests"]
+
+[[test]]
+name = "fft_gpu_contention"
+path = "tests/fft_gpu_contention.rs"
+required-features = ["slow-tests"]

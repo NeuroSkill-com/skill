@@ -88,6 +88,14 @@ pub enum DeviceKind {
     /// it, plus battery. Read directly over the strap's own BLE protocol — no
     /// WHOOP account.
     Whoop,
+    /// EmotiBit — EDA / PPG / motion / temperature sensor board (WiFi or BLE).
+    ///
+    /// Not an EEG device: it reports heart rate with inter-beat intervals, SpO2,
+    /// skin temperature, accelerometer and gyroscope as device vitals and
+    /// motion, and electrodermal activity plus the other scalar streams to the
+    /// `_sensors` sidecar. Connects over WiFi with the stock firmware or over
+    /// BLE with the `emotibit-ble` firmware.
+    Emotibit,
     /// Oura Ring Gen 3 / Ring 4 / Ring 5 — sleep and vitals wearable (BLE).
     ///
     /// Not an EEG device: it reports derived heart rate, SpO2, skin
@@ -242,6 +250,11 @@ impl DeviceKind {
         // unrelated products whose name merely contains the word.
         if n == "oura" || n.starts_with("oura ") || n.starts_with("oura-") || n.starts_with("oura_") {
             return Self::Oura;
+        }
+        // The BLE firmware advertises "EmotiBit-BLE-<mac>". A board on the stock
+        // firmware speaks WiFi and has no BLE name to match.
+        if n.starts_with("emotibit") {
+            return Self::Emotibit;
         }
         // A strap's name is user-settable and carries no identity, so this only
         // catches a factory name; the daemon's scanner recognises one from the
@@ -433,6 +446,20 @@ impl DeviceKind {
                 sample_rate_hz: 0.0,
                 electrode_names: Vec::new(),
             },
+            Self::Emotibit => DeviceCapabilities {
+                kind: Self::Emotibit,
+                channel_count: 0, // no electrodes
+                // The board streams a raw PPG waveform at 25 or 100 Hz, but the
+                // PPG pipeline assumes 64 Hz, so it is not routed there: heart
+                // rate arrives as device vitals and the raw waveform is stored
+                // in the `_sensors` sidecar.
+                has_ppg: false,
+                has_imu: true,
+                has_central_electrodes: false,
+                has_full_montage: false,
+                sample_rate_hz: 0.0,
+                electrode_names: Vec::new(),
+            },
             Self::Whoop => DeviceCapabilities {
                 kind: Self::Whoop,
                 channel_count: 0, // a strap has no electrodes
@@ -588,6 +615,7 @@ impl DeviceKind {
             Self::Neurosity => "neurosity",
             Self::BrainVision => "brainvision",
             Self::Whoop => "whoop",
+            Self::Emotibit => "emotibit",
             Self::Oura => "oura",
             Self::Unknown => "unknown",
         }
@@ -622,6 +650,7 @@ impl DeviceKind {
             "neurosity" => Self::Neurosity,
             "brainvision" | "rda" => Self::BrainVision,
             "whoop" => Self::Whoop,
+            "emotibit" => Self::Emotibit,
             "oura" => Self::Oura,
             "unknown" => Self::Unknown,
             other => {
@@ -844,6 +873,22 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             ],
         },
         // ── E ─────────────────────────────────────────────────────────────
+        SupportedCompany {
+            id: "emotibit".into(),
+            name_key: "settings.supportedDevices.company.emotibit".into(),
+            // No separate brand mark ships with the app; the product shot reads
+            // correctly at logo size, so it serves for both.
+            logo: "/devices/emotibit.jpg".into(),
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.emotibitBoard".into(),
+                ios_only: false,
+                image: "/devices/emotibit.jpg".into(),
+            }],
+            instruction_keys: vec![
+                "settings.supportedDevices.instruction.emotibit1".into(),
+                "settings.supportedDevices.instruction.emotibit2".into(),
+            ],
+        },
         SupportedCompany {
             id: "emotiv".into(),
             name_key: "settings.supportedDevices.company.emotiv".into(),
@@ -1160,6 +1205,18 @@ mod tests {
         assert!(caps.has_central_electrodes);
         assert!(caps.has_full_montage);
         assert_eq!(caps.sample_rate_hz, 500.0);
+    }
+
+    #[test]
+    fn from_name_emotibit() {
+        for name in ["EmotiBit-BLE-E848", "emotibit", "EmotiBit"] {
+            assert_eq!(DeviceKind::from_name(Some(name)), DeviceKind::Emotibit, "{name}");
+        }
+        assert_eq!(DeviceKind::from_kind_str("emotibit"), DeviceKind::Emotibit);
+        assert_eq!(DeviceKind::Emotibit.as_str(), "emotibit");
+        // Must not swallow Emotiv, whose names share a prefix.
+        assert_eq!(DeviceKind::from_name(Some("EMOTIV-EPOC-X")), DeviceKind::Emotiv);
+        assert!(DeviceKind::Emotibit.capabilities().has_imu);
     }
 
     #[test]

@@ -10,7 +10,7 @@
 //!   say -o /tmp/clip.aiff "testing one two three four"
 //!   afconvert -f WAVE -d LEI16@16000 -c 1 /tmp/clip.aiff /tmp/clip.wav
 //!   SKILL_ASR_TEST_WAV=/tmp/clip.wav SKILL_ASR_TEST_EXPECT=testing \
-//!     cargo test -p skill-asr --features asr --test asr_e2e -- --ignored --nocapture
+//!     cargo test -p skill-asr --features asr,slow-tests --test asr_e2e -- --ignored --nocapture
 #![cfg(feature = "asr")]
 
 use std::path::PathBuf;

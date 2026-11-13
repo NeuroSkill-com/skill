@@ -46,6 +46,13 @@ const ui: Record<string, string> = {
   "tip.ibi": "The inter-beat interval the heart rate was derived from, in milliseconds.",
   "tip.skinTemperature":
     "Skin temperature measured at the sensor. Absolute value, not the deviation from your baseline.",
+  "tip.scl":
+    "Skin conductance level: the slowly changing baseline of sweat-gland activity, in microsiemens. It tracks general arousal.",
+  "tip.scrRate":
+    "Skin conductance responses per minute over the last minute: brief rises that follow individual events.",
+  "tip.scrAmplitude": "Average size of those responses over the last minute.",
+  "tip.arousal":
+    "Skin conductance level compared with this session's own baseline (z-score). Positive means more aroused than usual for you; it is blank until the baseline has been learned.",
   "tip.rmssd": "Root Mean Square of Successive Differences between heartbeats. Key parasympathetic HRV metric.",
   "tip.sdnn": "Standard deviation of beat-to-beat intervals. Reflects overall HRV.",
   "tip.pnn50": "Percentage of successive intervals differing by > 50 ms. Higher = greater vagal tone.",

@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "skill-llm"
 version = "0.0.1"
 edition = "2021"
@@ -88,3 +89,23 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "it"
+path = "tests/it.rs"
+
+[[test]]
+name = "llm_e2e"
+path = "tests/llm_e2e.rs"
+
+[[test]]
+name = "llm_mtp_e2e"
+path = "tests/llm_mtp_e2e.rs"
+
+[[test]]
+name = "minicpm5_e2e"
+path = "tests/minicpm5_e2e.rs"
+
+[[test]]
+name = "qwen3_voice_chat"
+path = "tests/qwen3_voice_chat.rs"

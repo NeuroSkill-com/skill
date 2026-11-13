@@ -14,7 +14,7 @@
 //!
 //! Validate the output transcribes back (cross-check with the ASR side):
 //!   SKILL_ASR_TEST_WAV=$TMPDIR/neutts_e2e.wav SKILL_ASR_TEST_EXPECT="quick brown" \
-//!     cargo test -p skill-asr --release --features asr --test asr_e2e -- --ignored
+//!     cargo test -p skill-asr --release --features asr,slow-tests --test asr_e2e -- --ignored
 #![cfg(feature = "espeak")]
 
 use std::path::PathBuf;

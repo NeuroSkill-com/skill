@@ -252,6 +252,7 @@ enum ConnectRoute {
     Mendi,
     Oura,
     Whoop,
+    Emotibit,
     IrohRemote,
     AntNeuro,
     /// Recognised, but deliberately unsupported: the driver has been removed.
@@ -331,6 +332,12 @@ fn is_whoop(s: &str) -> bool {
     // routed from the service UUID the scanner recorded.
     skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Whoop
 }
+fn is_emotibit(s: &str) -> bool {
+    // Registry-owned, so a BLE name ("EmotiBit-BLE-E848") and the explicit
+    // `emotibit:<id or ip>` form (how a WiFi board is addressed, since it has
+    // no BLE name) both route here and nothing else does.
+    skill_data::device::DeviceKind::from_name(Some(s)) == skill_data::device::DeviceKind::Emotibit
+}
 fn is_oura(s: &str) -> bool {
     // Narrow for the same reason as the registry's `from_name`: "oura" is a
     // substring of unrelated product names, and a mis-route hands the ring's
@@ -366,6 +373,7 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_mendi, ConnectRoute::Mendi),
     (is_oura, ConnectRoute::Oura),
     (is_whoop, ConnectRoute::Whoop),
+    (is_emotibit, ConnectRoute::Emotibit),
     (is_antneuro, ConnectRoute::AntNeuro),
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
@@ -418,6 +426,7 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
         ConnectRoute::Mendi => connect_ble::connect_mendi(paired_name_for(state, target)).await,
         ConnectRoute::Oura => connect_ble::connect_oura(target, paired_name_for(state, target)).await,
         ConnectRoute::Whoop => connect_ble::connect_whoop(paired_name_for(state, target)).await,
+        ConnectRoute::Emotibit => connect_ble::connect_emotibit(target, paired_name_for(state, target)).await,
         ConnectRoute::AntNeuro => connect_wired::connect_antneuro(state, target).await,
         ConnectRoute::IrohRemote => connect_wired::connect_iroh_remote(state, target).await,
         ConnectRoute::Removed(device) => anyhow::bail!(
@@ -436,6 +445,9 @@ async fn connect_device_inner(state: &AppState, target: &str, lower: &str) -> an
 /// actual routing decisions (that remains in [`connect_device`]).
 fn infer_kind_from_target(target: &str) -> &'static str {
     let lower = target.to_lowercase();
+    if skill_data::device::DeviceKind::from_name(Some(&lower)) == skill_data::device::DeviceKind::Emotibit {
+        return "emotibit";
+    }
     if lower.starts_with("neurofield:") {
         return "neurofield";
     }
@@ -650,6 +662,8 @@ mod tests {
             ("Oura Ring Gen3", ConnectRoute::Oura),
             ("WHOOP", ConnectRoute::Whoop),
             ("whoop-4A2B", ConnectRoute::Whoop),
+            ("EmotiBit-BLE-E848", ConnectRoute::Emotibit),
+            ("emotibit:192.168.1.40", ConnectRoute::Emotibit),
             ("antneuro:0", ConnectRoute::AntNeuro),
             ("totally-unknown-device", ConnectRoute::Muse),
         ];

@@ -4,7 +4,7 @@
 //! time across batch sizes (channels × length), to find where a GPU backend
 //! overtakes Accelerate. Feeds the size-based choice in `fft` (`auto`).
 //!
-//! `cargo test --release -p skill-eeg --features rlx-fft-metal,rlx-fft-gpu \
+//! `cargo test --release -p skill-eeg --features slow-tests,rlx-fft-metal,rlx-fft-gpu \
 //!     --test fft_batch_sweep -- --ignored --nocapture`
 
 use std::time::{Duration, Instant};

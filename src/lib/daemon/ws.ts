@@ -24,6 +24,7 @@ const HIGH_RATE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "ImuSample",
   "PpgSample",
   "FnirsSample",
+  "SensorSample",
   "SignalQuality",
 ]);
 

@@ -4,7 +4,7 @@
 //! Usage:
 //! ```sh
 //! cargo run --release -p skill-screenshots \
-//!   --features text-embeddings-rlx-metal,text-embeddings-rlx-mlx \
+//!   --features bench-tools,text-embeddings-rlx-metal,text-embeddings-rlx-mlx \
 //!   --bin bench_image_embed -- metal 12 60
 //! ```
 //! Args: `<device> <count...>`. Counts model data "chunks" (e.g. 12 = ~1 min

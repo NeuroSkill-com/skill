@@ -6,7 +6,7 @@
 //! cp *.sqlite /tmp/skill-import/            # labels, activity, screenshots, …
 //! for d in 20*/; do mkdir -p /tmp/skill-import/$d; cp $d/eeg.sqlite /tmp/skill-import/$d 2>/dev/null; done
 //! SKILL_IMPORT_FIXTURE=/tmp/skill-import \
-//!   cargo test -p skill-data --test import_real_stores -- --ignored --nocapture
+//!   cargo test -p skill-data --test it import_real_stores:: -- --ignored --nocapture
 //! ```
 //!
 //! Run it on a copy: opening each store imports its `.sqlite` and renames it

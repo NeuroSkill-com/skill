@@ -135,6 +135,13 @@ oura-protocol = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5
 # `cfg(target_arch = "wasm32")`-gated and never enters a native build.
 poop = { version = "0.0.2", default-features = false }
 
+# EmotiBit (EDA / PPG / IMU / temperature wristband board).  Only the `ble`
+# feature: the defaults add a ratatui TUI, an espflash flasher, LSL/OSC outputs
+# and a WebSocket bridge, none of which this app renders.  It also speaks WiFi
+# (stock firmware) with no extra feature.  `ble` is the same `webbluetooth 0.0.4`
+# + `uuid` as the crates above, so it joins the one `Bluetooth::shared()` session.
+emotibit = { version = "0.1.0", default-features = false, features = ["ble"] }
+
 # Same `webbluetooth 0.0.4` lockstep requirement as muse-rs / vital / skill-daemon.
 webbluetooth = { version = "0.0.4", features = ["uuid"] }
 

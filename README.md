@@ -48,6 +48,7 @@ Windows, CUDA or Vulkan on Linux. Without a usable GPU they run on the CPU.
 - **BrainBit LLC:** BrainBit, BrainBit 2, BrainBit Flex 4/8
 - **BrainMaster Technologies:** Atlantis 4×4 (4-ch), Discovery (24-ch), Freedom (24-ch wireless)
 - **Cognionics / CGX:** Quick-20r, Quick-32r, Quick-8r, AIM-2
+- **EmotiBit:** EmotiBit sensor board (WiFi / BLE)
 - **Emotiv:** EPOC X, FLEX Saline, Insight, MN8
 - **g.tec medical engineering:** Unicorn Hybrid Black
 - **IDUN:** Guardian

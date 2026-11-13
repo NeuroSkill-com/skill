@@ -81,6 +81,12 @@ const settings: Record<string, string> = {
     "Abre Dispositivos, busca y elige la banda. Las bandas sin nombre o renombradas también se encuentran, por el servicio que anuncian.",
   "settings.supportedDevices.instruction.whoop3":
     "La frecuencia cardíaca, los intervalos R-R que hay detrás y la batería se transmiten a la sesión. No hace falta cuenta de WHOOP.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "Placa de sensores EmotiBit (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "Enciende la placa y póntela en la muñeca o el brazo. Con el firmware estándar transmite por WiFi (misma red de 2,4 GHz); con el firmware emotibit-ble, por Bluetooth. Cierra antes el osciloscopio de EmotiBit: una placa se conecta a un solo equipo.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "Abre Dispositivos, busca y elige la placa. Una placa WiFi que no aparezca puede añadirse como emotibit:192.168.1.40 (su dirección IP o id). La frecuencia cardíaca, los intervalos entre latidos, la SpO2, la temperatura de la piel, el movimiento y la batería pasan a la sesión; la EDA aún no se registra.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Obtener un token de acceso personal desde cloud.ouraring.com/personal-access-tokens.",

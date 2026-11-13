@@ -1566,6 +1566,9 @@ pub(crate) const HIGH_RATE_EVENT_TYPES: &[&str] = &[
     "ImuSample",
     "PpgSample",
     "FnirsSample",
+    // Scalar sensor streams (EDA, raw PPG counts, ...): raw PPG alone can be
+    // hundreds of samples a second. The derived `EdaMetrics` is not gated.
+    "SensorSample",
     "SignalQuality",
 ];
 

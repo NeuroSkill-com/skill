@@ -11,6 +11,7 @@ export { default as BrainStateScores } from "./BrainStateScores.svelte";
 export { default as CollapsibleSection } from "./CollapsibleSection.svelte";
 export { default as CompositeScores } from "./CompositeScores.svelte";
 export { default as ConsciousnessMetrics } from "./ConsciousnessMetrics.svelte";
+export { default as EdaCard } from "./EdaCard.svelte";
 export { default as EegIndices } from "./EegIndices.svelte";
 export { default as FaaGauge } from "./FaaGauge.svelte";
 export { default as HeadPoseCard } from "./HeadPoseCard.svelte";

@@ -41,7 +41,7 @@ run_one() {
   echo "========================================"
   # Release + single test process; exit before next quant to drop LM graphs from RSS.
   env "${COMMON[@]}" "$@" \
-    cargo test --release -p skill-tts --features "tts-engines,whisper-validate" \
+    cargo test --release -p skill-tts --features "tts-engines,whisper-validate,slow-tests" \
     --test tts_validate_e2e synthesize_engines_for_whisper_validation \
     -- --ignored --nocapture
   echo "=== done: $name (RSS should drop before next run) ==="
