@@ -188,6 +188,12 @@ jobs:
           max-size: 3GiB
           pr-comment: false
 
+      # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
+      # package versions the mirror no longer has, and the install fails as a whole
+      # while the step still reports success.
+      - name: Refresh apt package index
+        run: sudo apt-get update -o Acquire::Retries=5
+
       - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
@@ -200,6 +206,15 @@ jobs:
             cmake binutils mold clang
             protobuf-compiler libopenblas-dev
           version: tauri-rust-check-v8
+
+      - name: Verify system libraries
+        run: |
+          # Fail here, with a clear message, rather than minutes later inside a *-sys build script.
+          missing=0
+          for m in glib-2.0 gtk+-3.0 libsoup-3.0 webkit2gtk-4.1; do
+            pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
+          done
+          exit $missing
 
       # Always lint/test against the latest rlx / rlx-models main (rewrites
       # Cargo.lock pins before the `--locked` clippy/test steps below).
@@ -738,6 +753,12 @@ jobs:
           pr-comment: false
           save-cache: false
 
+      # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
+      # package versions the mirror no longer has, and the install fails as a whole
+      # while the step still reports success.
+      - name: Refresh apt package index
+        run: sudo apt-get update -o Acquire::Retries=5
+
       # Install all system deps in one cached step (includes mold + clang
       # to match rust-check's linker and reuse its build artifacts).
       - name: Cache + install system deps
@@ -848,6 +869,12 @@ jobs:
           pr-comment: false
           save-cache: false
 
+      # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
+      # package versions the mirror no longer has, and the install fails as a whole
+      # while the step still reports success.
+      - name: Refresh apt package index
+        run: sudo apt-get update -o Acquire::Retries=5
+
       # rlsl is pure Rust (no liblsl system dependency) so only the minimal
       # set of packages is needed: mold+clang for the fast linker, and the
       # basic dev headers shared with the workspace build.
@@ -937,6 +964,12 @@ jobs:
           cache-targets: false
           cache-on-failure: false
 
+      # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
+      # package versions the mirror no longer has, and the install fails as a whole
+      # while the step still reports success.
+      - name: Refresh apt package index
+        run: sudo apt-get update -o Acquire::Retries=5
+
       - name: Cache + install Tauri system deps (incl. mold + clang)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
@@ -949,6 +982,15 @@ jobs:
             cmake binutils mold clang
             protobuf-compiler libopenblas-dev
           version: tauri-rust-check-v8
+
+      - name: Verify system libraries
+        run: |
+          # Fail here, with a clear message, rather than minutes later inside a *-sys build script.
+          missing=0
+          for m in glib-2.0 gtk+-3.0 libsoup-3.0 webkit2gtk-4.1; do
+            pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
+          done
+          exit $missing
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked

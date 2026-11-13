@@ -764,8 +764,10 @@ mod non_macos {
     /// used during initial detection.
     fn sample_free_ram() -> Option<u64> {
         use sysinfo::{MemoryRefreshKind, RefreshKind, System};
+        // sysinfo 0.40 returns a Result here; if it cannot initialise, report "unknown".
         let mut sys =
-            System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()));
+            System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()))
+                .ok()?;
         sys.refresh_memory();
         let available = sys.available_memory();
         if available > 0 {
