@@ -1,4 +1,0 @@
-### Build
-
-- **Heavy integration tests are opt-in**: nine model-, GPU- and measurement-dependent test targets (`fft_*`, `qwen3_tts_e2e`, `tts_validate_e2e`, `asr_e2e`, `asr_funasr_nemotron_smoke`, `rlx_image_embed`, `rlx_semantic`) sit behind a per-crate `slow-tests` feature, so `cargo test --workspace` no longer links them. Most were `#[ignore]`d or skip themselves without cached models. `cargo test-slow` runs everything; the documented run commands and the two TTS scripts pass the feature.
-- **Smaller dev builds**: dependency crates build with no debug info and DuckDB at `opt-level = 1`, `split-debuginfo = "off"` stops kache writing `.dSYM` bundles, the `skill` library is built as an `rlib` only, benchmark binaries sit behind a `bench-tools` feature, and seven crates link their fast integration tests into one `it` binary each. A full workspace test build is about 6 GB instead of over 49 GB.
