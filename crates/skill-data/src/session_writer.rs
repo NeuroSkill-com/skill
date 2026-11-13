@@ -125,6 +125,12 @@ impl SessionWriter {
         );
     }
 
+    /// One sample of a scalar sensor stream (electrodermal activity, raw PPG
+    /// counts, ...), recorded to the `_sensors` sidecar in long format.
+    pub fn push_sensor(&mut self, eeg_csv_path: &Path, channel: &str, unit: &str, timestamp_s: f64, value: f64) {
+        dispatch!(self, push_sensor(eeg_csv_path, channel, unit, timestamp_s, value));
+    }
+
     pub fn push_imu(
         &mut self,
         eeg_csv_path: &Path,

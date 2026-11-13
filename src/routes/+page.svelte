@@ -58,12 +58,14 @@ import {
   BrainStateScores,
   CompositeScores,
   ConsciousnessMetrics,
+  EdaCard,
   EegIndices,
   FaaGauge,
   HeadPoseCard,
   PpgMetrics,
   VitalsCard,
 } from "#lib/dashboard";
+import { appendTrace, type EdaTrace, EMPTY_TRACE } from "#lib/dashboard/eda-logic";
 import { t } from "#lib/i18n/index.svelte";
 import {
   openApi,
@@ -364,6 +366,18 @@ let vitalsIbi = $state(0);
 let vitalsSpo2 = $state(0);
 let vitalsTemp = $state(0);
 let vitalsAt = $state(0);
+// ── Electrodermal activity ───────────────────────────────────────────────
+// The raw trace (~15 Hz) and the metrics the daemon derives from it once per
+// epoch arrive separately. Metrics fields are null until they exist (the rate
+// needs ~15 s of data, arousal needs its baseline), and stay null rather than
+// reading as zero.
+let edaScl = $state(0);
+let edaScrPerMin = $state<number | null>(null);
+let edaScrAmplitude = $state<number | null>(null);
+let edaArousal = $state<number | null>(null);
+let edaValidFraction = $state(1);
+let edaAt = $state(0);
+let edaTrace = $state<EdaTrace>(EMPTY_TRACE);
 let perfIdxScore = $state(0); // Perfusion Index (%)
 let stressIdxScore = $state(0); // Stress Index
 // Artifact / event detection
@@ -757,13 +771,19 @@ const hasPpg = $derived(status.has_ppg);
 const hasImuCap = $derived(status.has_imu);
 const isOura = $derived(status.device_kind === "oura");
 const isWhoop = $derived(status.device_kind === "whoop");
+const isEmotibit = $derived(status.device_kind === "emotibit");
 // Device-reported vitals, as opposed to the PPG waveform `hasPpg` gates. A
 // ring has an optical sensor but does its own beat detection, so there is no
 // waveform to chart — only values.
 const hasVitals = $derived(status.has_vitals === true || isOura || isWhoop);
+// Shown for an EmotiBit from the moment it connects, and for any device that
+// turns out to report skin conductance.
+const hasEda = $derived(isEmotibit || edaAt > 0);
 const hasEeg = $derived((status.eeg_channel_count ?? 0) > 0);
 const hasFnirs = $derived((status.fnirs_channel_names?.length ?? 0) > 0 || status.device_kind === "mendi");
-const hasBattery = $derived(isMuse || isMw75 || isEmotiv || isIdun || isMendi || isVital || isOura || isWhoop);
+const hasBattery = $derived(
+  isMuse || isMw75 || isEmotiv || isIdun || isMendi || isVital || isOura || isWhoop || isEmotibit,
+);
 const hasSecondary = $derived(secondarySessions.length > 0);
 
 /** Short transport/source label for the connected device. */
@@ -1306,7 +1326,8 @@ onMount(async () => {
   }
 
   // EEG/PPG/IMU streaming via daemon WebSocket
-  const { subscribeEeg, subscribePpg, subscribeImu, subscribeVitals } = await import("#lib/daemon/eeg-stream");
+  const { subscribeEeg, subscribePpg, subscribeImu, subscribeVitals, subscribeSensor, subscribeEdaMetrics } =
+    await import("#lib/daemon/eeg-stream");
   // Accumulate latest EEG values in a non-reactive buffer, then flush
   // into status.eeg at ~4 Hz to avoid N×256 Hz reactive updates.
   // Buffer grows dynamically for any channel count.
@@ -1354,6 +1375,31 @@ onMount(async () => {
       if (pkt.spo2_pct != null) vitalsSpo2 = pkt.spo2_pct;
       if (pkt.temperature_c != null) vitalsTemp = pkt.temperature_c;
       vitalsAt = pkt.timestamp;
+    }),
+  );
+
+  // Raw EDA at ~15 Hz: buffer in a plain array and publish twice a second, so
+  // the chart is not rebuilt for every packet.
+  let edaPending: [number, number][] = [];
+  const edaFlushTimer = setInterval(() => {
+    if (edaPending.length === 0) return;
+    edaTrace = appendTrace(edaTrace, edaPending);
+    edaPending = [];
+  }, 500);
+  unlisteners.push(() => clearInterval(edaFlushTimer));
+  unlisteners.push(
+    subscribeSensor("eda", (pkt) => {
+      for (const s of pkt.samples) edaPending.push(s);
+    }),
+  );
+  unlisteners.push(
+    subscribeEdaMetrics((m) => {
+      edaScl = m.scl_us;
+      edaScrPerMin = m.scr_per_min;
+      edaScrAmplitude = m.scr_amplitude_us;
+      edaArousal = m.arousal_z;
+      edaValidFraction = m.valid_fraction;
+      edaAt = m.timestamp_s;
     }),
   );
 
@@ -2477,6 +2523,12 @@ useWindowTitle("window.title.main");
         {#if hasVitals}
           <VitalsCard hr={vitalsHr} ibi={vitalsIbi} spo2={vitalsSpo2}
             temperature={vitalsTemp} updatedAt={vitalsAt} />
+        {/if}
+
+        <!-- Electrodermal activity (EmotiBit and any other skin-conductance source) -->
+        {#if hasEda}
+          <EdaCard scl={edaScl} scrPerMin={edaScrPerMin} scrAmplitude={edaScrAmplitude}
+            arousalZ={edaArousal} validFraction={edaValidFraction} trace={edaTrace} updatedAt={edaAt} />
         {/if}
 
         <!-- PPG Metrics -->

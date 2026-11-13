@@ -10,7 +10,7 @@
 //! Run:
 //! ```sh
 //! cargo test -p skill-daemon-state --release --test rlx_semantic \
-//!   --features text-embeddings-rlx-metal -- --nocapture
+//!   --features slow-tests,text-embeddings-rlx-metal -- --nocapture
 //! ```
 
 #![cfg(feature = "text-embeddings-rlx")]

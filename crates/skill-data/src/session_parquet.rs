@@ -16,7 +16,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::{Float64Array, RecordBatch};
+use arrow_array::{Float64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
@@ -58,6 +58,21 @@ fn vitals_schema() -> Arc<Schema> {
         Field::new("ibi_ms", DataType::Float64, true),
         Field::new("spo2_pct", DataType::Float64, true),
         Field::new("temperature_c", DataType::Float64, true),
+    ]))
+}
+
+/// One buffered sensor sample: `(timestamp_s, channel, unit, value)`.
+type SensorRow = (f64, String, String, f64);
+
+/// Schema for `_sensors.parquet`: long format, one row per sample. The channel
+/// and unit are strings repeated on every row, which Parquet's dictionary
+/// encoding stores as a few bits each.
+fn sensors_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("timestamp_s", DataType::Float64, false),
+        Field::new("channel", DataType::Utf8, false),
+        Field::new("unit", DataType::Utf8, false),
+        Field::new("value", DataType::Float64, false),
     ]))
 }
 
@@ -115,6 +130,11 @@ pub struct ParquetState {
     /// Every column but the timestamp is nullable, because a wearable reports
     /// one vital at a time.
     vitals_pending: Vec<VitalsRow>,
+
+    // ── Scalar sensor streams ────────────────────────────────────────────────
+    sensors_wtr: Option<ArrowWriter<std::fs::File>>,
+    sensors_path: PathBuf,
+    sensors_pending: Vec<SensorRow>,
 }
 
 impl ParquetState {
@@ -213,6 +233,9 @@ impl ParquetState {
             vitals_rows: 0,
             vitals_path: crate::session_paths::vitals_parquet_path(csv_path),
             vitals_pending: Vec::new(),
+            sensors_wtr: None,
+            sensors_path: crate::session_paths::sensors_parquet_path(csv_path),
+            sensors_pending: Vec::new(),
         })
     }
 
@@ -693,6 +716,64 @@ impl ParquetState {
         self.vitals_rows = 0;
     }
 
+    /// Buffer one scalar sensor sample for `_sensors.parquet` (long format).
+    pub fn push_sensor(&mut self, _eeg_csv_path: &Path, channel: &str, unit: &str, timestamp_s: f64, value: f64) {
+        if self.sensors_wtr.is_none() {
+            match std::fs::File::create(&self.sensors_path) {
+                Ok(f) => match ArrowWriter::try_new(f, sensors_schema(), Some(writer_props())) {
+                    Ok(w) => self.sensors_wtr = Some(w),
+                    Err(e) => {
+                        eprintln!("[parquet] sensors writer error: {e}");
+                        return;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("[parquet] sensors create error: {e}");
+                    return;
+                }
+            }
+        }
+        self.sensors_pending
+            .push((timestamp_s, channel.to_string(), unit.to_string(), value));
+        // Several slow streams share the file; this batch is a few seconds of
+        // the busiest mix rather than the 256 rows of a single fast stream.
+        if self.sensors_pending.len() >= 128 {
+            self.flush_sensors();
+        }
+    }
+
+    fn flush_sensors(&mut self) {
+        if self.sensors_pending.is_empty() {
+            return;
+        }
+        let Some(ref mut wtr) = self.sensors_wtr else {
+            return;
+        };
+        let n = self.sensors_pending.len();
+        let (mut ts, mut channel, mut unit, mut value) = (
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+        );
+        for (t, c, u, v) in self.sensors_pending.drain(..) {
+            ts.push(t);
+            channel.push(c);
+            unit.push(u);
+            value.push(v);
+        }
+        let columns: Vec<Arc<dyn arrow_array::Array>> = vec![
+            Arc::new(Float64Array::from(ts)),
+            Arc::new(StringArray::from(channel)),
+            Arc::new(StringArray::from(unit)),
+            Arc::new(Float64Array::from(value)),
+        ];
+        if let Ok(batch) = RecordBatch::try_new(sensors_schema(), columns) {
+            let _ = wtr.write(&batch);
+            let _ = wtr.flush();
+        }
+    }
+
     fn flush_fnirs(&mut self) {
         if self.fnirs_pending.is_empty() {
             return;
@@ -728,6 +809,7 @@ impl ParquetState {
         self.flush_metrics();
         self.flush_imu();
         self.flush_fnirs();
+        self.flush_sensors();
     }
 
     /// Close all writers, finalising the Parquet files. Idempotent.
@@ -740,6 +822,7 @@ impl ParquetState {
         self.flush_imu();
         self.flush_fnirs();
         self.flush_vitals();
+        self.flush_sensors();
         if let Some(w) = self.eeg_wtr.take() {
             let _ = w.close();
         }
@@ -756,6 +839,9 @@ impl ParquetState {
             let _ = w.close();
         }
         if let Some(w) = self.vitals_wtr.take() {
+            let _ = w.close();
+        }
+        if let Some(w) = self.sensors_wtr.take() {
             let _ = w.close();
         }
     }
@@ -951,6 +1037,67 @@ mod tests {
             .unwrap();
         assert!(spo2.is_null(0));
         assert_eq!(spo2.value(1), 97.0);
+    }
+
+    #[test]
+    fn sensors_parquet_path_derives_correctly() {
+        let p = crate::session_paths::sensors_parquet_path(Path::new("/data/exg_1700000000.csv"));
+        assert_eq!(p, std::path::PathBuf::from("/data/exg_1700000000_sensors.parquet"));
+    }
+
+    /// Long format round trip: every sample keeps its timestamp, channel, unit
+    /// and exact value, across more rows than one flush batch.
+    #[test]
+    fn parquet_sensors_round_trip_across_batches() {
+        use arrow_array::Array as _;
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut pq = ParquetState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+
+        // 300 rows crosses the 128-row flush twice and leaves a tail for `close`.
+        for i in 0..300 {
+            let (channel, unit) = if i % 2 == 0 { ("eda", "µS") } else { ("ppg_red", "") };
+            pq.push_sensor(&csv_path, channel, unit, 1000.0 + f64::from(i), f64::from(i) * 0.25);
+        }
+        pq.close();
+
+        let file = std::fs::File::open(crate::session_paths::sensors_parquet_path(&csv_path)).unwrap();
+        let reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+        let batches: Vec<_> = reader.map(std::result::Result::unwrap).collect();
+        let rows: usize = batches.iter().map(arrow_array::RecordBatch::num_rows).sum();
+        assert_eq!(rows, 300);
+
+        let col = |b: &arrow_array::RecordBatch, name: &str| b.column_by_name(name).unwrap().clone();
+        let b = &batches[0];
+        let ts = col(b, "timestamp_s");
+        let ts = ts.as_any().downcast_ref::<Float64Array>().unwrap();
+        let ch = col(b, "channel");
+        let ch = ch.as_any().downcast_ref::<StringArray>().unwrap();
+        let unit = col(b, "unit");
+        let unit = unit.as_any().downcast_ref::<StringArray>().unwrap();
+        let val = col(b, "value");
+        let val = val.as_any().downcast_ref::<Float64Array>().unwrap();
+        assert_eq!(
+            (ts.value(0), ch.value(0), unit.value(0), val.value(0)),
+            (1000.0, "eda", "µS", 0.0)
+        );
+        assert_eq!(
+            (ts.value(1), ch.value(1), unit.value(1), val.value(1)),
+            (1001.0, "ppg_red", "", 0.25)
+        );
+        assert!(ch.is_valid(0), "no nulls in long format");
+    }
+
+    #[test]
+    fn parquet_sensors_file_is_not_created_until_a_sample_arrives() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_test.csv");
+        let mut pq = ParquetState::open_with_labels(&csv_path, &["TP9"]).unwrap();
+        pq.close();
+        assert!(!crate::session_paths::sensors_parquet_path(&csv_path).exists());
     }
 
     #[test]

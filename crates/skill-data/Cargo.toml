@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "skill-data"
 version = "0.0.1"
 edition = "2021"
@@ -40,3 +41,7 @@ rusqlite = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "it"
+path = "tests/it.rs"

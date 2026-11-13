@@ -12,6 +12,7 @@
 //! - **hooks_log** — SQLite hook-fire audit log
 //! - **gpu_stats** — GPU hardware info queries
 //! - **ppg_analysis** — PPG/heart-rate signal analysis
+//! - **eda_analysis** — electrodermal activity: tonic level, responses, arousal
 //! - **dnd** — Do Not Disturb platform automation
 //! - **duck** — DuckDB instance registry + one-time SQLite import
 //! - **device** — BLE device types
@@ -22,6 +23,7 @@ pub mod activity_store;
 pub mod ansi;
 pub mod device;
 pub mod dnd;
+pub mod eda_analysis;
 /// DuckDB foundation (instance registry, SQLite import) — see `skill-db`.
 pub use skill_db as duck;
 pub mod eeg_scores;

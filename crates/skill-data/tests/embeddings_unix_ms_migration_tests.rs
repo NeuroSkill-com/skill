@@ -143,7 +143,7 @@ fn fresh_store_is_clean() {
 /// ```sh
 /// mkdir -p /tmp/fixture-day && cp ~/.skill/20260917/eeg.sqlite /tmp/fixture-day/
 /// SKILL_MIGRATION_FIXTURE=/tmp/fixture-day \
-///   cargo test -p skill-data --test embeddings_unix_ms_migration_tests -- --ignored --nocapture
+///   cargo test -p skill-data --test it embeddings_unix_ms_migration_tests:: -- --ignored --nocapture
 /// ```
 ///
 /// Ignored by default: it needs real data, and it must be run on a copy

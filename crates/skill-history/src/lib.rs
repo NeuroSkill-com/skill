@@ -34,21 +34,13 @@ fn is_session_json(fname: &str) -> bool {
     (fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX)) && fname.ends_with(".json")
 }
 
-/// Returns `true` if `fname` is a primary EEG data file (CSV or Parquet, not metrics/ppg).
+/// Returns `true` if `fname` is a primary EEG data file (CSV or Parquet), not a
+/// sidecar such as `_metrics`, `_ppg`, `_imu`, `_fnirs`, `_vitals` or `_sensors`.
 fn is_session_data(fname: &str) -> bool {
     let has_prefix = fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX);
-    if !has_prefix {
-        return false;
-    }
-    let is_eeg_csv = fname.ends_with(".csv")
-        && !fname.ends_with("_metrics.csv")
-        && !fname.ends_with("_ppg.csv")
-        && !fname.ends_with("_imu.csv");
-    let is_eeg_parquet = fname.ends_with(".parquet")
-        && !fname.ends_with("_metrics.parquet")
-        && !fname.ends_with("_ppg.parquet")
-        && !fname.ends_with("_imu.parquet");
-    is_eeg_csv || is_eeg_parquet
+    has_prefix
+        && (fname.ends_with(".csv") || fname.ends_with(".parquet"))
+        && !skill_data::session_paths::is_sidecar_file(fname)
 }
 
 /// Backward-compatible alias.
@@ -803,39 +795,42 @@ fn backfill_avg_snr(day_dir: &Path, sessions: &mut [(SessionEntry, Option<u64>, 
     }
 }
 
-/// Delete a session's CSV + JSON sidecar + metrics + IMU cache files.
+/// Delete a session: its primary file, JSON metadata, metrics cache and every
+/// data sidecar (`_metrics`, `_ppg`, `_imu`, `_fnirs`, `_vitals`, `_sensors`) in
+/// both CSV and Parquet.
+///
+/// The primary CSV, the JSON and the CSV sidecars must delete or this returns an
+/// error; the Parquet variants and the cache are best-effort, since which exist
+/// depends on the storage format the session was recorded with.
 pub fn delete_session(csv_path: &str) -> anyhow::Result<()> {
     let csv = std::path::PathBuf::from(csv_path);
-    let json = csv.with_extension("json");
-    let ppg = ppg_csv_path(&csv);
-    let met = metrics_csv_path(&csv);
-    let imu = skill_data::session_csv::imu_csv_path(&csv);
     let stem = csv.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
-    let cache = csv.with_file_name(format!("{stem}_metrics_cache.json"));
-    if csv.exists() {
-        std::fs::remove_file(&csv)?;
-    }
-    if json.exists() {
-        std::fs::remove_file(&json)?;
-    }
-    if ppg.exists() {
-        std::fs::remove_file(&ppg)?;
-    }
-    if met.exists() {
-        std::fs::remove_file(&met)?;
-    }
-    if imu.exists() {
-        std::fs::remove_file(&imu)?;
-    }
-    if cache.exists() {
-        let _ = std::fs::remove_file(&cache);
-    }
-    // Also try to delete Parquet variants.
-    for suffix in ["", "_ppg", "_metrics", "_imu"] {
-        let pq = csv.with_file_name(format!("{stem}{suffix}.parquet"));
-        if pq.exists() {
-            let _ = std::fs::remove_file(&pq);
+    let sidecars = skill_data::session_paths::sidecar_paths(&csv);
+
+    let required = [csv.clone(), csv.with_extension("json")].into_iter().chain(
+        sidecars
+            .iter()
+            .filter(|p| p.extension().is_some_and(|e| e == "csv"))
+            .cloned(),
+    );
+    for path in required {
+        if path.exists() {
+            std::fs::remove_file(&path)?;
         }
+    }
+
+    let best_effort = [
+        csv.with_file_name(format!("{stem}_metrics_cache.json")),
+        csv.with_extension("parquet"),
+    ]
+    .into_iter()
+    .chain(
+        sidecars
+            .into_iter()
+            .filter(|p| p.extension().is_some_and(|e| e == "parquet")),
+    );
+    for path in best_effort {
+        let _ = std::fs::remove_file(&path);
     }
     Ok(())
 }
@@ -1184,6 +1179,51 @@ mod tests {
         assert!(is_session_data("exg_1700000000.csv"));
         assert!(is_session_data("exg_1700000000.parquet"));
         assert!(is_session_data("muse_1700000000.csv"));
+    }
+
+    /// `_fnirs`, `_vitals` and `_sensors` used to slip through: they have the
+    /// session prefix and a data extension, so each one was counted as a session.
+    #[test]
+    fn is_session_data_rejects_every_sidecar() {
+        for suffix in skill_data::session_paths::SIDECAR_SUFFIXES {
+            for ext in ["csv", "parquet"] {
+                let name = format!("exg_1700000000{suffix}.{ext}");
+                assert!(!is_session_data(&name), "{name} was taken for a session");
+            }
+        }
+        assert!(is_session_data("exg_1700000000.csv"));
+        assert!(is_session_data("exg_1700000000.parquet"));
+    }
+
+    #[test]
+    fn delete_session_removes_every_sidecar_and_leaves_other_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        let mine = d.join("exg_1700000000.csv");
+        let mut files = vec![
+            mine.clone(),
+            d.join("exg_1700000000.json"),
+            d.join("exg_1700000000.parquet"),
+            d.join("exg_1700000000_metrics_cache.json"),
+        ];
+        files.extend(skill_data::session_paths::sidecar_paths(&mine));
+        for f in &files {
+            std::fs::write(f, "x").unwrap();
+        }
+        // A neighbouring session must survive, including its sensors file.
+        let other = [d.join("exg_1700000999.csv"), d.join("exg_1700000999_sensors.csv")];
+        for f in &other {
+            std::fs::write(f, "x").unwrap();
+        }
+
+        delete_session(mine.to_str().unwrap()).unwrap();
+
+        for f in &files {
+            assert!(!f.exists(), "{} was left behind", f.display());
+        }
+        for f in &other {
+            assert!(f.exists(), "{} belongs to another session", f.display());
+        }
     }
 
     #[test]

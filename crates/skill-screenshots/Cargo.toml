@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "skill-screenshots"
 version = "0.0.1"
 edition = "2021"
@@ -46,7 +47,7 @@ test = false
 name = "bench_image_embed"
 path = "src/bin/bench_image_embed.rs"
 test = false
-required-features = ["text-embeddings-rlx"]
+required-features = ["text-embeddings-rlx", "bench-tools"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 skill-vision = { path = "../skill-vision" }
@@ -54,6 +55,13 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 
 [features]
+# Opt-in: builds the model-, GPU- and measurement-dependent integration tests
+# listed below. Off by default so `cargo test --workspace` does not link ~60 MB
+# of test executables that are ignored or skip themselves without cached models.
+# `cargo test-slow` (see .cargo/config.toml) turns this on for every crate.
+slow-tests = []
+# Opt-in: builds `bench_image_embed`; see skill-daemon-state for why a new feature.
+bench-tools = []
 # text-embeddings-rlx — RlxVisionModel from rlx-embed (NomicEmbedVisionV15).
 # When it's off the capture pipeline still works (no embeddings emitted).
 # OCR (rlx-ocr) stays compiled in regardless.
@@ -95,3 +103,12 @@ xcap = { version = "0.9", default-features = false, optional = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "it"
+path = "tests/it.rs"
+
+[[test]]
+name = "rlx_image_embed"
+path = "tests/rlx_image_embed.rs"
+required-features = ["slow-tests"]

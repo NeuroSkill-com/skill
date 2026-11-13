@@ -65,6 +65,22 @@ const dashboard: Record<string, string> = {
   "dashboard.vitalsStale": "Sin lecturas en los últimos minutos: el dispositivo mide según su propio horario.",
   "dashboard.ibi": "Intervalo",
   "dashboard.skinTemperature": "Temp. piel",
+  "dashboard.eda": "Actividad electrodérmica",
+  "dashboard.edaWaiting":
+    "Esperando datos de conductancia de la piel. La primera lectura necesita unos cinco segundos de buen contacto.",
+  "dashboard.edaStale":
+    "Sin datos de conductancia de la piel en el último minuto: comprueba que los electrodos toquen la piel.",
+  "dashboard.edaContactPoor":
+    "Mal contacto con la piel: el {pct} % de las últimas muestras se descartó como artefacto.",
+  "dashboard.scl": "SCL",
+  "dashboard.scrRate": "SCR / min",
+  "dashboard.scrAmplitude": "Amp. SCR",
+  "dashboard.arousal": "Activación",
+  "dashboard.arousalLow": "Más calmado de lo habitual",
+  "dashboard.arousalTypical": "Habitual en ti",
+  "dashboard.arousalElevated": "Elevada",
+  "dashboard.arousalHigh": "Alta",
+  "dashboard.arousalWarmingUp": "Aprendiendo tu línea base…",
   "dashboard.hr": "Frecuencia cardíaca",
   "dashboard.rmssd": "RMSSD",
   "dashboard.sdnn": "SDNN",

@@ -31,7 +31,7 @@ run_one() {
   echo ""
   echo "=== $name ==="
   env "${COMMON[@]}" "$@" \
-    cargo test -p skill-tts --features "tts-engines,whisper-validate" \
+    cargo test -p skill-tts --features "tts-engines,whisper-validate,slow-tests" \
     --test tts_validate_e2e synthesize_engines_for_whisper_validation \
     -- --ignored --nocapture
 }

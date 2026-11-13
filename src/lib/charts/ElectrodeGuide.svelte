@@ -103,6 +103,7 @@ type ActiveTab =
   | "vital"
   | "oura"
   | "whoop"
+  | "emotibit"
   | "10-20"
   | "10-10"
   | "10-5";
@@ -123,42 +124,32 @@ const TABS: { id: ActiveTab; label: string; count: () => string }[] = [
   { id: "vital", label: "Vital Neuro", count: () => "3" },
   { id: "oura", label: "Oura Ring", count: () => "0" },
   { id: "whoop", label: "WHOOP", count: () => "0" },
+  { id: "emotibit", label: "EmotiBit", count: () => "0" },
   { id: "10-20", label: "10-20", count: () => "21" },
   { id: "10-10", label: "10-10", count: () => "64" },
   { id: "10-5", label: "10-5", count: () => "345" },
 ];
+// Device ids that have their own tab; anything else falls back to Muse.
+const DEFAULT_TAB_IDS: ReadonlySet<string> = new Set([
+  "mw75",
+  "hermes",
+  "ganglion",
+  "emotiv",
+  "idun",
+  "brainbit",
+  "gtec",
+  "neurofield",
+  "brainmaster",
+  "neurosky",
+  "neurosity",
+  "brainvision",
+  "vital",
+  "oura",
+  "whoop",
+  "emotibit",
+]);
 function defaultTab(d: string): ActiveTab {
-  return d === "mw75"
-    ? "mw75"
-    : d === "hermes"
-      ? "hermes"
-      : d === "ganglion"
-        ? "ganglion"
-        : d === "emotiv"
-          ? "emotiv"
-          : d === "idun"
-            ? "idun"
-            : d === "brainbit"
-              ? "brainbit"
-              : d === "gtec"
-                ? "gtec"
-                : d === "neurofield"
-                  ? "neurofield"
-                  : d === "brainmaster"
-                    ? "brainmaster"
-                    : d === "neurosky"
-                      ? "neurosky"
-                      : d === "neurosity"
-                        ? "neurosity"
-                        : d === "brainvision"
-                          ? "brainvision"
-                          : d === "vital"
-                            ? "vital"
-                            : d === "oura"
-                              ? "oura"
-                              : d === "whoop"
-                                ? "whoop"
-                                : "muse";
+  return DEFAULT_TAB_IDS.has(d) ? (d as ActiveTab) : "muse";
 }
 let activeTab: ActiveTab = $state("muse" as ActiveTab);
 
@@ -255,42 +246,36 @@ const deviceTabs = $derived(TABS.filter((tab) => DEVICE_TABS.includes(tab.id)));
 const genericTabs = $derived(TABS.filter((tab) => !DEVICE_TABS.includes(tab.id)));
 const isDeviceTab = $derived(DEVICE_TABS.includes(activeTab));
 
+// Tabs with nothing to place on the head: wristbands, straps and rings report
+// vitals rather than EEG, Vital Neuro reports no montage (its channels are
+// ch1-3), and Hermes / Ganglion positions are user-configurable.
+const NO_ELECTRODE_TABS: ReadonlySet<ActiveTab> = new Set<ActiveTab>([
+  "emotibit",
+  "whoop",
+  "oura",
+  "vital",
+  "hermes",
+  "ganglion",
+]);
+
 // Electrodes shown in the 3D view
-const electrodes3D = $derived(
-  activeTab === "muse"
-    ? museElectrodes
-    : activeTab === "mw75"
-      ? mw75Electrodes
-      : activeTab === "emotiv"
-        ? emotivElectrodes
-        : activeTab === "idun"
-          ? idunElectrodes
-          : activeTab === "brainbit"
-            ? brainbitElectrodes
-            : activeTab === "gtec"
-              ? gtecElectrodes
-              : activeTab === "neurofield"
-                ? neurofieldElectrodes
-                : activeTab === "brainmaster"
-                  ? brainmasterElectrodes
-                  : activeTab === "neurosky"
-                    ? neuroskyElectrodes
-                    : activeTab === "neurosity"
-                      ? neurosityElectrodes
-                      : activeTab === "brainvision"
-                        ? brainvisionElectrodes
-                        : activeTab === "whoop"
-                          ? [] // A strap has no electrodes; it reports vitals, not EEG
-                          : activeTab === "oura"
-                            ? [] // A ring has no electrodes; it reports vitals, not EEG
-                            : activeTab === "vital"
-                              ? [] // Vital Neuro reports no montage; its channels are ch1-3
-                              : activeTab === "hermes"
-                                ? [] // Hermes positions depend on montage
-                                : activeTab === "ganglion"
-                                  ? [] // Ganglion has configurable positions
-                                  : getElectrodes(activeTab as ElectrodeSystem),
-);
+const electrodes3D = $derived.by(() => {
+  if (NO_ELECTRODE_TABS.has(activeTab)) return [];
+  const byTab: Partial<Record<ActiveTab, Electrode[]>> = {
+    muse: museElectrodes,
+    mw75: mw75Electrodes,
+    emotiv: emotivElectrodes,
+    idun: idunElectrodes,
+    brainbit: brainbitElectrodes,
+    gtec: gtecElectrodes,
+    neurofield: neurofieldElectrodes,
+    brainmaster: brainmasterElectrodes,
+    neurosky: neuroskyElectrodes,
+    neurosity: neurosityElectrodes,
+    brainvision: brainvisionElectrodes,
+  };
+  return byTab[activeTab] ?? getElectrodes(activeTab as ElectrodeSystem);
+});
 
 let selectedElectrode: Electrode | null = $state(null);
 // biome-ignore lint/suspicious/noExplicitAny: dynamic Svelte component import

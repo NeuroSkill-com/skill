@@ -45,6 +45,36 @@ export interface VitalsPacket {
   temperature_c?: number;
 }
 
+/** Samples of one scalar sensor channel (electrodermal activity, raw PPG counts…).
+ *  `samples` are `[unix_seconds, value]` pairs, oldest first. */
+export interface SensorPacket {
+  device_kind?: string;
+  device_id?: string;
+  channel: string;
+  unit: string;
+  samples: [number, number][];
+}
+
+/** Derived electrodermal metrics for one epoch (about every five seconds). */
+export interface EdaMetricsPacket {
+  /** End of the epoch, Unix seconds. */
+  timestamp_s: number;
+  device_kind?: string;
+  device_id?: string;
+  /** Tonic skin conductance level, µS. */
+  scl_us: number;
+  /** Skin conductance responses confirmed during this epoch. */
+  scr_count: number;
+  /** Responses per minute over the trailing minute; null until enough data. */
+  scr_per_min: number | null;
+  /** Mean response amplitude over the trailing minute, µS; null when none occurred. */
+  scr_amplitude_us: number | null;
+  /** SCL as a z-score against this session's baseline; null until it is learned. */
+  arousal_z: number | null;
+  /** Fraction of this epoch's samples that passed the artifact gate, 0..1. */
+  valid_fraction: number;
+}
+
 // ── Subscriptions ──────────────────────────────────────────────────────────
 
 /** Subscribe to EEG sample packets. Returns unsubscribe function.
@@ -81,6 +111,28 @@ export function subscribePpg(callback: (pkt: PpgPacket) => void): () => void {
 export function subscribeVitals(callback: (pkt: VitalsPacket) => void): () => void {
   return onDaemonEvent("Vitals", (ev: DaemonEvent) => {
     callback(ev.payload as unknown as VitalsPacket);
+  });
+}
+
+/** Subscribe to samples of one scalar sensor channel. Returns unsubscribe function.
+ *
+ *  `SensorSample` is a high-rate event (raw PPG alone can be hundreds of samples
+ *  a second), so the daemon only sends it to a connection that has opted in;
+ *  registering this handler does that automatically. The channel filter is
+ *  applied here, so other channels are received but dropped. */
+export function subscribeSensor(channel: string, callback: (pkt: SensorPacket) => void): () => void {
+  return onDaemonEvent("SensorSample", (ev: DaemonEvent) => {
+    const pkt = ev.payload as unknown as SensorPacket;
+    if (pkt.channel === channel) callback(pkt);
+  });
+}
+
+/** Subscribe to derived electrodermal metrics. Returns unsubscribe function.
+ *
+ *  One event per epoch, so like vitals it is delivered by default. */
+export function subscribeEdaMetrics(callback: (pkt: EdaMetricsPacket) => void): () => void {
+  return onDaemonEvent("EdaMetrics", (ev: DaemonEvent) => {
+    callback(ev.payload as unknown as EdaMetricsPacket);
   });
 }
 

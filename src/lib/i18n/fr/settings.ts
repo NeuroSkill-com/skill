@@ -457,6 +457,12 @@ const settings: Record<string, string> = {
     "Ouvrez Appareils, lancez la recherche et choisissez le bracelet. Les bracelets sans nom ou renommés sont trouvés quand même, via le service qu'ils annoncent.",
   "settings.supportedDevices.instruction.whoop3":
     "La fréquence cardiaque, les intervalles R-R correspondants et la batterie alimentent la session. Aucun compte WHOOP n'est nécessaire.",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "Carte capteurs EmotiBit (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "Allumez la carte et portez-la au poignet ou au bras. Avec le firmware standard elle émet en WiFi (même réseau 2,4 GHz) ; avec le firmware emotibit-ble, en Bluetooth. Fermez d'abord l'oscilloscope EmotiBit : une carte ne se connecte qu'à un seul hôte.",
+  "settings.supportedDevices.instruction.emotibit2":
+    "Ouvrez Appareils, lancez la recherche et choisissez la carte. Une carte WiFi qui n'apparaît pas peut être ajoutée sous la forme emotibit:192.168.1.40 (son adresse IP ou son id). La fréquence cardiaque, les intervalles entre battements, la SpO2, la température cutanée, le mouvement et la batterie alimentent la session ; l'EDA n'est pas encore enregistrée.",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1":
     "Obtenir un jeton d'accès personnel depuis cloud.ouraring.com/personal-access-tokens.",

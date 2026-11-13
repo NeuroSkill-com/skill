@@ -33,6 +33,9 @@ pub(crate) async fn run_adapter_session(
 
     let mut pipeline: Option<Pipeline> = None;
     let mut sample_count: u64 = 0;
+    // Electrodermal analysis is per recording: one analyzer for the session, fed
+    // from whichever device reports an `eda` sensor channel.
+    let mut eda = skill_data::eda_analysis::EdaAnalyzer::new();
 
     // Abnormal-exit guard.
     //
@@ -386,6 +389,54 @@ pub(crate) async fn run_adapter_session(
                                 frame.spo2_pct,
                                 frame.temperature_c,
                             );
+                        }
+                    }
+
+                    DeviceEvent::Sensor(frame) => {
+                        // A scalar stream with no dedicated event (electrodermal
+                        // activity, raw PPG counts, ...). Every sample is one
+                        // long-format row in the `_sensors` sidecar, so streams
+                        // of different rates share the file.
+                        if let Some(ref mut pipe) = pipeline {
+                            for &(ts, value) in &frame.samples {
+                                pipe.writer.push_sensor(&pipe.csv_path, &frame.channel, &frame.unit, ts, value);
+                            }
+                        }
+                        // Electrodermal activity also gets analysed: tonic level,
+                        // skin conductance responses and arousal, once per epoch.
+                        if frame.channel == skill_data::eda_analysis::EdaMetrics::SOURCE_CHANNEL {
+                            for &(ts, us) in &frame.samples {
+                                let Some(m) = eda.push(ts, us) else { continue };
+                                // Recorded beside the raw samples, so a session can
+                                // be re-analysed later but already carries the result.
+                                if let Some(ref mut pipe) = pipeline {
+                                    for (channel, unit, value) in m.sensor_rows() {
+                                        pipe.writer.push_sensor(&pipe.csv_path, channel, unit, m.timestamp_s, value);
+                                    }
+                                }
+                                // One event every few seconds: no need to gate it.
+                                let mut payload = serde_json::to_value(&m).unwrap_or_default();
+                                if let Some(obj) = payload.as_object_mut() {
+                                    obj.insert("device_kind".into(), current_desc.kind.into());
+                                    if let Some(ref id) = device_id {
+                                        obj.insert("device_id".into(), id.clone().into());
+                                    }
+                                }
+                                broadcast_event(&state.events_tx, "EdaMetrics", &payload);
+                            }
+                        }
+                        // Raw PPG can be hundreds of samples a second, so skip
+                        // building the JSON when nothing is subscribed.
+                        if state.events_tx.receiver_count() > 0 {
+                            let mut payload = serde_json::Map::new();
+                            payload.insert("device_kind".into(), current_desc.kind.into());
+                            if let Some(ref id) = device_id {
+                                payload.insert("device_id".into(), id.clone().into());
+                            }
+                            payload.insert("channel".into(), frame.channel.clone().into());
+                            payload.insert("unit".into(), frame.unit.clone().into());
+                            payload.insert("samples".into(), serde_json::json!(frame.samples));
+                            broadcast_event(&state.events_tx, "SensorSample", &serde_json::Value::Object(payload));
                         }
                     }
 
@@ -1182,6 +1233,251 @@ mod tests {
             .count()
             .saturating_sub(1);
         assert_eq!(n, 50, "expected 50 IMU rows, got {n}");
+    }
+
+    // ── 5b. Scalar sensor streams written to _sensors.csv ───────────────────
+
+    /// A wristband with no electrodes still gets a session file, and its EDA and
+    /// raw PPG land as long-format rows rather than being dropped.
+    #[tokio::test]
+    async fn sensor_streams_written_to_sensors_csv() {
+        use skill_devices::session::SensorFrame;
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+
+        let mut adapter = MockAdapter::new(DeviceDescriptor {
+            kind: "emotibit",
+            caps: DeviceCaps::VITALS | DeviceCaps::IMU,
+            eeg_channels: 0,
+            eeg_sample_rate: 0.0,
+            channel_names: Vec::new(),
+            pipeline_channels: 0,
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: Vec::new(),
+            fnirs_channel_names: Vec::new(),
+        });
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "EmotiBit-BLE-E848".to_string(),
+            id: "mock:emotibit".to_string(),
+            ..Default::default()
+        }));
+        for i in 0..10_u32 {
+            let t = 1_700_000_000.0 + f64::from(i);
+            adapter.push(DeviceEvent::Sensor(SensorFrame {
+                channel: "eda".into(),
+                unit: "µS".into(),
+                samples: vec![(t, 0.4 + f64::from(i) * 0.01)],
+            }));
+            adapter.push(DeviceEvent::Sensor(SensorFrame {
+                channel: "ppg_red".into(),
+                unit: String::new(),
+                // A batch: two samples in one frame, each with its own time.
+                samples: vec![(t, 1000.0), (t + 0.5, 1001.0)],
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+        run(state, adapter).await;
+
+        let files: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .ends_with("_sensors.csv")
+            })
+            .collect();
+        assert_eq!(files.len(), 1, "expected one _sensors.csv, got {files:?}");
+        let text = std::fs::read_to_string(&files[0]).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "timestamp_s,channel,unit,value");
+        let count = |ch: &str| lines.iter().skip(1).filter(|l| l.split(',').nth(1) == Some(ch)).count();
+        assert_eq!(count("eda"), 10, "one EDA sample per frame");
+        assert_eq!(count("ppg_red"), 20, "a batched frame yields a row per sample");
+        assert!(lines.iter().any(|l| l.starts_with("1700000000.000000,eda,µS,0.4")));
+        assert!(
+            lines.iter().any(|l| l.starts_with("1700000000.500000,ppg_red,,1001")),
+            "per-sample timestamps must survive"
+        );
+        // The EEG-less session must not be mistaken for an EEG file by history.
+        assert!(
+            files_recursive(dir.path()).iter().all(|p| {
+                let n = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                !n.ends_with("_sensors.csv") || skill_data::session_paths::is_sidecar_file(n)
+            }),
+            "sensors file must be classified as a sidecar"
+        );
+    }
+
+    /// Subscribers get the same samples live, tagged with the device.
+    #[tokio::test]
+    async fn sensor_samples_are_broadcast_with_device_attribution() {
+        use skill_devices::session::SensorFrame;
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let mut adapter = MockAdapter::new(DeviceDescriptor {
+            kind: "emotibit",
+            caps: DeviceCaps::VITALS,
+            eeg_channels: 0,
+            eeg_sample_rate: 0.0,
+            channel_names: Vec::new(),
+            pipeline_channels: 0,
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: Vec::new(),
+            fnirs_channel_names: Vec::new(),
+        });
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "EmotiBit-BLE-E848".to_string(),
+            id: "mock:emotibit".to_string(),
+            ..Default::default()
+        }));
+        adapter.push(DeviceEvent::Sensor(SensorFrame {
+            channel: "eda".into(),
+            unit: "µS".into(),
+            samples: vec![(1_700_000_000.0, 0.42)],
+        }));
+        adapter.push(DeviceEvent::Disconnected);
+        run(state, adapter).await;
+
+        let mut found = None;
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "SensorSample" {
+                found = Some(ev.payload);
+            }
+        }
+        let p = found.expect("no SensorSample event was broadcast");
+        assert_eq!(p["device_kind"], "emotibit");
+        assert_eq!(p["channel"], "eda");
+        assert_eq!(p["unit"], "µS");
+        assert_eq!(p["samples"][0][1], 0.42);
+    }
+
+    /// An `eda` stream is analysed as it is recorded: the raw samples and the
+    /// derived metrics land in the same sidecar, and subscribers get each epoch.
+    #[tokio::test]
+    async fn eda_is_analysed_recorded_and_broadcast() {
+        use skill_devices::session::SensorFrame;
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+
+        let mut adapter = MockAdapter::new(DeviceDescriptor {
+            kind: "emotibit",
+            caps: DeviceCaps::VITALS,
+            eeg_channels: 0,
+            eeg_sample_rate: 0.0,
+            channel_names: Vec::new(),
+            pipeline_channels: 0,
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: Vec::new(),
+            fnirs_channel_names: Vec::new(),
+        });
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "EmotiBit-BLE-E848".to_string(),
+            id: "mock:emotibit".to_string(),
+            ..Default::default()
+        }));
+
+        // 40 s at 15 Hz on a 2 µS level, with one 0.3 µS response at 15 s.
+        let t0 = 1_700_000_000.0;
+        let response = |x: f64| {
+            if x <= 0.0 {
+                0.0
+            } else if x < 1.5 {
+                0.15 * (1.0 - (std::f64::consts::PI * x / 1.5).cos())
+            } else {
+                0.3 * (-(x - 1.5) / 3.0).exp()
+            }
+        };
+        for sec in 0..40_u32 {
+            let samples = (0..15_u32)
+                .map(|k| {
+                    let x = f64::from(sec) + f64::from(k) / 15.0;
+                    (t0 + x, 2.0 + response(x - 15.0))
+                })
+                .collect();
+            adapter.push(DeviceEvent::Sensor(SensorFrame {
+                channel: "eda".into(),
+                unit: "µS".into(),
+                samples,
+            }));
+        }
+        adapter.push(DeviceEvent::Disconnected);
+        run(state, adapter).await;
+
+        let mut metrics = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            if ev.r#type == "EdaMetrics" {
+                metrics.push(ev.payload);
+            }
+        }
+        assert!(
+            metrics.len() >= 6,
+            "an epoch every 5 s over 40 s, got {}",
+            metrics.len()
+        );
+        assert!(metrics.iter().all(|m| m["device_kind"] == "emotibit"));
+        assert!(metrics
+            .iter()
+            .all(|m| (m["scl_us"].as_f64().unwrap() - 2.0).abs() < 0.4));
+        let responses: u64 = metrics.iter().map(|m| m["scr_count"].as_u64().unwrap()).sum();
+        assert_eq!(responses, 1, "exactly the one injected response");
+
+        let files: Vec<_> = files_recursive(dir.path())
+            .into_iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .ends_with("_sensors.csv")
+            })
+            .collect();
+        let text = std::fs::read_to_string(&files[0]).unwrap();
+        let count = |ch: &str| text.lines().filter(|l| l.split(',').nth(1) == Some(ch)).count();
+        assert_eq!(count("eda"), 600, "every raw sample is kept");
+        assert_eq!(count("eda_scl"), metrics.len(), "one derived row per epoch");
+        assert!(count("eda_scr_count") == metrics.len());
+        assert!(count("eda_arousal") >= 1, "the baseline warms up within the run");
+    }
+
+    /// Only an `eda` channel is analysed; other sensor streams pass through.
+    #[tokio::test]
+    async fn other_sensor_channels_are_not_analysed_as_eda() {
+        use skill_devices::session::SensorFrame;
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut rx = state.events_tx.subscribe();
+        let mut adapter = MockAdapter::new(DeviceDescriptor {
+            kind: "emotibit",
+            caps: DeviceCaps::VITALS,
+            eeg_channels: 0,
+            eeg_sample_rate: 0.0,
+            channel_names: Vec::new(),
+            pipeline_channels: 0,
+            ppg_channel_names: Vec::new(),
+            imu_channel_names: Vec::new(),
+            fnirs_channel_names: Vec::new(),
+        });
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "EmotiBit-BLE-E848".to_string(),
+            id: "mock:emotibit".to_string(),
+            ..Default::default()
+        }));
+        let samples = (0..300_u32)
+            .map(|i| (1_700_000_000.0 + f64::from(i) / 15.0, 5000.0))
+            .collect();
+        adapter.push(DeviceEvent::Sensor(SensorFrame {
+            channel: "ppg_red".into(),
+            unit: String::new(),
+            samples,
+        }));
+        adapter.push(DeviceEvent::Disconnected);
+        run(state, adapter).await;
+        while let Ok(ev) = rx.try_recv() {
+            assert_ne!(ev.r#type, "EdaMetrics", "raw PPG must not be analysed as EDA");
+        }
     }
 
     // ── 6. Battery status tracked in AppState ────────────────────────────────

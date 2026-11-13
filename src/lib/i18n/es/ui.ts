@@ -56,6 +56,13 @@ const ui: Record<string, string> = {
   "tip.ibi": "El intervalo entre latidos del que se obtuvo la frecuencia cardíaca, en milisegundos.",
   "tip.skinTemperature":
     "Temperatura de la piel medida en el sensor. Valor absoluto, no la desviación respecto a tu valor de referencia.",
+  "tip.scl":
+    "Nivel de conductancia de la piel: la base, que cambia despacio, de la actividad de las glándulas sudoríparas, en microsiemens. Refleja la activación general.",
+  "tip.scrRate":
+    "Respuestas de conductancia de la piel por minuto durante el último minuto: subidas breves tras eventos concretos.",
+  "tip.scrAmplitude": "Tamaño medio de esas respuestas durante el último minuto.",
+  "tip.arousal":
+    "Nivel de conductancia de la piel comparado con la línea base de esta sesión (puntuación z). Positivo significa más activado de lo habitual en ti; queda en blanco hasta aprender la línea base.",
   "tip.rmssd":
     "Media cuadrática de diferencias sucesivas entre latidos del corazón. Métrica clave de VFC parasimpática.",
   "tip.sdnn": "Desviación estándar de los intervalos latido a latido. Refleja la VFC general.",

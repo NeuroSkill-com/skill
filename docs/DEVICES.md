@@ -68,10 +68,13 @@ metrics (band powers, meditation / cognitive-load scores) do not apply.
 | **Oura Ring** (Gen 3 / Ring 4 / Ring 5) | Ōura Health | Heart rate + IBI, SpO2, skin temperature, 3-axis motion, battery | BLE | `oura-link` / `oura-protocol` ([open_oura]) | Cloud-free, reads the ring directly. **Needs the ring's 16-byte BLE app-auth key** — see below. Live samples record to a `_vitals` sidecar |
 
 | **WHOOP** (4.0 / 5.0 / MG) | WHOOP | Heart rate + R-R intervals, battery | BLE | [`poop`] ([whoop-rs]) | Cloud-free, reads the strap directly. No account and no key needed |
+| **EmotiBit** | Connected Future Labs | Heart rate + IBI, SpO2, skin temperature, accelerometer + gyroscope, battery, **EDA**, raw PPG, thermopile, humidity, magnetometer | WiFi or BLE | [`emotibit`] ([emotibit-rs]) | Stock firmware over WiFi, or the `emotibit-ble` firmware over Bluetooth. Scalar streams record to a `_sensors` sidecar — see below |
 
 [open_oura]: https://github.com/Th0rgal/open_oura
 [`poop`]: https://docs.rs/poop
 [whoop-rs]: https://github.com/eugenehp/whoop-rs
+[`emotibit`]: https://docs.rs/emotibit
+[emotibit-rs]: https://github.com/eugenehp/emotibit-rs
 
 ### Oura: the two integrations are different things
 
@@ -148,6 +151,95 @@ refused, so a future upstream decoder cannot silently start feeding the health
 database guesses. `ibi_and_amplitude_event` is skipped for the same reason: 7–13 %
 of its beats read above 100 bpm during sleep on two different rings.
 
+### EmotiBit: what the board gives you
+
+A board runs either the **stock firmware**, which streams over WiFi, or the
+**`emotibit-ble` firmware**, which streams over Bluetooth; the adapter looks for
+both. A BLE board is found by the service it advertises
+(`6e6f7469-6269-7400-0000-000000000001`) and is listed as `EmotiBit-BLE-<mac>`.
+A WiFi board has no BLE name to scan for, so add it by hand as
+`emotibit:<id or ip>` (for example `emotibit:192.168.1.40`). A board connects to
+**one host at a time**: close the EmotiBit Oscilloscope first.
+
+* **Heart rate and inter-beat interval**, derived from the board's PPG stream,
+  and **SpO2**, as device vitals. Zero readings are the firmware's "no value
+  yet" marker and are dropped.
+* **Skin temperature** from `TEMP1`, the contact thermistor.
+* **Accelerometer and gyroscope**, delivered as one stream per axis and zipped
+  into motion frames. The gyroscope holds its latest value between frames
+  because the accelerometer paces them.
+* **Battery**, from the folded status the `emotibit` crate keeps (it merges the
+  voltage and percentage packets).
+
+**Scalar streams go to a `_sensors` sidecar.** Electrodermal activity (`eda`,
+with the board's `eda_level` / `eda_response` split), the SCR metrics
+(`scr_amplitude`, `scr_frequency`, `scr_rise_time`), `thermopile`, `temp0`,
+`humidity`, the magnetometer (`mag_x` / `mag_y` / `mag_z`) and the raw PPG
+waveform (`ppg_ir`, `ppg_red`, `ppg_green`) are written as one row per sample:
+
+```csv
+timestamp_s,channel,unit,value
+1700000000.250000,eda,µS,0.42
+1700000000.250000,ppg_red,,12345
+```
+
+Long format, so streams of different rates share the file with no padding or
+nulls, and a new channel needs no schema change. The same layout is used for
+`_sensors.parquet` when the storage format is Parquet. A batch of samples from
+one packet is spread over the time since that channel last reported, rather than
+stacked on one instant. Channel ids are written into recordings and are never
+renamed.
+
+### EDA: what is derived from the raw signal
+
+Whatever reports an `eda` sensor channel is analysed by `skill_data::eda_analysis`
+as it is recorded, once per five-second epoch of *sample time*. Results are
+written to the same `_sensors` sidecar under `eda_`-prefixed channels (so they
+cannot collide with the board's own `scr_*`), and streamed live as an
+`EdaMetrics` event that drives the dashboard's EDA card.
+
+| Channel | Unit | Meaning |
+|---|---|---|
+| `eda_scl` | µS | Tonic level: the median of the epoch's valid samples |
+| `eda_scr_count` | count | Skin conductance responses confirmed in this epoch |
+| `eda_scr_per_min` | 1/min | Responses per minute over the trailing minute (after about 15 s of data) |
+| `eda_scr_amplitude` | µS | Mean response size over the trailing minute, when any occurred |
+| `eda_arousal` | z | SCL against this session's baseline (after about 30 s) |
+| `eda_valid_fraction` | 0–1 | Share of the epoch's samples that passed the artifact gate |
+
+A metric that is not available yet is **omitted**, never written as zero.
+
+How it decides:
+
+* **Artifact gate.** A reading below 0.05 µS is an open circuit (the electrodes
+  lost the skin) and a jump steeper than 2 µS/s is not physiology. Both are
+  dropped and reset the response detector, so an artifact is never read as a
+  response, and the card warns when under 70 % of samples are valid.
+* **Responses.** A threshold detector on a lightly smoothed signal: a rise of at
+  least 0.03 µS above the running minimum, confirmed once the signal falls back
+  or stops climbing. A rise slower than 8 s is tonic drift and one faster than
+  0.3 s is an artifact; neither counts.
+* **Arousal** is the SCL as a z-score against a baseline learned over the
+  session so far, with a floor on its spread so a very steady wearer cannot make
+  a small change look enormous.
+
+**The baseline is per session.** Absolute skin conductance differs several-fold
+between people and with skin temperature, hydration and electrode contact, so
+the z-score says how far this moment is from *this wearer's recent norm*. It
+forgets slowly (about ten minutes), so a sustained shift is eventually absorbed
+rather than flagged forever. A baseline that persists across sessions is not
+attempted yet. Motion-artifact rejection from the accelerometer is not either:
+the gate is purely on the EDA signal.
+
+Raw PPG is stored here, not fed to the PPG analyser: that path assumes a fixed
+64 Hz stream, and an EmotiBit's runs at 25 or 100 Hz. SD-card fill has no route
+and is counted and logged once.
+
+Every data sidecar (`_metrics`, `_ppg`, `_imu`, `_fnirs`, `_vitals`, `_sensors`)
+is recognised by one shared list, `SIDECAR_SUFFIXES` in `skill-data`. History
+listing, session deletion and the EEG-file filter all use it, so a sidecar is
+neither miscounted as a session nor left behind when a session is deleted.
+
 ### WHOOP: what the strap gives you
 
 No credential at all — unlike the ring, a strap's read surface is open, and
@@ -188,9 +280,10 @@ of work, not yet built (the ring's equivalent is).
 
 | Transport | Devices | Protocol |
 |-----------|---------|----------|
-| **BLE** | Muse, MW75, Vital Neuro, Ganglion, IDUN, Mendi, Oura Ring, WHOOP, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth, or a vendor SDK for BrainBit / g.tec) |
+| **BLE** | Muse, MW75, Vital Neuro, Ganglion, IDUN, Mendi, Oura Ring, WHOOP, EmotiBit, BrainBit, g.tec | Bluetooth Low Energy (webbluetooth, or a vendor SDK for BrainBit / g.tec) |
 | **USB Serial** | Cyton, Cyton+Daisy, Cognionics CGX, BrainMaster, NeuroSky | FTDI/CDC serial at 57600–115200 baud |
 | **WiFi** | Cyton WiFi, Cyton+Daisy WiFi, Ganglion WiFi | TCP via OpenBCI WiFi Shield |
+| **WiFi (UDP)** | EmotiBit (stock firmware) | UDP discovery and CSV packets on the local network |
 | **UDP** | Galea | Direct UDP streaming |
 | **PCAN-USB** | NeuroField Q21 | CAN bus via PEAK PCAN adapter |
 | **Cortex WebSocket** | Emotiv (all models) | JSON-RPC over WebSocket to local Emotiv Launcher |
@@ -215,6 +308,7 @@ of work, not yet built (the ring's equivalent is).
 | Mendi | Stockholm, Sweden | 2019 | mendi.io |
 | Ōura Health | Oulu, Finland | 2013 | ouraring.com |
 | WHOOP | Boston, USA | 2012 | whoop.com |
+| Connected Future Labs (EmotiBit) | — | — | emotibit.com |
 | BrainBit LLC | Saratov, Russia | 2016 | brainbit.com |
 | g.tec medical engineering | Schiedlberg, Austria | 1999 | gtec.at |
 | Neurofield Inc | Santa Barbara, USA | 2009 | neurofieldneuroscience.com |

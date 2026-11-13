@@ -3,7 +3,7 @@
 //! End-to-end Qwen3-TTS smoke test (ignored by default — downloads ~the model).
 //!
 //! Run with:
-//!   cargo test -p skill-tts --features tts-engines --test qwen3_tts_e2e -- --ignored --nocapture
+//!   cargo test -p skill-tts --features tts-engines,slow-tests --test qwen3_tts_e2e -- --ignored --nocapture
 //!
 //! Verifies the real engine path: hf-hub download → `Qwen3TtsRunner` →
 //! `synthesize_custom_voice` → PCM. Asserts the output is the expected sample

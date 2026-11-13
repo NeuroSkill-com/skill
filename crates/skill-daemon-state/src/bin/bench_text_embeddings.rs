@@ -3,7 +3,7 @@
 //!
 //! Example:
 //! ```sh
-//! cargo run --release -p skill-daemon-state --features text-embeddings-rlx-metal \
+//! cargo run --release -p skill-daemon-state --features bench-tools,text-embeddings-rlx-metal \
 //!   --bin bench_text_embeddings -- \
 //!   --model nomic-ai/nomic-embed-text-v1.5 --rlx-device metal --batch-sizes 1,8,32
 //! ```

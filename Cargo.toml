@@ -386,11 +386,19 @@ codegen-units = 8
 # of a backtrace at a fraction of the size and link time of `debug = 2`.
 #
 # `line-tables-only` is the same backtrace information minus variable/type
-# DIEs, and `split-debuginfo = "unpacked"` stops macOS from running dsymutil on
-# every link (the .dSYM bundles were over half of target/debug). Dependencies
-# below get no debuginfo at all; workspace crates keep line tables.
+# DIEs. Dependencies below get no debuginfo at all; workspace crates keep line
+# tables in the objects.
+#
+# `split-debuginfo = "off"` is deliberate. kache (the rustc wrapper) runs
+# `dsymutil` on every test/bin executable built with `unpacked` and keeps both
+# the `.dSYM` and a `.dsym.tar` copy: ~3.3 GB of an 11 GB target/debug, and no
+# kache setting turns it off (`packed` or unset gets a rustc-written one).
+# Cost: `RUST_BACKTRACE` frames show function names without `file:line`, and
+# lldb has no source-level info for test binaries. The `panicked at file:line`
+# header is unaffected (it is panic metadata, not debuginfo), as is unwinding.
+# Restore "unpacked" when you need to step through a test in a debugger.
 debug = "line-tables-only"
-split-debuginfo = "unpacked"
+split-debuginfo = "off"
 
 [profile.dev.package."*"]
 debug = 0

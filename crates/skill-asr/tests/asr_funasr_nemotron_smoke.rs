@@ -3,7 +3,7 @@
 //! Ignored smoke tests for FunASR (SenseVoice) and Nemotron-ASR load paths.
 //!
 //! These download large Hub checkpoints on first run:
-//!   cargo test -p skill-asr --features asr --test asr_funasr_nemotron_smoke -- --ignored --nocapture
+//!   cargo test -p skill-asr --features asr,slow-tests --test asr_funasr_nemotron_smoke -- --ignored --nocapture
 //!
 //! Optional: `SKILL_ASR_SMOKE_NEMOTRON=1` to also exercise the ~2.4 GB Nemotron pack.
 #![cfg(feature = "asr")]

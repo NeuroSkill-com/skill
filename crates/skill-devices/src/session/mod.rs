@@ -24,13 +24,14 @@
 //! * [`mw75::Mw75Adapter`]   — Neurable MW75 Neuro (12 ch @ 500 Hz)
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
 //! * [`oura::OuraAdapter`] — Oura Ring 3/4/5 (vitals + motion, no EEG)
-//! * [`whoop::WhoopAdapter`] — WHOOP 4.0 / 5.0 / MG straps (vitals, no EEG)
+//! * [`emotibit::EmotibitAdapter`] — EmotiBit boards over WiFi or BLE (vitals + motion, no EEG)
 //! * [`whoop::WhoopAdapter`] — WHOOP 4.0 / 5.0 / MG straps (vitals, no EEG)
 //! * [`vital::VitalAdapter`] — Vital Neuro headphones (3 ch @ 250 Hz, IMU)
 
 pub mod antneuro;
 pub mod awear;
 pub mod cognionics;
+pub mod emotibit;
 pub mod emotiv;
 pub mod idun;
 pub mod iroh_remote;
@@ -192,6 +193,9 @@ pub enum DeviceEvent {
     Fnirs(FnirsFrame),
     /// Device-reported vitals (heart rate, SpO2, skin temperature).
     Vitals(VitalsFrame),
+    /// A scalar sensor stream with no dedicated event (electrodermal activity,
+    /// raw PPG counts, humidity, ...).
+    Sensor(SensorFrame),
 }
 
 /// Vitals a device derives on its own, rather than a raw waveform this app
@@ -214,6 +218,26 @@ pub struct VitalsFrame {
     pub spo2_pct: Option<f64>,
     /// Skin temperature in degrees Celsius.
     pub temperature_c: Option<f64>,
+}
+
+/// A run of samples from one scalar sensor channel that has no event of its own.
+///
+/// Electrodermal activity is the motivating case: it is slow, one value per
+/// sample, and neither a PPG waveform (the PPG path assumes a fixed 64 Hz) nor
+/// a vital the device derived. Anything that fits that shape can ride here
+/// without a new event type, a new file or a new column: the recorder writes
+/// each sample as one `(timestamp, channel, unit, value)` row, so channels of
+/// different rates share one file.
+#[derive(Debug, Clone)]
+pub struct SensorFrame {
+    /// Stable machine id of the channel, e.g. `"eda"` or `"ppg_ir"`. It is the
+    /// `channel` column on disk, so renaming one orphans past recordings.
+    pub channel: String,
+    /// Physical unit (`"µS"`, `"°C"`), or empty when the device does not say.
+    pub unit: String,
+    /// `(timestamp_s, value)` pairs, oldest first. Timestamps are seconds since
+    /// the Unix epoch and are per sample, because a batch spans real time.
+    pub samples: Vec<(f64, f64)>,
 }
 
 /// A single fNIRS (functional near-infrared spectroscopy) optical frame.

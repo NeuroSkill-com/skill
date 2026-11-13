@@ -94,6 +94,12 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.whoop2":
     "打开设备、扫描并选择该手环。没有名称或已改名的手环同样能被找到，依据是它广播的服务。",
   "settings.supportedDevices.instruction.whoop3": "心率、其背后的 R-R 间隔以及电量都会进入会话。无需 WHOOP 账号。",
+  "settings.supportedDevices.company.emotibit": "EmotiBit",
+  "settings.supportedDevices.device.emotibitBoard": "EmotiBit 传感器板 (WiFi / BLE)",
+  "settings.supportedDevices.instruction.emotibit1":
+    "打开电源并将电路板戴在手腕或手臂上。使用标准固件时通过 WiFi 传输(同一 2.4 GHz 网络),使用 emotibit-ble 固件时通过蓝牙传输。请先关闭 EmotiBit 示波器:一块电路板同一时间只能连接一个主机。",
+  "settings.supportedDevices.instruction.emotibit2":
+    "打开“设备”,扫描并选择该电路板。未出现的 WiFi 电路板可以用 emotibit:192.168.1.40(其 IP 地址或 id)的形式添加。心率、心跳间期、SpO2、皮肤温度、运动和电量会进入会话;EDA 暂未记录。",
   "settings.supportedDevices.device.ouraRing": "Oura Ring (Gen 3 / Gen 4)",
   "settings.supportedDevices.instruction.oura1": "从 cloud.ouraring.com/personal-access-tokens 获取个人访问令牌。",
   "settings.supportedDevices.instruction.oura2": "打开设备 API → Oura Ring 并粘贴您的令牌，然后保存。",
