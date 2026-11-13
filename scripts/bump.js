@@ -66,7 +66,10 @@ function refreshCargoLockForRelease() {
     // Prefer metadata over `generate-lockfile`: the latter re-resolves every
     // unpinned git dep to tip-of-default-branch and would float rlx on every RC.
     console.log("[bump] Refreshing Cargo.lock (cargo metadata, GitHub git pins)…");
-    execSync("cargo metadata --format-version=1", { stdio: "inherit" });
+    // The refresh is a side effect of resolving the graph; the JSON it prints
+    // (several MB for this workspace) is not used, so discard stdout. stderr stays
+    // attached, so cargo's progress ("Updating crates.io index") and any error show.
+    execSync("cargo metadata --format-version=1", { stdio: ["ignore", "ignore", "inherit"] });
   } finally {
     if (stashed && existsSync(stash)) {
       renameSync(stash, overlay);
@@ -628,6 +631,7 @@ async function runPreflightChecks() {
   // Frontend checks
   steps.push({ label: "npm run check", command: "npm run check" });
   steps.push({ label: "npm run sync:i18n:check", command: "npm run sync:i18n:check" });
+  steps.push({ label: "npm run check:test-targets", command: "npm run check:test-targets" });
   steps.push({ label: "npm test", command: "npm test" });
 
   // Linux tauri deps (no command — handled inline)
@@ -710,6 +714,17 @@ function todayIsoDate() {
 
 function releaseFilePath(version) {
   return `changes/releases/${version}.md`;
+}
+
+// ── git helpers ──────────────────────────────────────────────────────────────
+
+/// Tracked files that differ from HEAD, staged or not.
+function changedTrackedPaths() {
+  try {
+    return execSync("git diff --name-only HEAD", { encoding: "utf8" }).split(/\r?\n/).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 // ── CLI flags ────────────────────────────────────────────────────────────────
@@ -966,8 +981,26 @@ async function main() {
 
   const headBefore = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
 
+  // Tracked files that already differ from HEAD. A failed bump must not touch
+  // these: they are the user's own uncommitted work, not something bump wrote.
+  const dirtyBefore = new Set(changedTrackedPaths());
+
   // Track whether we've started mutating files
   let mutationStarted = false;
+
+  // Ctrl-C reaches this process and the child it is waiting on (cargo, npm). With
+  // no handler node dies on the spot, before the revert below can run, and a
+  // half-applied bump is left in the tree. Catching the signal lets the child's
+  // death surface as an error, which the handler below turns into a revert.
+  let interrupted = false;
+  const onSignal = () => {
+    interrupted = true;
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  const checkpoint = () => {
+    if (interrupted) throw new Error("Interrupted");
+  };
 
   try {
     mutationStarted = true;
@@ -1013,6 +1046,8 @@ async function main() {
       console.log(`[bump] Synced ${path} → ${newVersion}`);
     }
 
+    checkpoint();
+
     // ── CHANGELOG.md — compile fragments ─────────────────────────────────────
 
     const date = todayIsoDate();
@@ -1037,7 +1072,9 @@ async function main() {
 
     // Keep Cargo.lock in sync with the bumped skill version so CI `--locked`
     // builds (npm run release → tag → Release workflows) don't fail.
+    checkpoint();
     refreshCargoLockForRelease();
+    checkpoint();
 
     // ── optionally clean Rust build artifacts to free disk space ──────────────
 
@@ -1048,6 +1085,7 @@ async function main() {
     // ── regenerate derived indexes ─────────────────────────────────────────────
 
     execSync("npm run build:settings-index", { stdio: "inherit" });
+    checkpoint();
 
     // ── create bump commit ────────────────────────────────────────────────────
     // Cargo.lock must be addable here: refreshCargoLockForRelease cleared
@@ -1060,12 +1098,35 @@ async function main() {
 
     console.log(`\n\x1b[1;32m[bump] ✓ ${newVersion} committed successfully\x1b[0m`);
   } catch (err) {
-    // ── Revert all file mutations on failure ──────────────────────────────────
+    // ── Revert what bump changed on failure ───────────────────────────────────
+    // node is blocked inside execSync when Ctrl-C arrives, so the handler above
+    // has not run yet when the child's death throws; the error carries the signal.
+    // A child that was killed is reported as `signal`, or as exit status 128+n when
+    // a shell sat between us and it (130 = SIGINT, 143 = SIGTERM).
+    const stoppedBySignal =
+      interrupted ||
+      err?.signal === "SIGINT" ||
+      err?.signal === "SIGTERM" ||
+      err?.status === 130 ||
+      err?.status === 143;
+    if (stoppedBySignal) err.interrupted = true;
     if (mutationStarted) {
-      console.error(`\n\x1b[1;31m[bump] Failed — reverting all changes…\x1b[0m`);
+      console.error(
+        `\n\x1b[1;31m[bump] ${stoppedBySignal ? "Interrupted" : "Failed"} — reverting the bump's changes…\x1b[0m`,
+      );
       try {
-        // Reset tracked files to pre-bump state
-        execSync(`git checkout -- .`, { stdio: "inherit" });
+        // Restore only files this bump changed. `git checkout -- .` would also
+        // throw away the user's own uncommitted edits to tracked files.
+        const touched = changedTrackedPaths().filter((path) => !dirtyBefore.has(path));
+        if (touched.length > 0) {
+          execSync(`git checkout HEAD -- ${touched.map((path) => JSON.stringify(path)).join(" ")}`, {
+            stdio: "inherit",
+          });
+        }
+        const keptDirty = changedTrackedPaths().filter((path) => dirtyBefore.has(path));
+        if (keptDirty.length > 0) {
+          console.error(`[bump] Left your own uncommitted changes alone: ${keptDirty.join(", ")}`);
+        }
         // Remove any untracked files created during bump (e.g. release archive)
         execSync(`git clean -fd changes/releases`, { stdio: "ignore" });
         protectCargoLockIfOverlayActive();
@@ -1075,6 +1136,9 @@ async function main() {
       }
     }
     throw err;
+  } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
   }
 }
 
@@ -1082,5 +1146,6 @@ main().catch((err) => {
   if (err?.message) {
     console.error(`\x1b[31m${err.message}\x1b[0m`);
   }
-  process.exit(1);
+  // 130 = 128 + SIGINT, the conventional status for "stopped by Ctrl-C".
+  process.exit(err?.interrupted ? 130 : 1);
 });
