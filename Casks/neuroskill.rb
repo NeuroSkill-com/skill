@@ -1,8 +1,8 @@
 cask "neuroskill" do
   # version + sha256 are kept current by .github/workflows/homebrew-cask.yml,
   # which reconciles them against the latest stable GitHub release.
-  version "0.1.1"
-  sha256 "aec40c36f6a6f0b0106cc72c3f74e937e818e76b89b2984a3b030265d9232186"
+  version "0.1.2"
+  sha256 "d26fbaee790f3e4c82dc27384ead4205cf68fdae03860fc82b58f72e915459d2"
 
   url "https://github.com/NeuroSkill-com/skill/releases/download/v#{version}/NeuroSkill_#{version}_aarch64.dmg"
   name "NeuroSkill"
