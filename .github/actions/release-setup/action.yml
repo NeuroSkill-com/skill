@@ -71,43 +71,63 @@ runs:
       shell: bash
       run: sudo apt-get update -o Acquire::Retries=5
 
-    - name: Cache + install system dependencies (Linux)
-      if: inputs.linux-deps == 'true'
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: >-
-          libwebkit2gtk-4.1-dev
-          libappindicator3-dev
-          librsvg2-dev
-          patchelf
-          libssl-dev
-          libudev-dev
-          libdbus-1-dev
-          pkg-config
-          libasound2-dev
-          libpipewire-0.3-dev
-          libgbm-dev
-          cmake
-          binutils
-          rpm
-          dpkg-dev
-          mold
-          clang
-          protobuf-compiler
-          libopenblas-dev
-        version: ${{ inputs.linux-apt-version }}
-
-    # Fail here, with a clear message, rather than minutes later inside a *-sys
-    # build script: the apt step above can report success after a failed install.
-    - name: Verify system libraries (Linux)
+    # The package list lives in one file so the cached install below and the
+    # fallback after it cannot disagree. `rpm` is rpmbuild for the .rpm in
+    # package-linux-system-bundles.sh; `dpkg-dev` is dpkg-shlibdeps, which derives
+    # the .deb Depends from the shipped ELFs (named explicitly so a slimmer image
+    # cannot silently fall back to the incomplete hand-written dependency list).
+    - name: Read system package list (Linux)
+      id: pkgs
       if: inputs.linux-deps == 'true'
       shell: bash
+      run: echo "list=$(grep -v '^[[:space:]]*#' '${{ github.action_path }}/linux-apt-packages.txt' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+
+    # continue-on-error: this action can fail outright or, worse, report success
+    # after a failed install. Either way the step below decides, by looking.
+    - name: Cache + install system dependencies (Linux)
+      id: apt
+      if: inputs.linux-deps == 'true'
+      continue-on-error: true
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: ${{ steps.pkgs.outputs.list }}
+        version: ${{ inputs.linux-apt-version }}
+
+    # Trust pkg-config, not the step above. If the libraries are missing, install
+    # them directly (retrying, with the index refreshed each time), and fail here
+    # with a clear message rather than minutes later inside a *-sys build script.
+    - name: Ensure system libraries (Linux)
+      if: inputs.linux-deps == 'true'
+      shell: bash
+      env:
+        PKGS: ${{ steps.pkgs.outputs.list }}
+        APT_OUTCOME: ${{ steps.apt.outcome }}
       run: |
-        missing=0
-        for m in glib-2.0 gtk+-3.0 libsoup-3.0 webkit2gtk-4.1; do
-          pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
+        have() {
+          local m
+          for m in glib-2.0 gtk+-3.0 libsoup-3.0 webkit2gtk-4.1; do
+            pkg-config --exists "$m" || return 1
+          done
+        }
+        if have; then
+          echo "system libraries present (cached install: $APT_OUTCOME)"
+          exit 0
+        fi
+        echo "::warning::system libraries are missing after the cached apt step (outcome: $APT_OUTCOME); installing directly"
+        for attempt in 1 2 3; do
+          # shellcheck disable=SC2086  # PKGS is a space-separated list by design
+          if sudo apt-get update -o Acquire::Retries=5 && sudo apt-get install -y --fix-missing $PKGS; then
+            break
+          fi
+          echo "apt attempt $attempt failed"
+          sleep $((attempt * 15))
         done
-        exit $missing
+        if have; then
+          echo "system libraries installed by the fallback"
+          exit 0
+        fi
+        echo "::error::glib-2.0, gtk+-3.0, libsoup-3.0 or webkit2gtk-4.1 is still missing after 3 apt attempts"
+        exit 1
 
     - name: Setup Rust bootstrap (Linux)
       if: inputs.linux-deps == 'true'

@@ -21,9 +21,10 @@
 // byte-identical to the tested RC.
 
 import { execSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { baseVersion, bumpVersion, readVersionFile } from "./version-utils.mjs";
+import { stableFragmentFromRcNotes } from "./lib/release-notes.mjs";
+import { baseVersion, bumpVersion, isRc, readVersionFile } from "./version-utils.mjs";
 
 // GitHub caps PR/issue bodies at 65_536 chars. Leave headroom for the
 // surrounding template; truncate the embedded notes if they exceed this.
@@ -103,6 +104,40 @@ function gitTagExistsOnAnyRemote(tag) {
     if (r.status === 0) return true;
   }
   return false;
+}
+
+/// Refresh remote branches and tags, so the checks below see what is actually
+/// published rather than whatever this clone last fetched. Offline is not fatal:
+/// the checks that need the network then work from stale data, and say so.
+function fetchRemote() {
+  const ok = sh("git", ["fetch", "--quiet", "--tags", "origin"], { capture: true }).status === 0;
+  if (!ok) console.error("\x1b[33m!\x1b[0m could not fetch from origin; remote-state checks use stale data.");
+  return ok;
+}
+
+/// A stable `vX.Y.Z` tag means that version has shipped.
+function stableShipped(base) {
+  return gitTagExistsLocal(`v${base}`) || gitTagExistsOnAnyRemote(`v${base}`);
+}
+
+function tagExists(tag) {
+  return gitTagExistsLocal(tag) || gitTagExistsOnAnyRemote(tag);
+}
+
+/// How many commits `origin/main` has that HEAD does not (0 if there is no origin/main).
+function commitsBehindOriginMain() {
+  const n = Number(captureOut("git rev-list --count HEAD..origin/main"));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/// `origin/<branch>`-style upstream of a local branch, or "" when it has none.
+function upstreamOf(branch) {
+  return captureOut(`git rev-parse --abbrev-ref ${branch}@{upstream}`);
+}
+
+/// First RC of the patch after `base`: 0.1.1 -> 0.1.2-rc.1.
+function nextPatchRc(base) {
+  return bumpVersion(base, { rc: true });
 }
 
 function gitHeadVersion() {
@@ -215,33 +250,41 @@ function dim(msg) {
 function parseArgs() {
   const args = process.argv.slice(2);
   let rc = false;
+  let stable = false;
   let dryRun = false;
   let force = false;
   let yes = false;
   let skipChecks = false;
+  let crossCheck = false;
   for (const a of args) {
     if (a === "--rc") rc = true;
+    else if (a === "--stable") stable = true;
     else if (a === "--dry-run") dryRun = true;
     else if (a === "--force") force = true;
     else if (a === "--yes" || a === "-y") yes = true;
     else if (a === "--skip-checks") skipChecks = true;
+    else if (a === "--cross-check") crossCheck = true;
     else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
     } else fail(`Unknown flag: ${a}`);
   }
-  if (force && !rc) fail("--force only applies to --rc.");
-  if (yes && rc) fail("--yes only applies to promotion (no --rc).");
-  if (skipChecks && !rc) fail("--skip-checks only applies to --rc: promotion runs no local checks.");
-  return { rc, dryRun, force, yes, skipChecks };
+  if (rc && stable) fail("--rc and --stable are different modes. Pick one.");
+  const cuts = rc || stable;
+  if (force && !cuts) fail("--force only applies to --rc and --stable.");
+  if (yes && rc) fail("--yes only applies to shipping a release (--stable, or no flag), not to --rc.");
+  if (skipChecks && !cuts) fail("--skip-checks only applies to --rc and --stable: promotion runs no local checks.");
+  if (crossCheck && !cuts) fail("--cross-check only applies to --rc and --stable.");
+  return { rc, stable, dryRun, force, yes, skipChecks, crossCheck };
 }
 
 function printHelp() {
   console.log(`
 Usage: npm run release [-- --dry-run] [-- --yes]
-       npm run release -- --rc [--dry-run] [--force] [--skip-checks]
+       npm run release -- --rc     [--dry-run] [--force] [--skip-checks] [--cross-check]
+       npm run release -- --stable [--dry-run] [--yes] [--force] [--skip-checks] [--cross-check]
 
-Without --rc, promotes the current RC to stable. Run it from the release/X.Y.Z
+Without a mode flag, promotes the current RC to stable. Run it from the release/X.Y.Z
 branch. It checks that:
 
   - the working tree is clean and HEAD is the RC's bump commit, pushed and tagged
@@ -250,43 +293,60 @@ branch. It checks that:
   - every release workflow passed for the tag
 
 Then it asks for confirmation, rebase-merges the PR and waits for promote.yml to
-mark the release as latest. Nothing is rebuilt.
+mark the release as latest. Nothing is rebuilt, so the stable build is the RC's own
+bytes and still reports its \`-rc.N\` version.
+
+With --stable, ships the BARE version instead (0.1.2, not 0.1.2-rc.2), in two runs:
+
+  Run 1, from release/X.Y.Z while VERSION is an RC:
+    1. Merge the notes of every RC (changes/releases/X.Y.Z-rc.*.md) into one fragment
+    2. Run bump to the bare version, push, tag vX.Y.Z -> CI builds it as stable
+    3. Comment on the release PR
+  Run 2, once VERSION is bare and every workflow passed:
+    checks the PR, release (published, not a pre-release), workflows and latest.json,
+    asks for confirmation (--yes skips it), then rebase-merges the PR.
+
+  The stable build is a fresh build of the same commit, not the bytes tested as the RC.
 
 With --rc, cuts or iterates a release candidate. State-aware:
 
   From main → first RC of next patch
-    1. Compute next version (e.g. 0.5.0 → 0.5.1-rc.1)
+    1. Compute next version (e.g. 0.5.0 → 0.5.1-rc.1). If v<base> has already shipped
+       (main's VERSION still says its last RC) the next patch is used instead.
     2. Create branch release/<base-version> (release/0.5.1)
-    3. Run bump --rc (preflight + commit)
+    3. Run bump (preflight + commit)
     4. Push branch with -u
     5. Tag v0.5.1-rc.1, push tag → CI fires
     6. Open release PR
 
   From release/X.Y.Z → next RC iteration
     1. Compute next iteration (rc.1 → rc.2)
-    2. Run bump --rc (preflight + commit on same branch)
+    2. Run bump (preflight + commit on same branch)
     3. Push
     4. Tag, push tag → CI fires
     5. Comment on the existing PR
 
+  It refuses, with the fix, to: cut an RC on an already-shipped version, reuse an
+  existing tag, branch from a local main that is behind origin/main, or push a
+  release branch whose upstream is not origin/<branch>.
+
 Flags:
-  --rc          Cut or iterate an RC instead of promoting.
+  --rc          Cut or iterate a release candidate.
+  --stable      Ship the bare version (see above).
   --dry-run     Print what would happen; do not modify anything.
-  --yes, -y     Promote without the confirmation prompt.
+  --yes, -y     Skip the confirmation prompt when shipping.
   --force       Forwarded to bump (skip the version-tagged-on-remote check).
   --skip-checks Forwarded to bump and tag: no preflight (frontend checks, i18n check,
                 vitest, clippy, cargo test) and no pre-push hook on the tag push, so the
                 run does no local testing or compilation. The version/tag safety checks
                 still run, and CI is the first thing to see the commit. The pre-commit
                 hook (i18n locales, cargo fmt) still runs on the bump commit.
+  --cross-check Type-check the Windows build first (npm run check:cross), so a break that
+                only shows up off macOS fails before anything is tagged.
 `);
 }
 
-// ── Promote ─────────────────────────────────────────────────────────────────
-
-/// Everything that must hold before an RC may go to stable. Returns one entry
-/// per check, so a failed run lists all that's wrong rather than the first.
-function promotionChecks({ version, branch, pr }) {
+function promotionChecks({ version, branch, pr, stable = false }) {
   const tag = `v${version}`;
   const head = captureOut("git rev-parse HEAD");
   const checks = [];
@@ -297,7 +357,7 @@ function promotionChecks({ version, branch, pr }) {
   // promote.yml matches the head commit message against the bare version, and
   // anything after the bump commit would be on main but not in the tested RC.
   const message = captureOut("git log -1 --format=%B");
-  check("HEAD is the RC's bump commit", message === version, `HEAD is "${message.split("\n")[0]}"`);
+  check("HEAD is the version's bump commit", message === version, `HEAD is "${message.split("\n")[0]}"`);
   check(`HEAD is pushed to origin/${branch}`, remoteCommit(`refs/heads/${branch}`) === head);
   check(`tag ${tag} is on HEAD`, remoteCommit(`refs/tags/${tag}`) === head);
 
@@ -311,7 +371,13 @@ function promotionChecks({ version, branch, pr }) {
   const release = ghJson(["release", "view", tag, "--json", "isPrerelease,isDraft"]);
   check(`release ${tag} exists`, Boolean(release));
   if (release) {
-    check("release is a published pre-release", release.isPrerelease && !release.isDraft, "already stable or a draft");
+    // An RC is promoted, so it must still be a pre-release. A stable build is
+    // published as stable from the start, so it must not be one.
+    check(
+      stable ? "release is published and stable" : "release is a published pre-release",
+      stable ? !release.isPrerelease && !release.isDraft : release.isPrerelease && !release.isDraft,
+      stable ? "still a pre-release or a draft" : "already stable or a draft",
+    );
   }
 
   for (const workflow of RELEASE_WORKFLOWS) {
@@ -426,12 +492,169 @@ async function promote({ dryRun, yes }) {
   ok(`${tag} is live on the stable channel`);
 }
 
+// ── Stable (bare-version) release ───────────────────────────────────────────
+//
+// Promoting an RC ships the RC's own bytes, so the app and the updater keep
+// reporting `0.1.2-rc.2`. `--stable` builds the bare version instead, in two runs:
+//
+//   run 1 (VERSION is an RC):  merge the RCs' notes, bump to the bare version,
+//                              push, tag. CI builds it as a normal release.
+//   run 2 (VERSION is bare):   once the builds are green, rebase-merge the PR.
+//
+// Cost: the stable build is a fresh build of the same commit, not the exact bytes
+// that were tested as the RC. `v0.1.0` shipped this way.
+
+const NOTES_FRAGMENT_DIR = "changes/unreleased";
+
+function runCrossCheck() {
+  log("npm run check:cross (Windows type-check, so a platform-only break fails here)");
+  sh("npm", ["run", "check:cross"], { check: true });
+}
+
+async function cutStable({ dryRun, force, skipChecks, crossCheck }) {
+  const rcVersion = readVersionFile();
+  const base = baseVersion(rcVersion);
+  const branch = gitCurrentBranch();
+  const tag = `v${base}`;
+
+  if (branch !== `release/${base}`) fail(`Cut ${tag} from release/${base}. You are on '${branch}'.`);
+  if (gitDirty()) fail("Working tree is dirty. Commit or stash changes before running release.");
+  fetchRemote();
+  if (tagExists(tag)) {
+    fail(`${tag} already exists, so ${base} has shipped. Start the next version from main: npm run release -- --rc`);
+  }
+
+  const fragment = stableFragmentFromRcNotes(base);
+  const fragmentPath = `${NOTES_FRAGMENT_DIR}/release-${base}.md`;
+  if (!fragment) {
+    fail(
+      `No release notes found for ${base}: changes/releases/${base}-rc.*.md are missing or empty. ` +
+        `Write them to ${fragmentPath} yourself, commit, and run: npm run bump -- ${base}`,
+    );
+  }
+  if (existsSync(fragmentPath)) fail(`${fragmentPath} already exists. Remove it or commit it first, then re-run.`);
+  const entries = (fragment.match(/^- /gm) ?? []).length;
+
+  log(`current: ${rcVersion}    cutting stable: ${base}    tag: ${tag}`);
+  if (dryRun) {
+    dim(
+      `[dry-run] would write ${fragmentPath} (${entries} entries from the RC notes), run bump ${base}` +
+        `${skipChecks ? " --skip-checks" : ""}, push, run tag${skipChecks ? " --no-verify" : ""}, then comment on the PR`,
+    );
+    return;
+  }
+
+  if (crossCheck) runCrossCheck();
+  ensureCurrentVersionTagged({ currentVersion: rcVersion, branchName: branch, onReleaseBranch: true, skipChecks });
+
+  mkdirSync(NOTES_FRAGMENT_DIR, { recursive: true });
+  writeFileSync(fragmentPath, fragment);
+  log(`wrote ${fragmentPath} (${entries} entries)`);
+
+  const bumpArgs = ["run", "bump", "--", base];
+  if (force) bumpArgs.push("--force");
+  if (skipChecks) bumpArgs.push("--skip-checks");
+  log(`npm ${bumpArgs.join(" ")}`);
+  try {
+    sh("npm", bumpArgs, { check: true });
+  } catch (e) {
+    // bump reverts its own changes but leaves untracked files; this one is ours.
+    rmSync(fragmentPath, { force: true });
+    throw e;
+  }
+
+  if (!gitTracksRemote(branch)) {
+    log(`git push -u origin ${branch}`);
+    sh("git", ["push", "--no-verify", "-u", "origin", branch], { check: true });
+  } else {
+    log("git push");
+    sh("git", ["push", "--no-verify"], { check: true });
+  }
+  log(`npm ${tagArgs(skipChecks).join(" ")}`);
+  sh("npm", tagArgs(skipChecks), { check: true });
+
+  const prs = ghJson(["pr", "list", "--head", branch, "--state", "open", "--json", "number"]);
+  if (prs?.[0]) {
+    const body =
+      `🚀 Stable build: \`${tag}\`\n\nCI is building it as a normal (non-pre-release) release. ` +
+      "When every workflow has passed, run `npm run release -- --stable` again to rebase-merge this PR.";
+    sh("gh", ["pr", "comment", String(prs[0].number), "--body", body], { check: true });
+  } else {
+    console.error(`\x1b[33m!\x1b[0m no open PR from ${branch}; open one against main before the final step.`);
+  }
+
+  console.log("");
+  ok(`${tag} is building`);
+  dim("  When all workflows pass, run `npm run release -- --stable` again to merge the PR.");
+}
+
+async function finishStable({ dryRun, yes }) {
+  const version = readVersionFile();
+  const branch = gitCurrentBranch();
+  const tag = `v${version}`;
+
+  if (branch !== `release/${version}`) fail(`Finish ${tag} from release/${version}. You are on '${branch}'.`);
+  fetchRemote();
+  log(`finishing ${tag} from ${branch}`);
+
+  const prs = ghJson([
+    "pr",
+    "list",
+    "--head",
+    branch,
+    "--state",
+    "open",
+    "--json",
+    "number,url,baseRefName,mergeable,headRefOid",
+  ]);
+  const pr = prs?.[0];
+
+  const checks = promotionChecks({ version, branch, pr, stable: true });
+  for (const { name, passed, detail } of checks) {
+    if (passed) ok(name);
+    else console.error(`\x1b[1;31m✗\x1b[0m ${name}${detail ? ` (${detail})` : ""}`);
+  }
+  if (checks.some((c) => !c.passed)) {
+    fail(`${tag} is not ready to finish. Fix the above, or wait for the builds, then re-run.`);
+  }
+
+  if (dryRun) {
+    dim(`[dry-run] would rebase-merge PR #${pr.number}`);
+    return;
+  }
+  if (!yes && !(await confirmPromotion(version))) fail("Not confirmed. Nothing changed.");
+
+  // Rebase keeps the history linear. promote.yml ignores this merge on purpose:
+  // the commit message is the bare version, and the release is already stable.
+  log(`gh pr merge ${pr.number} --rebase`);
+  sh("gh", ["pr", "merge", String(pr.number), "--rebase", "--match-head-commit", captureOut("git rev-parse HEAD")], {
+    check: true,
+  });
+
+  const latest = ghJson(["release", "list", "--limit", "5", "--json", "tagName,isLatest"]);
+  const isLatest = latest?.some((r) => r.tagName === tag && r.isLatest);
+  console.log("");
+  if (isLatest) ok(`${tag} is live on the stable channel`);
+  else {
+    console.error(
+      `\x1b[33m!\x1b[0m PR #${pr.number} merged, but ${tag} is not marked "latest". If it should be: ` +
+        `gh release edit ${tag} --latest`,
+    );
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const { rc, dryRun, force, yes, skipChecks } = parseArgs();
+  const { rc, stable, dryRun, force, yes, skipChecks, crossCheck } = parseArgs();
 
   ensureGhReady();
+
+  if (stable) {
+    if (isRc(readVersionFile())) await cutStable({ dryRun, force, skipChecks, crossCheck });
+    else await finishStable({ dryRun, yes });
+    return;
+  }
 
   if (!rc) {
     await promote({ dryRun, yes });
@@ -442,15 +665,37 @@ async function main() {
     fail("Working tree is dirty. Commit or stash changes before running release.");
   }
 
+  // Everything below is decided from what is published, not from what this clone
+  // last saw: a stale origin/main or a missing tag is how releases go wrong.
+  fetchRemote();
+
   const currentVersion = readVersionFile();
-  const newVersion = bumpVersion(currentVersion, { rc });
-  const base = baseVersion(newVersion);
-  const branchName = `release/${base}`;
-  const tag = `v${newVersion}`;
+  let newVersion = bumpVersion(currentVersion, { rc });
+  let base = baseVersion(newVersion);
 
   const currentBranch = gitCurrentBranch();
   const onMain = currentBranch === "main" || currentBranch === "master";
   const onReleaseBranch = currentBranch.startsWith("release/");
+
+  // Promotion leaves `main`'s VERSION at the last RC (0.1.1-rc.3) even after
+  // v0.1.1 ships, so "the next RC" would be a second 0.1.1-rc.4 on a released
+  // version. A stable tag means that version is done: start the next patch.
+  if (onMain) {
+    for (let guard = 0; guard < 20 && stableShipped(base); guard++) {
+      const next = nextPatchRc(base);
+      log(`v${base} has already shipped; starting the next patch: ${next}`);
+      newVersion = next;
+      base = baseVersion(newVersion);
+    }
+  } else if (onReleaseBranch && stableShipped(base)) {
+    fail(
+      `v${base} has already shipped, so release/${base} is finished and a new RC here would collide with it. ` +
+        `Start the next patch from main: git checkout main && git pull --ff-only && npm run release -- --rc`,
+    );
+  }
+
+  const branchName = `release/${base}`;
+  const tag = `v${newVersion}`;
 
   if (!onMain && !onReleaseBranch) {
     fail(
@@ -465,16 +710,42 @@ async function main() {
     );
   }
 
+  if (tagExists(tag)) {
+    fail(
+      `${tag} already exists, so ${newVersion} cannot be cut again (a published tag is never moved). Pick a version that is free.`,
+    );
+  }
+  if (onMain) {
+    const behind = commitsBehindOriginMain();
+    if (behind > 0) {
+      fail(
+        `Local ${currentBranch} is ${behind} commit${behind === 1 ? "" : "s"} behind origin/main, so a release branch cut ` +
+          `from it would be missing them (and rebuild history that main already has). Run: git pull --ff-only`,
+      );
+    }
+  }
+  if (onReleaseBranch) {
+    const upstream = upstreamOf(currentBranch);
+    if (upstream && upstream !== `origin/${currentBranch}`) {
+      fail(
+        `'${currentBranch}' tracks '${upstream}', so a plain \`git push\` refuses to push it. ` +
+          `Fix: git branch --set-upstream-to=origin/${currentBranch} ${currentBranch}`,
+      );
+    }
+  }
+
   log(`current: ${currentVersion}    branch: ${currentBranch}`);
   log(`next:    ${newVersion}    tag: ${tag}    target branch: ${branchName}`);
 
   if (dryRun) {
     dim(
-      `[dry-run] would create/checkout branch, run bump --rc${skipChecks ? " --skip-checks" : ""}, push, ` +
+      `[dry-run] would create/checkout branch, run bump ${newVersion}${skipChecks ? " --skip-checks" : ""}, push, ` +
         `run tag${skipChecks ? " --no-verify" : ""}, then open or comment on PR`,
     );
     return;
   }
+
+  if (crossCheck) runCrossCheck();
 
   // ── 1. Checkout / create release branch ────────────────────────────────
   if (onMain) {
@@ -497,7 +768,9 @@ async function main() {
   ensureCurrentVersionTagged({ currentVersion, branchName, onReleaseBranch, skipChecks });
 
   // ── 3. Run bump (mutates files, runs preflight, creates commit) ────────
-  const bumpArgs = ["run", "bump", "--", "--rc"];
+  // The version is passed explicitly: bump derives its own from VERSION, which
+  // is exactly what is wrong when main still says an already-shipped RC.
+  const bumpArgs = ["run", "bump", "--", newVersion];
   if (force) bumpArgs.push("--force");
   if (skipChecks) bumpArgs.push("--skip-checks");
   log(`npm ${bumpArgs.join(" ")}`);
@@ -549,7 +822,8 @@ async function main() {
       "",
       "- Each push to this branch via `npm run release -- --rc` produces a new RC build.",
       "- Users opted into the **rc** update channel receive each iteration automatically.",
-      "- **`npm run release` promotes the most recent RC to stable.** The promoted binary is byte-identical to the tested RC — no rebuild happens.",
+      "- **`npm run release` promotes the most recent RC to stable.** The promoted binary is byte-identical to the tested RC — no rebuild happens, so it still reports the `-rc.N` version.",
+      "- **`npm run release -- --stable` builds the bare version instead** (a fresh build of the same commit), then merges this PR once the builds pass.",
       "",
       "### Merge policy",
       "",
