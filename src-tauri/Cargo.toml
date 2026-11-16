@@ -176,7 +176,7 @@ base64 = { workspace = true }
 # xdg-portal is the Linux backend (D-Bus, no GTK3 headers needed); it is
 # compiled away on macOS / Windows by rfd's own cfg gates, so listing it here
 # is safe for all platforms.
-rfd = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
+rfd = { version = "0.18", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
 
 
 # HTTP client used by the resumable LLM model downloader.
