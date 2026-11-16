@@ -60,6 +60,9 @@ pub struct EpochAccumulator {
     channel_names: Vec<String>,
     latest_bands: Option<skill_eeg::eeg_bands::BandSnapshot>,
     pub(crate) tx: mpsc::SyncSender<EpochMsg>,
+    /// Epochs handed to the embed worker, and epochs it had no room for.
+    epochs_sent: u64,
+    epochs_dropped: u64,
 }
 
 impl EpochAccumulator {
@@ -86,7 +89,15 @@ impl EpochAccumulator {
             channel_names,
             latest_bands: None,
             tx,
+            epochs_sent: 0,
+            epochs_dropped: 0,
         }
+    }
+
+    /// `(sent, dropped)`: epochs handed to the embed worker, and epochs it
+    /// had no room for (or was gone for).
+    pub fn epoch_counts(&self) -> (u64, u64) {
+        (self.epochs_sent, self.epochs_dropped)
     }
 
     pub fn set_device_name(&mut self, name: String) {
@@ -95,6 +106,32 @@ impl EpochAccumulator {
 
     pub fn update_bands(&mut self, snap: skill_eeg::eeg_bands::BandSnapshot) {
         self.latest_bands = Some(snap);
+    }
+
+    /// Push one sample of every channel (a whole frame). Same result as
+    /// `push` once per electrode, with the epoch check done once.
+    pub fn push_frame(&mut self, channels: &[f64]) {
+        let n = channels.len().min(EEG_CHANNELS);
+        if n == 0 {
+            return;
+        }
+        // The first electrode goes through `push` (which discards stale data
+        // after a long pause, before anything of this frame is queued), the
+        // last one too (which checks for a complete epoch once the frame is
+        // in); the ones between only queue.
+        let direct = n > 2 && self.bufs[..n].iter().all(|b| b.len() < self.max_buf_samples);
+        if !direct {
+            for (el, &v) in channels[..n].iter().enumerate() {
+                self.push(el, &[v as f32]);
+            }
+            return;
+        }
+        self.push(0, &[channels[0] as f32]);
+        for (el, &v) in channels[..n - 1].iter().enumerate().skip(1) {
+            self.bufs[el].push_back(v as f32);
+            self.since_last[el] += 1;
+        }
+        self.push(n - 1, &[channels[n - 1] as f32]);
     }
 
     /// Push raw µV samples for one electrode at the device's native rate.
@@ -181,6 +218,7 @@ impl EpochAccumulator {
             band_snapshot: self.latest_bands.clone(),
         };
         if let Err(e) = self.tx.try_send(msg) {
+            self.epochs_dropped += 1;
             match e {
                 mpsc::TrySendError::Full(_) => {
                     info!("epoch dropped — embed worker busy");
@@ -189,6 +227,8 @@ impl EpochAccumulator {
                     info!("embed worker disconnected — epochs will be dropped");
                 }
             }
+        } else {
+            self.epochs_sent += 1;
         }
     }
 }
@@ -216,6 +256,32 @@ fn resample_linear(src: &[f32], target_len: usize) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Whole frames produce the same epochs as one electrode at a time.
+    #[test]
+    fn frames_give_the_same_epochs_as_per_electrode_pushes() {
+        let run = |frames: bool| -> Vec<Vec<Vec<f32>>> {
+            let (tx, rx) = mpsc::sync_channel::<EpochMsg>(64);
+            let mut acc = EpochAccumulator::new(tx, 8, 500.0, (0..8).map(|i| format!("C{i}")).collect());
+            for k in 0..(500 * 12) {
+                let frame: Vec<f64> = (0..8).map(|c| f64::from(k) + f64::from(c) / 10.0).collect();
+                if frames {
+                    acc.push_frame(&frame);
+                } else {
+                    for (el, &v) in frame.iter().enumerate() {
+                        acc.push(el, &[v as f32]);
+                    }
+                }
+            }
+            let (sent, dropped) = acc.epoch_counts();
+            let epochs: Vec<Vec<Vec<f32>>> = rx.try_iter().map(|m| m.samples).collect();
+            assert_eq!((sent as usize, dropped), (epochs.len(), 0));
+            epochs
+        };
+        let (a, b) = (run(false), run(true));
+        assert!(a.len() >= 2, "{} epochs in 12 s", a.len());
+        assert_eq!(a, b);
+    }
 
     #[test]
     fn epoch_reports_the_rate_it_was_resampled_to() {

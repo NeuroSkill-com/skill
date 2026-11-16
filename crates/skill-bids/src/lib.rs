@@ -13,7 +13,7 @@
 //!     sub-…_ses-…_scans.tsv
 //!     eeg/    sub-…_task-…_run-N_eeg.{vhdr,vmrk,eeg,json}
 //!             sub-…_task-…_run-N_channels.tsv
-//!             sub-…_task-…_run-N_events.tsv        labels + signal gaps
+//!             sub-…_task-…_run-N_events.tsv        labels + markers + signal gaps
 //!             sub-…_task-…_run-N_physio.{tsv.gz,json}  PPG
 //!     motion/ sub-…_task-…_tracksys-imu_run-N_{motion.tsv,motion.json,channels.tsv}
 //! ```
@@ -86,6 +86,12 @@ pub struct ExportOptions {
     pub include_events: bool,
     pub include_ppg: bool,
     pub include_imu: bool,
+    /// Where a recording carries measurements of the recording computer's
+    /// clock against a time server (`exg_<ts>_clock.csv`), give `acq_time` on
+    /// the server's clock rather than the computer's. Times within a
+    /// recording are not touched: its streams and events share one clock.
+    /// The measured offset is stated in the EEG sidecar either way.
+    pub correct_clock: bool,
 }
 
 impl Default for ExportOptions {
@@ -103,6 +109,7 @@ impl Default for ExportOptions {
             include_events: true,
             include_ppg: true,
             include_imu: true,
+            correct_clock: true,
         }
     }
 }
@@ -394,7 +401,31 @@ fn export_recording(
     let vhdr_rel = eeg("eeg", ".vhdr")?;
     let vhdr = ctx.abs(&vhdr_rel);
 
-    let channels: Vec<Channel> = rec.channel_names.iter().map(|n| eeg_channel(n)).collect();
+    let channels: Vec<Channel> = match &rec.montage {
+        // what the montage says of each channel: what it carries, and whether it is usable
+        Some(m) => m
+            .channels
+            .iter()
+            .map(|c| {
+                use skill_data::montage::ChannelKind as K;
+                let mut ch = eeg_channel(&c.label);
+                ch.channel_type = match c.kind {
+                    K::Eeg => ChannelType::EEG,
+                    K::Eog => ChannelType::EOG,
+                    K::Ecg => ChannelType::ECG,
+                    K::Emg => ChannelType::EMG,
+                    K::Ref => ChannelType::REF,
+                    K::Trigger => ChannelType::TRIG,
+                    K::Misc => ChannelType::MISC,
+                };
+                if c.bad {
+                    ch.status = Some("bad".into());
+                }
+                ch
+            })
+            .collect(),
+        None => rec.channel_names.iter().map(|n| eeg_channel(n)).collect(),
+    };
     let sr = rec.sample_rate;
     let mut writer = BrainVisionWriter::create(&vhdr, &channels, sr)?;
 
@@ -452,7 +483,31 @@ fn export_recording(
     let mut events: Vec<EegEvent> = Vec::new();
     let mut n_labels = 0;
     if opts.include_events {
-        for l in labels.iter().filter(|l| l.end_utc > t0 && l.start_utc < last_wall) {
+        // Markers recorded with the signal (LSL marker streams), at their own
+        // sub-second times.
+        let markers: Vec<(f64, String, String)> = skill_data::session_csv::read_markers(&rec.eeg_path)
+            .into_iter()
+            .filter(|m| m.0 >= t0 && m.0 < last_wall)
+            .collect();
+        for (ts, source, text) in &markers {
+            let onset = to_file_time(*ts);
+            let mut extra = std::collections::HashMap::new();
+            extra.insert("source".to_string(), source.clone());
+            writer.add_marker(onset, 0.0, text);
+            events.push(event(onset, 0.0, "marker", Some(text), sr, extra));
+        }
+        // A label the daemon made from one of those markers says the same
+        // thing again, to the second: the marker is the better record.
+        let restates_a_marker = |l: &LabelEvent| {
+            l.context.starts_with(skill_data::session_csv::MARKER_LABEL_CONTEXT)
+                && markers
+                    .iter()
+                    .any(|m| m.2 == l.text && (m.0 - l.start_utc).abs() <= 1.0)
+        };
+        for l in labels
+            .iter()
+            .filter(|l| l.end_utc > t0 && l.start_utc < last_wall && !restates_a_marker(l))
+        {
             let onset = to_file_time(l.start_utc.max(t0));
             let end = to_file_time(l.end_utc.min(last_wall));
             let mut extra = std::collections::HashMap::new();
@@ -477,13 +532,26 @@ fn export_recording(
     }
     writer.finish()?;
 
-    let eeg_count = channels.iter().filter(|c| c.channel_type == ChannelType::EEG).count();
+    let count = |t: ChannelType| channels.iter().filter(|c| c.channel_type == t).count();
+    let eeg_count = count(ChannelType::EEG);
+    let (eog, ecg, emg, trig) = (
+        count(ChannelType::EOG),
+        count(ChannelType::ECG),
+        count(ChannelType::EMG),
+        count(ChannelType::TRIG),
+    );
+    let montage = rec.montage.as_ref();
     let metadata: EegMetadata = serde_json::from_value(json!({
         "TaskName": ctx.task,
         "SamplingFrequency": sr,
         "EEGChannelCount": eeg_count,
-        "MiscChannelCount": channels.len() - eeg_count,
-        "EEGReference": eeg_reference(rec),
+        "EOGChannelCount": eog,
+        "ECGChannelCount": ecg,
+        "EMGChannelCount": emg,
+        "TriggerChannelCount": trig,
+        "MiscChannelCount": channels.len() - eeg_count - eog - ecg - emg - trig,
+        "EEGReference": montage.and_then(|m| m.reference.clone()).unwrap_or_else(|| eeg_reference(rec).to_string()),
+        "EEGGround": montage.and_then(|m| m.ground.clone()),
         "RecordingDuration": duration,
         "RecordingType": if gaps.is_empty() { "continuous" } else { "discontinuous" },
         "Manufacturer": rec.device_kind,
@@ -500,6 +568,16 @@ fn export_recording(
     }
     if let Some(fw) = &rec.firmware_version {
         extra.insert("SoftwareVersions".into(), json!(fw));
+    }
+    // What the recording computer's clock was off by, as measured against a
+    // time server while it recorded.
+    let clock = skill_data::wall_clock::ClockCorrection::for_recording(&rec.eeg_path);
+    if let Some(c) = &clock {
+        extra.insert("ClockOffsetSeconds".into(), json!(round6(c.offset_at(t0))));
+        extra.insert("ClockOffsetSpreadSeconds".into(), json!(round6(c.residual_s)));
+        extra.insert("ClockDriftPPM".into(), json!((c.drift_ppm() * 100.0).round() / 100.0));
+        extra.insert("ClockChecks".into(), json!(c.checks));
+        extra.insert("AcquisitionTimeCorrected".into(), json!(opts.correct_clock));
     }
     write_eeg_sidecar(&ctx.abs(&eeg("eeg", ".json")?), &metadata, Some(&extra))?;
     write_channels_tsv(&ctx.abs(&eeg("channels", ".tsv")?), &channels)?;
@@ -549,6 +627,11 @@ fn export_recording(
         }
     }
 
+    if let Some(c) = clock.as_ref().filter(|_| opts.correct_clock) {
+        for (_, acq_time) in &mut scan_files {
+            *acq_time = c.corrected(*acq_time);
+        }
+    }
     Ok(Some((
         ExportedRecording {
             source: rec.eeg_path.to_string_lossy().into_owned(),

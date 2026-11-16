@@ -344,10 +344,22 @@ async fn create_label(
 /// Internal helper for daemon-side callers (e.g. calibration runner).
 /// Submits a label without going through HTTP.
 pub async fn submit_label_internal(state: &AppState, text: &str, eeg_start: u64, eeg_end: u64) -> Result<(), String> {
+    submit_label_with_context_internal(state, text, "", eeg_start, eeg_end).await
+}
+
+/// [`submit_label_internal`] with a context line (stored, not embedded).
+pub async fn submit_label_with_context_internal(
+    state: &AppState,
+    text: &str,
+    context: &str,
+    eeg_start: u64,
+    eeg_end: u64,
+) -> Result<(), String> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let label_index = state.label_index.clone();
     let embedder = state.text_embedder.clone();
     let text = text.to_string();
+    let context = context.to_string();
 
     tokio::task::spawn_blocking(move || {
         let conn = open_labels_db(&skill_dir).map_err(|e| e.to_string())?;
@@ -362,7 +374,7 @@ pub async fn submit_label_internal(state: &AppState, text: &str, eeg_start: u64,
                 "INSERT INTO labels (text, context, eeg_start, eeg_end, wall_start, wall_end,
                                  label_start, label_end,
                                  created_at, text_embedding, context_embedding, embedding_model)
-             VALUES (?1, '', ?2, ?3, ?4, ?5, ?4, ?5, ?6, ?7, NULL, ?8)
+             VALUES (?1, ?9, ?2, ?3, ?4, ?5, ?4, ?5, ?6, ?7, NULL, ?8)
              RETURNING id",
                 skill_data::duck::params![
                     text,
@@ -373,6 +385,7 @@ pub async fn submit_label_internal(state: &AppState, text: &str, eeg_start: u64,
                     now_unix(),
                     text_blob,
                     EMBED_MODEL_NAME,
+                    context,
                 ],
                 |r| r.get::<_, i64>(0),
             )

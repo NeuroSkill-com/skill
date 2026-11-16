@@ -63,6 +63,48 @@ pub fn sensors_csv_path(eeg_path: &Path) -> PathBuf {
     eeg_path.with_file_name(format!("{stem}_sensors.csv"))
 }
 
+/// Start of the `context` of a label made from a recorded marker (the source
+/// stream's name follows). Lets an export that has the markers themselves
+/// tell such a label from one a person wrote.
+pub const MARKER_LABEL_CONTEXT: &str = "marker from ";
+
+/// Sidecar path for event markers (`_markers.csv`).
+pub fn markers_csv_path(eeg_path: &Path) -> PathBuf {
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    eeg_path.with_file_name(format!("{stem}_markers.csv"))
+}
+
+/// Append one event marker to a recording's `_markers.csv` (created with its
+/// header on the first marker): `timestamp_s,source,marker`. Always CSV,
+/// whatever the storage format — markers are few, and each one is on disk
+/// before this returns, so none is lost to a crash.
+pub fn append_marker(eeg_csv_path: &Path, timestamp_s: f64, source: &str, marker: &str) -> std::io::Result<()> {
+    let path = markers_csv_path(eeg_csv_path);
+    let file = std::fs::File::options().create(true).append(true).open(&path)?;
+    let new = file.metadata()?.len() == 0;
+    let mut wtr = csv::Writer::from_writer(file);
+    if new {
+        wtr.write_record(["timestamp_s", "source", "marker"])?;
+    }
+    wtr.write_record([format!("{timestamp_s:.6}").as_str(), source, marker])?;
+    wtr.flush()?;
+    wtr.into_inner()
+        .map_err(|e| std::io::Error::other(e.to_string()))?
+        .sync_data()
+}
+
+/// The markers of a recording, oldest first: `(timestamp_s, source, marker)`.
+/// Empty when the recording has none.
+pub fn read_markers(eeg_csv_path: &Path) -> Vec<(f64, String, String)> {
+    let Ok(mut rdr) = csv::Reader::from_path(markers_csv_path(eeg_csv_path)) else {
+        return Vec::new();
+    };
+    rdr.records()
+        .flatten()
+        .filter_map(|r| Some((r.get(0)?.parse().ok()?, r.get(1)?.to_string(), r.get(2)?.to_string())))
+        .collect()
+}
+
 // ── Metrics CSV column header ─────────────────────────────────────────────────
 
 /// Column headers for the `_metrics.csv` file.
@@ -293,6 +335,11 @@ pub struct CsvState {
     ts_bufs: Vec<VecDeque<f64>>,
     /// Rows written so far — used to drive periodic disk flushes.
     written: u64,
+    /// EEG rows or flushes the disk refused (full, I/O error). Not zero means
+    /// samples are not reaching the file.
+    eeg_write_errors: u64,
+    /// Scratch buffer for formatting one field.
+    field: String,
     /// Separate CSV writer for PPG data (created lazily on first PPG sample).
     ppg_wtr: Option<csv::Writer<std::fs::File>>,
     /// Queued raw ADC values per PPG channel (0=ambient, 1=infrared, 2=red).
@@ -336,6 +383,8 @@ impl CsvState {
             bufs: (0..n).map(|_| VecDeque::new()).collect(),
             ts_bufs: (0..n).map(|_| VecDeque::new()).collect(),
             written: 0,
+            eeg_write_errors: 0,
+            field: String::new(),
             ppg_wtr: None,
             ppg_bufs: std::array::from_fn(|_| VecDeque::new()),
             ppg_ts_bufs: std::array::from_fn(|_| VecDeque::new()),
@@ -369,25 +418,69 @@ impl CsvState {
             let Some(ts) = self.ts_bufs[0].pop_front() else {
                 break;
             };
-            for k in 1..n {
-                self.ts_bufs[k].pop_front();
+            for ts_buf in self.ts_bufs.iter_mut().take(n).skip(1) {
+                ts_buf.pop_front();
             }
 
             let mut row = vec![format!("{:.6}", ts)];
-            for k in 0..n {
-                let Some(v) = self.bufs[k].pop_front() else {
+            for buf in self.bufs.iter_mut().take(n) {
+                let Some(v) = buf.pop_front() else {
                     break;
                 };
                 row.push(format!("{:.4}", v));
             }
             let refs: Vec<&str> = row.iter().map(String::as_str).collect();
-            let _ = self.wtr.write_record(&refs);
+            if self.wtr.write_record(&refs).is_err() {
+                self.eeg_write_errors += 1;
+            }
             self.written += 1;
         }
 
-        if self.written > 0 && self.written.is_multiple_of(256) {
-            let _ = self.wtr.flush();
+        if self.written > 0 && self.written.is_multiple_of(256) && self.wtr.flush().is_err() {
+            self.eeg_write_errors += 1;
         }
+    }
+
+    /// Write one complete row — a sample of every channel taken at `ts` —
+    /// without going through the per-electrode queues. For sources that
+    /// deliver whole frames (LSL, wired amplifiers); `channels` shorter than
+    /// the file's column count leaves the remaining columns empty.
+    pub fn push_eeg_frame(&mut self, channels: &[f64], ts: f64, sample_rate: f64) {
+        // Samples already queued per electrode must come out first and in
+        // their rows: keep to that path once it is in use.
+        if self.bufs.iter().any(|b| !b.is_empty()) {
+            for (el, &v) in channels.iter().enumerate() {
+                self.push_eeg(el, &[v], ts, sample_rate);
+            }
+            return;
+        }
+        use std::fmt::Write as _;
+        let mut field = std::mem::take(&mut self.field);
+        let mut ok = true;
+        field.clear();
+        let _ = write!(field, "{ts:.6}");
+        ok &= self.wtr.write_field(&field).is_ok();
+        for k in 0..self.n_eeg {
+            field.clear();
+            if let Some(v) = channels.get(k) {
+                let _ = write!(field, "{v:.4}");
+            }
+            ok &= self.wtr.write_field(&field).is_ok();
+        }
+        ok &= self.wtr.write_record(None::<&[u8]>).is_ok();
+        self.field = field;
+        if !ok {
+            self.eeg_write_errors += 1;
+        }
+        self.written += 1;
+        if self.written.is_multiple_of(256) && self.wtr.flush().is_err() {
+            self.eeg_write_errors += 1;
+        }
+    }
+
+    /// EEG rows handed to the file, and how many writes or flushes failed.
+    pub fn eeg_write_counts(&self) -> (u64, u64) {
+        (self.written, self.eeg_write_errors)
     }
 
     /// Buffer PPG samples for `channel` (0-2) and flush complete rows.
@@ -448,13 +541,13 @@ impl CsvState {
                 let Some(ts) = self.ppg_ts_bufs[0].pop_front() else {
                     break;
                 };
-                for k in 1..3 {
-                    self.ppg_ts_bufs[k].pop_front();
+                for ts_buf in self.ppg_ts_bufs.iter_mut().take(3).skip(1) {
+                    ts_buf.pop_front();
                 }
 
                 let mut row = vec![format!("{:.6}", ts)];
-                for k in 0..3 {
-                    let Some(v) = self.ppg_bufs[k].pop_front() else {
+                for buf in self.ppg_bufs.iter_mut().take(3) {
+                    let Some(v) = buf.pop_front() else {
                         break;
                     };
                     row.push(format!("{:.1}", v));

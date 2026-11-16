@@ -59,6 +59,14 @@ src-tauri/resources/tts/*
 # synthetic test packages, both large and both reproducible on demand.
 dist/rpm-verify/
 
+# Linux packaging output: staging trees from scripts/package-linux-*.sh, and
+# packages + binaries from scripts/build-linux-container.sh. Hundreds of MB of
+# binaries each, all reproducible; unignored, `git add -A` hashes every one.
+dist/linux/
+dist/linux-container/
+# Test binaries staged for running on a Raspberry Pi.
+dist/pi-tests/
+
 # Python bytecode from scripts/lib helpers.
 __pycache__/
 

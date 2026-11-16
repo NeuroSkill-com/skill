@@ -661,6 +661,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.companionEmotibit",
+    "label": "Enregistrer un EmotiBit en parallèle",
+    "desc": "Enregistre un bracelet EmotiBit (conductance cutanée, pouls, température, mouvement) en parallèle de chaque session, dans le même enregistrement et sur la même horloge. Une session démarre sans lui et continue de le chercher ; chaque connexion et chaque perte est notée par un marqueur."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Objectif quotidien",
     "desc": "Définissez votre objectif d'enregistrement quotidien. Le progrès est affiché sur le tableau de bord."
@@ -787,6 +793,18 @@
   },
   {
     "tab": "settings",
+    "key": "settings.losslessRecording",
+    "label": "Enregistrement sans perte",
+    "desc": "Garde les échantillons en mémoire tant que l'enregistrement ne peut pas être écrit, puis les écrit ; avant la fermeture d'une session, tout ce que l'appareil a déjà livré est écrit."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.montage",
+    "label": "Montage des canaux",
+    "desc": "Nomme les canaux d'un enregistrement : leurs étiquettes, ce que chacun mesure et lesquels sont inutilisables. Un montage enregistré peut être celui par défaut des nouvelles sessions, et tout enregistrement peut en recevoir un autre plus tard — rien de ce qui est enregistré n'est réécrit."
+  },
+  {
+    "tab": "settings",
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Configurez une carte OpenBCI pour vous connecter à côté ou à la place d'un autre appareil BCI."
@@ -814,6 +832,18 @@
     "key": "settings.scanner.usbSerial",
     "label": "USB Série",
     "desc": "Dongle OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.storageFormatAuto",
+    "label": "Automatique",
+    "desc": "CSV pour les petits flux, Parquet pour les débits élevés"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.timeCheck",
+    "label": "Vérifier l'horloge pendant l'enregistrement",
+    "desc": "Compare l'horloge de cet ordinateur à un serveur de temps toutes les quelques minutes pendant un enregistrement. L'écart est seulement mesuré et conservé avec l'enregistrement, afin de pouvoir aligner plus tard des enregistrements de plusieurs ordinateurs ; un écart important déclenche un avertissement."
   },
   {
     "tab": "settings",

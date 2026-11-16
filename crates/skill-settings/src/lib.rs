@@ -268,6 +268,40 @@ pub enum SleepPreset {
     Custom,
 }
 
+/// Comparing this computer's clock with a time server during a recording.
+///
+/// A recording's time stamps are this computer's clock; a clock that is not
+/// being kept in step can be tens of milliseconds out and drifting, which is
+/// what two recordings made on two computers are then misaligned by. The
+/// difference is measured — never applied to the clock or to the time stamps
+/// — and kept beside the recording (`exg_<ts>_clock.csv`), so that it can be
+/// corrected for afterwards; a clock far out raises a warning.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct TimeCheckConfig {
+    pub enabled: bool,
+    /// `host` or `host:port` of an NTP server. Empty: the server this
+    /// operating system's own clock service uses by default. A lab with a
+    /// time server of its own on the local network (the way to get well
+    /// under a millisecond) names it here.
+    pub server: String,
+    /// Minutes between checks.
+    pub interval_minutes: u32,
+    /// Warn when the clock is further out than this, milliseconds.
+    pub warn_ms: u32,
+}
+
+impl Default for TimeCheckConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            server: String::new(),
+            interval_minutes: 5,
+            warn_ms: 50,
+        }
+    }
+}
+
 /// User-configurable sleep schedule, persisted in `settings.json`.
 ///
 /// Times are stored as `"HH:MM"` strings in 24-hour format so they
@@ -1024,9 +1058,32 @@ pub struct UserSettings {
     /// Sleep schedule configuration.
     #[serde(default)]
     pub sleep: SleepConfig,
-    /// Recording storage format: `"csv"` (default), `"parquet"`, or `"both"`.
+    /// Recording storage format: `"auto"` (default: CSV for small streams,
+    /// Parquet for high-rate ones), `"csv"`, `"parquet"`, or `"both"`.
     #[serde(default = "default_storage_format")]
     pub storage_format: String,
+    /// Keep every sample that reaches the app: samples that arrive while the
+    /// recording cannot be opened are held in memory and written once it can,
+    /// and what a device has already delivered is written before a session
+    /// closes. Off by default.
+    #[serde(default)]
+    pub lossless_recording: bool,
+    /// Devices recorded in parallel with every session, into the same
+    /// recording: connect targets as for a session (`emotibit`,
+    /// `emotibit:192.168.1.40`, `EmotiBit-BLE-E848`). A companion that is not
+    /// there does not hold a session up; it is looked for while the session
+    /// runs. Empty by default.
+    #[serde(default)]
+    pub companion_devices: Vec<String>,
+    /// Montages: a library of named ones, and rules that make one of them the
+    /// default of a session by its device kind, device name and channel
+    /// count. See `skill_data::montage`. Empty by default: channels keep the
+    /// names their device gives them.
+    #[serde(default)]
+    pub montages: skill_data::montage::MontageSettings,
+    /// Checking this computer's clock against a time server while recording.
+    #[serde(default)]
+    pub time_check: TimeCheckConfig,
     /// Roll the session writer to a new file every N minutes. Bounds the
     /// blast radius of a daemon crash to ≤ N minutes of data and keeps any
     /// single file small enough for readers to load. `0` disables rollover.
@@ -1218,7 +1275,7 @@ fn skip_secret_in_release(_value: &str) -> bool {
 }
 
 pub fn default_storage_format() -> String {
-    "csv".into()
+    "auto".into()
 }
 
 pub fn default_session_rollover_minutes() -> u32 {
@@ -1398,6 +1455,10 @@ impl Default for UserSettings {
             asr: AsrConfig::default(),
             accent_color: default_accent_color(),
             storage_format: default_storage_format(),
+            lossless_recording: false,
+            companion_devices: Vec::new(),
+            montages: skill_data::montage::MontageSettings::default(),
+            time_check: TimeCheckConfig::default(),
             session_rollover_minutes: default_session_rollover_minutes(),
             screenshot: ScreenshotConfig::default(),
             sleep: SleepConfig::default(),

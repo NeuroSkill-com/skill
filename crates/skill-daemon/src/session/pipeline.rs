@@ -69,6 +69,9 @@ pub(crate) struct Pipeline {
     pub(crate) start_utc: u64,
     pub(crate) device_name: String,
     pub(crate) total_samples: u64,
+    /// Microvolts per count when the source delivers integers
+    /// ([`Pipeline::set_eeg_scale_uv`]).
+    eeg_scale_uv: Option<f64>,
     flush_counter: u64,
     /// Samples since the bad-electrode mask was last refreshed.
     quality_mask_counter: u32,
@@ -77,7 +80,12 @@ pub(crate) struct Pipeline {
     pub(crate) fnirs_channel_names: Vec<String>,
     /// Device kind tag (e.g. "muse", "awear", "openbci", "emotiv").
     pub(crate) device_kind: String,
+    /// The default montage this session records under, with the channel names
+    /// the device delivered: written beside every chunk of the recording.
+    pub(crate) default_montage: Option<(skill_data::montage::Montage, Vec<String>)>,
     pub(crate) ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer,
+    /// Latest trace report of the session, kept in the sidecar at finalize.
+    pub(crate) trace_summary: Option<serde_json::Value>,
     /// Whether the current chunk has been flushed, closed and given a sidecar.
     ///
     /// Exists so `Drop` can finalise a chunk the session never got to finalise
@@ -118,10 +126,14 @@ impl Pipeline {
         let start_utc = unix_secs();
         let csv_path = day_dir.join(format!("exg_{start_utc}.csv"));
 
+        // Recordings a crash, a kill or a power cut left without their
+        // Parquet footer are made whole again before the next one starts.
+        recover_unfinished_recordings(skill_dir);
+
         // Storage format (csv/parquet/both) from settings.
         let storage_format = {
             let settings = skill_settings::load_settings(skill_dir);
-            StorageFormat::parse(&settings.storage_format)
+            StorageFormat::for_stream(&settings.storage_format, eeg_channels, sample_rate)
         };
         let default_labels: Vec<String> = (0..eeg_channels).map(|i| format!("Ch{}", i + 1)).collect();
         let labels: Vec<&str> = if channel_names.is_empty() {
@@ -165,8 +177,11 @@ impl Pipeline {
         // Override with SKILL_VIRTUAL_EMBED=1 (e.g. for e2e tests).
         let is_virtual = device_name.to_lowercase().contains("virtual");
         let force_virtual_embed = std::env::var("SKILL_VIRTUAL_EMBED").map(|v| v == "1").unwrap_or(false);
+        // Tests run without the encoder unless one asks for it
+        // (SKILL_TEST_EMBED=1: the live-session embedding measurement).
+        let test_embed = std::env::var("SKILL_TEST_EMBED").map(|v| v == "1").unwrap_or(false);
         let skip_embed = (is_virtual && !force_virtual_embed)
-            || cfg!(test)
+            || (cfg!(test) && !test_embed)
             || std::env::var("SKILL_SKIP_EMBED").map(|v| v == "1").unwrap_or(false);
         let model_config = skill_eeg::eeg_model_config::load_model_config(skill_dir);
         let (embed_worker_opt, acc) = if skip_embed {
@@ -209,38 +224,74 @@ impl Pipeline {
             start_utc,
             device_name,
             total_samples: 0,
+            eeg_scale_uv: None,
             flush_counter: 0,
             quality_mask_counter: 0,
             firmware_version: None,
             serial_number: None,
             fnirs_channel_names: Vec::new(),
             device_kind: String::new(),
+            default_montage: None,
             // 5-second window covers one full HRV epoch at 64 Hz PPG.
             ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer::new(5.0),
+            trace_summary: None,
             finalized: false,
         })
+    }
+
+    /// What storage says about the recording so far (for the session trace).
+    pub(crate) fn storage_counts(&self) -> super::trace::StorageCounts {
+        let (rows, errors) = self.writer.eeg_write_counts();
+        super::trace::StorageCounts {
+            rows,
+            errors,
+            disk_bytes: super::trace::recording_disk_bytes(&self.csv_path),
+        }
+    }
+
+    /// `(sent, dropped)` epochs for the embedder.
+    pub(crate) fn epoch_counts(&self) -> (u64, u64) {
+        self.epoch_accumulator
+            .as_ref()
+            .map_or((0, 0), EpochAccumulator::epoch_counts)
+    }
+
+    /// The source delivers integers, `scale_uv` microvolts each: have the
+    /// recording store them as integers where its format can (Parquet). Call
+    /// before the first sample; it is carried over to the files a rollover
+    /// starts.
+    pub(crate) fn set_eeg_scale_uv(&mut self, scale_uv: f64) {
+        self.eeg_scale_uv = Some(scale_uv);
+        match self.writer.set_eeg_scale_uv(scale_uv) {
+            Ok(true) => info!(scale_uv, "recording EEG as integer counts"),
+            Ok(false) => {}
+            Err(e) => tracing::error!(%e, "could not switch the recording to integer counts; it stays as it was"),
+        }
+    }
+
+    /// Record a frame without analysing it: for samples that are written
+    /// late (held while the recording could not be opened, or still queued
+    /// when the session closes), where only the recording matters.
+    pub(crate) fn store_eeg(&mut self, channels: &[f64], ts: f64) {
+        self.total_samples += 1;
+        self.flush_counter += 1;
+        self.writer.push_eeg_frame(channels, ts, self.sample_rate);
+        if self.flush_counter >= 256 {
+            self.writer.flush();
+            self.flush_counter = 0;
+        }
     }
 
     /// Push one EEG frame through the full DSP pipeline.
     /// Returns enriched band snapshot JSON if the band analyzer fired.
     pub(crate) fn push_eeg(&mut self, channels: &[f64], ts: f64) -> Option<serde_json::Value> {
-        self.total_samples += 1;
-        self.flush_counter += 1;
-
-        // 1. Record raw samples to file.
-        for (el, &v) in channels.iter().enumerate() {
-            self.writer.push_eeg(el, &[v], ts, self.sample_rate);
-        }
-        if self.flush_counter >= 256 {
-            self.writer.flush();
-            self.flush_counter = 0;
-        }
+        // 1. Record raw samples to file — first, so that nothing the rest of
+        //    the pipeline does can come between a sample and the disk.
+        self.store_eeg(channels, ts);
 
         // 2. Feed epoch accumulator (for EXG embeddings).
         if let Some(ref mut acc) = self.epoch_accumulator {
-            for (el, &v) in channels.iter().enumerate() {
-                acc.push(el, &[v as f32]);
-            }
+            acc.push_frame(channels);
         }
 
         // 3. EEG filter (notch + bandpass).
@@ -341,6 +392,16 @@ impl Pipeline {
             },
             &self.device_kind,
         );
+        if let Some((montage, recorded)) = &self.default_montage {
+            if let Err(e) = skill_data::montage::set_session_montage(
+                &self.csv_path,
+                montage.clone(),
+                skill_data::montage::MontageOrigin::Default,
+                Some(recorded.clone()),
+            ) {
+                tracing::warn!(%e, "the session's montage was not written beside the recording");
+            }
+        }
     }
 
     pub(crate) fn finalize(&mut self) {
@@ -365,6 +426,9 @@ impl Pipeline {
             },
             &self.device_kind,
         );
+        if let Some(trace) = &self.trace_summary {
+            super::shared::add_to_session_meta(&self.csv_path, "trace", trace);
+        }
         info!(
             path = %self.csv_path.display(),
             samples = self.total_samples,
@@ -405,10 +469,15 @@ impl Pipeline {
         // 3. Open a fresh writer with the same labels and current settings.
         let storage_format = {
             let settings = skill_settings::load_settings(skill_dir);
-            StorageFormat::parse(&settings.storage_format)
+            StorageFormat::for_stream(&settings.storage_format, self.channel_names.len(), self.sample_rate)
         };
         let labels: Vec<&str> = self.channel_names.iter().map(String::as_str).collect();
-        let new_writer = SessionWriter::open(&new_path, &labels, storage_format).context("rollover writer open")?;
+        let mut new_writer = SessionWriter::open(&new_path, &labels, storage_format).context("rollover writer open")?;
+        if let Some(scale_uv) = self.eeg_scale_uv {
+            if let Err(e) = new_writer.set_eeg_scale_uv(scale_uv) {
+                tracing::error!(%e, "rollover: the new file stays in microvolts");
+            }
+        }
 
         // 4. Swap.
         self.writer = new_writer;
@@ -424,6 +493,31 @@ impl Pipeline {
         info!(path = %self.csv_path.display(), "session rolled");
         Ok(())
     }
+}
+
+/// Sweep the day directories for Parquet recordings that were never closed
+/// and rebuild them, in the background. Files touched in the last two minutes
+/// are left alone: another session may be writing them right now.
+fn recover_unfinished_recordings(skill_dir: &Path) {
+    const MIN_IDLE: std::time::Duration = std::time::Duration::from_secs(120);
+    let skill_dir = skill_dir.to_path_buf();
+    std::thread::spawn(move || {
+        let Ok(days) = std::fs::read_dir(&skill_dir) else {
+            return;
+        };
+        for day in days.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+            for (path, outcome) in skill_data::session_parquet::recover_eeg_parquets_in(&day, MIN_IDLE) {
+                match outcome {
+                    skill_data::session_parquet::EegRecovery::Recovered { rows } => {
+                        info!(path = %path.display(), rows, "recovered an unfinished recording");
+                    }
+                    other => {
+                        tracing::warn!(path = %path.display(), ?other, "unfinished recording could not be recovered");
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[cfg(test)]

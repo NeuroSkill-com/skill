@@ -232,6 +232,12 @@ fn probe_cached(b: FftBackend) -> Result<(), String> {
 /// GPU graphs — call it off the async runtime.
 pub fn probe_all() {
     for b in candidates() {
+        // On a Pi a GPU FFT panics in pipeline creation (see `calibrate`);
+        // leave GPUs unprobed. Choosing one explicitly still probes it then.
+        #[cfg(feature = "rlx-fft")]
+        if skill_accel::is_raspberry_pi() && matches!(b, FftBackend::Rlx(d) if d != rlx::Device::Cpu) {
+            continue;
+        }
         if let Err(e) = probe_cached(b) {
             eprintln!("[fft] not offering `{}`: {e}", b.name());
         }
@@ -323,6 +329,14 @@ fn time_round_trip(b: FftBackend, ch: usize, len: usize) -> Option<f64> {
 pub fn calibrate(cpu: FftBackend) -> Option<AutoPlan> {
     #[cfg(feature = "rlx-fft")]
     {
+        // A Pi's VideoCore enumerates as a wgpu adapter but caps workgroups at
+        // 256 invocations, so the GPU FFT panics in pipeline creation, and the
+        // timing sweep would compete with the LLM for the four cores at
+        // startup. Same policy as every model: CPU unless chosen explicitly.
+        if skill_accel::is_raspberry_pi() {
+            eprintln!("[fft] auto: Raspberry Pi — CPU only, no GPU calibration");
+            return None;
+        }
         let sizes: Vec<usize> = SWEEP.iter().map(|(c, l)| c * l).collect();
         let cpu_t: Vec<f64> = SWEEP
             .iter()

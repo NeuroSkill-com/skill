@@ -225,6 +225,7 @@ impl EmotivAdapter {
                     None
                 };
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel,
                     gyro: None, // Cortex motion stream has quaternions, not raw gyro
                     mag,

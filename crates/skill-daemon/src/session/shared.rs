@@ -183,6 +183,24 @@ pub fn write_session_meta_full(
     }
 }
 
+/// Add one key to a recording's sidecar JSON (read, insert, write back).
+/// A sidecar that is missing or unreadable is left as it is.
+pub fn add_to_session_meta(csv_path: &Path, key: &str, value: &serde_json::Value) {
+    let path = csv_path.with_extension("json");
+    let Some(mut meta) = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+    else {
+        return;
+    };
+    if let Some(obj) = meta.as_object_mut() {
+        obj.insert(key.to_string(), value.clone());
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&meta) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
 /// Write a minimal in-progress sidecar JSON immediately after opening a
 /// recording, before any samples are flushed. Crash-resilience: a daemon
 /// killed mid-chunk leaves a sidecar with the known device/channel/rate

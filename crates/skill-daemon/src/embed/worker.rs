@@ -1207,8 +1207,8 @@ fn encode_neurorvq(state: &mut NeuroRVQState, msg: &EpochMsg) -> Option<Vec<f32>
     let n_samples = msg.samples[0].len();
     let mut signal = Vec::with_capacity(n_ch * n_samples);
     for s in 0..n_samples {
-        for ch in 0..n_ch {
-            signal.push(msg.samples[ch].get(s).copied().unwrap_or(0.0));
+        for samples in msg.samples.iter().take(n_ch) {
+            signal.push(samples.get(s).copied().unwrap_or(0.0));
         }
     }
     let ch_names: Vec<&str> = msg.channel_names.iter().take(n_ch).map(String::as_str).collect();

@@ -17,6 +17,9 @@ pub(crate) struct NotchPresetRequest {
 
 crate::settings_struct!(FilterConfig, get_filter_config, set_filter_config => filter_config);
 crate::settings_get_value!(get_storage_format => storage_format);
+crate::settings_bool!(get_lossless_recording, set_lossless_recording => lossless_recording);
+crate::settings_struct!(Vec<String>, get_companion_devices, set_companion_devices => companion_devices);
+crate::settings_struct!(skill_settings::TimeCheckConfig, get_time_check, set_time_check => time_check);
 crate::settings_get_value!(get_embedding_overlap => embedding_overlap_secs);
 
 pub(crate) async fn set_notch_preset(
@@ -36,6 +39,7 @@ pub(crate) async fn set_storage_format(
     Json(req): Json<super::settings::StringValueRequest>,
 ) -> Json<serde_json::Value> {
     let fmt = match req.value.to_ascii_lowercase().as_str() {
+        "auto" => "auto",
         "parquet" => "parquet",
         "both" => "both",
         _ => "csv",

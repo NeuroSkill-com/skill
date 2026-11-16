@@ -992,6 +992,8 @@ fn try_qwen35_runner(
         None => std::env::remove_var("RLX_QWEN35_VISION_MIN_TOKENS"),
     }
 
+    set_cpu_host_embed(device == rlx::runtime::Device::Cpu);
+
     let build = |mm: Option<&Path>| {
         eprintln!(
             "[rlx] Qwen35 load device={device:?} packed={packed} max_seq={max_seq} mmproj={}",
@@ -1036,6 +1038,30 @@ fn try_qwen35_runner(
         Err(e) => Err(anyhow!("Qwen35Runner on {device:?} failed: {e}")),
     };
     Some(built.map(|runner| (runner, max_seq)))
+}
+
+/// On CPU, look Qwen3.5's token embedding up on the host
+/// (`RLX_QWEN35_HOST_EMBED=1`) instead of baking an f32 copy of the table into
+/// every compiled graph. rlx only does this by itself for tables of 1 GiB or
+/// more, and Qwen3.5-0.8B's is 1.017 GB, just under. Measured on aarch64 with
+/// a Raspberry Pi's cache budget (dequant cache capped at 1 GB, 4 threads):
+/// peak RSS 7.0 GB → 3.0 GB, byte-identical greedy output, decode speed within
+/// run-to-run noise. That is the difference between fitting a 4 GB Pi and not
+/// fitting an 8 GB one. On a GPU the graph-resident table is the fast path, so
+/// this is CPU-only, and it is cleared again when a later load goes to a GPU.
+/// A value set by the user is never touched.
+fn set_cpu_host_embed(cpu: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    const VAR: &str = "RLX_QWEN35_HOST_EMBED";
+    static OURS: AtomicBool = AtomicBool::new(false);
+    if cpu {
+        if std::env::var_os(VAR).is_none() {
+            std::env::set_var(VAR, "1");
+            OURS.store(true, Ordering::Relaxed);
+        }
+    } else if OURS.swap(false, Ordering::Relaxed) {
+        std::env::remove_var(VAR);
+    }
 }
 
 fn resolve_gemma_tokenizer(weights: &Path) -> Option<PathBuf> {
@@ -1954,6 +1980,10 @@ mod device_tests {
     /// that shipped in 0.1.0-rc.3: `inference_device` said `"gpu"` and
     /// `rlx_device` said `"metal"`, but a stale `n_gpu_layers: 0` left over
     /// from the "GPU layers: CPU" button pinned the whole engine to CPU.
+    ///
+    /// Compared against the shared device policy rather than "not CPU": a
+    /// machine can have no usable accelerator at all (a Raspberry Pi, whose
+    /// policy chain is empty, or a box with no GPU), and there CPU is right.
     #[test]
     fn zero_gpu_layers_does_not_veto_an_explicit_accelerator() {
         let cfg = LlmConfig {
@@ -1961,11 +1991,15 @@ mod device_tests {
             n_gpu_layers: 0,
             ..LlmConfig::default()
         };
-        assert_ne!(
+        let policy = skill_accel::best(skill_accel::parse_device("metal"));
+        assert_eq!(
             resolve_rlx_device(&cfg),
-            Device::Cpu,
+            policy,
             "an explicitly requested accelerator wins over the llama.cpp layer count"
         );
+        if skill_accel::usable(Device::Metal) {
+            assert_eq!(policy, Device::Metal);
+        }
     }
 
     /// …and it must not veto `auto` either: "use the GPU when there is one"
@@ -2934,6 +2968,23 @@ mod context_limit_tests {
         for msg in [at_cap, below, humanize_inference_error("weight not found: x")] {
             assert!(!msg.contains("  "), "double space in {msg:?}");
         }
+    }
+
+    #[test]
+    fn cpu_host_embed_is_set_for_cpu_and_cleared_for_gpu_but_never_overrides_the_user() {
+        const VAR: &str = "RLX_QWEN35_HOST_EMBED";
+        std::env::remove_var(VAR);
+        set_cpu_host_embed(true);
+        assert_eq!(std::env::var(VAR).as_deref(), Ok("1"));
+        set_cpu_host_embed(false);
+        assert!(std::env::var_os(VAR).is_none(), "a GPU load must not inherit it");
+
+        std::env::set_var(VAR, "0");
+        set_cpu_host_embed(true);
+        assert_eq!(std::env::var(VAR).as_deref(), Ok("0"));
+        set_cpu_host_embed(false);
+        assert_eq!(std::env::var(VAR).as_deref(), Ok("0"));
+        std::env::remove_var(VAR);
     }
 
     #[test]

@@ -615,10 +615,7 @@ where
                     }
                 }
                 let key = (tc.function.name.clone(), tc.function.arguments.clone());
-                if executed_calls.contains(&key) {
-                    return false;
-                }
-                true
+                !executed_calls.contains(&key)
             })
             .take(max_calls_per_round)
             .collect();

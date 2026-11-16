@@ -120,6 +120,7 @@ Long-form documentation lives in `./docs`:
 - API reference (WebSocket + HTTP): [docs/API.md](docs/API.md)
 - Development guide: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - Linux build/packaging: [docs/LINUX.md](docs/LINUX.md)
+- Raspberry Pi (4/5, 64-bit): [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md)
 - Windows build setup: [docs/WINDOWS.md](docs/WINDOWS.md)
 
 ## Development (quickstart)

@@ -296,14 +296,14 @@ Release:        1
 Summary:        Neurofeedback and local AI assistant
 License:        GPL-3.0-only
 BuildArch:      $rpm_arch
-# No manual `Requires: openblas` here.
+# No manual "Requires: openblas" here.
 #
 # rpmbuild's automatic dependency generator already reads the shipped ELF and
-# emits `libopenblas.so.0()(64bit)` -- verified against the released rpm, which
+# emits "libopenblas.so.0()(64bit)" -- verified against the released rpm, which
 # carried both that and the redundant manual line. The soname is the portable
 # form: the package providing it is named differently on each distro this rpm
 # targets (openblas-serial / -threads / -openmp on Fedora and RHEL, libopenblas0
-# on openSUSE), so pinning the literal name `openblas` adds nothing on Fedora and
+# on openSUSE), so pinning the literal name "openblas" adds nothing on Fedora and
 # makes the package refuse to install where no such package exists.
 Source0:        neuroskill-root.tar.gz
 

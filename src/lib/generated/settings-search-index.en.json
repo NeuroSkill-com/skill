@@ -661,6 +661,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.companionEmotibit",
+    "label": "Record an EmotiBit alongside",
+    "desc": "Records an EmotiBit wristband (skin conductance, pulse, temperature, motion) in parallel with every session, into the same recording and on the same clock. A session starts without it and keeps looking for it; each time it connects or drops out, a marker says so."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Daily Goal",
     "desc": "Set your daily recording goal. Progress is shown on the dashboard."
@@ -787,6 +793,18 @@
   },
   {
     "tab": "settings",
+    "key": "settings.losslessRecording",
+    "label": "Lossless recording",
+    "desc": "Hold samples in memory while the recording cannot be written and write them once it can, and write everything a device has already delivered before a session closes."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.montage",
+    "label": "Montage",
+    "desc": "Names the channels of a recording: their labels, what each one carries and which are bad. A saved montage can be the default for new sessions, and any recording can be given another one later — nothing recorded is rewritten."
+  },
+  {
+    "tab": "settings",
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Configure an OpenBCI board to connect alongside or instead of another BCI device."
@@ -814,6 +832,18 @@
     "key": "settings.scanner.usbSerial",
     "label": "USB Serial",
     "desc": "OpenBCI Cyton / CytonDaisy dongle"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.storageFormatAuto",
+    "label": "Automatic",
+    "desc": "CSV for small streams, Parquet for high-rate ones"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.timeCheck",
+    "label": "Check the clock while recording",
+    "desc": "Compare this computer's clock with a time server every few minutes during a recording. The difference is only measured and kept with the recording, so recordings from several computers can be lined up later; a clock that is far out raises a warning."
   },
   {
     "tab": "settings",

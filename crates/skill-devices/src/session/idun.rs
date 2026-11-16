@@ -142,6 +142,7 @@ impl IdunAdapter {
             GuardianEvent::Accelerometer(reading) => {
                 self.last_accel = [reading.sample.x, reading.sample.y, reading.sample.z];
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: self.last_accel,
                     gyro: None,
                     mag: None,
@@ -150,6 +151,7 @@ impl IdunAdapter {
 
             GuardianEvent::Gyroscope(reading) => {
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: self.last_accel,
                     gyro: Some([reading.sample.x, reading.sample.y, reading.sample.z]),
                     mag: None,

@@ -168,6 +168,7 @@ impl MuseAdapter {
                 // Emit all 3 sub-samples.
                 for s in &imu.samples {
                     self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                        timestamp_s: None,
                         accel: [s.x, s.y, s.z],
                         gyro: None,
                         mag: None,
@@ -178,6 +179,7 @@ impl MuseAdapter {
             MuseEvent::Gyroscope(imu) => {
                 for s in &imu.samples {
                     self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                        timestamp_s: None,
                         accel: self.last_accel,
                         gyro: Some([s.x, s.y, s.z]),
                         mag: None,
@@ -197,6 +199,10 @@ impl MuseAdapter {
                 let val = serde_json::Value::Object(c.fields);
                 self.pending.push_back(DeviceEvent::Meta(val));
             }
+
+            // muse-rs 0.2.3 lets the enum grow: an event this adapter does not
+            // know yet carries nothing the session records.
+            _ => {}
         }
     }
 }

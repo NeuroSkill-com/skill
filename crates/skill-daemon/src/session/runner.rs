@@ -5,11 +5,256 @@
 
 use skill_devices::session::{DeviceAdapter, DeviceEvent};
 use tokio::sync::oneshot;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use super::pipeline::Pipeline;
 use super::shared::{broadcast_event, unix_secs_f64};
 use crate::state::AppState;
+
+/// How often a recording that could not be opened is tried again.
+const PIPELINE_RETRY_EVERY: std::time::Duration = if cfg!(test) {
+    std::time::Duration::from_millis(200)
+} else {
+    std::time::Duration::from_secs(5)
+};
+
+/// Open the recording for a connected device and thread its identity in.
+fn open_pipeline(
+    state: &AppState,
+    skill_dir: &std::path::Path,
+    desc: &skill_devices::session::DeviceDescriptor,
+    info: &skill_devices::session::DeviceInfo,
+    hooks: &[skill_settings::HookRule],
+    eeg_scale_uv: Option<f64>,
+) -> anyhow::Result<Pipeline> {
+    // The default montage of the settings for this device, if a rule holds: the session
+    // records and analyses under its labels. The names the device gave are kept beside
+    // the recording, with the montage, so that it can be given another one later.
+    let montages = skill_settings::load_settings(skill_dir).montages;
+    let default_montage = montages
+        .default_for(desc.kind, &info.name, desc.channel_names.len())
+        .map(|(montage, _)| (montage.clone(), montage.resolve(&desc.channel_names)));
+    let channel_names = match &default_montage {
+        Some((montage, resolved)) => {
+            info!(montage = %montage.name, covered = resolved.covered, "default montage");
+            for w in &resolved.warnings {
+                warn!(montage = %montage.name, "{w}");
+            }
+            resolved.labels()
+        }
+        None => desc.channel_names.clone(),
+    };
+    let mut p = Pipeline::open(
+        skill_dir,
+        desc.eeg_channels,
+        desc.eeg_sample_rate,
+        channel_names.clone(),
+        info.name.clone(),
+        state.events_tx.clone(),
+        hooks.to_vec(),
+        state.text_embedder.clone(),
+        state.exg_model_status.clone(),
+    )?;
+    // Capture device identity and channel metadata.
+    p.serial_number = info.serial_number.clone();
+    p.firmware_version = info.firmware_version.clone();
+    p.device_kind = desc.kind.to_string();
+    p.fnirs_channel_names = desc.fnirs_channel_names.clone();
+    p.default_montage = default_montage.map(|(montage, _)| (montage, desc.channel_names.clone()));
+    if let Some(scale_uv) = eeg_scale_uv {
+        p.set_eeg_scale_uv(scale_uv);
+    }
+    // Drop a partial sidecar before any samples flow so a crash here leaves a
+    // readable session entry for list_sessions_for_day.
+    p.write_partial_sidecar();
+    if let Ok(mut s) = state.status.lock() {
+        s.csv_path = Some(p.csv_path.display().to_string());
+        s.channel_names = channel_names;
+    }
+    Ok(p)
+}
+
+/// Decides which markers become labels: the first of a stream, any that
+/// differs from the one before it on the same stream, and a repeated one
+/// again after [`MarkerLabels::REPEAT_AFTER_S`].
+#[derive(Default)]
+struct MarkerLabels {
+    /// Per source: the last marker text and when it last became a label.
+    last: std::collections::HashMap<String, (String, f64)>,
+}
+
+impl MarkerLabels {
+    const REPEAT_AFTER_S: f64 = 60.0;
+
+    fn is_new(&mut self, marker: &skill_devices::session::MarkerFrame) -> bool {
+        if marker.text.trim().is_empty() {
+            return false;
+        }
+        match self.last.get_mut(&marker.source) {
+            Some((text, at)) if *text == marker.text && marker.timestamp_s - *at < Self::REPEAT_AFTER_S => false,
+            Some(entry) => {
+                *entry = (marker.text.clone(), marker.timestamp_s);
+                true
+            }
+            None => {
+                self.last
+                    .insert(marker.source.clone(), (marker.text.clone(), marker.timestamp_s));
+                true
+            }
+        }
+    }
+}
+
+/// Whether an event carries data that belongs in the recording.
+fn is_recorded(ev: &DeviceEvent) -> bool {
+    matches!(
+        ev,
+        DeviceEvent::Eeg(_)
+            | DeviceEvent::Imu(_)
+            | DeviceEvent::Ppg(_)
+            | DeviceEvent::Vitals(_)
+            | DeviceEvent::Marker(_)
+            | DeviceEvent::Sensor(_)
+            | DeviceEvent::Fnirs(_)
+    )
+}
+
+/// Write an event's data to the recording and nothing else: no analysis, no
+/// broadcast. For data written late, where only the recording matters.
+/// `arrived_s` stamps the events that carry no time of their own.
+fn store_event(pipe: &mut Pipeline, arrived_s: f64, ev: &DeviceEvent) {
+    match ev {
+        DeviceEvent::Eeg(f) => pipe.store_eeg(&f.channels, f.timestamp_s),
+        DeviceEvent::Imu(f) => pipe.writer.push_imu(
+            &pipe.csv_path,
+            f.timestamp_s.unwrap_or(arrived_s),
+            f.accel,
+            f.gyro,
+            None,
+        ),
+        DeviceEvent::Ppg(f) => pipe
+            .writer
+            .push_ppg(&pipe.csv_path, f.channel, &f.samples, f.timestamp_s, None),
+        DeviceEvent::Vitals(f) => pipe.writer.push_vitals(
+            &pipe.csv_path,
+            f.timestamp_s,
+            f.hr_bpm,
+            f.ibi_ms,
+            f.spo2_pct,
+            f.temperature_c,
+        ),
+        DeviceEvent::Marker(m) => {
+            if let Err(e) = skill_data::session_csv::append_marker(&pipe.csv_path, m.timestamp_s, &m.source, &m.text) {
+                error!(%e, "marker not recorded");
+            }
+        }
+        DeviceEvent::Sensor(f) => {
+            for &(ts, value) in &f.samples {
+                pipe.writer.push_sensor(&pipe.csv_path, &f.channel, &f.unit, ts, value);
+            }
+        }
+        DeviceEvent::Fnirs(f) => {
+            pipe.writer
+                .push_fnirs(&pipe.csv_path, &f.channels, &pipe.fnirs_channel_names, f.timestamp_s);
+        }
+        _ => {}
+    }
+}
+
+/// Lossless recording: events kept in memory, oldest first, while there is no
+/// recording to write them to.
+#[derive(Default)]
+struct Held {
+    /// Arrival time (Unix seconds) and event.
+    events: std::collections::VecDeque<(f64, DeviceEvent)>,
+    /// Sample values held, the measure of the memory in use.
+    values: usize,
+    /// Events given up to stay within [`Held::MAX_VALUES`].
+    dropped: u64,
+}
+
+impl Held {
+    /// 128 MB of samples: a quarter of an hour of 32 channels at 500 Hz.
+    const MAX_VALUES: usize = 16 << 20;
+
+    fn weight(ev: &DeviceEvent) -> usize {
+        match ev {
+            DeviceEvent::Eeg(f) => f.channels.len(),
+            DeviceEvent::Ppg(f) => f.samples.len(),
+            DeviceEvent::Sensor(f) => f.samples.len() * 2,
+            DeviceEvent::Fnirs(f) => f.channels.len(),
+            _ => 8,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
+
+    fn push(&mut self, arrived_s: f64, ev: DeviceEvent) {
+        self.values += Self::weight(&ev);
+        self.events.push_back((arrived_s, ev));
+        while self.values > Self::MAX_VALUES {
+            let Some((_, old)) = self.events.pop_front() else { break };
+            self.values -= Self::weight(&old);
+            if self.dropped == 0 {
+                error!("held samples exceed memory budget and there is still no recording — the oldest are being lost");
+            }
+            self.dropped += 1;
+        }
+    }
+
+    /// Write everything held to the recording, in arrival order.
+    fn write_to(&mut self, pipe: &mut Pipeline) {
+        let n = self.events.len();
+        for (arrived_s, ev) in self.events.drain(..) {
+            store_event(pipe, arrived_s, &ev);
+        }
+        pipe.writer.flush();
+        self.values = 0;
+        info!(events = n, lost = self.dropped, "held samples written to the recording");
+    }
+}
+
+/// Lossless recording: write what the adapter has already received before
+/// the session lets go of it. Stops at the first event that is not there yet,
+/// so a live stream cannot hold a closing session open.
+fn drain_adapter(adapter: &mut dyn DeviceAdapter, pipeline: &mut Option<Pipeline>, held: &mut Held) -> u64 {
+    use futures::FutureExt;
+    const BUDGET: std::time::Duration = std::time::Duration::from_secs(2);
+    let started = std::time::Instant::now();
+    let mut stored = 0;
+    while started.elapsed() < BUDGET {
+        let Some(Some(ev)) = adapter.next_event().now_or_never() else {
+            break;
+        };
+        if matches!(ev, DeviceEvent::Disconnected) {
+            break;
+        }
+        if !is_recorded(&ev) {
+            continue;
+        }
+        match pipeline.as_mut() {
+            Some(pipe) => store_event(pipe, unix_secs_f64(), &ev),
+            None => held.push(unix_secs_f64(), ev),
+        }
+        stored += 1;
+    }
+    stored
+}
+
+/// Tell the user, not just the log, that samples are not being stored.
+fn report_recording_failure(state: &AppState, error: &anyhow::Error) {
+    broadcast_event(
+        &state.events_tx,
+        "toast",
+        &serde_json::json!({
+            "level": "error",
+            "title": "Recording is failing",
+            "message": format!("EEG samples are not being stored: {error:#}. Check the disk."),
+        }),
+    );
+}
 
 // ── Generic session runner ────────────────────────────────────────────────────
 
@@ -33,6 +278,21 @@ pub(crate) async fn run_adapter_session(
 
     let mut pipeline: Option<Pipeline> = None;
     let mut sample_count: u64 = 0;
+    let mut trace = super::trace::SessionTrace::new(sample_rate);
+    let mut marker_labels = MarkerLabels::default();
+    // A recording that could not be opened (disk full, directory gone) is
+    // retried, so the session starts storing as soon as the disk allows.
+    let mut pipeline_identity: Option<skill_devices::session::DeviceInfo> = None;
+    let mut pipeline_retry_at: Option<std::time::Instant> = None;
+    // Lossless recording (a setting, read when the session starts).
+    let lossless = skill_settings::load_settings(&skill_dir).lossless_recording;
+    let mut held = Held::default();
+    // This computer's clock against a time server, measured as the session
+    // runs and kept with the recording (a setting, on by default).
+    let clock_monitor = super::clock_check::ClockMonitor::start(&skill_dir);
+    let mut last_clock_check: Option<skill_data::wall_clock::ClockCheck> = None;
+    let mut clock_check_filed = true;
+    let mut clock_warned = false;
     // Electrodermal analysis is per recording: one analyzer for the session, fed
     // from whichever device reports an `eda` sensor channel.
     let mut eda = skill_data::eda_analysis::EdaAnalyzer::new();
@@ -118,6 +378,12 @@ pub(crate) async fn run_adapter_session(
             biased;
             _ = &mut cancel_rx => {
                 info!("session cancelled");
+                if lossless {
+                    let stored = drain_adapter(adapter.as_mut(), &mut pipeline, &mut held);
+                    if stored > 0 {
+                        info!(events = stored, "wrote what the device had already delivered");
+                    }
+                }
                 adapter.disconnect().await;
                 exit_guard.finish();
                 break;
@@ -146,8 +412,12 @@ pub(crate) async fn run_adapter_session(
                     if let Some(ref mut pipe) = pipeline {
                         if let Err(e) = pipe.roll(&skill_dir) {
                             error!(%e, "session rollover failed; continuing on existing writer");
-                        } else if let Ok(mut s) = state.status.lock() {
-                            s.csv_path = Some(pipe.csv_path.display().to_string());
+                        } else {
+                            if let Ok(mut s) = state.status.lock() {
+                                s.csv_path = Some(pipe.csv_path.display().to_string());
+                            }
+                            // every file says what the clock was off by
+                            clock_check_filed = last_clock_check.is_none();
                         }
                     }
                 }
@@ -167,6 +437,69 @@ pub(crate) async fn run_adapter_session(
                     exit_guard.finish();
                     break;
                 };
+
+                if is_recorded(&ev) && pipeline.is_none() && pipeline_retry_at.is_some_and(|t| std::time::Instant::now() >= t) {
+                    if let Some(info) = pipeline_identity.as_ref() {
+                        match open_pipeline(&state, &skill_dir, &current_desc, info, &hooks, adapter.eeg_scale_uv()) {
+                            Ok(p) => {
+                                info!("recording started after an earlier failure to open it");
+                                pipeline = Some(p);
+                                pipeline_retry_at = None;
+                                rollover_sleep.as_mut().reset(tokio::time::Instant::now() + rollover_duration);
+                            }
+                            Err(e) => {
+                                error!(%e, "pipeline open failed again — samples are NOT being recorded");
+                                pipeline_retry_at = Some(std::time::Instant::now() + PIPELINE_RETRY_EVERY);
+                            }
+                        }
+                    }
+                }
+
+                // A new comparison of this computer's clock with the time
+                // server: reported, and kept with the recording.
+                if let Some(check) = clock_monitor.as_ref().and_then(super::clock_check::ClockMonitor::poll) {
+                    trace.on_clock_check(&check);
+                    broadcast_event(&state.events_tx, "ClockCheck", &serde_json::json!({
+                        "offset_ms": check.offset_s * 1e3,
+                        "uncertainty_ms": check.uncertainty_s() * 1e3,
+                        "server": check.server,
+                    }));
+                    let warn_s = clock_monitor.as_ref().map_or(f64::MAX, |m| m.warn_s);
+                    if check.offset_s.abs() - check.uncertainty_s() > warn_s && !clock_warned {
+                        clock_warned = true;
+                        tracing::warn!(offset_ms = check.offset_s * 1e3, server = %check.server, "this computer's clock is off");
+                        broadcast_event(&state.events_tx, "toast", &serde_json::json!({
+                            "level": "warning",
+                            "title": "This computer's clock is off",
+                            "message": format!(
+                                "It is {:.0} ms {} {}. Recordings made here will not line up with recordings made on other computers by that much; the difference is kept with the recording. Check that the system sets its time automatically.",
+                                check.offset_s.abs() * 1e3,
+                                if check.offset_s > 0.0 { "behind" } else { "ahead of" },
+                                check.server,
+                            ),
+                        }));
+                    }
+                    last_clock_check = Some(check);
+                    clock_check_filed = false;
+                }
+                if !clock_check_filed {
+                    if let (Some(pipe), Some(check)) = (pipeline.as_ref(), last_clock_check.as_ref()) {
+                        clock_check_filed = true;
+                        if let Err(e) = skill_data::wall_clock::append_check(&pipe.csv_path, check) {
+                            error!(%e, "clock check not recorded");
+                        }
+                    }
+                }
+
+                // Lossless recording: with nowhere to write, hold the event;
+                // once there is a recording, what was held goes in first.
+                if lossless && is_recorded(&ev) {
+                    match pipeline.as_mut() {
+                        None => held.push(unix_secs_f64(), ev.clone()),
+                        Some(pipe) if !held.is_empty() => held.write_to(pipe),
+                        Some(_) => {}
+                    }
+                }
 
                 match ev {
                     DeviceEvent::Connected(info) => {
@@ -208,34 +541,22 @@ pub(crate) async fn run_adapter_session(
                             "kind": device_kind,
                         }));
 
-                        match Pipeline::open(
-                            &skill_dir,
-                            current_desc.eeg_channels,
-                            sample_rate,
-                            current_desc.channel_names.clone(),
-                            info.name.clone(),
-                            state.events_tx.clone(),
-                            hooks.clone(),
-                            state.text_embedder.clone(),
-                            state.exg_model_status.clone(),
-                        ) {
-                            Ok(mut p) => {
-                                // Capture device identity and channel metadata.
-                                p.serial_number = info.serial_number.clone();
-                                p.firmware_version = info.firmware_version.clone();
-                                p.device_kind = device_kind.to_string();
-                                p.fnirs_channel_names = current_desc.fnirs_channel_names.clone();
-                                // Drop a partial sidecar before any samples
-                                // flow so a crash here leaves a readable
-                                // session entry for list_sessions_for_day.
-                                p.write_partial_sidecar();
-                                if let Ok(mut s) = state.status.lock() {
-                                    s.csv_path = Some(p.csv_path.display().to_string());
-                                }
+                        trace = super::trace::SessionTrace::new(sample_rate);
+                        if let Some(check) = last_clock_check.as_ref() {
+                            trace.on_clock_check(check);
+                        }
+                        pipeline_identity = Some(info.clone());
+                        match open_pipeline(&state, &skill_dir, &current_desc, &info, &hooks, adapter.eeg_scale_uv()) {
+                            Ok(p) => {
                                 pipeline = Some(p);
+                                pipeline_retry_at = None;
                                 rollover_sleep.as_mut().reset(tokio::time::Instant::now() + rollover_duration);
                             }
-                            Err(e) => error!(%e, "pipeline open failed"),
+                            Err(e) => {
+                                error!(%e, "pipeline open failed — samples are NOT being recorded; retrying");
+                                report_recording_failure(&state, &e);
+                                pipeline_retry_at = Some(std::time::Instant::now() + PIPELINE_RETRY_EVERY);
+                            }
                         }
                     }
 
@@ -245,8 +566,35 @@ pub(crate) async fn run_adapter_session(
                             s.sample_count = sample_count;
                         }
 
+                        let frame_started = std::time::Instant::now();
+                        let enriched = pipeline
+                            .as_mut()
+                            .and_then(|pipe| pipe.push_eeg(&frame.channels, frame.timestamp_s));
+                        trace.on_frame(frame.timestamp_s, unix_secs_f64(), frame_started.elapsed());
+                        if trace.due() {
+                            let (storage, epochs) = pipeline
+                                .as_ref()
+                                .map_or((super::trace::StorageCounts::default(), (0, 0)), |p| {
+                                    (p.storage_counts(), p.epoch_counts())
+                                });
+                            let report = trace.report(storage, epochs);
+                            let value = serde_json::to_value(&report).unwrap_or_default();
+                            if trace.should_log(&report) {
+                                if report.is_alarming() {
+                                    error!(trace = %value, "session trace: storage is failing — samples are being lost");
+                                    report_recording_failure(&state, &anyhow::anyhow!("{} failed writes", report.write_errors));
+                                } else {
+                                    info!(trace = %value, "session trace");
+                                }
+                            }
+                            broadcast_event(&state.events_tx, "SessionTrace", &value);
+                            if let Some(ref mut pipe) = pipeline {
+                                pipe.trace_summary = Some(value);
+                            }
+                        }
+
                         if let Some(ref mut pipe) = pipeline {
-                            if let Some(enriched) = pipe.push_eeg(&frame.channels, frame.timestamp_s) {
+                            if let Some(enriched) = enriched {
                                 // Update latest_bands and broadcast.
                                 if let Ok(mut bands) = state.latest_bands.lock() {
                                     *bands = Some(enriched.clone());
@@ -286,7 +634,9 @@ pub(crate) async fn run_adapter_session(
                     }
 
                     DeviceEvent::Imu(frame) => {
-                        let ts = unix_secs_f64();
+                        // The source's own time for the reading when it has
+                        // one: that is the timeline its EEG is on.
+                        let ts = frame.timestamp_s.unwrap_or_else(unix_secs_f64);
                         if let Ok(mut s) = state.status.lock() {
                             s.imu_sample_count += 1;
                         }
@@ -389,6 +739,48 @@ pub(crate) async fn run_adapter_session(
                                 frame.spo2_pct,
                                 frame.temperature_c,
                             );
+                        }
+                    }
+
+                    DeviceEvent::Marker(marker) => {
+                        // Every marker goes to the recording's `_markers`
+                        // sidecar, on disk before the next event is read.
+                        if let Some(ref pipe) = pipeline {
+                            match skill_data::session_csv::append_marker(
+                                &pipe.csv_path,
+                                marker.timestamp_s,
+                                &marker.source,
+                                &marker.text,
+                            ) {
+                                Ok(()) => trace.on_marker(),
+                                Err(e) => {
+                                    error!(%e, "marker not recorded");
+                                    report_recording_failure(&state, &anyhow::anyhow!("marker not recorded: {e}"));
+                                }
+                            }
+                        }
+                        broadcast_event(&state.events_tx, "Marker", &serde_json::json!({
+                            "timestamp": marker.timestamp_s,
+                            "source": marker.source,
+                            "marker": marker.text,
+                        }));
+                        // And becomes a label — searchable, shown with the
+                        // session — when it says something new: a marker that
+                        // repeats the previous one of its stream (a trigger
+                        // fired a thousand times) is one label a minute.
+                        if marker_labels.is_new(&marker) {
+                            let (state, marker) = (state.clone(), marker.clone());
+                            tokio::spawn(async move {
+                                let at = marker.timestamp_s.max(0.0) as u64;
+                                let context = format!("{}{}", skill_data::session_csv::MARKER_LABEL_CONTEXT, marker.source);
+                                if let Err(e) = crate::routes::labels::submit_label_with_context_internal(
+                                    &state, &marker.text, &context, at, at,
+                                )
+                                .await
+                                {
+                                    error!(%e, "label for marker not stored");
+                                }
+                            });
                         }
                     }
 
@@ -515,6 +907,23 @@ pub(crate) async fn run_adapter_session(
                         break;
                     }
                 }
+            }
+        }
+    }
+
+    // Lossless recording: a last attempt for samples still held.
+    if !held.is_empty() {
+        if pipeline.is_none() {
+            if let Some(info) = pipeline_identity.as_ref() {
+                pipeline = open_pipeline(&state, &skill_dir, &current_desc, info, &hooks, adapter.eeg_scale_uv()).ok();
+            }
+        }
+        match pipeline.as_mut() {
+            Some(pipe) => held.write_to(pipe),
+            None => {
+                let e = anyhow::anyhow!("{} held events had no recording to go to", held.events.len());
+                error!(%e, "session ended with samples that could not be stored");
+                report_recording_failure(&state, &e);
             }
         }
     }
@@ -1147,6 +1556,7 @@ mod tests {
                 timestamp_s: ts,
             }));
             adapter.push(DeviceEvent::Imu(ImuFrame {
+                timestamp_s: None,
                 accel: [0.0, 0.0, 9.81],
                 gyro: Some([0.0, 0.0, 0.0]),
                 mag: None,
@@ -1181,6 +1591,243 @@ mod tests {
 
     // ── 5. IMU data written to _imu.csv ──────────────────────────────────────
 
+    /// Markers are all written to the `_markers` sidecar; they become labels
+    /// when they say something new, not once per repetition.
+    #[tokio::test]
+    async fn markers_are_recorded_and_new_ones_become_labels() {
+        use skill_devices::session::MarkerFrame;
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut events = state.events_tx.subscribe();
+
+        let mut adapter = MockAdapter::new(eeg_desc("lsl", 4, 256.0));
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "MarkerRig".to_string(),
+            id: "mock:markers".to_string(),
+            ..Default::default()
+        }));
+        const T0: f64 = 1_760_000_000.0;
+        let marker = |at: f64, source: &str, text: &str| {
+            DeviceEvent::Marker(MarkerFrame {
+                timestamp_s: T0 + at,
+                text: text.to_string(),
+                source: source.to_string(),
+            })
+        };
+        for i in 0..512_usize {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: vec![1.0, 2.0, 3.0, 4.0],
+                timestamp_s: T0 + i as f64 / 256.0,
+            }));
+            match i {
+                10 => adapter.push(marker(0.0391, "TaskEvents", "rest, eyes closed")),
+                // a trigger fired three times in a row: three markers, one label
+                100 | 110 | 120 => adapter.push(marker(i as f64 / 256.0, "TriggerCodes", "42")),
+                300 => adapter.push(marker(1.1719, "TaskEvents", "task")),
+                _ => {}
+            }
+        }
+        adapter.push(DeviceEvent::Disconnected);
+        run(state.clone(), adapter).await;
+
+        let csv = files_recursive(dir.path())
+            .into_iter()
+            .find(|p| {
+                let n = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                n.starts_with("exg_") && n.ends_with(".csv") && !skill_data::session_paths::is_sidecar_file(n)
+            })
+            .expect("recording");
+        let markers = skill_data::session_csv::read_markers(&csv);
+        let got: Vec<(i64, &str, &str)> = markers
+            .iter()
+            .map(|m| (((m.0 - T0) * 1e4).round() as i64, m.1.as_str(), m.2.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (391, "TaskEvents", "rest, eyes closed"),
+                (3906, "TriggerCodes", "42"),
+                (4297, "TriggerCodes", "42"),
+                (4688, "TriggerCodes", "42"),
+                (11719, "TaskEvents", "task"),
+            ]
+        );
+
+        // every marker is broadcast; the sidecar's trace counts them
+        let mut broadcast = 0;
+        while let Ok(ev) = events.try_recv() {
+            broadcast += usize::from(ev.r#type == "Marker");
+        }
+        assert_eq!(broadcast, 5);
+
+        // labels: one per new marker (written by a background task)
+        let mut labels: Vec<(String, String, i64)> = Vec::new();
+        for _ in 0..100 {
+            labels = skill_data::label_store::LabelStore::open(dir.path())
+                .map(|s| {
+                    s.list_all()
+                        .into_iter()
+                        .map(|l| (l.text, l.context, l.eeg_start as i64))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if labels.len() >= 3 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // two of them fall in the same second: order by text, not by which task finished first
+        labels.sort();
+        let got: Vec<(&str, &str)> = labels.iter().map(|l| (l.0.as_str(), l.1.as_str())).collect();
+        assert_eq!(
+            got,
+            [
+                ("42", "marker from TriggerCodes"),
+                ("rest, eyes closed", "marker from TaskEvents"),
+                ("task", "marker from TaskEvents"),
+            ]
+        );
+        assert!(
+            labels.iter().all(|l| l.2 == T0 as i64 || l.2 == T0 as i64 + 1),
+            "{labels:?}"
+        );
+    }
+
+    /// A 32-channel LSL-style session recorded to Parquet, with markers and a hand-written
+    /// label, exports to a valid BIDS dataset: every sample, the markers at their own times,
+    /// the label, and no second copy of the labels the markers produced.
+    #[tokio::test]
+    async fn parquet_session_with_markers_exports_to_bids() {
+        use skill_devices::session::MarkerFrame;
+        const CH: usize = 32;
+        const RATE: f64 = 500.0;
+        const N: usize = 5000;
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        // in the past, so that the recording's sidecar (stamped "now") covers it
+        let t0 = (unix_secs_f64() - 30.0).floor();
+
+        let mut desc = eeg_desc("lsl", CH, RATE);
+        desc.channel_names = (1..=CH).map(|i| format!("E{i}")).collect();
+        let mut adapter = MockAdapter::new(desc);
+        adapter.push(DeviceEvent::Connected(DeviceInfo {
+            name: "BidsRig-EEG".to_string(),
+            id: "mock:bids".to_string(),
+            ..Default::default()
+        }));
+        for k in 0..N {
+            adapter.push(DeviceEvent::Eeg(EegFrame {
+                channels: (0..CH).map(|c| (k % 1000) as f64 + c as f64 / 100.0).collect(),
+                timestamp_s: t0 + k as f64 / RATE,
+            }));
+            let marker = |text: &str| {
+                DeviceEvent::Marker(MarkerFrame {
+                    timestamp_s: t0 + k as f64 / RATE,
+                    text: text.to_string(),
+                    source: "TaskEvents".to_string(),
+                })
+            };
+            match k {
+                1000 => adapter.push(marker("rest")),
+                2500 => adapter.push(marker("task")),
+                4000 => adapter.push(marker("rest")),
+                _ => {}
+            }
+        }
+        adapter.push(DeviceEvent::Disconnected);
+        run(state.clone(), adapter).await;
+
+        // 16 000 values a second: the automatic format chose Parquet
+        let recording = files_recursive(dir.path())
+            .into_iter()
+            .find(|p| {
+                let n = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                n.starts_with("exg_") && n.ends_with(".parquet") && !skill_data::session_paths::is_sidecar_file(n)
+            })
+            .expect("a Parquet recording");
+
+        // a label a person wrote, and the ones the markers produced (background tasks)
+        crate::routes::labels::submit_label_internal(&state, "felt drowsy", t0 as u64 + 6, t0 as u64 + 7)
+            .await
+            .unwrap();
+        let mut labels = Vec::new();
+        for _ in 0..100 {
+            labels = skill_data::label_store::LabelStore::open(dir.path())
+                .map(|s| s.query_range(0, u64::MAX >> 1))
+                .unwrap_or_default();
+            if labels.len() >= 4 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert_eq!(labels.len(), 4, "three marker labels and one written by hand");
+        let labels: Vec<skill_bids::LabelEvent> = labels
+            .into_iter()
+            .map(|l| skill_bids::LabelEvent {
+                start_utc: l.eeg_start as f64,
+                end_utc: l.eeg_end as f64,
+                text: l.text,
+                context: l.context,
+            })
+            .collect();
+
+        let out = dir.path().join("bids-out");
+        let opts = skill_bids::ExportOptions {
+            out_dir: Some(out.clone()),
+            ..Default::default()
+        };
+        let skill_dir = dir.path().to_path_buf();
+        let summary = tokio::task::spawn_blocking(move || skill_bids::export(&skill_dir, &opts, &labels, &mut |_| {}))
+            .await
+            .unwrap()
+            .expect("export");
+
+        assert_eq!(summary.recordings.len(), 1, "skipped: {:?}", summary.skipped);
+        let rec = &summary.recordings[0];
+        assert!(
+            rec.source.ends_with(recording.file_name().unwrap().to_str().unwrap()),
+            "{}",
+            rec.source
+        );
+        assert_eq!(
+            (rec.n_channels, rec.n_samples, rec.sampling_frequency),
+            (CH, N as u64, RATE)
+        );
+        assert_eq!(rec.n_gaps, 0);
+        assert!(summary.validation.is_empty(), "{:?}", summary.validation);
+
+        let vhdr = out.join(&rec.eeg_file);
+        assert!(vhdr.exists() && vhdr.with_extension("eeg").exists());
+        let events_path = vhdr.with_file_name(
+            vhdr.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .replace("_eeg.vhdr", "_events.tsv"),
+        );
+        let events = std::fs::read_to_string(&events_path).unwrap();
+        let rows: Vec<Vec<&str>> = events.lines().map(|l| l.split('\t').collect()).collect();
+        let col = |name: &str| rows[0].iter().position(|c| *c == name).unwrap();
+        let (onset, kind, value) = (col("onset"), col("trial_type"), col("value"));
+        let got: Vec<(f64, &str, &str)> = rows[1..]
+            .iter()
+            .map(|r| (r[onset].parse().unwrap(), r[kind], r[value]))
+            .collect();
+        let want = [
+            (2.0, "marker", "rest"),
+            (5.0, "marker", "task"),
+            (6.0, "label", "felt drowsy"),
+            (8.0, "marker", "rest"),
+        ];
+        assert_eq!(got.len(), want.len(), "{events}");
+        for (g, w) in got.iter().zip(&want) {
+            assert!(
+                (g.0 - w.0).abs() < 1e-3 && g.1 == w.1 && g.2 == w.2,
+                "{g:?} vs {w:?}\n{events}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn imu_written_to_imu_csv() {
         let dir = TempDir::new().unwrap();
@@ -1209,6 +1856,7 @@ mod tests {
                 timestamp_s: i as f64 / 256.0,
             }));
             adapter.push(DeviceEvent::Imu(ImuFrame {
+                timestamp_s: None,
                 accel: [i as f32 * 0.01, 0.0, 9.81],
                 gyro: Some([0.1, 0.2, 0.3]),
                 mag: None,
@@ -1591,6 +2239,661 @@ mod tests {
         drop(state.status.lock().unwrap());
     }
 
+    // ── 9b. Lossless recording ────────────────────────────────────────────────
+
+    fn write_recording_settings(skill_dir: &std::path::Path, lossless: bool) {
+        let mut s = skill_settings::UserSettings::default();
+        s.storage_format = "csv".into();
+        s.lossless_recording = lossless;
+        let p = skill_settings::settings_path(skill_dir);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+    }
+
+    /// Data rows over all raw EEG CSVs under `root`.
+    fn raw_eeg_rows(root: &std::path::Path) -> usize {
+        files_recursive(root)
+            .into_iter()
+            .filter(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_") && s.ends_with(".csv") && s.matches('_').count() == 1
+            })
+            .map(|p| std::fs::read_to_string(p).unwrap().lines().count().saturating_sub(1))
+            .sum()
+    }
+
+    /// Delivers its events without waiting and, part of the way through,
+    /// does something — as a device that keeps talking while the user acts.
+    struct ActingAdapter {
+        desc: DeviceDescriptor,
+        queue: VecDeque<DeviceEvent>,
+        delivered: usize,
+        act_after: usize,
+        act: Option<Box<dyn FnOnce() + Send>>,
+        /// Wait this long before every event from `act_after` on.
+        delay_after: Option<Duration>,
+        /// What the adapter reports as its integer scale.
+        eeg_scale_uv: Option<f64>,
+    }
+
+    #[async_trait]
+    impl DeviceAdapter for ActingAdapter {
+        fn descriptor(&self) -> &DeviceDescriptor {
+            &self.desc
+        }
+        async fn next_event(&mut self) -> Option<DeviceEvent> {
+            if self.delivered >= self.act_after {
+                if let Some(act) = self.act.take() {
+                    act();
+                }
+                if let Some(d) = self.delay_after {
+                    tokio::time::sleep(d).await;
+                }
+            }
+            self.delivered += 1;
+            self.queue.pop_front()
+        }
+        async fn disconnect(&mut self) {}
+        fn eeg_scale_uv(&self) -> Option<f64> {
+            self.eeg_scale_uv
+        }
+    }
+
+    fn acting_adapter(frames: usize, act_after: usize, act: Box<dyn FnOnce() + Send>) -> ActingAdapter {
+        let mut queue = VecDeque::new();
+        queue.push_back(DeviceEvent::Connected(DeviceInfo {
+            name: "Acting".to_string(),
+            id: "mock:acting".to_string(),
+            ..Default::default()
+        }));
+        for i in 0..frames {
+            queue.push_back(DeviceEvent::Eeg(EegFrame {
+                channels: vec![i as f64, 2.0, 3.0, 4.0],
+                timestamp_s: 1_700_000_000.0 + i as f64 / 256.0,
+            }));
+        }
+        ActingAdapter {
+            desc: eeg_desc("muse", 4, 256.0),
+            queue,
+            delivered: 0,
+            act_after,
+            act: Some(act),
+            delay_after: None,
+            eeg_scale_uv: None,
+        }
+    }
+
+    /// A session cancelled while the device has delivered more than has been
+    /// written: lossless recording writes all of it, the default does not.
+    #[tokio::test]
+    async fn lossless_recording_writes_what_was_delivered_before_a_cancel() {
+        for (lossless, expect_all) in [(true, true), (false, false)] {
+            let dir = TempDir::new().unwrap();
+            write_recording_settings(dir.path(), lossless);
+            let state = test_state(dir.path());
+            let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+            let adapter = acting_adapter(
+                600,
+                100,
+                Box::new(move || {
+                    let _ = cancel_tx.send(());
+                }),
+            );
+            run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+            let rows = raw_eeg_rows(dir.path());
+            if expect_all {
+                assert_eq!(rows, 600, "lossless recording left delivered samples unwritten");
+            } else {
+                assert!(
+                    rows < 600,
+                    "the default wrote {rows} rows; the test no longer shows a difference"
+                );
+            }
+        }
+    }
+
+    /// Samples that arrive while the recording cannot be opened are held and
+    /// written, in order, once it can.
+    #[tokio::test]
+    async fn lossless_recording_holds_samples_until_the_recording_opens() {
+        for (lossless, expect_all) in [(true, true), (false, false)] {
+            let dir = TempDir::new().unwrap();
+            write_recording_settings(dir.path(), lossless);
+            let state = test_state(dir.path());
+            // A file where the day directory belongs: the recording cannot open.
+            let scratch = TempDir::new().unwrap();
+            let day = crate::session::shared::utc_date_dir(scratch.path());
+            let blocker = dir.path().join(day.file_name().unwrap());
+            std::fs::write(&blocker, b"in the way").unwrap();
+
+            let unblock = blocker.clone();
+            let mut adapter = acting_adapter(
+                300,
+                200,
+                Box::new(move || {
+                    std::fs::remove_file(unblock).unwrap();
+                }),
+            );
+            // Slow from there on, so that the retry comes round.
+            adapter.delay_after = Some(Duration::from_millis(5));
+            let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+            run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+
+            let rows = raw_eeg_rows(dir.path());
+            if expect_all {
+                assert_eq!(rows, 300, "held samples did not all reach the recording");
+                let csv = files_recursive(dir.path())
+                    .into_iter()
+                    .find(|p| {
+                        let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                        s.starts_with("exg_") && s.ends_with(".csv") && s.matches('_').count() == 1
+                    })
+                    .unwrap();
+                let text = std::fs::read_to_string(csv).unwrap();
+                let firsts: Vec<f64> = text
+                    .lines()
+                    .skip(1)
+                    .map(|l| l.split(',').nth(1).unwrap().parse().unwrap())
+                    .collect();
+                assert!(firsts.windows(2).all(|w| w[1] == w[0] + 1.0), "rows are out of order");
+            } else {
+                assert!(rows > 0 && rows < 300, "the default wrote {rows} rows");
+            }
+        }
+    }
+
+    /// A source of integers is recorded as integers: the Parquet file holds
+    /// the counts, says what one is worth, and reads back to the same values.
+    #[tokio::test]
+    async fn integer_source_is_recorded_as_integer_counts() {
+        let dir = TempDir::new().unwrap();
+        let mut s = skill_settings::UserSettings::default();
+        s.storage_format = "parquet".into();
+        let p = skill_settings::settings_path(dir.path());
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+        let state = test_state(dir.path());
+
+        // nanovolts on an electrode offset no `f32` holds to the nanovolt
+        let count = |i: usize, c: usize| 250_000_000 + (c as i64) * 1_000_003 + (i as i64 % 97) * 13 - 600;
+        let mut adapter = acting_adapter(0, usize::MAX, Box::new(|| {}));
+        adapter.eeg_scale_uv = Some(1e-3);
+        for i in 0..3000 {
+            adapter.queue.push_back(DeviceEvent::Eeg(EegFrame {
+                channels: (0..4).map(|c| count(i, c) as f64 * 1e-3).collect(),
+                timestamp_s: 1_700_000_000.0 + i as f64 / 256.0,
+            }));
+        }
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+
+        let pq = files_recursive(dir.path())
+            .into_iter()
+            .find(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_") && s.ends_with(".parquet") && s.matches('_').count() == 1
+            })
+            .expect("a raw EEG parquet file");
+        assert_eq!(
+            skill_data::session_parquet::read_eeg_parquet_scale(&pq).unwrap(),
+            Some(1e-3)
+        );
+        for c in [0, 3] {
+            let got = skill_data::session_parquet::read_eeg_parquet_channel(&pq, c).unwrap();
+            assert_eq!(got.len(), 3000);
+            for (i, v) in got.iter().enumerate() {
+                assert_eq!(*v, count(i, c) as f64 * 1e-3, "row {i} channel {c}");
+            }
+        }
+    }
+
+    /// A session whose device matches a default rule records under that montage's labels,
+    /// keeps what the device called its channels beside the recording, and can be given
+    /// another montage afterwards without anything recorded being touched.
+    #[tokio::test]
+    async fn a_default_montage_names_the_channels_and_can_be_replaced_later() {
+        use skill_data::montage::{self, Montage, MontageOrigin, MontageRule, MontageSpec};
+        let dir = TempDir::new().unwrap();
+        let mut s = skill_settings::UserSettings::default();
+        s.storage_format = "csv".into();
+        let spec = |json: &str| serde_json::from_str::<MontageSpec>(json).unwrap();
+        let mut cap = Montage::from_spec(spec(r#""Fp1 Fp2 Cz HEOG:eog""#), &[]).unwrap();
+        cap.name = "Four".into();
+        cap.reference = Some("CMS".into());
+        s.montages.library = vec![cap];
+        s.montages.defaults = vec![
+            // another device: passed over
+            MontageRule {
+                montage: "Four".into(),
+                device_kind: Some("openbci".into()),
+                ..Default::default()
+            },
+            MontageRule {
+                montage: "Four".into(),
+                device_name: Some("act*".into()),
+                channel_count: Some(4),
+                ..Default::default()
+            },
+        ];
+        let p = skill_settings::settings_path(dir.path());
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+        let state = test_state(dir.path());
+
+        let adapter = acting_adapter(600, usize::MAX, Box::new(|| {}));
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+
+        let csv = files_recursive(dir.path())
+            .into_iter()
+            .find(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_") && s.ends_with(".csv") && s.matches('_').count() == 1
+            })
+            .expect("a raw EEG file");
+        // recorded under the labels: the file and its sidecar
+        let header = std::fs::read_to_string(&csv)
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .to_string();
+        assert!(
+            header.contains("Fp1") && header.contains("HEOG") && !header.contains("Ch0"),
+            "{header}"
+        );
+        let sidecar: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(csv.with_extension("json")).unwrap()).unwrap();
+        assert_eq!(
+            sidecar["channel_names"],
+            serde_json::json!(["Fp1", "Fp2", "Cz", "HEOG"])
+        );
+        // and what the device called them is beside it, with the montage
+        let file = montage::read_session_montage(&csv).expect("the montage beside the recording");
+        assert_eq!(file.origin, MontageOrigin::Default);
+        assert_eq!(file.recorded_channel_names, ["Ch0", "Ch1", "Ch2", "Ch3"]);
+        let (now, origin) = montage::effective_channels(&csv).unwrap();
+        assert_eq!(origin, Some(MontageOrigin::Default));
+        assert_eq!(now.reference.as_deref(), Some("CMS"));
+        assert_eq!(now.channels[3].kind, montage::ChannelKind::Eog);
+
+        // afterwards: another montage, by the device's own channel names
+        let before = std::fs::read(&csv).unwrap();
+        let later = Montage::from_spec(spec(r#"{"Ch3": "Oz", "Ch0": "AF7!"}"#), &[]).unwrap();
+        let r = montage::set_session_montage(&csv, later, MontageOrigin::Session, None).unwrap();
+        assert_eq!(r.labels(), ["AF7", "Ch1", "Ch2", "Oz"]);
+        assert!(r.channels[0].bad);
+        assert_eq!(std::fs::read(&csv).unwrap(), before, "nothing recorded was touched");
+        assert_eq!(
+            montage::effective_channels(&csv).unwrap().1,
+            Some(MontageOrigin::Session)
+        );
+    }
+
+    /// Delivers frames at the stream's own rate, as a device does.
+    struct PacedAdapter {
+        desc: DeviceDescriptor,
+        connected: bool,
+        k: u64,
+        total: u64,
+        start: Option<(tokio::time::Instant, f64)>,
+    }
+
+    #[async_trait]
+    impl DeviceAdapter for PacedAdapter {
+        fn descriptor(&self) -> &DeviceDescriptor {
+            &self.desc
+        }
+        async fn next_event(&mut self) -> Option<DeviceEvent> {
+            if !self.connected {
+                self.connected = true;
+                return Some(DeviceEvent::Connected(DeviceInfo {
+                    name: "Paced-EEG".to_string(),
+                    id: "mock:paced".to_string(),
+                    ..Default::default()
+                }));
+            }
+            if self.k >= self.total {
+                return (self.k == self.total).then(|| {
+                    self.k += 1;
+                    DeviceEvent::Disconnected
+                });
+            }
+            let rate = self.desc.eeg_sample_rate;
+            let (t0, unix0) = *self
+                .start
+                .get_or_insert_with(|| (tokio::time::Instant::now(), unix_secs_f64()));
+            let at = self.k as f64 / rate;
+            tokio::time::sleep_until(t0 + Duration::from_secs_f64(at)).await;
+            // alpha and beta on every electrode, with its own phase and noise
+            let channels = (0..self.desc.eeg_channels)
+                .map(|c| {
+                    let noise = ((self.k * 7919 + c as u64 * 104_729) % 2001) as f64 / 1000.0 - 1.0;
+                    20.0 * (std::f64::consts::TAU * 10.0 * at + c as f64).sin()
+                        + 6.0 * (std::f64::consts::TAU * 21.0 * at + 0.3 * c as f64).sin()
+                        + 4.0 * noise
+                })
+                .collect();
+            self.k += 1;
+            Some(DeviceEvent::Eeg(EegFrame {
+                channels,
+                timestamp_s: unix0 + at,
+            }))
+        }
+        async fn disconnect(&mut self) {}
+    }
+
+    /// What embeddings cost inside a live session: a 32-channel 500 Hz
+    /// stream at its real rate through the whole session, encoder included.
+    /// Checks that the recording is whole while the encoder runs, and prints
+    /// the numbers.
+    ///
+    /// Needs an encoder build and its weights, so it is not part of the suite:
+    /// `SKILL_TEST_EMBED=1 [SKILL_TEST_EMBED_SECS=60] cargo test -p skill-daemon
+    /// --no-default-features --features llm,embed-zuna -- --ignored
+    /// --nocapture embeddings_inside_a_live_session`
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "loads an EXG encoder: needs SKILL_TEST_EMBED=1, an embed-* feature and downloaded weights"]
+    async fn embeddings_inside_a_live_session() {
+        if std::env::var("SKILL_TEST_EMBED").map_or(true, |v| v != "1") {
+            eprintln!("skipped: set SKILL_TEST_EMBED=1");
+            return;
+        }
+        let secs: f64 = std::env::var("SKILL_TEST_EMBED_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(60.0);
+        let (channels, rate) = (32usize, 500.0);
+        let dir = TempDir::new().unwrap();
+        let mut settings = skill_settings::UserSettings::default();
+        settings.storage_format = "parquet".into();
+        let p = skill_settings::settings_path(dir.path());
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+        let state = test_state(dir.path());
+
+        let mut desc = eeg_desc("lsl", channels, rate);
+        desc.channel_names = "Fp1,Fp2,F7,F3,Fz,F4,F8,FC5,FC1,FC2,FC6,T7,C3,Cz,C4,T8,TP9,CP5,CP1,CP2,CP6,TP10,P7,P3,Pz,P4,P8,PO9,O1,Oz,O2,PO10"
+            .split(',')
+            .map(str::to_string)
+            .collect();
+        let total = (secs * rate) as u64;
+        let adapter = PacedAdapter {
+            desc,
+            connected: false,
+            k: 0,
+            total,
+            start: None,
+        };
+
+        // What the session reports while it runs.
+        let mut events = state.events_tx.subscribe();
+        let started = Instant::now();
+        type Seen = Vec<(f64, String, serde_json::Value)>;
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Seen::new()));
+        let seen2 = seen.clone();
+        let collector = tokio::spawn(async move {
+            loop {
+                match events.recv().await {
+                    Ok(ev) => {
+                        if matches!(
+                            ev.r#type.as_str(),
+                            "EegEmbedding"
+                                | "SessionTrace"
+                                | "EmbedWorkerStatus"
+                                | "ExgWeightsMissing"
+                                | "EmbedWorkerWarning"
+                        ) {
+                            seen2
+                                .lock()
+                                .unwrap()
+                                .push((started.elapsed().as_secs_f64(), ev.r#type, ev.payload));
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(_) => break,
+                }
+            }
+        });
+
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let exg_status = state.exg_model_status.clone();
+        run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+        let session_secs = started.elapsed().as_secs_f64();
+        let exg = exg_status.lock().unwrap().clone();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        collector.abort();
+        let seen = seen.lock().unwrap().clone();
+        let of = |ty: &str| -> Vec<(f64, serde_json::Value)> {
+            seen.iter().filter(|e| e.1 == ty).map(|e| (e.0, e.2.clone())).collect()
+        };
+        let (embeddings, traces) = (of("EegEmbedding"), of("SessionTrace"));
+        let status: Seen = seen
+            .iter()
+            .filter(|e| e.1 != "EegEmbedding" && e.1 != "SessionTrace")
+            .cloned()
+            .collect();
+
+        let pq = files_recursive(dir.path())
+            .into_iter()
+            .find(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_") && s.ends_with(".parquet") && s.matches('_').count() == 1
+            })
+            .expect("a raw EEG parquet file");
+        let rows = skill_data::session_parquet::read_eeg_parquet_timestamps(&pq)
+            .unwrap()
+            .len();
+        let sidecar: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(pq.with_extension("json")).unwrap()).unwrap();
+
+        eprintln!("── embeddings inside a live session: {channels} ch at {rate} Hz for {secs} s ──");
+        eprintln!("session ran {session_secs:.1} s (the end waits for queued epochs to be embedded)");
+        for (at, ty, payload) in &status {
+            eprintln!("  {at:6.1} s  {ty} {payload}");
+        }
+        eprintln!("rows recorded: {rows} of {total} frames");
+        eprintln!(
+            "embeddings: {} (first after {:.1} s, last after {:.1} s)",
+            embeddings.len(),
+            embeddings.first().map_or(f64::NAN, |e| e.0),
+            embeddings.last().map_or(f64::NAN, |e| e.0),
+        );
+        eprintln!(
+            "encoder: {:?}, last embed {:.0} ms, average {:.0} ms, embeddings in store {}",
+            exg.encoder_describe, exg.last_embed_ms, exg.avg_embed_ms, exg.embeddings_today
+        );
+        let field = |v: &serde_json::Value, k: &str| v[k].as_f64().unwrap_or(f64::NAN);
+        let first_embed = embeddings.first().map_or(f64::MAX, |e| e.0);
+        for (label, part) in [
+            (
+                "before the first embedding",
+                traces.iter().filter(|t| t.0 < first_embed).collect::<Vec<_>>(),
+            ),
+            (
+                "with the encoder running  ",
+                traces.iter().filter(|t| t.0 >= first_embed).collect::<Vec<_>>(),
+            ),
+        ] {
+            if part.is_empty() {
+                continue;
+            }
+            let mean = |k: &str| part.iter().map(|t| field(&t.1, k)).sum::<f64>() / part.len() as f64;
+            let max = |k: &str| part.iter().map(|t| field(&t.1, k)).fold(f64::MIN, f64::max);
+            eprintln!(
+                "  {label}: pipeline {:.1}% of a core (max {:.1}), process {:.0}% (max {:.0}), ingest lag {:.1} ms (max {:.1}), {} s",
+                mean("pipeline_cpu_pct"),
+                max("pipeline_cpu_pct"),
+                mean("process_cpu_pct"),
+                max("process_cpu_pct"),
+                mean("lag_ms"),
+                max("lag_ms"),
+                part.len()
+            );
+        }
+        eprintln!("final trace: {}", sidecar["trace"]);
+
+        assert_eq!(rows as u64, total, "the recording lost frames while the encoder ran");
+        assert_eq!(sidecar["trace"]["write_errors"], 0);
+        assert!(!embeddings.is_empty(), "no embedding was produced: {status:?}");
+        assert_eq!(
+            sidecar["trace"]["epochs_dropped"], 0,
+            "epochs were dropped: {}",
+            sidecar["trace"]
+        );
+    }
+
+    /// End to end against a stream that is really on the network (a device
+    /// behind `nesdk-lsl`, say): a whole session — resolve, connect, record,
+    /// markers, trace — into `SKILL_E2E_OUT`, left there to be compared with
+    /// what the sender recorded.
+    ///
+    /// `SKILL_E2E_LSL_STREAM=EN32-EEG SKILL_E2E_OUT=/tmp/e2e [SKILL_E2E_SECS=30]
+    /// cargo test -p skill-daemon --no-default-features --features llm --
+    /// --ignored --nocapture session_from_a_live_lsl_stream`
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "needs a live LSL stream: SKILL_E2E_LSL_STREAM and SKILL_E2E_OUT"]
+    async fn session_from_a_live_lsl_stream() {
+        let (Ok(stream), Ok(out)) = (std::env::var("SKILL_E2E_LSL_STREAM"), std::env::var("SKILL_E2E_OUT")) else {
+            eprintln!("skipped: set SKILL_E2E_LSL_STREAM and SKILL_E2E_OUT");
+            return;
+        };
+        let secs: f64 = std::env::var("SKILL_E2E_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30.0);
+        let out = std::path::PathBuf::from(out);
+        let mut settings = skill_settings::UserSettings::default();
+        settings.lossless_recording = true;
+        // tests ask no time server unless one is named: `SKILL_E2E_TIME_SERVER=time.apple.com`
+        if let Ok(server) = std::env::var("SKILL_E2E_TIME_SERVER") {
+            settings.time_check.server = server;
+            settings.time_check.interval_minutes = 1;
+        }
+        // devices recorded in parallel: `SKILL_E2E_COMPANIONS=emotibit:10.0.0.149`
+        if let Ok(companions) = std::env::var("SKILL_E2E_COMPANIONS") {
+            settings.companion_devices = companions.split(',').map(str::to_string).collect();
+        }
+        let p = skill_settings::settings_path(&out);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+        let state = test_state(&out);
+
+        let found = tokio::task::spawn_blocking(move || skill_lsl::resolve_stream_by_name(&stream, 10.0))
+            .await
+            .unwrap()
+            .expect("the stream resolves");
+        let adapter = tokio::task::spawn_blocking(move || skill_lsl::LslAdapter::connect(&found))
+            .await
+            .unwrap()
+            .expect("connect");
+        eprintln!(
+            "connected: {} ch at {} Hz, integer scale {:?}, {:?}",
+            adapter.descriptor().eeg_channels,
+            adapter.descriptor().eeg_sample_rate,
+            adapter.eeg_scale_uv(),
+            adapter.stats()
+        );
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs_f64(secs)).await;
+            let _ = cancel_tx.send(());
+        });
+        let status = state.status.clone();
+        let adapter = super::super::connect::with_companions(&state, "lsl", Box::new(adapter));
+        run_adapter_session(state, cancel_rx, adapter).await;
+        // labels made from markers are stored by tasks of their own
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        eprintln!("samples through the session: {}", status.lock().unwrap().sample_count);
+        for f in files_recursive(&out) {
+            eprintln!("  {} B  {}", std::fs::metadata(&f).map_or(0, |m| m.len()), f.display());
+            if f.extension().is_some_and(|e| e == "json") && f.to_string_lossy().contains("exg_") {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&f).unwrap()) {
+                    eprintln!("  trace: {}", v["trace"]);
+                }
+            }
+        }
+    }
+
+    /// A time server on this machine whose clock is `ahead_s` ahead of ours.
+    fn fake_time_server(ahead_s: f64) -> String {
+        const NTP_UNIX: f64 = 2_208_988_800.0;
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let addr = socket.local_addr().unwrap().to_string();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 48];
+            while let Ok((48, from)) = socket.recv_from(&mut buf) {
+                let t = unix_secs_f64() + ahead_s + NTP_UNIX;
+                let mut stamp = [0u8; 8];
+                stamp[..4].copy_from_slice(&(t as u32).to_be_bytes());
+                stamp[4..].copy_from_slice(&((t.fract() * 4_294_967_296.0) as u32).to_be_bytes());
+                let mut reply = [0u8; 48];
+                reply[0] = 0x24;
+                reply[1] = 2;
+                reply[24..32].copy_from_slice(&buf[40..48]);
+                reply[32..40].copy_from_slice(&stamp);
+                reply[40..48].copy_from_slice(&stamp);
+                let _ = socket.send_to(&reply, from);
+            }
+        });
+        addr
+    }
+
+    /// A session checks this computer's clock against the time server: the
+    /// difference is kept with the recording and in its trace, and a clock
+    /// far out is said to be.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn clock_is_checked_against_a_time_server_and_kept_with_the_recording() {
+        let dir = TempDir::new().unwrap();
+        let mut settings = skill_settings::UserSettings::default();
+        settings.storage_format = "csv".into();
+        settings.time_check.server = fake_time_server(0.2);
+        let p = skill_settings::settings_path(dir.path());
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+        let state = test_state(dir.path());
+        let mut events = state.events_tx.subscribe();
+
+        // three seconds of a device, so that the check has time to come back
+        let mut adapter = acting_adapter(600, 0, Box::new(|| {}));
+        adapter.delay_after = Some(Duration::from_millis(5));
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+
+        let csv = files_recursive(dir.path())
+            .into_iter()
+            .find(|p| {
+                let s = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                s.starts_with("exg_") && s.ends_with(".csv") && s.matches('_').count() == 1
+            })
+            .expect("a recording");
+        let checks = skill_data::wall_clock::read_checks(&csv);
+        assert_eq!(checks.len(), 1, "{checks:?}");
+        assert!((checks[0].offset_s - 0.2).abs() < 0.02, "{checks:?}");
+        let fix = skill_data::wall_clock::ClockCorrection::for_recording(&csv).unwrap();
+        assert!((fix.corrected(1_700_000_000.0) - 1_700_000_000.2).abs() < 0.02);
+
+        let sidecar: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(csv.with_extension("json")).unwrap()).unwrap();
+        let offset_ms = sidecar["trace"]["clock_offset_ms"]
+            .as_f64()
+            .expect("offset in the trace");
+        assert!((offset_ms - 200.0).abs() < 20.0, "{}", sidecar["trace"]);
+        assert_eq!(sidecar["trace"]["clock_checks"], 1);
+
+        let mut warned = false;
+        let mut reported = false;
+        while let Ok(ev) = events.try_recv() {
+            reported |= ev.r#type == "ClockCheck";
+            warned |= ev.r#type == "toast" && ev.payload["title"] == "This computer's clock is off";
+        }
+        assert!(reported, "no ClockCheck event");
+        assert!(warned, "a clock 200 ms out raised no warning");
+    }
+
     // ── 10. Status transitions: disconnected → connected → disconnected ───────
 
     #[tokio::test]
@@ -1649,6 +2952,7 @@ mod tests {
                     }));
                 }
                 adapter.push(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: [0.0, 0.0, 9.81],
                     gyro: Some([0.0, 0.0, 0.0]),
                     mag: None,
@@ -1963,34 +3267,237 @@ mod tests {
 
         let adapter = LslAdapter::new(&info);
 
-        // Run for ~2 s so the LSL inlet has time to establish and flush.
+        // EXG CSV artifacts of the session (either raw EEG or metrics sidecar
+        // depending on backend mode).
+        fn csv_count(root: &std::path::Path) -> usize {
+            let mut n = 0usize;
+            for day in std::fs::read_dir(root).into_iter().flatten().flatten() {
+                if let Ok(ft) = day.file_type() {
+                    if !ft.is_dir() {
+                        continue;
+                    }
+                }
+                if let Ok(files) = std::fs::read_dir(day.path()) {
+                    for f in files.flatten() {
+                        let s = f.file_name().to_string_lossy().to_string();
+                        if s.starts_with("exg_") && s.ends_with(".csv") {
+                            n += 1;
+                        }
+                    }
+                }
+            }
+            n
+        }
+
+        // Run until the session has started to store the stream, however long
+        // the LSL inlet takes to establish (clock offset, data connection) on a
+        // busy machine — a fixed 2.2 s, then 6 s, was not always enough — and
+        // give up after 60 s.
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let root = dir.path().to_path_buf();
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(2200)).await;
+            let t0 = Instant::now();
+            while csv_count(&root) == 0 && t0.elapsed() < Duration::from_secs(60) {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            // a little more, so that data is flowing when the session is stopped
+            tokio::time::sleep(Duration::from_millis(1000)).await;
             let _ = cancel_tx.send(());
         });
 
         run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
 
-        // After the run, we should have produced at least one EXG CSV artifact
-        // (either raw EEG or metrics sidecar depending on backend mode).
-        let mut csv_count = 0usize;
-        for day in std::fs::read_dir(dir.path()).unwrap().flatten() {
-            if let Ok(ft) = day.file_type() {
-                if !ft.is_dir() {
-                    continue;
-                }
+        assert!(
+            csv_count(dir.path()) > 0,
+            "no EXG CSV artifacts after LSL virtual source session"
+        );
+    }
+
+    // ── 20a. High-rate LSL stream → Parquet, traced end to end ───────────
+    //
+    // A 32-channel 500 Hz stream that declares its wall-clock reference (as
+    // the NeuroElectrics bridge does), recorded to Parquet: every sample is
+    // stored with its exact acquisition time, and the session reports what
+    // it cost.
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn lsl_high_rate_stream_is_stored_synced_and_traced() {
+        use rlsl::prelude::*;
+        use skill_lsl::LslAdapter;
+        const CH: usize = 32;
+        const RATE: f64 = 500.0;
+        // What the source claims its stamps mean on its own wall clock: deliberately far off,
+        // because the recording must not depend on it when the clocks can be synchronised.
+        const CLAIMED_UNIX0: f64 = 1_750_000_000.0;
+
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        let mut settings = skill_settings::UserSettings::default();
+        settings.storage_format = "parquet".into();
+        let settings_path = skill_settings::settings_path(dir.path());
+        std::fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
+        std::fs::write(&settings_path, serde_json::to_string(&settings).unwrap()).unwrap();
+        let mut events = state.events_tx.subscribe();
+
+        // The source lives on its own OS thread (rlsl runs its own runtime).
+        // Sample k: channel c carries k + c/100, stamped lsl0 + 1 + k/500.
+        let name = format!("TraceTest-{}-EEG", std::process::id());
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (stop2, source_name) = (stop.clone(), name.clone());
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<f64>();
+        let feeder = std::thread::spawn(move || {
+            let lsl0 = rlsl::clock::local_clock();
+            let info = StreamInfo::new(
+                &source_name,
+                "EEG",
+                CH as u32,
+                RATE,
+                rlsl::types::ChannelFormat::Float32,
+                "trace-test",
+            );
+            let desc = info.desc();
+            let channels = desc.append_child("channels");
+            for c in 0..CH {
+                channels
+                    .append_child("channel")
+                    .append_child_value("label", &format!("E{}", c + 1));
             }
-            if let Ok(files) = std::fs::read_dir(day.path()) {
-                for f in files.flatten() {
-                    let s = f.file_name().to_string_lossy().to_string();
-                    if s.starts_with("exg_") && s.ends_with(".csv") {
-                        csv_count += 1;
-                    }
+            let reference = desc.append_child("clock_reference");
+            reference.append_child_value("lsl_time", &format!("{lsl0:.6}"));
+            reference.append_child_value("unix_time", &format!("{CLAIMED_UNIX0:.3}"));
+            let outlet = StreamOutlet::new(&info, 0, 360);
+            let _ = ready_tx.send(lsl0);
+            let t0 = std::time::Instant::now();
+            let mut k = 0u64;
+            while !stop2.load(std::sync::atomic::Ordering::Relaxed) {
+                let due = (t0.elapsed().as_secs_f64() * RATE) as u64;
+                while k < due {
+                    let row: Vec<f32> = (0..CH).map(|c| (k % 4096) as f32 + c as f32 / 100.0).collect();
+                    outlet.push_sample_f(&row, lsl0 + 1.0 + k as f64 / RATE, true);
+                    k += 1;
                 }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            k
+        });
+        // The source's stamp `lsl0` on this machine's Unix clock: source and recorder share a
+        // process here, so their LSL clocks are one and the stream's clock offset is zero.
+        let lsl0 = ready_rx.await.unwrap();
+        let unix0 = lsl0 + (unix_secs_f64() - rlsl::clock::local_clock());
+
+        let found = tokio::task::spawn_blocking(move || skill_lsl::resolve_stream_by_name(&name, 5.0))
+            .await
+            .unwrap();
+        let Some(found) = found else {
+            eprintln!("[lsl_high_rate] stream not found, skipping");
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            return;
+        };
+        let adapter = tokio::task::spawn_blocking(move || LslAdapter::connect(&found))
+            .await
+            .unwrap()
+            .expect("connect");
+
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(4500)).await;
+            let _ = cancel_tx.send(());
+        });
+        run_adapter_session(state, cancel_rx, Box::new(adapter)).await;
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        let pushed = feeder.join().unwrap();
+
+        // The recording: one complete Parquet file, no CSV, no side files.
+        let files: Vec<std::path::PathBuf> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .filter(|d| d.path().is_dir())
+            .flat_map(|d| {
+                std::fs::read_dir(d.path())
+                    .unwrap()
+                    .flatten()
+                    .map(|f| f.path())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let named = |suffix: &str| -> Vec<&std::path::PathBuf> {
+            files
+                .iter()
+                .filter(|f| {
+                    let n = f.file_name().unwrap().to_string_lossy();
+                    n.starts_with("exg_") && n.ends_with(suffix) && n.matches('_').count() == 1
+                })
+                .collect()
+        };
+        assert!(named(".csv").is_empty(), "parquet only: {files:?}");
+        assert!(
+            named(".tail").is_empty() && named(".ckpt").is_empty(),
+            "side files removed: {files:?}"
+        );
+        let pq = named(".parquet");
+        assert_eq!(pq.len(), 1, "{files:?}");
+        assert!(skill_data::session_parquet::eeg_parquet_is_complete(pq[0]));
+
+        // Every row is a sample the source sent, in order, with the time it
+        // was taken at — not the time it arrived.
+        let stamps = skill_data::session_parquet::read_eeg_parquet_timestamps(pq[0]).unwrap();
+        let (_, names, data) = skill_data::session_parquet::read_eeg_parquet(pq[0]).unwrap();
+        assert_eq!((names.len(), data[0].len()), (CH, stamps.len()));
+        // (timestamp, channel 1, channel 32)
+        let rows: Vec<(f64, f64, f64)> = (0..stamps.len())
+            .map(|i| (stamps[i], f64::from(data[0][i]), f64::from(data[CH - 1][i])))
+            .collect();
+        // How many depends on how fast this build is on this machine (an unoptimised one under
+        // load stores a fraction of real time before the session is cancelled); that every one
+        // of them is right does not.
+        assert!(rows.len() >= 250, "{} rows of ~{pushed} pushed", rows.len());
+        let k_of = |r: &(f64, f64, f64)| ((r.0 - unix0 - 1.0) * RATE).round() as i64;
+        for w in rows.windows(2) {
+            assert_eq!(k_of(&w[1]), k_of(&w[0]) + 1, "consecutive samples at {}", w[0].0);
+        }
+        for r in &rows {
+            let k = k_of(r);
+            assert!(
+                (r.0 - (unix0 + 1.0 + k as f64 / RATE)).abs() < 0.0008,
+                "stamp {} of sample {k}",
+                r.0
+            );
+            assert_eq!(r.1, (k % 4096) as f64, "channel 1 of sample {k}");
+            assert_eq!(
+                r.2,
+                f64::from((k % 4096) as f32 + 31.0 / 100.0),
+                "channel 32 of sample {k}"
+            );
+        }
+
+        // The trace: broadcast every second and kept in the sidecar.
+        let mut traces = Vec::new();
+        while let Ok(ev) = events.try_recv() {
+            if ev.r#type == "SessionTrace" {
+                traces.push(ev.payload);
             }
         }
-        assert!(csv_count > 0, "no EXG CSV artifacts after LSL virtual source session");
+        assert!(!traces.is_empty(), "no SessionTrace events");
+        let last = traces.last().unwrap();
+        assert_eq!(last["gaps"], 0, "{last}");
+        assert_eq!(last["write_errors"], 0, "{last}");
+        assert_eq!(last["nominal_rate_hz"], RATE);
+        // About 500 a second. An unoptimised build on a busy machine cannot always keep up
+        // (the samples queue and are stored all the same, as checked above), so only a rate
+        // that is impossible fails.
+        let rate = last["rate_hz"].as_f64().unwrap();
+        assert!(rate > 0.0 && rate <= 600.0, "{last}");
+        assert!(
+            last["disk_bytes"].as_u64().unwrap() > 0 && last["pipeline_cpu_pct"].as_f64().unwrap() > 0.0,
+            "{last}"
+        );
+        let sidecar: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(pq[0].with_extension("json")).unwrap()).unwrap();
+        assert_eq!(sidecar["channel_names"].as_array().unwrap().len(), CH);
+        assert_eq!(sidecar["channel_names"][0], "E1");
+        assert_eq!(sidecar["trace"]["gaps"], 0, "{sidecar}");
+        assert!(sidecar["trace"]["rows_written"].as_u64().unwrap() > 0, "{sidecar}");
+        eprintln!("[lsl_high_rate] {} rows, last trace: {last}", rows.len());
     }
 
     // ── 20b. Virtual LSL → daemon discover + connect_lsl + status ─────────
@@ -2080,14 +3587,19 @@ mod tests {
                 if let Ok(files) = std::fs::read_dir(day.path()) {
                     for f in files.flatten() {
                         let name = f.file_name().to_string_lossy().to_string();
-                        if name.starts_with("exg_") && name.ends_with(".csv") {
+                        // 32 channels at 256 Hz: the automatic storage
+                        // format records this stream as Parquet.
+                        if name.starts_with("exg_") && (name.ends_with(".csv") || name.ends_with(".parquet")) {
                             csv_count += 1;
                         }
                     }
                 }
             }
         }
-        assert!(csv_count > 0, "no EXG CSV artifacts — pipeline did not receive data");
+        assert!(
+            csv_count > 0,
+            "no EXG recording artifacts — pipeline did not receive data"
+        );
 
         // Drain WS events to verify DeviceConnected was broadcast with LSL metadata.
         let mut found_connected = false;
@@ -2186,6 +3698,7 @@ mod tests {
                         timestamp_s: ts,
                     }));
                     adapter.push(DeviceEvent::Imu(ImuFrame {
+                        timestamp_s: None,
                         accel: [f.accel_x_g(), f.accel_y_g(), f.accel_z_g()],
                         gyro: Some([f.gyro_x_dps(), f.gyro_y_dps(), f.gyro_z_dps()]),
                         mag: None,
@@ -2548,6 +4061,7 @@ mod tests {
             }));
             if i % 5 == 0 {
                 adapter.push(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: [0.01 * i as f32, -0.02, 9.81],
                     gyro: Some([0.1, 0.2, 0.3]),
                     mag: None,

@@ -16,7 +16,9 @@ use crate::session_csv::{metrics_csv_path, ppg_csv_path};
 /// it was then miscounted as a session and left behind by a delete. Adding a
 /// sidecar means adding its suffix here, and `every_path_helper_uses_a_listed_suffix`
 /// fails if a helper below drifts from it.
-pub const SIDECAR_SUFFIXES: &[&str] = &["_metrics", "_ppg", "_imu", "_fnirs", "_vitals", "_sensors"];
+pub const SIDECAR_SUFFIXES: &[&str] = &[
+    "_metrics", "_ppg", "_imu", "_fnirs", "_vitals", "_sensors", "_markers", "_clock",
+];
 
 /// True for a sidecar's file name (`exg_1700000000_vitals.csv`), as opposed to a
 /// primary recording (`exg_1700000000.csv`).
@@ -125,7 +127,7 @@ mod tests {
     /// list cannot drift from the writers that create these files.
     #[test]
     fn every_path_helper_uses_a_listed_suffix() {
-        use crate::session_csv::{fnirs_csv_path, imu_csv_path, sensors_csv_path, vitals_csv_path};
+        use crate::session_csv::{fnirs_csv_path, imu_csv_path, markers_csv_path, sensors_csv_path, vitals_csv_path};
         let eeg = Path::new("/data/exg_1700000000.csv");
         let csvs = [
             metrics_csv_path(eeg),
@@ -134,6 +136,7 @@ mod tests {
             fnirs_csv_path(eeg),
             vitals_csv_path(eeg),
             sensors_csv_path(eeg),
+            markers_csv_path(eeg),
         ];
         for p in csvs {
             let name = p.file_name().unwrap().to_str().unwrap().to_string();

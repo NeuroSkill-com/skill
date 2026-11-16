@@ -175,11 +175,11 @@ impl IrohRemoteAdapter {
 
             // PPG
             if ppg_stride > 0 && ppg_idx < ppg_spc && (i % ppg_stride == 0) {
-                for ppg_c in 0..ppg_ch {
-                    if ppg_idx < chunk.ppg_data[ppg_c].len() {
+                for (ppg_c, samples) in chunk.ppg_data.iter().enumerate() {
+                    if ppg_idx < samples.len() {
                         self.pending.push_back(DeviceEvent::Ppg(PpgFrame {
                             channel: ppg_c,
-                            samples: vec![chunk.ppg_data[ppg_c][ppg_idx]],
+                            samples: vec![samples[ppg_idx]],
                             timestamp_s: ts,
                         }));
                     }
@@ -191,6 +191,7 @@ impl IrohRemoteAdapter {
             if imu_stride > 0 && imu_idx < imu_n && (i % imu_stride == 0) {
                 let (ax, ay, az, gx, gy, gz) = chunk.imu_data[imu_idx];
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: [ax, ay, az],
                     gyro: Some([gx, gy, gz]),
                     mag: None,

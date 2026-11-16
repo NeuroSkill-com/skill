@@ -69,6 +69,7 @@ pub fn spawn_device_session(state: AppState, target: String) -> Option<SessionHa
 
         match connect_device(&state2, &target).await {
             Ok(adapter) => {
+                let adapter = with_companions(&state2, &target, adapter);
                 run_adapter_session(state2.clone(), cancel_rx, adapter).await;
             }
             Err(e) => {
@@ -378,6 +379,51 @@ const CONNECT_ROUTE_RULES: &[(ConnectPredicate, ConnectRoute)] = &[
     (is_iroh_remote, ConnectRoute::IrohRemote),
 ];
 
+/// The session's device together with the companion devices of the settings
+/// (`companion_devices`), each connected like a session's device would be and
+/// looked for again whenever it is not there. Without any, `adapter` itself.
+pub(super) fn with_companions(
+    state: &AppState,
+    target: &str,
+    adapter: Box<dyn DeviceAdapter>,
+) -> Box<dyn DeviceAdapter> {
+    let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
+    let wanted = skill_settings::load_settings(&skill_dir).companion_devices;
+    let companions = companion_targets(&wanted, target);
+    if companions.is_empty() {
+        return adapter;
+    }
+    push_device_log_static(state, "session", &format!("companion devices: {companions:?}"));
+    let connectors = companions
+        .into_iter()
+        .map(|companion| {
+            let label = infer_kind_from_target(&companion).to_string();
+            let state = state.clone();
+            let connect: super::companion::Connector = Box::new(move || {
+                let (state, companion) = (state.clone(), companion.clone());
+                // Listing a device as a companion is what pairing is for a session's
+                // device: the owner naming it. (`emotibit` alone, the first board found,
+                // could not be paired by name anyway.)
+                Box::pin(async move { connect_device_inner(&state, &companion, &companion.to_lowercase()).await })
+            });
+            (label, connect)
+        })
+        .collect();
+    Box::new(super::companion::WithCompanions::new(adapter, connectors))
+}
+
+/// The companions to connect for a session on `target`: the configured ones,
+/// each once, without the session's own device.
+fn companion_targets(configured: &[String], target: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for c in configured.iter().map(|c| c.trim()).filter(|c| !c.is_empty()) {
+        if !c.eq_ignore_ascii_case(target.trim()) && !out.iter().any(|o| o.eq_ignore_ascii_case(c)) {
+            out.push(c.to_string());
+        }
+    }
+    out
+}
+
 fn matching_connect_routes(lower: &str) -> Vec<ConnectRoute> {
     CONNECT_ROUTE_RULES
         .iter()
@@ -535,6 +581,22 @@ fn push_device_log_static(state: &AppState, tag: &str, msg: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn companions_are_the_configured_devices_without_the_sessions_own() {
+        let configured = [
+            "emotibit".to_string(),
+            " EmotiBit ".into(),
+            String::new(),
+            "lsl:Other".into(),
+        ];
+        assert_eq!(
+            companion_targets(&configured, "lsl:EN32-EEG"),
+            ["emotibit", "lsl:Other"]
+        );
+        assert_eq!(companion_targets(&configured, "Emotibit"), ["lsl:Other"]);
+        assert!(companion_targets(&[], "lsl:EN32-EEG").is_empty());
+    }
 
     #[test]
     fn infer_kind_covers_supported_device_targets() {

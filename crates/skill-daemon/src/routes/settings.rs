@@ -303,6 +303,18 @@ pub fn router() -> Router<AppState> {
             get(settings_device::get_storage_format).post(settings_device::set_storage_format),
         )
         .route(
+            "/settings/lossless-recording",
+            get(settings_device::get_lossless_recording).post(settings_device::set_lossless_recording),
+        )
+        .route(
+            "/settings/companion-devices",
+            get(settings_device::get_companion_devices).post(settings_device::set_companion_devices),
+        )
+        .route(
+            "/settings/time-check",
+            get(settings_device::get_time_check).post(settings_device::set_time_check),
+        )
+        .route(
             "/settings/embedding-overlap",
             get(settings_device::get_embedding_overlap).post(settings_device::set_embedding_overlap),
         )
@@ -1950,8 +1962,12 @@ mod tests {
         .await;
         assert_eq!(v_parquet["value"], "parquet");
 
-        let Json(v_both) = set_storage_format(State(st), Json(StringValueRequest { value: "both".into() })).await;
+        let Json(v_both) =
+            set_storage_format(State(st.clone()), Json(StringValueRequest { value: "both".into() })).await;
         assert_eq!(v_both["value"], "both");
+
+        let Json(v_auto) = set_storage_format(State(st), Json(StringValueRequest { value: "Auto".into() })).await;
+        assert_eq!(v_auto["value"], "auto");
     }
 
     #[tokio::test]

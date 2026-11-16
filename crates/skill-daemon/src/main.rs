@@ -396,6 +396,7 @@ async fn daemon_main() -> anyhow::Result<()> {
     let v1 = routes::core::router()
         .merge(routes::labels::router())
         .merge(routes::history::router())
+        .merge(routes::montage::router())
         .merge(routes::settings::router())
         .merge(routes::api::router())
         .merge(routes::analysis::router())
