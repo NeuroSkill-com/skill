@@ -672,13 +672,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "Graba una pulsera EmotiBit (conductancia de la piel, pulso, temperatura, movimiento) en paralelo con cada sesión, en la misma grabación y con el mismo reloj. La sesión empieza sin ella y la sigue buscando; cada conexión y cada pérdida queda anotada con un marcador.",
   "settings.montage": "Montaje",
-  "settings.montageDesc": "Da nombre a los canales de una grabación: sus etiquetas, qué registra cada uno y cuáles son defectuosos. Un montaje guardado puede ser el predeterminado para las sesiones nuevas, y a cualquier grabación se le puede asignar otro más tarde; nada de lo grabado se reescribe.",
+  "settings.montageDesc":
+    "Da nombre a los canales de una grabación: sus etiquetas, qué registra cada uno y cuáles son defectuosos. Un montaje guardado puede ser el predeterminado para las sesiones nuevas, y a cualquier grabación se le puede asignar otro más tarde; nada de lo grabado se reescribe.",
   "settings.montageOpen": "Montajes…",
   "settings.montageLibrary": "Montajes guardados",
   "settings.montageNone": "Aún no hay montajes guardados.",
   "settings.montageName": "Nombre",
   "settings.montageChannels": "Canales",
-  "settings.montageChannelsHint": "Etiquetas en el orden de los canales (Fp1 Fp2 F7 …), o CH3=Cz para canales sueltos. Añade :eog, :ecg, :emg, :misc o :trigger para indicar qué registra un canal, y ! para uno defectuoso. También se acepta JSON.",
+  "settings.montageChannelsHint":
+    "Etiquetas en el orden de los canales (Fp1 Fp2 F7 …), o CH3=Cz para canales sueltos. Añade :eog, :ecg, :emg, :misc o :trigger para indicar qué registra un canal, y ! para uno defectuoso. También se acepta JSON.",
   "settings.montageDefaultFor": "Usar por defecto en sesiones nuevas",
   "settings.montageDeviceName": "Nombre del dispositivo o flujo (* para cualquier texto)",
   "settings.montageChannelCount": "Número de canales",

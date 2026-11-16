@@ -18,11 +18,11 @@ import { SectionHeader } from "#lib/components/ui/section-header";
 import { Separator } from "#lib/components/ui/separator";
 import { SettingsCard } from "#lib/components/ui/settings-card";
 import { ToggleRow } from "#lib/components/ui/toggle-row";
-import MontageDialog from "#lib/montage/MontageDialog.svelte";
 import {
   getActiveWindow,
   getActiveWindowTracking,
   getApiToken,
+  getCompanionDevices,
   getGpuStats,
   getHfEndpoint,
   getInferenceDevice,
@@ -30,7 +30,6 @@ import {
   getIrohLogs,
   getLastInputActivity,
   getLocationEnabled,
-  getCompanionDevices,
   getLosslessRecording,
   getMainWindowAutoFit,
   getStorageFormat,
@@ -38,12 +37,12 @@ import {
   getWsConfig,
   setActiveWindowTracking,
   setApiToken,
+  setCompanionDevices,
   setHfEndpoint,
   setInferenceDevice,
   setInputActivityTracking,
   setIrohLogs,
   setLocationEnabled,
-  setCompanionDevices,
   setLosslessRecording,
   setMainWindowAutoFit,
   setStorageFormat,
@@ -59,6 +58,7 @@ import {
   setFileActivityTracking,
 } from "#lib/daemon/settings";
 import { t } from "#lib/i18n/index.svelte";
+import MontageDialog from "#lib/montage/MontageDialog.svelte";
 import { openOnboarding } from "#lib/navigation";
 
 // ── Types ──────────────────────────────────────────────────────────────────

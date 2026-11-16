@@ -34,7 +34,6 @@ import {
   setupHiDpiCanvas,
 } from "#lib/format";
 import BidsExportDialog from "#lib/history/BidsExportDialog.svelte";
-import MontageDialog from "#lib/montage/MontageDialog.svelte";
 import HistoryCalendar from "#lib/history/HistoryCalendar.svelte";
 import HistoryStatsBar from "#lib/history/HistoryStatsBar.svelte";
 import {
@@ -71,6 +70,7 @@ import {
 import type { GpsPoint } from "#lib/history/SessionMap.svelte";
 import SessionMap from "#lib/history/SessionMap.svelte";
 import { t } from "#lib/i18n/index.svelte";
+import MontageDialog from "#lib/montage/MontageDialog.svelte";
 import { getResolved } from "#lib/stores/theme.svelte";
 import { type HistoryViewMode, hBar, hCbs } from "#lib/stores/titlebar.svelte";
 import { useWindowTitle } from "#lib/stores/window-title.svelte";

@@ -630,13 +630,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "מקליט צמיד EmotiBit (מוליכות העור, דופק, טמפרטורה, תנועה) במקביל לכל סשן, לאותה הקלטה ועל אותו שעון. סשן מתחיל גם בלעדיו וממשיך לחפש אותו; כל התחברות וכל ניתוק מסומנים בסמן.",
   "settings.montage": "מונטאז'",
-  "settings.montageDesc": "נותן שמות לערוצי ההקלטה: התוויות שלהם, מה כל ערוץ מודד ואילו מהם פגומים. מונטאז' שמור יכול לשמש ברירת מחדל לסשנים חדשים, ולכל הקלטה אפשר לתת מונטאז' אחר מאוחר יותר — שום דבר שהוקלט אינו נכתב מחדש.",
+  "settings.montageDesc":
+    "נותן שמות לערוצי ההקלטה: התוויות שלהם, מה כל ערוץ מודד ואילו מהם פגומים. מונטאז' שמור יכול לשמש ברירת מחדל לסשנים חדשים, ולכל הקלטה אפשר לתת מונטאז' אחר מאוחר יותר — שום דבר שהוקלט אינו נכתב מחדש.",
   "settings.montageOpen": "מונטאז'ים…",
   "settings.montageLibrary": "מונטאז'ים שמורים",
   "settings.montageNone": "עדיין לא נשמרו מונטאז'ים.",
   "settings.montageName": "שם",
   "settings.montageChannels": "ערוצים",
-  "settings.montageChannelsHint": "תוויות לפי סדר הערוצים (Fp1 Fp2 F7 …), או CH3=Cz לערוצים בודדים. הוסיפו ‎:eog‏, ‎:ecg‏, ‎:emg‏, ‎:misc‏ או ‎:trigger‏ כדי לציין מה הערוץ מודד, ו-! לערוץ פגום. אפשר גם JSON.",
+  "settings.montageChannelsHint":
+    "תוויות לפי סדר הערוצים (Fp1 Fp2 F7 …), או CH3=Cz לערוצים בודדים. הוסיפו ‎:eog‏, ‎:ecg‏, ‎:emg‏, ‎:misc‏ או ‎:trigger‏ כדי לציין מה הערוץ מודד, ו-! לערוץ פגום. אפשר גם JSON.",
   "settings.montageDefaultFor": "להשתמש כברירת מחדל לסשנים חדשים",
   "settings.montageDeviceName": "שם ההתקן או הזרם (* לכל טקסט)",
   "settings.montageChannelCount": "מספר ערוצים",

@@ -751,13 +751,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "EmotiBit 손목 밴드(피부 전도도, 맥박, 온도, 움직임)를 모든 세션과 병행하여 같은 기록에 같은 시계로 기록합니다. 밴드가 없어도 세션은 시작되고 계속 찾습니다. 연결되거나 끊길 때마다 마커가 기록됩니다.",
   "settings.montage": "몽타주",
-  "settings.montageDesc": "기록의 채널에 이름을 붙입니다. 레이블, 각 채널이 무엇을 측정하는지, 어떤 채널이 불량인지. 저장한 몽타주를 새 세션의 기본값으로 쓸 수 있고, 어떤 기록에든 나중에 다른 몽타주를 지정할 수 있습니다. 기록된 데이터는 다시 쓰이지 않습니다.",
+  "settings.montageDesc":
+    "기록의 채널에 이름을 붙입니다. 레이블, 각 채널이 무엇을 측정하는지, 어떤 채널이 불량인지. 저장한 몽타주를 새 세션의 기본값으로 쓸 수 있고, 어떤 기록에든 나중에 다른 몽타주를 지정할 수 있습니다. 기록된 데이터는 다시 쓰이지 않습니다.",
   "settings.montageOpen": "몽타주…",
   "settings.montageLibrary": "저장된 몽타주",
   "settings.montageNone": "아직 저장된 몽타주가 없습니다.",
   "settings.montageName": "이름",
   "settings.montageChannels": "채널",
-  "settings.montageChannelsHint": "채널 순서대로의 레이블(Fp1 Fp2 F7 …), 또는 개별 채널에 CH3=Cz. :eog, :ecg, :emg, :misc, :trigger 로 채널 종류를, ! 로 불량 채널을 표시합니다. JSON 도 됩니다.",
+  "settings.montageChannelsHint":
+    "채널 순서대로의 레이블(Fp1 Fp2 F7 …), 또는 개별 채널에 CH3=Cz. :eog, :ecg, :emg, :misc, :trigger 로 채널 종류를, ! 로 불량 채널을 표시합니다. JSON 도 됩니다.",
   "settings.montageDefaultFor": "새 세션의 기본값으로 사용",
   "settings.montageDeviceName": "장치 또는 스트림 이름(* 는 임의의 문자열)",
   "settings.montageChannelCount": "채널 수",

@@ -785,13 +785,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "Records an EmotiBit wristband (skin conductance, pulse, temperature, motion) in parallel with every session, into the same recording and on the same clock. A session starts without it and keeps looking for it; each time it connects or drops out, a marker says so.",
   "settings.montage": "Montage",
-  "settings.montageDesc": "Names the channels of a recording: their labels, what each one carries and which are bad. A saved montage can be the default for new sessions, and any recording can be given another one later — nothing recorded is rewritten.",
+  "settings.montageDesc":
+    "Names the channels of a recording: their labels, what each one carries and which are bad. A saved montage can be the default for new sessions, and any recording can be given another one later — nothing recorded is rewritten.",
   "settings.montageOpen": "Montages…",
   "settings.montageLibrary": "Saved montages",
   "settings.montageNone": "No montages saved yet.",
   "settings.montageName": "Name",
   "settings.montageChannels": "Channels",
-  "settings.montageChannelsHint": "Labels in channel order (Fp1 Fp2 F7 …), or CH3=Cz for single channels. Add :eog, :ecg, :emg, :misc or :trigger for what a channel carries, and ! for a bad one. JSON works too.",
+  "settings.montageChannelsHint":
+    "Labels in channel order (Fp1 Fp2 F7 …), or CH3=Cz for single channels. Add :eog, :ecg, :emg, :misc or :trigger for what a channel carries, and ! for a bad one. JSON works too.",
   "settings.montageDefaultFor": "Use by default for new sessions",
   "settings.montageDeviceName": "Device or stream name (* for any text)",
   "settings.montageChannelCount": "Channel count",

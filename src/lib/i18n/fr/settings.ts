@@ -672,13 +672,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "Enregistre un bracelet EmotiBit (conductance cutanée, pouls, température, mouvement) en parallèle de chaque session, dans le même enregistrement et sur la même horloge. Une session démarre sans lui et continue de le chercher ; chaque connexion et chaque perte est notée par un marqueur.",
   "settings.montage": "Montage des canaux",
-  "settings.montageDesc": "Nomme les canaux d'un enregistrement : leurs étiquettes, ce que chacun mesure et lesquels sont inutilisables. Un montage enregistré peut être celui par défaut des nouvelles sessions, et tout enregistrement peut en recevoir un autre plus tard — rien de ce qui est enregistré n'est réécrit.",
+  "settings.montageDesc":
+    "Nomme les canaux d'un enregistrement : leurs étiquettes, ce que chacun mesure et lesquels sont inutilisables. Un montage enregistré peut être celui par défaut des nouvelles sessions, et tout enregistrement peut en recevoir un autre plus tard — rien de ce qui est enregistré n'est réécrit.",
   "settings.montageOpen": "Gérer les montages…",
   "settings.montageLibrary": "Montages enregistrés",
   "settings.montageNone": "Aucun montage enregistré pour l'instant.",
   "settings.montageName": "Nom",
   "settings.montageChannels": "Canaux",
-  "settings.montageChannelsHint": "Étiquettes dans l'ordre des canaux (Fp1 Fp2 F7 …), ou CH3=Cz pour des canaux isolés. Ajoutez :eog, :ecg, :emg, :misc ou :trigger pour indiquer ce que mesure un canal, et ! pour un canal inutilisable. Le JSON est accepté aussi.",
+  "settings.montageChannelsHint":
+    "Étiquettes dans l'ordre des canaux (Fp1 Fp2 F7 …), ou CH3=Cz pour des canaux isolés. Ajoutez :eog, :ecg, :emg, :misc ou :trigger pour indiquer ce que mesure un canal, et ! pour un canal inutilisable. Le JSON est accepté aussi.",
   "settings.montageDefaultFor": "Utiliser par défaut pour les nouvelles sessions",
   "settings.montageDeviceName": "Nom de l'appareil ou du flux (* pour n'importe quel texte)",
   "settings.montageChannelCount": "Nombre de canaux",

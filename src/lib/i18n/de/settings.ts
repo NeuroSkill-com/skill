@@ -670,13 +670,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "Zeichnet ein EmotiBit-Armband (Hautleitwert, Puls, Temperatur, Bewegung) parallel zu jeder Sitzung auf, in dieselbe Aufnahme und mit derselben Uhr. Eine Sitzung beginnt auch ohne das Armband und sucht weiter danach; jedes Verbinden und jeder Abbruch wird als Marker vermerkt.",
   "settings.montage": "Kanalmontage",
-  "settings.montageDesc": "Benennt die Kanäle einer Aufnahme: ihre Bezeichnungen, was jeder Kanal misst und welche unbrauchbar sind. Eine gespeicherte Montage kann der Standard für neue Sitzungen sein, und jede Aufnahme kann später eine andere bekommen – nichts Aufgezeichnetes wird umgeschrieben.",
+  "settings.montageDesc":
+    "Benennt die Kanäle einer Aufnahme: ihre Bezeichnungen, was jeder Kanal misst und welche unbrauchbar sind. Eine gespeicherte Montage kann der Standard für neue Sitzungen sein, und jede Aufnahme kann später eine andere bekommen – nichts Aufgezeichnetes wird umgeschrieben.",
   "settings.montageOpen": "Montagen…",
   "settings.montageLibrary": "Gespeicherte Montagen",
   "settings.montageNone": "Noch keine Montagen gespeichert.",
   "settings.montageName": "Name",
   "settings.montageChannels": "Kanäle",
-  "settings.montageChannelsHint": "Bezeichnungen in Kanalreihenfolge (Fp1 Fp2 F7 …) oder CH3=Cz für einzelne Kanäle. Mit :eog, :ecg, :emg, :misc oder :trigger angeben, was ein Kanal misst, und mit ! einen unbrauchbaren markieren. JSON geht auch.",
+  "settings.montageChannelsHint":
+    "Bezeichnungen in Kanalreihenfolge (Fp1 Fp2 F7 …) oder CH3=Cz für einzelne Kanäle. Mit :eog, :ecg, :emg, :misc oder :trigger angeben, was ein Kanal misst, und mit ! einen unbrauchbaren markieren. JSON geht auch.",
   "settings.montageDefaultFor": "Standard für neue Sitzungen",
   "settings.montageDeviceName": "Geräte- oder Streamname (* für beliebigen Text)",
   "settings.montageChannelCount": "Kanalzahl",

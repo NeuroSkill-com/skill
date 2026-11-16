@@ -766,13 +766,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "EmotiBit リストバンド（皮膚コンダクタンス、脈拍、温度、動き）を各セッションと並行して、同じ記録に同じ時計で記録します。リストバンドがなくてもセッションは始まり、探し続けます。接続や切断のたびにマーカーが記録されます。",
   "settings.montage": "モンタージュ",
-  "settings.montageDesc": "記録のチャンネルに名前を付けます。ラベル、各チャンネルが何を測っているか、どれが不良か。保存したモンタージュは新しいセッションの既定にでき、どの記録にも後から別のものを割り当てられます。記録済みのデータは書き換えられません。",
+  "settings.montageDesc":
+    "記録のチャンネルに名前を付けます。ラベル、各チャンネルが何を測っているか、どれが不良か。保存したモンタージュは新しいセッションの既定にでき、どの記録にも後から別のものを割り当てられます。記録済みのデータは書き換えられません。",
   "settings.montageOpen": "モンタージュ…",
   "settings.montageLibrary": "保存済みモンタージュ",
   "settings.montageNone": "保存されたモンタージュはまだありません。",
   "settings.montageName": "名前",
   "settings.montageChannels": "チャンネル",
-  "settings.montageChannelsHint": "チャンネル順のラベル（Fp1 Fp2 F7 …）、または個別のチャンネルに CH3=Cz。:eog、:ecg、:emg、:misc、:trigger でチャンネルの種類を、! で不良チャンネルを示します。JSON も使えます。",
+  "settings.montageChannelsHint":
+    "チャンネル順のラベル（Fp1 Fp2 F7 …）、または個別のチャンネルに CH3=Cz。:eog、:ecg、:emg、:misc、:trigger でチャンネルの種類を、! で不良チャンネルを示します。JSON も使えます。",
   "settings.montageDefaultFor": "新しいセッションの既定にする",
   "settings.montageDeviceName": "デバイス名またはストリーム名（* は任意の文字列）",
   "settings.montageChannelCount": "チャンネル数",

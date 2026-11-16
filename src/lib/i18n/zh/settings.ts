@@ -739,13 +739,15 @@ const settings: Record<string, string> = {
   "settings.companionEmotibitDesc":
     "在每次会话的同时记录 EmotiBit 腕带（皮肤电导、脉搏、温度、运动），写入同一份记录并使用同一时钟。没有腕带时会话照常开始并继续查找；每次连接或断开都会记下一个标记。",
   "settings.montage": "导联布局",
-  "settings.montageDesc": "为记录的通道命名：标签、每个通道测量什么以及哪些是坏通道。保存的导联布局可作为新会话的默认设置，任何记录之后都可以改用另一个——已记录的数据不会被改写。",
+  "settings.montageDesc":
+    "为记录的通道命名：标签、每个通道测量什么以及哪些是坏通道。保存的导联布局可作为新会话的默认设置，任何记录之后都可以改用另一个——已记录的数据不会被改写。",
   "settings.montageOpen": "导联布局…",
   "settings.montageLibrary": "已保存的导联布局",
   "settings.montageNone": "还没有保存的导联布局。",
   "settings.montageName": "名称",
   "settings.montageChannels": "通道",
-  "settings.montageChannelsHint": "按通道顺序填写标签（Fp1 Fp2 F7 …），或用 CH3=Cz 指定单个通道。用 :eog、:ecg、:emg、:misc 或 :trigger 说明通道测量的内容，用 ! 标记坏通道。也可以用 JSON。",
+  "settings.montageChannelsHint":
+    "按通道顺序填写标签（Fp1 Fp2 F7 …），或用 CH3=Cz 指定单个通道。用 :eog、:ecg、:emg、:misc 或 :trigger 说明通道测量的内容，用 ! 标记坏通道。也可以用 JSON。",
   "settings.montageDefaultFor": "作为新会话的默认设置",
   "settings.montageDeviceName": "设备或数据流名称（* 表示任意文字）",
   "settings.montageChannelCount": "通道数",
