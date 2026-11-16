@@ -185,9 +185,10 @@
     "ws": "^8.21.1"
   },
   "overrides": {
-    "cookie": "^1.0.2"
+    "cookie": "^1.0.2",
+    "deepmerge": "file:./patches/npm/deepmerge-4.3.1"
   },
   "allowScripts": {
-    "esbuild@0.28.1": true
+    "esbuild@0.28.2": true
   }
 }

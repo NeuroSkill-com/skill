@@ -1,0 +1,12 @@
+{
+  "name": "deepmerge",
+  "version": "4.3.1",
+  "description": "deepmerge 4.3.1 with a fix for GHSA-gcqx-w48m-w2h4 (prototype poisoning); no patched upstream release exists",
+  "license": "MIT",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/TehShrike/deepmerge.git"
+  }
+}
