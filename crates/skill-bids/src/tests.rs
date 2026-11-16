@@ -195,6 +195,76 @@ fn exports_clipped_range_as_valid_bids() {
     assert!(summary.total_bytes > 0);
 }
 
+/// A recording that was given a montage is exported under it: labels, what each
+/// channel carries, which are bad, the reference.
+#[test]
+fn a_recordings_montage_is_what_is_exported() {
+    use skill_data::montage::{set_session_montage, Montage, MontageOrigin, MontageSpec};
+    let skill = fake_skill_dir();
+    let eeg = source::discover(skill.path(), None, None, &[]).remove(0).eeg_path;
+    let spec: MontageSpec =
+        serde_json::from_str(r#"{"channels":[{"source":"TP9","label":"M1"},{"source":"AF8","label":"VEOG","kind":"eog"},{"source":"4","label":"Ext","kind":"misc","bad":true}],"reference":"Fpz","ground":"AFz"}"#).unwrap();
+    set_session_montage(
+        &eeg,
+        Montage::from_spec(spec, &[]).unwrap(),
+        MontageOrigin::Session,
+        None,
+    )
+    .unwrap();
+
+    let out = skill.path().join("montage");
+    let o = ExportOptions {
+        out_dir: Some(out.clone()),
+        include_ppg: false,
+        include_imu: false,
+        ..ExportOptions::default()
+    };
+    assert_eq!(preview(skill.path(), &o)[0].channel_names, ["M1", "AF7", "VEOG", "Ext"]);
+    export(skill.path(), &o, &[], &mut |_| {}).unwrap();
+    let find = |suffix: &str| {
+        walk(&out)
+            .into_iter()
+            .find(|p| p.to_string_lossy().ends_with(suffix))
+            .unwrap_or_else(|| panic!("no {suffix}"))
+    };
+    let channels = std::fs::read_to_string(find("_channels.tsv")).unwrap();
+    let row = |name: &str| {
+        channels
+            .lines()
+            .find(|l| l.starts_with(&format!("{name}\t")))
+            .unwrap_or_else(|| panic!("{name}: {channels}"))
+            .to_string()
+    };
+    assert!(row("M1").contains("EEG") && row("AF7").contains("EEG"));
+    assert!(row("VEOG").contains("EOG"));
+    assert!(row("Ext").contains("MISC") && row("Ext").contains("bad"));
+    let meta: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(find("_eeg.json")).unwrap()).unwrap();
+    assert_eq!(
+        (&meta["EEGReference"], &meta["EEGGround"]),
+        (&json!("Fpz"), &json!("AFz"))
+    );
+    assert_eq!(
+        (
+            &meta["EEGChannelCount"],
+            &meta["EOGChannelCount"],
+            &meta["MiscChannelCount"]
+        ),
+        (&json!(2), &json!(1), &json!(1))
+    );
+}
+
+fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        if e.path().is_dir() {
+            out.extend(walk(&e.path()));
+        } else {
+            out.push(e.path());
+        }
+    }
+    out
+}
+
 #[test]
 fn whole_recording_without_range() {
     let skill = fake_skill_dir();
@@ -257,4 +327,135 @@ fn labels_and_days() {
     // 2026-10-26T02:00Z is still the 25th in UTC−4.
     assert_eq!(local_day_label(1_792_980_000.0, -4 * 3600), "20261025");
     assert_eq!(local_day_label(1_792_980_000.0, 0), "20261026");
+}
+
+/// Markers recorded beside the signal become events at their exact times, and
+/// the labels the daemon derived from them are not exported a second time.
+#[test]
+fn recorded_markers_become_events() {
+    let skill = fake_skill_dir();
+    let out = skill.path().join("export");
+    let eeg_path = skill.path().join("20261026").join(format!("exg_{}.csv", T0 as u64));
+    use skill_data::session_csv::{append_marker, MARKER_LABEL_CONTEXT};
+    append_marker(&eeg_path, T0 + 12.25, "TaskEvents", "stimulus, left").unwrap();
+    append_marker(&eeg_path, T0 + 13.5, "TriggerCodes", "42").unwrap();
+    append_marker(&eeg_path, T0 + 5.0, "TaskEvents", "before the range").unwrap();
+    let labels = vec![
+        // what the daemon stores for the first marker, to the second
+        LabelEvent {
+            start_utc: T0 + 12.0,
+            end_utc: T0 + 12.0,
+            text: "stimulus, left".into(),
+            context: format!("{MARKER_LABEL_CONTEXT}TaskEvents"),
+        },
+        // a label a person wrote stays
+        LabelEvent {
+            start_utc: T0 + 20.0,
+            end_utc: T0 + 22.0,
+            text: "felt drowsy".into(),
+            context: String::new(),
+        },
+    ];
+    let summary = export(skill.path(), &opts(&out), &labels, &mut |_| {}).unwrap();
+    let rec = &summary.recordings[0];
+    let events_tsv = std::fs::read_to_string(
+        out.join(&rec.eeg_file).with_file_name(
+            Path::new(&rec.eeg_file)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .replace("_eeg.vhdr", "_events.tsv"),
+        ),
+    )
+    .unwrap();
+    let rows: Vec<Vec<&str>> = events_tsv.lines().map(|l| l.split('\t').collect()).collect();
+    let col = |name: &str| {
+        rows[0]
+            .iter()
+            .position(|c| *c == name)
+            .unwrap_or_else(|| panic!("{name} in {:?}", rows[0]))
+    };
+    let (onset, kind, value) = (col("onset"), col("trial_type"), col("value"));
+    let got: Vec<(f64, &str, &str)> = rows[1..]
+        .iter()
+        .filter(|r| r[kind] != "gap")
+        .map(|r| (r[onset].parse().unwrap(), r[kind], r[value]))
+        .collect();
+    // the export starts at T0 + 10
+    assert_eq!(got.len(), 3, "{events_tsv}");
+    assert_eq!((got[0].1, got[0].2), ("marker", "stimulus, left"));
+    assert!((got[0].0 - 2.25).abs() < 0.05, "{events_tsv}");
+    assert_eq!((got[1].1, got[1].2), ("marker", "42"));
+    assert!((got[1].0 - 3.5).abs() < 0.05, "{events_tsv}");
+    // 1.25 s apart, to the sample
+    assert!((got[1].0 - got[0].0 - 1.25).abs() < 1e-6, "{events_tsv}");
+    assert_eq!((got[2].1, got[2].2), ("label", "felt drowsy"));
+    assert!(
+        events_tsv.contains("TaskEvents") && rows[0].contains(&"source"),
+        "{events_tsv}"
+    );
+}
+
+/// A recording that carries measurements of its computer's clock: the export
+/// says what the clock was off by, and gives acquisition times on the time
+/// server's clock — unless asked to leave them.
+#[test]
+fn clock_checks_correct_acquisition_times() {
+    use skill_data::wall_clock::{append_check, ClockCheck};
+    let skill = fake_skill_dir();
+    let eeg = skill.path().join("20261026").join(format!("exg_{}.csv", T0 as u64));
+    // the recording computer was 2.5 s behind the time server
+    for k in 0..3 {
+        append_check(
+            &eeg,
+            &ClockCheck {
+                unix_s: T0 + f64::from(k) * 20.0,
+                offset_s: 2.5,
+                round_trip_s: 0.010,
+                server: "time.example".into(),
+            },
+        )
+        .unwrap();
+    }
+    let ses = |out: &Path| out.join("sub-test01/ses-20261026");
+    let scans = |out: &Path| std::fs::read_to_string(ses(out).join("sub-test01_ses-20261026_scans.tsv")).unwrap();
+    let sidecar = |out: &Path| -> serde_json::Value {
+        serde_json::from_str(
+            &std::fs::read_to_string(ses(out).join("eeg/sub-test01_ses-20261026_task-rest_run-1_eeg.json")).unwrap(),
+        )
+        .unwrap()
+    };
+
+    let out = skill.path().join("corrected");
+    let summary = export(skill.path(), &opts(&out), &[], &mut |_| {}).unwrap();
+    let errors: Vec<_> = summary.validation.iter().filter(|i| i.severity == "error").collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    // 09:59:30.0 on the computer's clock is 09:59:32.5 on the server's
+    assert!(
+        scans(&out).contains("_eeg.vhdr\t2026-10-26T09:59:32.5"),
+        "{}",
+        scans(&out)
+    );
+    let json = sidecar(&out);
+    assert_eq!(json["ClockOffsetSeconds"], 2.5);
+    assert_eq!(json["ClockChecks"], 3);
+    assert_eq!(json["AcquisitionTimeCorrected"], true);
+    // the clock file itself is not mistaken for a recording or exported as one
+    assert_eq!(summary.recordings.len(), 1);
+
+    let out = skill.path().join("as-recorded");
+    let o = ExportOptions {
+        correct_clock: false,
+        ..opts(&out)
+    };
+    export(skill.path(), &o, &[], &mut |_| {}).unwrap();
+    assert!(
+        scans(&out).contains("_eeg.vhdr\t2026-10-26T09:59:30"),
+        "{}",
+        scans(&out)
+    );
+    let json = sidecar(&out);
+    assert_eq!(json["ClockOffsetSeconds"], 2.5);
+    assert_eq!(json["AcquisitionTimeCorrected"], false);
 }

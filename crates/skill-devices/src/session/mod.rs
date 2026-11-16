@@ -149,6 +149,10 @@ pub struct PpgFrame {
 /// A normalised inertial measurement.
 #[derive(Debug, Clone)]
 pub struct ImuFrame {
+    /// When the reading was taken, Unix seconds, for sources that say
+    /// (an LSL stream stamps every sample). `None`: the session stamps the
+    /// frame with the time it arrived.
+    pub timestamp_s: Option<f64>,
     /// Accelerometer reading in g (X, Y, Z).
     pub accel: [f32; 3],
     /// Gyroscope reading in °/s (X, Y, Z), if available.
@@ -196,6 +200,21 @@ pub enum DeviceEvent {
     /// A scalar sensor stream with no dedicated event (electrodermal activity,
     /// raw PPG counts, humidity, ...).
     Sensor(SensorFrame),
+    /// An event marker from the source or from software running beside it
+    /// (stimulus onset, button press, experiment phase).
+    Marker(MarkerFrame),
+}
+
+/// One event marker: something that happened at an instant, to be laid over
+/// the signal. Recorded to the `_markers` sidecar and kept as a label.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkerFrame {
+    /// When it happened, in seconds since the Unix epoch.
+    pub timestamp_s: f64,
+    /// The marker itself: a name, or a code as text (`"42"`).
+    pub text: String,
+    /// Where it came from, e.g. the name of the LSL marker stream.
+    pub source: String,
 }
 
 /// Vitals a device derives on its own, rather than a raw waveform this app
@@ -281,6 +300,15 @@ pub trait DeviceAdapter: Send {
     /// Called by the session runner when the user cancels or after the event
     /// loop exits.  Implementations should be idempotent.
     async fn disconnect(&mut self);
+
+    /// For a source whose EEG samples are integers: the microvolts one count
+    /// stands for (`0.001` when the source counts nanovolts). Every sample in
+    /// an [`EegFrame`] is then a whole number of counts times this, and a
+    /// recording can store the counts themselves — exact, and smaller.
+    /// `None` (the default) for sources that deliver real numbers.
+    fn eeg_scale_uv(&self) -> Option<f64> {
+        None
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

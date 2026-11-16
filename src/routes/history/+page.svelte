@@ -34,6 +34,7 @@ import {
   setupHiDpiCanvas,
 } from "#lib/format";
 import BidsExportDialog from "#lib/history/BidsExportDialog.svelte";
+import MontageDialog from "#lib/montage/MontageDialog.svelte";
 import HistoryCalendar from "#lib/history/HistoryCalendar.svelte";
 import HistoryStatsBar from "#lib/history/HistoryStatsBar.svelte";
 import {
@@ -116,6 +117,8 @@ let confirmDelete = $state<string | null>(null);
 // BIDS export dialog: opened for the current day, or for one session.
 let bidsOpen = $state(false);
 let bidsCsvPath = $state<string | null>(null);
+let montageOpen = $state(false);
+let montageCsvPath = $state<string | null>(null);
 let bidsStart = $state(0);
 let bidsEnd = $state(0);
 function openBidsExport(session: SessionEntry | null) {
@@ -2284,6 +2287,10 @@ useWindowTitle("window.title.history");
                           {t("history.bids.button")}
                         </Button>
                         <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
+                                onclick={(e: MouseEvent) => { e.stopPropagation(); montageCsvPath = session.csv_path; montageOpen = true; }}>
+                          {t("settings.montage")}
+                        </Button>
+                        <Button size="sm" variant="ghost" class="text-ui-sm h-6 px-2"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_session_window", { csvPath: session.csv_path }); }}>
                           <IconExternalLink class="w-3 h-3 mr-1" />
                           {t("history.popOut")}
@@ -2388,6 +2395,7 @@ useWindowTitle("window.title.history");
 
 {#if currentLocalKey}
   {@const day = dayBoundsFor(currentLocalKey)}
+  <MontageDialog bind:open={montageOpen} csvPath={montageCsvPath} />
   <BidsExportDialog
     bind:open={bidsOpen}
     startUtc={bidsStart}

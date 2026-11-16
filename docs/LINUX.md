@@ -15,6 +15,9 @@ the Development section of [`README.md`](README.md).
 - Ubuntu 22.04 LTS (jammy)
 - Ubuntu 20.04 LTS (focal)
 
+Raspberry Pi (aarch64): see [`RASPBERRY_PI.md`](RASPBERRY_PI.md) for supported
+boards and OS versions, the CPU-only inference policy, and build tips.
+
 ## 1) Base build toolchain
 
 ```bash
@@ -122,6 +125,7 @@ dynamic-loading).
 
 **At runtime:** CUDA when an NVIDIA driver is present, otherwise **wgpu**,
 otherwise CPU. That fallback is automatic — not a separate build flavor.
+On a Raspberry Pi, `auto` means CPU; see [`RASPBERRY_PI.md`](RASPBERRY_PI.md).
 
 No Vulkan SDK is needed to build: wgpu loads the system Vulkan loader
 (`libvulkan1`, shipped with Mesa / the GPU driver) at run time.

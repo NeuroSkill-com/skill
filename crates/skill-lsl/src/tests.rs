@@ -32,6 +32,119 @@ mod tests {
         assert_eq!(1usize.min(skill_constants::EEG_CHANNELS), 1);
     }
 
+    // ── Clock mapping ─────────────────────────────────────────────────────
+
+    #[test]
+    fn clock_reference_is_read_from_the_full_info() {
+        use crate::lsl_adapter::{parse_clock_reference, ClockMap};
+        let xml = "<info><desc><manufacturer>x</manufacturer><clock_reference><lsl_time>12.500000</lsl_time>\
+                   <unix_time>1700000000.250</unix_time></clock_reference></desc></info>";
+        let mut map = parse_clock_reference(xml).expect("reference");
+        assert_eq!(
+            map,
+            ClockMap::Offset {
+                offset: 1_700_000_000.25 - 12.5,
+                exact: true
+            }
+        );
+        // a declared clock ignores when the samples arrive
+        assert_eq!(map.unix_time(13.5, 20.0, 5.0), 1_700_000_001.25);
+        assert!(parse_clock_reference("<info><desc></desc></info>").is_none());
+        assert!(parse_clock_reference("<clock_reference><lsl_time>x</lsl_time></clock_reference>").is_none());
+    }
+
+    #[test]
+    fn undeclared_clock_anchors_the_first_chunk_and_then_holds() {
+        use crate::lsl_adapter::ClockMap;
+        let mut map = ClockMap::Pending;
+        // first chunk: stamps 100.0..100.2, arrived at Unix 5000
+        assert_eq!(map.unix_time(100.0, 100.2, 5000.0), 4999.8);
+        assert_eq!(map.unix_time(100.2, 100.2, 5000.0), 5000.0);
+        // later chunks keep the same offset whatever their arrival time
+        assert_eq!(map.unix_time(101.0, 101.0, 9999.0), 5000.8);
+        assert!(matches!(map, ClockMap::Offset { exact: false, .. }));
+    }
+
+    /// The wall clock drifting against the LSL clock is followed — smoothly,
+    /// so that stamps stay evenly spaced — and a wall clock that is set is
+    /// followed at once.
+    #[test]
+    fn wall_clock_drift_is_followed_smoothly() {
+        use crate::lsl_adapter::WallClock;
+        use std::time::{Duration, Instant};
+        let t0 = Instant::now();
+        let mut wall = WallClock::starting_at(1000.0, t0);
+        // 15 ppm for an hour: what a constant offset got wrong by 54 ms
+        let true_offset = |s: f64| 1000.0 + 15e-6 * s;
+        let (mut prev, mut largest_step, mut worst) = (1000.0, 0.0f64, 0.0f64);
+        for k in 1..=3600 * 50 {
+            let s = k as f64 / 50.0; // a chunk every 20 ms
+            let got = wall.offset_at(t0 + Duration::from_secs_f64(s), || true_offset(s));
+            largest_step = largest_step.max((got - prev).abs());
+            worst = worst.max((got - true_offset(s)).abs());
+            prev = got;
+        }
+        assert!(worst < 0.0002, "off by {} ms", worst * 1e3);
+        assert!(
+            largest_step <= 20e-3 * 500e-6 + 1e-12,
+            "a step of {} us",
+            largest_step * 1e6
+        );
+        assert!((prev - 1000.054).abs() < 0.0002, "{prev}");
+
+        // a bad measurement (the thread was preempted between the two reads)
+        // moves the result by no more than the slew allows before the next one
+        let s = 3600.0;
+        let mut at = t0 + Duration::from_secs_f64(s + 5.0);
+        let glitched = wall.offset_at(at, || true_offset(s) + 0.050);
+        assert!((glitched - prev).abs() < 0.003, "{}", glitched - prev);
+        at += Duration::from_secs(5);
+        wall.offset_at(at, || true_offset(s));
+        at += Duration::from_secs(5);
+        let settled = wall.offset_at(at, || true_offset(s));
+        assert!((settled - true_offset(s)).abs() < 0.003);
+
+        // the wall clock is set an hour ahead: followed at once
+        at += Duration::from_secs(5);
+        let set = wall.offset_at(at, || true_offset(s) + 3600.0);
+        assert!((set - true_offset(s) - 3600.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_marker_stamp_that_is_no_time_gives_way_to_the_arrival() {
+        use crate::lsl_adapter::plausible_marker_time;
+        let now = 1_794_800_000.0;
+        let mut warned = false;
+        // a little late, a replayed one, the clocks a few ms apart: its own time
+        for at in [now - 0.02, now - 9.5, now + 0.004] {
+            assert_eq!(plausible_marker_time(at, now, "m", &mut warned), at);
+        }
+        assert!(!warned);
+        // from the future, or from long ago: a sender that numbers its markers
+        assert_eq!(plausible_marker_time(now + 1000.0, now, "m", &mut warned), now);
+        assert_eq!(plausible_marker_time(100.0, now, "m", &mut warned), now);
+        assert!(warned);
+    }
+
+    #[test]
+    fn marker_times_shed_their_transport_delay() {
+        use crate::lsl_adapter::{marker_text_from_numbers, MarkerClock};
+        let mut clock = MarkerClock::default();
+        // sender clock = Unix - 1000; the first marker took 80 ms to arrive
+        assert_eq!(clock.unix_time(10.0, 1010.08), 1010.08);
+        // the next took 5 ms: it is placed 5 ms after it was stamped, not 80
+        let t = clock.unix_time(11.0, 1011.005);
+        assert!((t - 1011.005).abs() < 1e-9, "{t}");
+        // and a slow one after that keeps the best estimate
+        let t = clock.unix_time(12.0, 1012.2);
+        assert!((t - 1012.005).abs() < 1e-9, "{t}");
+        // no stamp: the arrival
+        assert_eq!(clock.unix_time(0.0, 2000.0), 2000.0);
+
+        assert_eq!(marker_text_from_numbers(&[42.0]), "42");
+        assert_eq!(marker_text_from_numbers(&[1.0, 2.5]), "1;2.5");
+    }
+
     // ── discover_streams smoke test ───────────────────────────────────────
 
     #[test]

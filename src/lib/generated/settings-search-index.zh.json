@@ -661,6 +661,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.companionEmotibit",
+    "label": "同时记录 EmotiBit",
+    "desc": "在每次会话的同时记录 EmotiBit 腕带（皮肤电导、脉搏、温度、运动），写入同一份记录并使用同一时钟。没有腕带时会话照常开始并继续查找；每次连接或断开都会记下一个标记。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "每日目标",
     "desc": "设置您的每日录制目标。进度显示在仪表板上。"
@@ -787,6 +793,18 @@
   },
   {
     "tab": "settings",
+    "key": "settings.losslessRecording",
+    "label": "无损录制",
+    "desc": "在无法写入录制文件时将样本保留在内存中，待可写入后再写入；会话关闭前，写入设备已送达的全部数据。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.montage",
+    "label": "导联布局",
+    "desc": "为记录的通道命名：标签、每个通道测量什么以及哪些是坏通道。保存的导联布局可作为新会话的默认设置，任何记录之后都可以改用另一个——已记录的数据不会被改写。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "配置 OpenBCI 板以替代或补充另一个 BCI 设备进行连接。"
@@ -814,6 +832,18 @@
     "key": "settings.scanner.usbSerial",
     "label": "USB 串口",
     "desc": "OpenBCI Cyton / CytonDaisy 适配器"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.storageFormatAuto",
+    "label": "自动",
+    "desc": "小数据流用 CSV，高速率用 Parquet"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.timeCheck",
+    "label": "录制时检查时钟",
+    "desc": "录制期间每隔几分钟将本机时钟与时间服务器比对。差值仅被测量并随录制保存，便于日后对齐多台电脑的录制；时钟偏差过大时会发出警告。"
   },
   {
     "tab": "settings",

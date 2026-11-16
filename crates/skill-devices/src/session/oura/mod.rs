@@ -330,6 +330,7 @@ async fn stream_motion(
     client
         .stream_accelerometer(MOTION_WINDOW, |s| {
             let _ = tx.try_send(DeviceEvent::Imu(ImuFrame {
+                timestamp_s: None,
                 accel: [
                     f32::from(s.x) * ACCEL_G_PER_COUNT,
                     f32::from(s.y) * ACCEL_G_PER_COUNT,

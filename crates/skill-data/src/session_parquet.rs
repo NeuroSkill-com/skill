@@ -4,8 +4,22 @@
 
 //! Parquet recording writer — drop-in alternative to CSV.
 //!
-//! Stores EEG, PPG, and metrics data in columnar Apache Parquet files with
-//! Snappy compression.  Enabled when `storage_format = "parquet"` in settings.
+//! Stores EEG, PPG, and metrics data in columnar Apache Parquet files.
+//! Enabled when `storage_format = "parquet"` in settings.
+//!
+//! The raw EEG file is written for size and for survival:
+//!
+//! - **Size.** Samples are buffered in columns and written as one row group
+//!   every [`EEG_ROW_GROUP_SECS`] of signal (sized from the stream's own rate,
+//!   so a 4-channel 256 Hz headband and a 32-channel 500 Hz cap both get row
+//!   groups of the same duration), byte-stream-split and ZSTD compressed.
+//! - **Survival.** A Parquet file has no meaning until its footer is written,
+//!   and that only happens at `close()`. So after every row group the writer
+//!   syncs the data and stores, beside it, the footer the file would have if it
+//!   ended right there (`.parquet.ckpt`); and the rows of the row group still in
+//!   memory are appended to a small journal (`.parquet.tail`) as they arrive.
+//!   [`recover_eeg_parquet`] turns what a crash, a kill or a power cut leaves
+//!   behind back into a complete file. Both side files go away on `close()`.
 //!
 //! Files produced:
 //! - `exg_<ts>.parquet` — raw EEG samples (timestamp + N channel columns)
@@ -16,7 +30,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::{Float64Array, RecordBatch, StringArray};
+use arrow_array::{Float64Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
@@ -29,10 +43,26 @@ use skill_eeg::eeg_bands::BandSnapshot;
 
 // ── Row-group flush threshold ─────────────────────────────────────────────────
 
-/// Flush a Parquet row group after this many rows to bound memory.
-const EEG_FLUSH_ROWS: usize = 4096;
+/// Seconds of signal per EEG row group. Bounds the writer's memory, and is
+/// the most a power cut can cost (a crash or kill costs [`EEG_TAIL_SECS`]).
+pub const EEG_ROW_GROUP_SECS: f64 = 10.0;
+/// Row-group size limits, whatever the sample rate says.
+const EEG_ROW_GROUP_MIN_ROWS: usize = 1024;
+const EEG_ROW_GROUP_MAX_ROWS: usize = 1 << 16;
+/// Row-group size until the first sample has told the writer the rate.
+const EEG_ROW_GROUP_DEFAULT_ROWS: usize = 4096;
+/// Seconds of signal that may sit in memory before going to the tail journal.
+pub const EEG_TAIL_SECS: f64 = 0.25;
 const PPG_FLUSH_ROWS: usize = 1024;
-const METRICS_FLUSH_ROWS: usize = 64;
+/// Band-metrics rows per row group: a minute of them, or this many rows,
+/// whichever comes first. The metrics file is wide — twelve columns per
+/// channel, 432 for a 32-channel cap — and every row group costs a page
+/// header and a footer entry *per column*, so a row group of a few rows is
+/// almost all overhead. (It used to be cut on every `flush()`, twice a second:
+/// 32 channels wrote 700 MB an hour, nearly all of it headers.) Metrics are
+/// derived from the raw signal, so the minute a crash can cost is recomputable.
+const METRICS_ROW_GROUP_SECS: f64 = 60.0;
+const METRICS_ROW_GROUP_MAX_ROWS: usize = 1024;
 
 // ── Path helpers (re-exported from session_paths) ────────────────────────────
 
@@ -42,6 +72,176 @@ pub use crate::session_paths::*;
 
 fn writer_props() -> WriterProperties {
     WriterProperties::builder().set_compression(Compression::SNAPPY).build()
+}
+
+/// Properties for the raw EEG file: every column is a dense `f64` signal, for
+/// which a dictionary only costs time and memory, and whose bytes compress far
+/// better split by significance (the high bytes of neighbouring samples are
+/// nearly constant) than interleaved. Row groups are cut by the writer itself.
+fn eeg_writer_props() -> WriterProperties {
+    WriterProperties::builder()
+        .set_compression(Compression::ZSTD(parquet::basic::ZstdLevel::default()))
+        .set_dictionary_enabled(false)
+        .set_encoding(parquet::basic::Encoding::BYTE_STREAM_SPLIT)
+        .set_max_row_group_row_count(Some(usize::MAX))
+        .build()
+}
+
+/// Properties for the band-metrics file. Its values are `f32`s stored in
+/// `f64` columns (the low four bytes of every value are zero) and many columns
+/// are constant for a whole session (no PPG: all NaN), which byte-stream-split
+/// plus ZSTD reduces to almost nothing; min/max statistics for hundreds of
+/// columns nobody filters on would only pad the footer.
+fn metrics_writer_props() -> WriterProperties {
+    WriterProperties::builder()
+        .set_compression(Compression::ZSTD(parquet::basic::ZstdLevel::default()))
+        .set_dictionary_enabled(false)
+        .set_encoding(parquet::basic::Encoding::BYTE_STREAM_SPLIT)
+        .set_statistics_enabled(parquet::file::properties::EnabledStatistics::None)
+        .set_max_row_group_row_count(Some(usize::MAX))
+        .build()
+}
+
+/// File metadata key of an EEG file whose channel columns are integers: the
+/// microvolts one count stands for (`0.001` for nanovolts). Absent from files
+/// that store microvolts as `f64`.
+pub const EEG_SCALE_KEY: &str = "skill.eeg_scale_uv";
+
+fn eeg_scale_metadata(scale_uv: f64) -> parquet::file::metadata::KeyValue {
+    parquet::file::metadata::KeyValue::new(EEG_SCALE_KEY.to_string(), scale_uv.to_string())
+}
+
+/// Properties for a raw EEG file stored as integer counts: neighbouring
+/// samples of a signal differ by little, so the deltas pack into a few bits
+/// each — about a third of the bytes the same signal takes as `f64`.
+fn eeg_counts_writer_props(scale_uv: f64) -> WriterProperties {
+    WriterProperties::builder()
+        .set_compression(Compression::ZSTD(parquet::basic::ZstdLevel::default()))
+        .set_dictionary_enabled(false)
+        .set_encoding(parquet::basic::Encoding::DELTA_BINARY_PACKED)
+        .set_column_encoding(
+            parquet::schema::types::ColumnPath::from("timestamp_s"),
+            parquet::basic::Encoding::BYTE_STREAM_SPLIT,
+        )
+        .set_max_row_group_row_count(Some(usize::MAX))
+        .set_key_value_metadata(Some(vec![eeg_scale_metadata(scale_uv)]))
+        .build()
+}
+
+fn eeg_props_for(scale_uv: Option<f64>) -> WriterProperties {
+    scale_uv.map_or_else(eeg_writer_props, eeg_counts_writer_props)
+}
+
+/// The scale a file's metadata declares, if it stores counts.
+fn eeg_scale_of(schema: &Schema) -> Option<f64> {
+    schema
+        .metadata()
+        .get(EEG_SCALE_KEY)?
+        .parse()
+        .ok()
+        .filter(|q: &f64| q.is_finite() && *q > 0.0)
+}
+
+/// Microvolts as counts of `scale_uv`; a missing value (NaN) is a null.
+fn counts_array(values: &[f64], scale_uv: f64) -> Int64Array {
+    values
+        .iter()
+        .map(|&v| v.is_finite().then(|| (v / scale_uv).round() as i64))
+        .collect()
+}
+
+/// A channel column of an EEG file, read as microvolts whichever way it is
+/// stored.
+enum EegColumn<'a> {
+    Microvolts(&'a Float64Array),
+    Counts(&'a Int64Array, f64),
+}
+
+impl<'a> EegColumn<'a> {
+    fn new(col: &'a dyn arrow_array::Array, scale_uv: Option<f64>) -> Option<Self> {
+        let any = col.as_any();
+        any.downcast_ref::<Float64Array>().map(Self::Microvolts).or_else(|| {
+            any.downcast_ref::<Int64Array>()
+                .map(|c| Self::Counts(c, scale_uv.unwrap_or(1.0)))
+        })
+    }
+
+    fn get(&self, i: usize) -> Option<f64> {
+        use arrow_array::Array;
+        match self {
+            Self::Microvolts(c) => (!c.is_null(i)).then(|| c.value(i)),
+            Self::Counts(c, q) => (!c.is_null(i)).then(|| c.value(i) as f64 * q),
+        }
+    }
+}
+
+// ── EEG crash journal ─────────────────────────────────────────────────────────
+
+/// `<file>.parquet.ckpt`: the end of the last synced row group and the footer
+/// for a file that ends there.
+pub fn eeg_checkpoint_path(pq_path: &Path) -> PathBuf {
+    side_path(pq_path, "ckpt")
+}
+
+/// `<file>.parquet.tail`: the rows that are not in a row group yet.
+pub fn eeg_tail_path(pq_path: &Path) -> PathBuf {
+    side_path(pq_path, "tail")
+}
+
+fn side_path(pq_path: &Path, ext: &str) -> PathBuf {
+    let mut name = pq_path.file_name().unwrap_or_default().to_os_string();
+    name.push(".");
+    name.push(ext);
+    pq_path.with_file_name(name)
+}
+
+/// First line of the tail journal; the rows follow as little-endian `f64`s,
+/// `1 + channels` per row (timestamp first).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct TailHeader {
+    magic: String,
+    channels: Vec<String>,
+    /// Set when the file stores counts ([`EEG_SCALE_KEY`]); the journal rows
+    /// are microvolts either way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    scale_uv: Option<f64>,
+}
+
+const TAIL_MAGIC: &str = "skill-eeg-tail-1";
+
+fn eeg_schema_for(labels: &[&str]) -> Arc<Schema> {
+    eeg_schema_scaled(labels, None)
+}
+
+/// The EEG schema: channels as `f64` microvolts, or with a scale as `i64`
+/// counts of it.
+fn eeg_schema_scaled(labels: &[&str], scale_uv: Option<f64>) -> Arc<Schema> {
+    let ty = if scale_uv.is_some() {
+        DataType::Int64
+    } else {
+        DataType::Float64
+    };
+    let mut fields = vec![Field::new("timestamp_s", DataType::Float64, false)];
+    for label in labels {
+        fields.push(Field::new(*label, ty.clone(), true));
+    }
+    Arc::new(Schema::new(fields))
+}
+
+/// Size and throughput of the raw EEG file so far.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct EegWriteStats {
+    /// Rows handed to the writer (in row groups or in the journal).
+    pub rows: u64,
+    /// Rows in synced row groups.
+    pub rows_durable: u64,
+    pub row_groups: u64,
+    /// Bytes of the Parquet file on disk.
+    pub bytes: u64,
+    /// Failed writes (disk full, I/O error). Not zero means data is being lost.
+    pub errors: u64,
+    /// Time spent encoding and writing, in seconds.
+    pub write_secs: f64,
 }
 
 /// One buffered vitals row: `(timestamp, hr_bpm, ibi_ms, spo2_pct, temperature_c)`.
@@ -86,10 +286,25 @@ pub struct ParquetState {
     // ── EEG ──────────────────────────────────────────────────────────────────
     eeg_wtr: Option<ArrowWriter<std::fs::File>>,
     eeg_schema: Arc<Schema>,
+    /// Microvolts per count when the channels are stored as integers.
+    eeg_scale: Option<f64>,
+    eeg_path: PathBuf,
     n_eeg: usize,
+    /// Per-channel queues that line samples up into rows.
     eeg_ts: Vec<VecDeque<f64>>,
     eeg_bufs: Vec<VecDeque<f64>>,
-    eeg_rows: usize,
+    /// Complete rows waiting for their row group: timestamps, then one column
+    /// per channel.
+    eeg_pending_ts: Vec<f64>,
+    eeg_pending: Vec<Vec<f64>>,
+    /// How many of the pending rows are already in the tail journal.
+    eeg_journaled: usize,
+    eeg_tail: Option<std::fs::File>,
+    /// Rows per row group / per journal append, from the sample rate.
+    eeg_group_rows: usize,
+    eeg_tail_rows: usize,
+    eeg_rate_seen: f64,
+    eeg_stats: EegWriteStats,
 
     // ── PPG (lazy) ───────────────────────────────────────────────────────────
     ppg_wtr: Option<ArrowWriter<std::fs::File>>,
@@ -143,15 +358,16 @@ impl ParquetState {
         let pq_path = eeg_parquet_path(csv_path);
         let n = labels.len();
 
-        // EEG schema: timestamp_s + N channel columns
-        let mut fields = vec![Field::new("timestamp_s", DataType::Float64, false)];
-        for label in labels {
-            fields.push(Field::new(*label, DataType::Float64, true));
-        }
-        let eeg_schema = Arc::new(Schema::new(fields));
+        let eeg_schema = eeg_schema_for(labels);
 
         let file = std::fs::File::create(&pq_path).with_context(|| format!("parquet create {}", pq_path.display()))?;
-        let eeg_wtr = ArrowWriter::try_new(file, eeg_schema.clone(), Some(writer_props())).context("parquet writer")?;
+        let eeg_wtr =
+            ArrowWriter::try_new(file, eeg_schema.clone(), Some(eeg_writer_props())).context("parquet writer")?;
+        // The journal is what makes the recording survive a crash; a session
+        // that cannot have one still records.
+        let eeg_tail = open_tail(&pq_path, labels, None)
+            .map_err(|e| eprintln!("[parquet] EEG tail journal unavailable for {}: {e}", pq_path.display()))
+            .ok();
 
         // PPG schema
         let ppg_fields = vec![
@@ -198,10 +414,19 @@ impl ParquetState {
         Ok(Self {
             eeg_wtr: Some(eeg_wtr),
             eeg_schema,
+            eeg_scale: None,
+            eeg_path: pq_path,
             n_eeg: n,
             eeg_ts: (0..n).map(|_| VecDeque::new()).collect(),
             eeg_bufs: (0..n).map(|_| VecDeque::new()).collect(),
-            eeg_rows: 0,
+            eeg_pending_ts: Vec::new(),
+            eeg_pending: (0..n).map(|_| Vec::new()).collect(),
+            eeg_journaled: 0,
+            eeg_tail,
+            eeg_group_rows: EEG_ROW_GROUP_DEFAULT_ROWS,
+            eeg_tail_rows: 64,
+            eeg_rate_seen: 0.0,
+            eeg_stats: EegWriteStats::default(),
 
             ppg_wtr: None,
             ppg_schema,
@@ -241,6 +466,47 @@ impl ParquetState {
 
     // ── EEG ──────────────────────────────────────────────────────────────────
 
+    /// Store the EEG channels as integer counts of `scale_uv` microvolts
+    /// (`0.001`: nanovolts) instead of `f64` microvolts — for a source whose
+    /// samples are integers, which this keeps exact in about a third of the
+    /// bytes. Samples are still pushed in microvolts and read back in
+    /// microvolts; a value that is not a whole number of counts is rounded to
+    /// one. Takes effect only before the first sample: returns whether it did.
+    pub fn set_eeg_scale_uv(&mut self, scale_uv: f64) -> anyhow::Result<bool> {
+        let untouched = self.eeg_stats.rows == 0 && self.eeg_bufs.iter().all(VecDeque::is_empty);
+        if !(scale_uv.is_finite() && scale_uv > 0.0) || !untouched || self.eeg_wtr.is_none() {
+            return Ok(false);
+        }
+        let labels: Vec<String> = self
+            .eeg_schema
+            .fields()
+            .iter()
+            .skip(1)
+            .map(|f| f.name().clone())
+            .collect();
+        let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
+        let schema = eeg_schema_scaled(&labels, Some(scale_uv));
+        // Start the (still empty) file again under the new schema.
+        self.eeg_wtr = None;
+        let file = std::fs::File::create(&self.eeg_path)
+            .with_context(|| format!("parquet create {}", self.eeg_path.display()))?;
+        self.eeg_wtr = Some(
+            ArrowWriter::try_new(file, schema.clone(), Some(eeg_counts_writer_props(scale_uv)))
+                .context("parquet writer")?,
+        );
+        self.eeg_schema = schema;
+        self.eeg_scale = Some(scale_uv);
+        self.eeg_tail = open_tail(&self.eeg_path, &labels, Some(scale_uv))
+            .map_err(|e| {
+                eprintln!(
+                    "[parquet] EEG tail journal unavailable for {}: {e}",
+                    self.eeg_path.display()
+                );
+            })
+            .ok();
+        Ok(true)
+    }
+
     pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
         if electrode >= self.n_eeg {
             return;
@@ -250,7 +516,15 @@ impl ParquetState {
             self.eeg_ts[electrode].push_back(packet_ts + i as f64 / sample_rate);
         }
 
-        // Drain complete rows (all channels have data).
+        // Size the row groups and journal appends from the stream itself.
+        if sample_rate > 0.0 && sample_rate != self.eeg_rate_seen {
+            self.eeg_rate_seen = sample_rate;
+            self.eeg_group_rows = ((sample_rate * EEG_ROW_GROUP_SECS).round() as usize)
+                .clamp(EEG_ROW_GROUP_MIN_ROWS, EEG_ROW_GROUP_MAX_ROWS);
+            self.eeg_tail_rows = ((sample_rate * EEG_TAIL_SECS).round() as usize).max(1);
+        }
+
+        // Move complete rows (all channels have data) to the column buffers.
         let ready = self
             .eeg_bufs
             .iter()
@@ -260,36 +534,148 @@ impl ParquetState {
         if ready == 0 {
             return;
         }
+        self.eeg_pending_ts.extend(self.eeg_ts[0].drain(..ready));
+        for k in 0..self.n_eeg {
+            if k > 0 {
+                self.eeg_ts[k].drain(..ready);
+            }
+            self.eeg_pending[k].extend(self.eeg_bufs[k].drain(..ready));
+        }
+        self.eeg_stats.rows += ready as u64;
 
-        // Build column arrays.
-        let n = self.n_eeg;
-        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_ts[0].pop_front()).collect();
-        for k in 1..n {
-            for _ in 0..ready {
-                self.eeg_ts[k].pop_front();
+        if self.eeg_pending_ts.len() >= self.eeg_group_rows {
+            self.write_eeg_row_group();
+        } else if self.eeg_pending_ts.len() - self.eeg_journaled >= self.eeg_tail_rows {
+            self.journal_eeg_tail();
+        }
+    }
+
+    /// Add one complete row — a sample of every channel taken at `ts` —
+    /// straight to the column buffers. For sources that deliver whole frames;
+    /// a missing channel is stored as NaN.
+    pub fn push_eeg_frame(&mut self, channels: &[f64], ts: f64, sample_rate: f64) {
+        // Samples queued per electrode must come out first and in their rows.
+        if self.eeg_bufs.iter().any(|b| !b.is_empty()) {
+            for (el, &v) in channels.iter().enumerate() {
+                self.push_eeg(el, &[v], ts, sample_rate);
+            }
+            return;
+        }
+        if sample_rate > 0.0 && sample_rate != self.eeg_rate_seen {
+            self.eeg_rate_seen = sample_rate;
+            self.eeg_group_rows = ((sample_rate * EEG_ROW_GROUP_SECS).round() as usize)
+                .clamp(EEG_ROW_GROUP_MIN_ROWS, EEG_ROW_GROUP_MAX_ROWS);
+            self.eeg_tail_rows = ((sample_rate * EEG_TAIL_SECS).round() as usize).max(1);
+        }
+        self.eeg_pending_ts.push(ts);
+        for (k, col) in self.eeg_pending.iter_mut().enumerate() {
+            col.push(channels.get(k).copied().unwrap_or(f64::NAN));
+        }
+        self.eeg_stats.rows += 1;
+        if self.eeg_pending_ts.len() >= self.eeg_group_rows {
+            self.write_eeg_row_group();
+        } else if self.eeg_pending_ts.len() - self.eeg_journaled >= self.eeg_tail_rows {
+            self.journal_eeg_tail();
+        }
+    }
+
+    /// Append the pending rows that are not in the tail journal yet.
+    fn journal_eeg_tail(&mut self) {
+        let rows = self.eeg_pending_ts.len();
+        if rows <= self.eeg_journaled {
+            return;
+        }
+        let Some(tail) = self.eeg_tail.as_mut() else {
+            self.eeg_journaled = rows;
+            return;
+        };
+        let t0 = std::time::Instant::now();
+        let mut buf = Vec::with_capacity((rows - self.eeg_journaled) * (self.n_eeg + 1) * 8);
+        for r in self.eeg_journaled..rows {
+            buf.extend_from_slice(&self.eeg_pending_ts[r].to_le_bytes());
+            for col in &self.eeg_pending {
+                buf.extend_from_slice(&col[r].to_le_bytes());
             }
         }
-
-        let mut columns: Vec<Arc<dyn arrow_array::Array>> = Vec::with_capacity(n + 1);
-        columns.push(Arc::new(Float64Array::from(ts_col)));
-        for k in 0..n {
-            let col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_bufs[k].pop_front()).collect();
-            columns.push(Arc::new(Float64Array::from(col)));
+        use std::io::Write as _;
+        if let Err(e) = tail.write_all(&buf) {
+            self.eeg_stats.errors += 1;
+            eprintln!(
+                "[parquet] EEG tail journal write failed for {}: {e}",
+                self.eeg_path.display()
+            );
         }
+        self.eeg_journaled = rows;
+        self.eeg_stats.write_secs += t0.elapsed().as_secs_f64();
+    }
 
-        if let Ok(batch) = RecordBatch::try_new(self.eeg_schema.clone(), columns) {
-            if let Some(ref mut w) = self.eeg_wtr {
-                let _ = w.write(&batch);
+    /// Write the pending rows as one row group, make it durable, checkpoint
+    /// the footer and start the tail journal afresh.
+    fn write_eeg_row_group(&mut self) {
+        let rows = self.eeg_pending_ts.len();
+        if rows == 0 {
+            return;
+        }
+        let t0 = std::time::Instant::now();
+        let mut columns: Vec<Arc<dyn arrow_array::Array>> = Vec::with_capacity(self.n_eeg + 1);
+        columns.push(Arc::new(Float64Array::from(std::mem::take(&mut self.eeg_pending_ts))));
+        let scale = self.eeg_scale;
+        for col in &mut self.eeg_pending {
+            let col = std::mem::take(col);
+            columns.push(match scale {
+                None => Arc::new(Float64Array::from(col)),
+                Some(q) => Arc::new(counts_array(&col, q)),
+            });
+        }
+        self.eeg_journaled = 0;
+
+        let Some(w) = self.eeg_wtr.as_mut() else {
+            return;
+        };
+        let written = RecordBatch::try_new(self.eeg_schema.clone(), columns)
+            .map_err(parquet::errors::ParquetError::from)
+            .and_then(|batch| w.write(&batch))
+            .and_then(|()| w.flush());
+        match written {
+            Ok(()) => {
+                // Data first, then the footer that vouches for it, then the
+                // journal those rows no longer need. The writer buffers what
+                // it writes: a row group whose last pages are small is not
+                // all in the file until that buffer is flushed too.
+                let synced = w.sync().and_then(|()| w.inner().sync_data());
+                if let Err(e) = synced.and_then(|()| write_checkpoint(&self.eeg_path, w, scale)) {
+                    self.eeg_stats.errors += 1;
+                    eprintln!("[parquet] EEG checkpoint failed for {}: {e}", self.eeg_path.display());
+                } else {
+                    self.eeg_stats.rows_durable += rows as u64;
+                    if let Some(tail) = self.eeg_tail.as_mut() {
+                        if let Err(e) = truncate_tail(tail) {
+                            eprintln!(
+                                "[parquet] EEG tail journal reset failed for {}: {e}",
+                                self.eeg_path.display()
+                            );
+                        }
+                    }
+                }
+                self.eeg_stats.row_groups += 1;
+                self.eeg_stats.bytes = w.bytes_written() as u64;
             }
-            self.eeg_rows += ready;
-        }
-
-        if self.eeg_rows >= EEG_FLUSH_ROWS {
-            if let Some(ref mut w) = self.eeg_wtr {
-                let _ = w.flush();
+            Err(e) => {
+                // The rows stay in the journal (it is only cut after a good
+                // row group), so recovery can still bring them back.
+                self.eeg_stats.errors += 1;
+                eprintln!(
+                    "[parquet] EEG row group write failed for {}: {e}",
+                    self.eeg_path.display()
+                );
             }
-            self.eeg_rows = 0;
         }
+        self.eeg_stats.write_secs += t0.elapsed().as_secs_f64();
+    }
+
+    /// Size and throughput of the raw EEG file so far.
+    pub fn eeg_stats(&self) -> EegWriteStats {
+        self.eeg_stats
     }
 
     // ── PPG ──────────────────────────────────────────────────────────────────
@@ -340,9 +726,9 @@ impl ParquetState {
         }
 
         let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.ppg_ts[0].pop_front()).collect();
-        for k in 1..3 {
+        for ts in self.ppg_ts.iter_mut().take(3).skip(1) {
             for _ in 0..ready {
-                self.ppg_ts[k].pop_front();
+                ts.pop_front();
             }
         }
 
@@ -388,7 +774,7 @@ impl ParquetState {
         // Lazy-open metrics writer.
         if self.metrics_wtr.is_none() {
             match std::fs::File::create(&self.metrics_path) {
-                Ok(f) => match ArrowWriter::try_new(f, self.metrics_schema.clone(), Some(writer_props())) {
+                Ok(f) => match ArrowWriter::try_new(f, self.metrics_schema.clone(), Some(metrics_writer_props())) {
                     Ok(w) => {
                         self.metrics_wtr = Some(w);
                     }
@@ -482,10 +868,15 @@ impl ParquetState {
         row.extend_from_slice(&[opt(snap.gpu_overall), opt(snap.gpu_render), opt(snap.gpu_tiler)]);
         row.push(snap.echt as f64);
 
+        // A row group per minute of metrics (by their own time stamps), or
+        // per METRICS_ROW_GROUP_MAX_ROWS rows.
+        let group_started = self.metrics_pending.first().map_or(snap.timestamp, |r| r[0]);
         self.metrics_pending.push(row);
         self.metrics_rows += 1;
 
-        if self.metrics_rows >= METRICS_FLUSH_ROWS {
+        if self.metrics_rows >= METRICS_ROW_GROUP_MAX_ROWS
+            || (snap.timestamp - group_started).abs() >= METRICS_ROW_GROUP_SECS
+        {
             self.flush_metrics();
         }
     }
@@ -800,13 +1191,18 @@ impl ParquetState {
     }
 
     pub fn flush(&mut self) {
-        if let Some(ref mut w) = self.eeg_wtr {
-            let _ = w.flush();
+        // EEG: put what is in memory into the journal. Row groups are cut by
+        // duration in `push_eeg` — forcing one here would shred the file into
+        // thousands of tiny groups (the session calls this every 256 samples).
+        self.journal_eeg_tail();
+        if let Some(tail) = self.eeg_tail.as_mut() {
+            let _ = tail.sync_data();
         }
         if let Some(ref mut w) = self.ppg_wtr {
             let _ = w.flush();
         }
-        self.flush_metrics();
+        // Not the metrics: their row groups are cut by time in `push_metrics`
+        // (see METRICS_ROW_GROUP_SECS), and written out at `close()`.
         self.flush_imu();
         self.flush_fnirs();
         self.flush_sensors();
@@ -823,8 +1219,27 @@ impl ParquetState {
         self.flush_fnirs();
         self.flush_vitals();
         self.flush_sensors();
+        if self.eeg_wtr.is_some() {
+            self.write_eeg_row_group();
+        }
         if let Some(w) = self.eeg_wtr.take() {
-            let _ = w.close();
+            match w.close() {
+                Ok(_) => {
+                    // The real footer is in place: the side files have done their job.
+                    self.eeg_tail = None;
+                    let _ = std::fs::remove_file(eeg_tail_path(&self.eeg_path));
+                    let _ = std::fs::remove_file(eeg_checkpoint_path(&self.eeg_path));
+                    self.eeg_stats.bytes = std::fs::metadata(&self.eeg_path).map_or(self.eeg_stats.bytes, |m| m.len());
+                }
+                Err(e) => {
+                    // Leave them: recovery can rebuild the file from them.
+                    self.eeg_stats.errors += 1;
+                    eprintln!(
+                        "[parquet] EEG parquet close failed for {}: {e}",
+                        self.eeg_path.display()
+                    );
+                }
+            }
         }
         if let Some(w) = self.ppg_wtr.take() {
             let _ = w.close();
@@ -851,6 +1266,261 @@ impl Drop for ParquetState {
     fn drop(&mut self) {
         self.close();
     }
+}
+
+fn open_tail(pq_path: &Path, labels: &[&str], scale_uv: Option<f64>) -> std::io::Result<std::fs::File> {
+    use std::io::Write as _;
+    // Read access too: cutting the journal back re-reads where the header ends.
+    let mut f = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(eeg_tail_path(pq_path))?;
+    let header = TailHeader {
+        magic: TAIL_MAGIC.into(),
+        channels: labels.iter().map(|l| (*l).to_string()).collect(),
+        scale_uv,
+    };
+    let mut line = serde_json::to_vec(&header).map_err(std::io::Error::other)?;
+    line.push(b'\n');
+    f.write_all(&line)?;
+    f.sync_data()?;
+    Ok(f)
+}
+
+/// Cut the journal back to its header line.
+fn truncate_tail(tail: &mut std::fs::File) -> std::io::Result<()> {
+    use std::io::{BufRead as _, Seek as _, SeekFrom};
+    tail.seek(SeekFrom::Start(0))?;
+    let mut header = Vec::new();
+    std::io::BufReader::new(&*tail).read_until(b'\n', &mut header)?;
+    tail.set_len(header.len() as u64)?;
+    tail.seek(SeekFrom::Start(header.len() as u64))?;
+    Ok(())
+}
+
+/// Store the footer the file would have if it ended after the row groups
+/// flushed so far: `[u64 LE: end of data][footer]`, written beside and renamed
+/// over so a reader never sees half of one.
+fn write_checkpoint(pq_path: &Path, w: &ArrowWriter<std::fs::File>, scale_uv: Option<f64>) -> std::io::Result<()> {
+    use parquet::file::metadata::{FileMetaData, ParquetMetaData, ParquetMetaDataWriter};
+    let groups = w.flushed_row_groups().to_vec();
+    let Some(first) = groups.first() else {
+        return Ok(());
+    };
+    let rows = groups
+        .iter()
+        .map(parquet::file::metadata::RowGroupMetaData::num_rows)
+        .sum();
+    let key_values = scale_uv.map(|q| vec![eeg_scale_metadata(q)]);
+    let file_meta = FileMetaData::new(
+        1,
+        rows,
+        Some("skill-data".into()),
+        key_values,
+        first.schema_descr_ptr(),
+        None,
+    );
+    let meta = ParquetMetaData::new(file_meta, groups);
+    let mut buf = (w.bytes_written() as u64).to_le_bytes().to_vec();
+    ParquetMetaDataWriter::new(&mut buf, &meta)
+        .finish()
+        .map_err(std::io::Error::other)?;
+    let path = eeg_checkpoint_path(pq_path);
+    let tmp = side_path(pq_path, "ckpt.tmp");
+    std::fs::write(&tmp, &buf)?;
+    std::fs::rename(&tmp, &path)
+}
+
+/// What [`recover_eeg_parquet`] found and did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EegRecovery {
+    /// The file has its footer; nothing to do (stray side files are removed).
+    Intact,
+    /// The file was rebuilt; this many rows are in it.
+    Recovered { rows: u64 },
+    /// No footer and nothing to rebuild from.
+    Unrecoverable,
+}
+
+/// Does the file end in a readable Parquet footer?
+pub fn eeg_parquet_is_complete(pq_path: &Path) -> bool {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    std::fs::File::open(pq_path)
+        .ok()
+        .and_then(|f| ParquetRecordBatchReaderBuilder::try_new(f).ok())
+        .is_some()
+}
+
+/// Make an EEG Parquet file that was never closed (crash, kill, power cut)
+/// whole again: the row groups vouched for by the checkpoint, followed by the
+/// rows in the tail journal, rewritten as a normal file in place of the broken
+/// one. Safe to call on any file at any time; a file with a footer is left
+/// alone. Not for a file that is still being written.
+pub fn recover_eeg_parquet(pq_path: &Path) -> anyhow::Result<EegRecovery> {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use std::io::{BufRead as _, Read as _, Write as _};
+
+    let ckpt_path = eeg_checkpoint_path(pq_path);
+    let tail_path = eeg_tail_path(pq_path);
+    if eeg_parquet_is_complete(pq_path) {
+        let _ = std::fs::remove_file(&ckpt_path);
+        let _ = std::fs::remove_file(&tail_path);
+        return Ok(EegRecovery::Intact);
+    }
+
+    // 1. The durable row groups: the data up to the checkpoint plus its footer
+    //    is a complete Parquet file.
+    let mut labels: Option<Vec<String>> = None;
+    let mut scale: Option<f64> = None;
+    let mut batches: Vec<RecordBatch> = Vec::new();
+    let head_path = side_path(pq_path, "head.tmp");
+    if let Ok(ckpt) = std::fs::read(&ckpt_path) {
+        let data_end = ckpt
+            .get(..8)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap_or_default()));
+        let have = std::fs::metadata(pq_path).map_or(0, |m| m.len());
+        if let Some(data_end) = data_end.filter(|&e| e >= 4 && e <= have) {
+            let mut head = std::fs::File::create(&head_path).context("recovery scratch file")?;
+            std::io::copy(&mut std::fs::File::open(pq_path)?.take(data_end), &mut head)?;
+            head.write_all(&ckpt[8..])?;
+            drop(head);
+            // A checkpoint that does not read back is skipped, not fatal: the
+            // journal may still hold rows.
+            if let Ok(builder) = std::fs::File::open(&head_path)
+                .map_err(anyhow::Error::from)
+                .and_then(|f| ParquetRecordBatchReaderBuilder::try_new(f).map_err(anyhow::Error::from))
+            {
+                labels = Some(
+                    builder
+                        .schema()
+                        .fields()
+                        .iter()
+                        .skip(1)
+                        .map(|f| f.name().clone())
+                        .collect(),
+                );
+                scale = eeg_scale_of(builder.schema());
+                if let Ok(reader) = builder.build() {
+                    // Stop at the first unreadable batch; keep what came before.
+                    batches.extend(reader.map_while(Result::ok));
+                }
+            }
+        }
+    }
+
+    // 2. The rows that never reached a row group.
+    let mut tail_rows: Vec<f64> = Vec::new();
+    if let Ok(f) = std::fs::File::open(&tail_path) {
+        let mut rd = std::io::BufReader::new(f);
+        let mut line = Vec::new();
+        rd.read_until(b'\n', &mut line)?;
+        if let Ok(h) = serde_json::from_slice::<TailHeader>(&line) {
+            if h.magic == TAIL_MAGIC && labels.as_ref().is_none_or(|l| *l == h.channels) {
+                let width = (h.channels.len() + 1) * 8;
+                let mut raw = Vec::new();
+                rd.read_to_end(&mut raw)?;
+                // A row cut short by the crash is dropped.
+                raw.truncate(raw.len() / width * width);
+                tail_rows = raw.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect();
+                if labels.is_none() {
+                    scale = h.scale_uv;
+                }
+                labels.get_or_insert(h.channels);
+            }
+        }
+    }
+
+    let Some(labels) = labels else {
+        let _ = std::fs::remove_file(&head_path);
+        return Ok(EegRecovery::Unrecoverable);
+    };
+    let label_refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+    let schema = eeg_schema_scaled(&label_refs, scale);
+    let width = labels.len() + 1;
+    if !tail_rows.is_empty() {
+        let columns: Vec<Arc<dyn arrow_array::Array>> = (0..width)
+            .map(|c| {
+                let col: Vec<f64> = tail_rows.iter().skip(c).step_by(width).copied().collect();
+                match scale.filter(|_| c > 0) {
+                    None => Arc::new(Float64Array::from(col)) as Arc<dyn arrow_array::Array>,
+                    Some(q) => Arc::new(counts_array(&col, q)),
+                }
+            })
+            .collect();
+        batches.push(RecordBatch::try_new(schema.clone(), columns).context("tail rows")?);
+    }
+    let rows: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
+    if rows == 0 {
+        let _ = std::fs::remove_file(&head_path);
+        return Ok(EegRecovery::Unrecoverable);
+    }
+
+    // 3. Write the whole recording as a normal file, then swap it in. The
+    //    broken file and its side files stay until the new one is on disk.
+    let out_path = side_path(pq_path, "recovered.tmp");
+    let out = std::fs::File::create(&out_path).context("recovery output")?;
+    let mut w = ArrowWriter::try_new(out, schema.clone(), Some(eeg_props_for(scale))).context("recovery writer")?;
+    for batch in &batches {
+        // Columns are matched by position: the schema is the same, but a
+        // batch read back carries the file's own field metadata.
+        let batch = RecordBatch::try_new(schema.clone(), batch.columns().to_vec()).context("recovered rows")?;
+        w.write(&batch).context("recovery write")?;
+        w.flush().context("recovery flush")?;
+    }
+    w.inner().sync_all().ok();
+    w.close().context("recovery close")?;
+    std::fs::rename(&out_path, pq_path).context("recovery swap")?;
+    let _ = std::fs::remove_file(&head_path);
+    let _ = std::fs::remove_file(&ckpt_path);
+    let _ = std::fs::remove_file(&tail_path);
+    Ok(EegRecovery::Recovered { rows })
+}
+
+/// Recover every unfinished EEG Parquet recording in a day directory.
+/// Returns `(path, outcome)` for the files that were not intact.
+///
+/// A recording still being written looks just like a crashed one, except that
+/// its journal keeps moving: files touched within `min_idle` are left alone
+/// (a live writer appends every [`EEG_TAIL_SECS`]).
+pub fn recover_eeg_parquets_in(day_dir: &Path, min_idle: std::time::Duration) -> Vec<(PathBuf, EegRecovery)> {
+    let idle = |p: &Path| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_none_or(|age| age >= min_idle)
+    };
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(day_dir) else {
+        return out;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        // Only raw EEG files have side files, not their `_ppg` / `_metrics` / …
+        // sidecars.
+        let is_eeg = name.starts_with("exg_") && name.ends_with(".parquet") && !is_sidecar_file(name);
+        if !is_eeg {
+            continue;
+        }
+        let (ckpt, tail) = (eeg_checkpoint_path(&path), eeg_tail_path(&path));
+        if !ckpt.exists() && !tail.exists() {
+            continue;
+        }
+        if !(idle(&path) && idle(&ckpt) && idle(&tail)) {
+            continue;
+        }
+        match recover_eeg_parquet(&path) {
+            Ok(EegRecovery::Intact) => {}
+            Ok(outcome) => out.push((path, outcome)),
+            Err(e) => {
+                eprintln!("[parquet] EEG parquet recovery failed for {}: {e:#}", path.display());
+                out.push((path, EegRecovery::Unrecoverable));
+            }
+        }
+    }
+    out
 }
 
 /// Read just the channel names from an EEG parquet schema (cheap — does not
@@ -892,6 +1562,7 @@ pub fn read_eeg_parquet(path: &Path) -> anyhow::Result<(f64, Vec<String>, Vec<Ve
     let channel_names: Vec<String> = schema.fields().iter().skip(1).map(|f| f.name().clone()).collect();
     let n_ch = channel_names.len();
 
+    let scale = eeg_scale_of(&schema);
     let reader = builder.build().context("parquet reader")?;
     let mut first_ts: Option<f64> = None;
     let mut channels: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
@@ -903,13 +1574,10 @@ pub fn read_eeg_parquet(path: &Path) -> anyhow::Result<(f64, Vec<String>, Vec<Ve
             .as_any()
             .downcast_ref::<arrow_array::Float64Array>()
             .ok_or_else(|| anyhow::anyhow!("timestamp_s column is not Float64"))?;
-        let mut ch_cols: Vec<&arrow_array::Float64Array> = Vec::with_capacity(n_ch);
+        let mut ch_cols: Vec<EegColumn> = Vec::with_capacity(n_ch);
         for k in 0..n_ch {
-            let col = batch
-                .column(k + 1)
-                .as_any()
-                .downcast_ref::<arrow_array::Float64Array>()
-                .ok_or_else(|| anyhow::anyhow!("channel column {} is not Float64", k + 1))?;
+            let col = EegColumn::new(batch.column(k + 1).as_ref(), scale)
+                .ok_or_else(|| anyhow::anyhow!("channel column {} is neither Float64 nor Int64", k + 1))?;
             ch_cols.push(col);
         }
         for i in 0..ts_col.len() {
@@ -920,14 +1588,67 @@ pub fn read_eeg_parquet(path: &Path) -> anyhow::Result<(f64, Vec<String>, Vec<Ve
                 first_ts = Some(ts_col.value(i));
             }
             for (k, col) in ch_cols.iter().enumerate() {
-                let v = if col.is_null(i) { 0.0 } else { col.value(i) as f32 };
-                channels[k].push(v);
+                channels[k].push(col.get(i).unwrap_or(0.0) as f32);
             }
         }
     }
 
     let first = first_ts.ok_or_else(|| anyhow::anyhow!("parquet file has no rows"))?;
     Ok((first, channel_names, channels))
+}
+
+/// The microvolts per count of an EEG parquet file that stores its channels
+/// as integers ([`EEG_SCALE_KEY`]); `None` for one that stores `f64`.
+pub fn read_eeg_parquet_scale(path: &Path) -> anyhow::Result<Option<f64>> {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).context("parquet builder")?;
+    Ok(eeg_scale_of(builder.schema()))
+}
+
+/// One channel of an EEG parquet file at full precision, in microvolts
+/// (a null is NaN). [`read_eeg_parquet`] returns `f32`.
+pub fn read_eeg_parquet_channel(path: &Path, channel: usize) -> anyhow::Result<Vec<f64>> {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use parquet::arrow::ProjectionMask;
+
+    let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).context("parquet builder")?;
+    let scale = eeg_scale_of(builder.schema());
+    let mask = ProjectionMask::leaves(builder.parquet_schema(), [channel + 1]);
+    let reader = builder.with_projection(mask).build().context("parquet reader")?;
+    let mut out = Vec::new();
+    for batch in reader {
+        let batch = batch.context("parquet batch")?;
+        let col = EegColumn::new(batch.column(0).as_ref(), scale)
+            .ok_or_else(|| anyhow::anyhow!("channel column {} is neither Float64 nor Int64", channel + 1))?;
+        out.extend((0..batch.num_rows()).map(|i| col.get(i).unwrap_or(f64::NAN)));
+    }
+    Ok(out)
+}
+
+/// The `timestamp_s` column of an EEG parquet file, one value per row (rows
+/// with a null timestamp are skipped, as in [`read_eeg_parquet`]).
+pub fn read_eeg_parquet_timestamps(path: &Path) -> anyhow::Result<Vec<f64>> {
+    use arrow_array::Array;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use parquet::arrow::ProjectionMask;
+
+    let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).context("parquet builder")?;
+    let mask = ProjectionMask::leaves(builder.parquet_schema(), [0]);
+    let reader = builder.with_projection(mask).build().context("parquet reader")?;
+    let mut out = Vec::new();
+    for batch in reader {
+        let batch = batch.context("parquet batch")?;
+        let ts = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .ok_or_else(|| anyhow::anyhow!("timestamp_s column is not Float64"))?;
+        out.extend((0..ts.len()).filter(|&i| !ts.is_null(i)).map(|i| ts.value(i)));
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -1193,5 +1914,532 @@ mod tests {
 
         let imu_path = imu_parquet_path(&csv_path);
         assert!(imu_path.exists(), "Parquet IMU file should exist");
+    }
+
+    // ── Raw EEG: size, row groups, crash recovery ────────────────────────────
+
+    /// A 500 Hz 8-channel signal quantised like an amplifier's samples.
+    fn eeg_value(row: usize, ch: usize) -> f64 {
+        let t = row as f64 / 500.0;
+        let v = 40.0 * (std::f64::consts::TAU * (8.0 + ch as f64) * t).sin()
+            + 5.0 * ((row * 31 + ch * 17) % 97) as f64 / 97.0;
+        ((v * 1000.0).round() / 1000.0) as f32 as f64
+    }
+
+    const EEG_LABELS: [&str; 8] = ["Fp1", "Fp2", "C3", "Cz", "C4", "P3", "Pz", "P4"];
+
+    /// Push `rows` samples the way the session does: one electrode at a time,
+    /// with a `flush()` every 256 samples.
+    fn push_rows(pq: &mut ParquetState, from: usize, rows: usize) {
+        for r in from..from + rows {
+            for ch in 0..EEG_LABELS.len() {
+                pq.push_eeg(ch, &[eeg_value(r, ch)], 1_700_000_000.0 + r as f64 / 500.0, 500.0);
+            }
+            if r % 256 == 255 {
+                pq.flush();
+            }
+        }
+    }
+
+    fn assert_rows(pq_path: &Path, rows: usize) {
+        use arrow_array::Array;
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        let builder = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(pq_path).unwrap()).expect("footer");
+        let names: Vec<String> = builder.schema().fields().iter().map(|f| f.name().clone()).collect();
+        assert_eq!(names[0], "timestamp_s");
+        assert_eq!(&names[1..], &EEG_LABELS);
+        let mut r = 0usize;
+        for batch in builder.build().unwrap() {
+            let batch = batch.unwrap();
+            let col = |k: usize| batch.column(k).as_any().downcast_ref::<Float64Array>().unwrap().clone();
+            let ts = col(0);
+            for i in 0..ts.len() {
+                assert_eq!(ts.value(i), 1_700_000_000.0 + r as f64 / 500.0, "row {r} timestamp");
+                for ch in 0..EEG_LABELS.len() {
+                    assert_eq!(col(ch + 1).value(i), eeg_value(r, ch), "row {r} channel {ch}");
+                }
+                r += 1;
+            }
+        }
+        assert_eq!(r, rows, "rows in {}", pq_path.display());
+    }
+
+    #[test]
+    fn eeg_row_groups_follow_the_sample_rate_not_the_flush_calls() {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_1700000000.csv");
+        let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+        let rows = 500 * 25; // 25 s
+        push_rows(&mut pq, 0, rows);
+        let stats = pq.eeg_stats();
+        assert_eq!(
+            (stats.rows, stats.rows_durable, stats.row_groups, stats.errors),
+            (rows as u64, 10_000, 2, 0)
+        );
+        pq.close();
+        let pq_path = eeg_parquet_path(&csv_path);
+        assert_rows(&pq_path, rows);
+        let meta = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&pq_path).unwrap()).unwrap();
+        let groups: Vec<i64> = meta.metadata().row_groups().iter().map(|g| g.num_rows()).collect();
+        // 10 s of signal each, and the rest at close — not one per flush()
+        assert_eq!(groups, [5000, 5000, 2500]);
+        // closed cleanly: no side files left
+        assert!(!eeg_tail_path(&pq_path).exists() && !eeg_checkpoint_path(&pq_path).exists());
+        assert_eq!(recover_eeg_parquet(&pq_path).unwrap(), EegRecovery::Intact);
+        assert_eq!(pq.eeg_stats().bytes, std::fs::metadata(&pq_path).unwrap().len());
+    }
+
+    #[test]
+    fn eeg_file_is_much_smaller_than_csv_and_than_plain_snappy() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_1700000000.csv");
+        let rows = 500 * 60;
+        let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+        let mut csv = crate::session_csv::CsvState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+        // the previous layout: Snappy, dictionary on, a row group per flush
+        let old_path = dir.path().join("old.parquet");
+        let mut old = ArrowWriter::try_new(
+            std::fs::File::create(&old_path).unwrap(),
+            eeg_schema_for(&EEG_LABELS),
+            Some(writer_props()),
+        )
+        .unwrap();
+        for r in 0..rows {
+            let ts = 1_700_000_000.0 + r as f64 / 500.0;
+            let mut cols: Vec<Arc<dyn arrow_array::Array>> = vec![Arc::new(Float64Array::from(vec![ts]))];
+            for ch in 0..EEG_LABELS.len() {
+                pq.push_eeg(ch, &[eeg_value(r, ch)], ts, 500.0);
+                csv.push_eeg(ch, &[eeg_value(r, ch)], ts, 500.0);
+                cols.push(Arc::new(Float64Array::from(vec![eeg_value(r, ch)])));
+            }
+            old.write(&RecordBatch::try_new(eeg_schema_for(&EEG_LABELS), cols).unwrap())
+                .unwrap();
+            if r % 256 == 255 {
+                pq.flush();
+                old.flush().unwrap();
+            }
+        }
+        pq.close();
+        csv.flush();
+        old.close().unwrap();
+        let size = |p: &Path| std::fs::metadata(p).unwrap().len() as f64;
+        let (new, old, csv) = (size(&eeg_parquet_path(&csv_path)), size(&old_path), size(&csv_path));
+        eprintln!(
+            "60 s of 8 ch at 500 Hz: csv {:.0} kB, parquet before {:.0} kB, parquet now {:.0} kB",
+            csv / 1e3,
+            old / 1e3,
+            new / 1e3
+        );
+        assert!(new < csv / 2.0, "parquet {new} vs csv {csv}");
+        assert!(new < old * 0.8, "parquet now {new} vs before {old}");
+    }
+
+    /// The process dies without `close()`: no footer. Recovery brings back the
+    /// row groups and the rows that were only in the journal.
+    #[test]
+    fn eeg_recording_survives_a_crash() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_1700000000.csv");
+        let pq_path = eeg_parquet_path(&csv_path);
+        let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+        let rows = 500 * 23 + 300; // two row groups and 3.6 s more
+        push_rows(&mut pq, 0, rows);
+        // what `kill -9` leaves: no destructor, no footer
+        std::mem::forget(pq);
+        assert!(!eeg_parquet_is_complete(&pq_path));
+
+        let outcome = recover_eeg_parquet(&pq_path).unwrap();
+        // everything up to the last journal append (every 0.25 s = 125 rows)
+        let EegRecovery::Recovered { rows: got } = outcome else {
+            panic!("{outcome:?}")
+        };
+        assert!(
+            got as usize >= rows - 125 && got as usize <= rows,
+            "{got} of {rows} rows"
+        );
+        assert_rows(&pq_path, got as usize);
+        assert!(!eeg_tail_path(&pq_path).exists() && !eeg_checkpoint_path(&pq_path).exists());
+        // and the standard reader takes it
+        let (first, names, data) = read_eeg_parquet(&pq_path).unwrap();
+        assert_eq!((first, names.len(), data[0].len()), (1_700_000_000.0, 8, got as usize));
+        let stamps = read_eeg_parquet_timestamps(&pq_path).unwrap();
+        assert_eq!((stamps.len(), stamps[1]), (got as usize, 1_700_000_000.002));
+        assert_eq!(recover_eeg_parquet(&pq_path).unwrap(), EegRecovery::Intact);
+    }
+
+    /// A sample of an integer source, in nanovolts: a signal of some µV on
+    /// an electrode offset of hundreds of mV — more digits than an `f32` has.
+    fn eeg_count(row: usize, ch: usize) -> i64 {
+        let t = row as f64 / 500.0;
+        let signal = 40_000.0 * (std::f64::consts::TAU * (8.0 + ch as f64) * t).sin();
+        let noise = ((row * 7919 + ch * 104_729) % 2001) as i64 - 1000;
+        (ch as i64 - 4) * 75_000_000 + signal as i64 + noise
+    }
+
+    const NV: f64 = 0.001;
+
+    fn push_count_rows(pq: &mut ParquetState, from: usize, rows: usize) {
+        for r in from..from + rows {
+            let frame: Vec<f64> = (0..EEG_LABELS.len()).map(|ch| eeg_count(r, ch) as f64 * NV).collect();
+            pq.push_eeg_frame(&frame, 1_700_000_000.0 + r as f64 / 500.0, 500.0);
+        }
+    }
+
+    fn assert_count_rows(pq_path: &Path, rows: usize) {
+        assert_eq!(read_eeg_parquet_scale(pq_path).unwrap(), Some(NV));
+        for ch in [0, 3, 7] {
+            let got = read_eeg_parquet_channel(pq_path, ch).unwrap();
+            assert_eq!(got.len(), rows);
+            for (r, v) in got.iter().enumerate() {
+                assert_eq!(*v, eeg_count(r, ch) as f64 * NV, "row {r} channel {ch}");
+            }
+        }
+    }
+
+    /// An integer source is stored as integers: exact, and much smaller than
+    /// the same samples as `f64`.
+    #[test]
+    fn eeg_counts_are_stored_as_integers_exactly_and_smaller() {
+        let dir = tempfile::tempdir().unwrap();
+        let rows = 500 * 60;
+        let size = |name: &str, counts: bool| {
+            let csv_path = dir.path().join(name);
+            let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+            if counts {
+                assert!(pq.set_eeg_scale_uv(NV).unwrap());
+            }
+            push_count_rows(&mut pq, 0, rows);
+            // too late now: the file keeps the form it started with
+            assert!(!pq.set_eeg_scale_uv(0.5).unwrap());
+            pq.close();
+            assert_eq!(pq.eeg_stats().errors, 0);
+            let pq_path = eeg_parquet_path(&csv_path);
+            (std::fs::metadata(&pq_path).unwrap().len(), pq_path)
+        };
+        let (float_bytes, float_path) = size("exg_1.csv", false);
+        let (count_bytes, count_path) = size("exg_2.csv", true);
+
+        assert_count_rows(&count_path, rows);
+        assert_eq!(read_eeg_parquet_scale(&float_path).unwrap(), None);
+        // the file says what it holds
+        let builder = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
+            std::fs::File::open(&count_path).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(builder.schema().field(0).data_type(), &DataType::Float64);
+        assert!(builder
+            .schema()
+            .fields()
+            .iter()
+            .skip(1)
+            .all(|f| f.data_type() == &DataType::Int64));
+        // the common reader gives microvolts for both
+        let (_, _, floats) = read_eeg_parquet(&float_path).unwrap();
+        let (first, names, counts) = read_eeg_parquet(&count_path).unwrap();
+        assert_eq!((first, names.len()), (1_700_000_000.0, 8));
+        assert_eq!(floats, counts);
+        assert!(
+            count_bytes * 2 < float_bytes,
+            "integers {count_bytes} B, f64 {float_bytes} B"
+        );
+        eprintln!("60 s of 8 ch at 500 Hz: f64 {float_bytes} B, integer counts {count_bytes} B");
+    }
+
+    /// A missing sample is a null, not a number.
+    #[test]
+    fn eeg_counts_keep_missing_samples_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_1.csv");
+        let mut pq = ParquetState::open_with_labels(&csv_path, &["A", "B"]).unwrap();
+        assert!(pq.set_eeg_scale_uv(NV).unwrap());
+        pq.push_eeg_frame(&[1.5, f64::NAN], 1.0, 250.0);
+        pq.push_eeg_frame(&[-2.25], 1.004, 250.0);
+        pq.close();
+        let path = eeg_parquet_path(&csv_path);
+        assert_eq!(read_eeg_parquet_channel(&path, 0).unwrap(), [1.5, -2.25]);
+        assert!(read_eeg_parquet_channel(&path, 1).unwrap().iter().all(|v| v.is_nan()));
+    }
+
+    /// An integer recording comes back from a crash as an integer recording.
+    #[test]
+    fn eeg_counts_recording_survives_a_crash() {
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_1700000000.csv");
+        let pq_path = eeg_parquet_path(&csv_path);
+        let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+        assert!(pq.set_eeg_scale_uv(NV).unwrap());
+        let rows = 500 * 23 + 300; // two row groups and 3.6 s more
+        push_count_rows(&mut pq, 0, rows);
+        std::mem::forget(pq);
+        assert!(!eeg_parquet_is_complete(&pq_path));
+
+        let EegRecovery::Recovered { rows: got } = recover_eeg_parquet(&pq_path).unwrap() else {
+            panic!("not recovered")
+        };
+        assert!(
+            got as usize >= rows - 125 && got as usize <= rows,
+            "{got} of {rows} rows"
+        );
+        assert_count_rows(&pq_path, got as usize);
+
+        // and from the journal alone, before any row group exists
+        let csv_path = dir.path().join("exg_1700000100.csv");
+        let pq_path = eeg_parquet_path(&csv_path);
+        let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+        assert!(pq.set_eeg_scale_uv(NV).unwrap());
+        push_count_rows(&mut pq, 0, 1000);
+        std::mem::forget(pq);
+        let EegRecovery::Recovered { rows: got } = recover_eeg_parquet(&pq_path).unwrap() else {
+            panic!("not recovered")
+        };
+        assert_eq!(got, 1000);
+        assert_count_rows(&pq_path, 1000);
+    }
+
+    /// Each side file is enough on its own, and damage to one does not cost
+    /// what the other holds.
+    #[test]
+    fn eeg_recovery_uses_whatever_is_left() {
+        let dir = tempfile::tempdir().unwrap();
+        let crash = |name: &str, rows: usize| -> PathBuf {
+            let csv_path = dir.path().join(name);
+            let mut pq = ParquetState::open_with_labels(&csv_path, &EEG_LABELS).unwrap();
+            push_rows(&mut pq, 0, rows);
+            pq.flush();
+            std::mem::forget(pq);
+            eeg_parquet_path(&csv_path)
+        };
+
+        // died within the first row group: only the journal exists
+        let p = crash("exg_1700000001.csv", 1000);
+        assert!(!eeg_checkpoint_path(&p).exists());
+        assert_eq!(recover_eeg_parquet(&p).unwrap(), EegRecovery::Recovered { rows: 1000 });
+        assert_rows(&p, 1000);
+
+        // the journal is gone (or torn mid-row): the row groups still come back
+        let p = crash("exg_1700000002.csv", 12_000);
+        std::fs::remove_file(eeg_tail_path(&p)).unwrap();
+        assert_eq!(
+            recover_eeg_parquet(&p).unwrap(),
+            EegRecovery::Recovered { rows: 10_000 }
+        );
+        assert_rows(&p, 10_000);
+
+        let p = crash("exg_1700000003.csv", 12_000);
+        let tail = eeg_tail_path(&p);
+        let len = std::fs::metadata(&tail).unwrap().len();
+        std::fs::File::options()
+            .write(true)
+            .open(&tail)
+            .unwrap()
+            .set_len(len - 5)
+            .unwrap();
+        assert_eq!(
+            recover_eeg_parquet(&p).unwrap(),
+            EegRecovery::Recovered { rows: 11_999 }
+        );
+        assert_rows(&p, 11_999);
+
+        // the file itself was cut inside the last row group (power cut before
+        // the data reached the disk): the checkpoint no longer fits and is
+        // ignored, the journal is used
+        let p = crash("exg_1700000004.csv", 6000);
+        std::fs::File::options()
+            .write(true)
+            .open(&p)
+            .unwrap()
+            .set_len(1000)
+            .unwrap();
+        assert_eq!(recover_eeg_parquet(&p).unwrap(), EegRecovery::Recovered { rows: 1000 });
+
+        // nothing at all
+        let p = dir.path().join("exg_1700000005.parquet");
+        std::fs::write(&p, b"PAR1").unwrap();
+        assert_eq!(recover_eeg_parquet(&p).unwrap(), EegRecovery::Unrecoverable);
+
+        // the day sweep leaves files that were touched a moment ago (a live
+        // recording looks the same) and repairs them once they have gone quiet
+        let a = crash("exg_1700000006.csv", 700);
+        assert!(recover_eeg_parquets_in(dir.path(), std::time::Duration::from_secs(60)).is_empty());
+        assert!(!eeg_parquet_is_complete(&a));
+        let done = recover_eeg_parquets_in(dir.path(), std::time::Duration::ZERO);
+        assert_eq!(done, vec![(a.clone(), EegRecovery::Recovered { rows: 700 })]);
+        assert_rows(&a, 700);
+    }
+
+    /// Whole frames give the same files as one electrode at a time.
+    #[test]
+    fn eeg_frames_write_what_per_electrode_pushes_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let (a, b) = (dir.path().join("exg_1.csv"), dir.path().join("exg_2.csv"));
+        let mut pq_a = ParquetState::open_with_labels(&a, &EEG_LABELS).unwrap();
+        let mut pq_b = ParquetState::open_with_labels(&b, &EEG_LABELS).unwrap();
+        let mut csv_a = crate::session_csv::CsvState::open_with_labels(&a, &EEG_LABELS).unwrap();
+        let mut csv_b = crate::session_csv::CsvState::open_with_labels(&b, &EEG_LABELS).unwrap();
+        let rows = 6000;
+        push_rows(&mut pq_a, 0, rows);
+        for r in 0..rows {
+            let ts = 1_700_000_000.0 + r as f64 / 500.0;
+            let frame: Vec<f64> = (0..EEG_LABELS.len()).map(|ch| eeg_value(r, ch)).collect();
+            pq_b.push_eeg_frame(&frame, ts, 500.0);
+            csv_b.push_eeg_frame(&frame, ts, 500.0);
+            for (ch, &v) in frame.iter().enumerate() {
+                csv_a.push_eeg(ch, &[v], ts, 500.0);
+            }
+        }
+        pq_a.close();
+        pq_b.close();
+        csv_a.flush();
+        csv_b.flush();
+        assert_rows(&eeg_parquet_path(&b), rows);
+        assert_eq!(
+            std::fs::read(eeg_parquet_path(&a)).unwrap(),
+            std::fs::read(eeg_parquet_path(&b)).unwrap(),
+            "parquet bytes"
+        );
+        assert_eq!(std::fs::read(&a).unwrap(), std::fs::read(&b).unwrap(), "csv bytes");
+        assert_eq!(csv_b.eeg_write_counts(), (rows as u64, 0));
+    }
+
+    // ── Band metrics ─────────────────────────────────────────────────────────
+
+    /// A 32-channel snapshot like the band analyser produces: `f32` powers,
+    /// no PPG or head pose.
+    fn metrics_snapshot(base: &BandSnapshot, k: usize) -> BandSnapshot {
+        let mut snap = base.clone();
+        snap.timestamp = 1_700_000_000.0 + k as f64 * 0.128;
+        let mut x = (k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        let mut noise = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x >> 40) as f32 / (1u64 << 24) as f32
+        };
+        for ch in &mut snap.channels {
+            ch.delta = 20.0 + 10.0 * noise();
+            ch.theta = 8.0 + 4.0 * noise();
+            ch.alpha = 12.0 + 6.0 * noise();
+            ch.beta = 3.0 + noise();
+            ch.gamma = 1.0 + 0.5 * noise();
+            ch.high_gamma = 0.3 * noise();
+            let total = ch.delta + ch.theta + ch.alpha + ch.beta + ch.gamma + ch.high_gamma;
+            ch.rel_delta = ch.delta / total;
+            ch.rel_theta = ch.theta / total;
+            ch.rel_alpha = ch.alpha / total;
+            ch.rel_beta = ch.beta / total;
+            ch.rel_gamma = ch.gamma / total;
+            ch.rel_high_gamma = ch.high_gamma / total;
+        }
+        snap.faa = noise() - 0.5;
+        snap.tar = noise();
+        snap.snr = 10.0 * noise();
+        snap
+    }
+
+    /// One real snapshot from the band analyser, for `channels` channels.
+    fn analysed_snapshot(channels: usize) -> BandSnapshot {
+        let mut analyser = skill_eeg::eeg_bands::BandAnalyzer::new_with_rate(500.0);
+        for i in 0..4000 {
+            let t = i as f64 / 500.0;
+            for ch in 0..channels {
+                analyser.push(
+                    ch,
+                    &[30.0 * (std::f64::consts::TAU * (9.0 + ch as f64 / 8.0) * t).sin()],
+                );
+            }
+            if analyser.latest.is_some() {
+                break;
+            }
+        }
+        analyser.latest.clone().expect("a snapshot")
+    }
+
+    /// Five minutes of 32-channel metrics, written the way a session writes
+    /// them (a `flush()` every half second): the file is a small fraction of
+    /// what the same rows cost with a row group per flush, and reads back
+    /// value for value.
+    #[test]
+    fn metrics_file_is_compact_and_lossless() {
+        use arrow_array::Array;
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("exg_1700000000.csv");
+        let labels: Vec<String> = (1..=32).map(|i| format!("CH{i}")).collect();
+        let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+        let mut pq = ParquetState::open_with_labels(&csv_path, &refs).unwrap();
+        let schema = pq.metrics_schema.clone();
+
+        // the previous layout, for comparison: Snappy and a row group per flush
+        let old_path = dir.path().join("old_metrics.parquet");
+        let mut old = ArrowWriter::try_new(
+            std::fs::File::create(&old_path).unwrap(),
+            schema.clone(),
+            Some(writer_props()),
+        )
+        .unwrap();
+
+        let n_ch = 32.min(skill_constants::EEG_CHANNELS);
+        let base = analysed_snapshot(n_ch);
+        assert_eq!(base.channels.len(), n_ch);
+        let rows = 2344; // 5 min at one snapshot per 64 samples of a 500 Hz stream
+        for k in 0..rows {
+            let snap = metrics_snapshot(&base, k);
+            pq.push_metrics(&csv_path, &snap);
+            let mut row = vec![f64::NAN; schema.fields().len()];
+            row[0] = snap.timestamp;
+            for (c, ch) in snap.channels.iter().enumerate() {
+                row[1 + c * 12] = f64::from(ch.delta);
+            }
+            let cols: Vec<Arc<dyn arrow_array::Array>> = row
+                .iter()
+                .map(|v| Arc::new(Float64Array::from(vec![*v])) as Arc<dyn arrow_array::Array>)
+                .collect();
+            old.write(&RecordBatch::try_new(schema.clone(), cols).unwrap()).unwrap();
+            // the session flushes every 256 samples = every 4 snapshots
+            if k % 4 == 3 {
+                pq.flush();
+                old.flush().unwrap();
+            }
+        }
+        pq.close();
+        old.close().unwrap();
+
+        let path = metrics_parquet_path(&csv_path);
+        let (new, old) = (
+            std::fs::metadata(&path).unwrap().len() as f64,
+            std::fs::metadata(&old_path).unwrap().len() as f64,
+        );
+        eprintln!(
+            "5 min of 32-channel metrics: before {:.1} MB, now {:.2} MB ({:.0}x)",
+            old / 1e6,
+            new / 1e6,
+            old / new
+        );
+        assert!(new < old / 10.0, "now {new} vs before {old}");
+
+        let builder = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&path).unwrap()).unwrap();
+        let groups: Vec<i64> = builder.metadata().row_groups().iter().map(|g| g.num_rows()).collect();
+        // a minute of snapshots each (60 / 0.128 = 469), not four
+        assert!(groups.len() <= 6 && groups[0] >= 460, "{groups:?}");
+        let mut k = 0usize;
+        for batch in builder.build().unwrap() {
+            let batch = batch.unwrap();
+            let col = |i: usize| batch.column(i).as_any().downcast_ref::<Float64Array>().unwrap().clone();
+            let last = n_ch - 1;
+            let (ts, delta0, rel_hg_last) = (col(0), col(1), col(1 + last * 12 + 11));
+            let faa = col(batch.schema().index_of("faa").unwrap());
+            let hr = col(batch.schema().index_of("hr_bpm").unwrap());
+            for i in 0..batch.num_rows() {
+                let want = metrics_snapshot(&base, k);
+                assert_eq!(ts.value(i), want.timestamp);
+                assert_eq!(delta0.value(i), f64::from(want.channels[0].delta));
+                assert_eq!(rel_hg_last.value(i), f64::from(want.channels[last].rel_high_gamma));
+                assert_eq!(faa.value(i), f64::from(want.faa));
+                assert!(hr.value(i).is_nan() || want.hr.is_some());
+                k += 1;
+            }
+        }
+        assert_eq!(k, rows);
     }
 }

@@ -12,12 +12,18 @@ name: Trial — Linux arm64 packages
 # Run it by hand, confirm the artifacts, and only then consider promoting it
 # into release-linux.yml.
 #
-# Scope is the daemon + system packages, not the signed/published app: enough to
-# answer "does an aarch64 rpm build and is it well-formed", which is the open
-# question. Artifacts are uploaded to the workflow run, never to a Release, so a
-# trial cannot publish anything.
+# This is also the Raspberry Pi (4/5, 64-bit OS) build: a Pi runs these exact
+# aarch64 packages. The build runs inside a Debian container
+# (scripts/build-linux-container.sh) so the binaries need the container's glibc,
+# not the runner's: built on the Ubuntu 24.04 runner they would need 2.39 and
+# refuse to start on Raspberry Pi OS Bookworm (2.36). The script also runs rlx's
+# ISA portability check (no ungated above-ARMv8.0 instruction, so no SIGILL on
+# a Pi 4) and `--version` under an emulated Cortex-A72 and A76. The .deb is
+# then installed into debian:bookworm and debian:trixie arm64 containers to
+# prove its dependencies resolve there. Artifacts are uploaded to the workflow
+# run, never to a Release, so a trial cannot publish anything.
 #
-# Known arm64 delta from the x86_64 job, handled below:
+# Known arm64 delta from the x86_64 job:
 #   * CUDA: the `linux` umbrella pulls rlx-cuda -> cudarc, which defaults to
 #     `fallback-dynamic-loading` and dlopens libcuda at run time, so it builds
 #     with no CUDA toolkit present and simply finds no device at run time
@@ -26,9 +32,32 @@ name: Trial — Linux arm64 packages
 on:
   workflow_dispatch:
     inputs:
+      scope:
+        description: >-
+          `app` builds the full product (frontend + daemon + tty + Tauri app),
+          as a Raspberry Pi user would install it. `daemon` builds only the
+          daemon and packages it in the app's place (faster).
+        required: false
+        default: app
+        type: choice
+        options:
+          - app
+          - daemon
+      os:
+        description: >-
+          Debian release to build in. Sets the glibc floor: bookworm (2.36)
+          runs on Raspberry Pi OS Bookworm and Trixie and Ubuntu 22.04+;
+          trixie (2.41) only on Trixie and Ubuntu 25.04+.
+        required: false
+        default: bookworm
+        type: choice
+        options:
+          - bookworm
+          - trixie
       features:
         description: >-
-          skill-daemon feature umbrella. `linux` mirrors the x86_64 release.
+          skill-daemon feature umbrella for scope=daemon (scope=app always
+          uses the release recipe). `linux` mirrors the x86_64 release.
           Use `product` to isolate a failure from the GPU backends.
         required: false
         default: linux
@@ -47,7 +76,7 @@ jobs:
   trial-arm64:
     name: Trial — aarch64-unknown-linux-gnu packages
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - name: Free disk space
@@ -73,39 +102,42 @@ jobs:
             exit 1
           fi
 
-      - name: Release setup (Linux deps + Rust + Node)
-        uses: ./.github/actions/release-setup
-        with:
-          target: aarch64-unknown-linux-gnu
-          linux-deps: "true"
-          cache-key: linux-trial-aarch64-unknown-linux-gnu-v1
-          build-frontend: "false"
+      # Only to refresh Cargo.lock on the host; the build has its own toolchain.
+      - name: Install Rust (lock refresh only)
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Compile skill-daemon (aarch64)
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
+
+      # `app` builds what a Raspberry Pi user installs: the same shared recipe
+      # as the x86_64 release (frontend, then daemon → tty → Tauri app).
+      # `daemon` is the quick path and packages the daemon in the app's place.
+      - name: Build in debian:${{ inputs.os }} (aarch64)
         shell: bash
         run: |
           set -euo pipefail
-          cargo build -p skill-daemon \
+          bash scripts/build-linux-container.sh \
+            --target aarch64-unknown-linux-gnu \
+            --image "debian:${{ inputs.os }}" \
+            --scope "${{ inputs.scope }}" \
             --features "${{ inputs.features }}" \
-            --release --locked --target aarch64-unknown-linux-gnu
+            --no-volumes
 
-      # package-linux-system-bundles.sh stages `src-tauri/target/<triple>/release/skill`.
-      # This trial does not build the Tauri app (that needs the frontend and a
-      # signed bundle), so stand in the daemon binary to exercise the packaging
-      # and metadata path, which is what is actually under test here.
-      - name: Stage a binary for packaging
+      # Raspberry Pi OS follows Debian: Bookworm ships glibc 2.36, Trixie 2.41.
+      # A binary needing a newer GLIBC_x.y symbol than the OS has will not start.
+      - name: Check glibc floor (Raspberry Pi OS compatibility)
         shell: bash
         run: |
           set -euo pipefail
-          dir="src-tauri/target/aarch64-unknown-linux-gnu/release"
-          if [[ ! -f "$dir/skill" ]]; then
-            cp "$dir/skill-daemon" "$dir/skill"
-            echo "note: packaged the daemon binary as a stand-in for the app"
-          fi
-
-      - name: Build deb + rpm (aarch64)
-        shell: bash
-        run: bash scripts/package-linux-system-bundles.sh --target aarch64-unknown-linux-gnu --skip-build
+          case "${{ inputs.os }}" in bookworm) max=2.36 ;; trixie) max=2.41 ;; esac
+          for b in dist/linux-container/aarch64-unknown-linux-gnu/skill*; do
+            need="$(objdump -T "$b" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+            echo "$(basename "$b") needs $need"
+            if [[ "$(printf '%s\n' "${need#GLIBC_}" "$max" | sort -V | tail -1)" != "$max" ]]; then
+              echo "::error::$(basename "$b") needs $need, newer than debian:${{ inputs.os }} (glibc $max)"
+              exit 1
+            fi
+          done
 
       # The point of the trial: is the rpm well-formed, correctly versioned, and
       # does rpm's own dependency generator produce the OpenBLAS soname?
@@ -113,12 +145,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bundle="src-tauri/target/aarch64-unknown-linux-gnu/release/bundle"
-          rpm_file="$(find "$bundle/rpm" -name '*.rpm' | head -1)"
-          deb_file="$(find "$bundle/deb" -name '*.deb' | head -1)"
+          command -v rpm >/dev/null || sudo apt-get install -y -qq rpm >/dev/null
+          out="dist/linux-container/aarch64-unknown-linux-gnu"
+          rpm_file="$(find "$out" -name '*.rpm' | head -1)"
+          deb_file="$(find "$out" -name '*.deb' | head -1)"
           if [[ -z "$rpm_file" || -z "$deb_file" ]]; then
-            echo "::error::expected both a .deb and a .rpm under $bundle"
-            find "$bundle" -maxdepth 2 || true
+            echo "::error::expected both a .deb and a .rpm under $out"
+            ls -la "$out" || true
             exit 1
           fi
 
@@ -145,12 +178,39 @@ jobs:
           rpm -qp --requires "$rpm_file" | grep -q 'libopenblas\.so\.0' \
             || echo "::warning::no libopenblas soname requirement was auto-generated"
 
+      # Raspberry Pi OS is Debian plus Pi firmware/kernel, so a .deb whose
+      # Depends resolve on debian:<release> arm64 installs on that Pi OS. Also
+      # checks every shipped ELF finds all its shared libraries. Bookworm is
+      # only expected to pass for a bookworm build.
+      - name: Install the .deb on Debian arm64 (Raspberry Pi OS base)
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb_file="$(find dist/linux-container/aarch64-unknown-linux-gnu -name '*.deb' | head -1)"
+          releases="trixie"
+          [[ "${{ inputs.os }}" == bookworm ]] && releases="bookworm trixie"
+          for rel in $releases; do
+            echo "── debian:$rel ──"
+            docker run --rm --platform linux/arm64 -v "$PWD/$deb_file:/tmp/skill.deb:ro" "debian:$rel" bash -euc '
+              apt-get update -qq
+              apt-get install -y -qq /tmp/skill.deb >/dev/null
+              missing=0
+              for f in $(dpkg -L "$(dpkg-deb -f /tmp/skill.deb Package)"); do
+                [[ -f "$f" && -x "$f" ]] || continue
+                head -c4 "$f" | grep -q ELF || continue
+                if ldd "$f" | grep "not found"; then echo "missing libs: $f"; missing=1; fi
+              done
+              /opt/neuroskill/skill-daemon --version
+              exit $missing
+            '
+          done
+
       - name: Upload trial packages
         uses: actions/upload-artifact@v7
         with:
           name: linux-arm64-trial-packages
           path: |
-            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
-            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+            dist/linux-container/aarch64-unknown-linux-gnu/*.deb
+            dist/linux-container/aarch64-unknown-linux-gnu/*.rpm
           if-no-files-found: error
           retention-days: 14

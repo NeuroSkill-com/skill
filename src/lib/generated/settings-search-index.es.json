@@ -661,6 +661,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.companionEmotibit",
+    "label": "Grabar un EmotiBit en paralelo",
+    "desc": "Graba una pulsera EmotiBit (conductancia de la piel, pulso, temperatura, movimiento) en paralelo con cada sesión, en la misma grabación y con el mismo reloj. La sesión empieza sin ella y la sigue buscando; cada conexión y cada pérdida queda anotada con un marcador."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Objetivo diario",
     "desc": "Establece tu objetivo de grabación diario. El progreso se muestra en el tablero."
@@ -787,6 +793,18 @@
   },
   {
     "tab": "settings",
+    "key": "settings.losslessRecording",
+    "label": "Grabación sin pérdidas",
+    "desc": "Retiene las muestras en memoria mientras no se pueda escribir la grabación y las escribe después; antes de cerrar una sesión se escribe todo lo que el dispositivo ya haya entregado."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.montage",
+    "label": "Montaje",
+    "desc": "Da nombre a los canales de una grabación: sus etiquetas, qué registra cada uno y cuáles son defectuosos. Un montaje guardado puede ser el predeterminado para las sesiones nuevas, y a cualquier grabación se le puede asignar otro más tarde; nada de lo grabado se reescribe."
+  },
+  {
+    "tab": "settings",
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Configure una placa OpenBCI para conectarse junto con otro dispositivo BCI o en lugar de él."
@@ -814,6 +832,18 @@
     "key": "settings.scanner.usbSerial",
     "label": "Serie USB",
     "desc": "Llave OpenBCI Cyton / CytonDaisy"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.storageFormatAuto",
+    "label": "Automático",
+    "desc": "CSV para flujos pequeños, Parquet para los de alta tasa"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.timeCheck",
+    "label": "Comprobar el reloj durante la grabación",
+    "desc": "Compara el reloj de este ordenador con un servidor de hora cada pocos minutos durante una grabación. La diferencia solo se mide y se guarda con la grabación, para poder alinear después grabaciones de varios ordenadores; si el reloj está muy desviado se muestra un aviso."
   },
   {
     "tab": "settings",

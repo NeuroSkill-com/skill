@@ -105,6 +105,7 @@ impl MendiAdapter {
                 }));
 
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: [frame.accel_x_g(), frame.accel_y_g(), frame.accel_z_g()],
                     gyro: Some([frame.gyro_x_dps(), frame.gyro_y_dps(), frame.gyro_z_dps()]),
                     mag: None,

@@ -822,6 +822,7 @@ pub fn delete_session(csv_path: &str) -> anyhow::Result<()> {
     let best_effort = [
         csv.with_file_name(format!("{stem}_metrics_cache.json")),
         csv.with_extension("parquet"),
+        skill_data::montage::montage_path(&csv),
     ]
     .into_iter()
     .chain(

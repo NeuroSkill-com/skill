@@ -14,7 +14,7 @@ slow-tests = []
 default = []
 # GPU-accelerated FFT via RLX — Metal on macOS, CUDA/wgpu/CPU elsewhere.
 # rlx-fft enables the rlx CPU baseline; the tier suffixes add GPU backends.
-rlx-fft       = ["dep:rlx", "rlx/cpu"]
+rlx-fft       = ["dep:rlx", "rlx/cpu", "dep:skill-accel"]
 rlx-fft-metal = ["rlx-fft", "rlx/metal"]
 rlx-fft-mlx   = ["rlx-fft", "rlx/mlx"]
 rlx-fft-ane   = ["rlx-fft", "rlx/coreml"]
@@ -27,6 +27,7 @@ skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 rlx        = { workspace = true, optional = true }
+skill-accel = { path = "../skill-accel", optional = true }
 rustfft    = "6"
 
 [dev-dependencies]

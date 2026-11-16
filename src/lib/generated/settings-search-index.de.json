@@ -661,6 +661,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.companionEmotibit",
+    "label": "EmotiBit parallel aufzeichnen",
+    "desc": "Zeichnet ein EmotiBit-Armband (Hautleitwert, Puls, Temperatur, Bewegung) parallel zu jeder Sitzung auf, in dieselbe Aufnahme und mit derselben Uhr. Eine Sitzung beginnt auch ohne das Armband und sucht weiter danach; jedes Verbinden und jeder Abbruch wird als Marker vermerkt."
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "Tagesziel",
     "desc": "Legen Sie Ihr tägliches Aufzeichnungsziel fest. Der Fortschritt wird auf dem Dashboard angezeigt."
@@ -787,6 +793,18 @@
   },
   {
     "tab": "settings",
+    "key": "settings.losslessRecording",
+    "label": "Verlustfreie Aufnahme",
+    "desc": "Hält Samples im Speicher, solange die Aufnahme nicht geschrieben werden kann, und schreibt sie danach; vor dem Schließen einer Sitzung wird alles geschrieben, was das Gerät bereits geliefert hat."
+  },
+  {
+    "tab": "settings",
+    "key": "settings.montage",
+    "label": "Kanalmontage",
+    "desc": "Benennt die Kanäle einer Aufnahme: ihre Bezeichnungen, was jeder Kanal misst und welche unbrauchbar sind. Eine gespeicherte Montage kann der Standard für neue Sitzungen sein, und jede Aufnahme kann später eine andere bekommen – nichts Aufgezeichnetes wird umgeschrieben."
+  },
+  {
+    "tab": "settings",
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines anderen BCI-Geräts."
@@ -814,6 +832,18 @@
     "key": "settings.scanner.usbSerial",
     "label": "USB Seriell",
     "desc": "OpenBCI Cyton / CytonDaisy Dongle"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.storageFormatAuto",
+    "label": "Automatisch",
+    "desc": "CSV für kleine Datenströme, Parquet für hohe Datenraten"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.timeCheck",
+    "label": "Uhr während der Aufnahme prüfen",
+    "desc": "Vergleicht während einer Aufnahme alle paar Minuten die Uhr dieses Computers mit einem Zeitserver. Die Abweichung wird nur gemessen und mit der Aufnahme gespeichert, damit Aufnahmen mehrerer Computer später ausgerichtet werden können; bei großer Abweichung erscheint eine Warnung."
   },
   {
     "tab": "settings",

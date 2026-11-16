@@ -7,7 +7,7 @@ use skill_daemon_common::{ble_id, DiscoveredDeviceResponse, ScannerWifiConfigReq
 use skill_data::device::DeviceKind;
 use tokio::sync::oneshot;
 use webbluetooth::uuid::BluetoothUuid;
-use webbluetooth::{Advertisement, Bluetooth, LeScanOptions};
+use webbluetooth::{Advertisement, Availability, Bluetooth, LeScanOptions};
 
 use tracing::{debug, info, warn};
 
@@ -278,8 +278,39 @@ pub(crate) fn read_ble_cache(state: &AppState) -> Vec<DiscoveredDeviceResponse> 
 ///   the radio (once no other watcher wants it), which is how the pause below
 ///   is implemented.  The session itself is never dropped — it is a process
 ///   singleton, and dropping it would invalidate every device adopted from it.
+/// Why Bluetooth is unusable, in terms of what to do about it on this OS.
+///
+/// webbluetooth's own text for `Unauthorized` is about Apple's Info.plist on
+/// every platform. On Linux its BlueZ backend reports `Unauthorized` when it
+/// cannot reach `bluetoothd` over D-Bus (not installed, not running, or its
+/// unit is masked), and `Unsupported` when BlueZ runs but has no controller,
+/// which on a Raspberry Pi is often a `disable-bt` overlay.
+fn explain_unavailable(why: Availability) -> String {
+    if cfg!(target_os = "linux") {
+        match why {
+            Availability::Unauthorized => {
+                return "bluetoothd is not reachable over D-Bus — install `bluez` and run \
+                        `sudo systemctl enable --now bluetooth`"
+                    .into()
+            }
+            Availability::Unsupported => {
+                return "no Bluetooth adapter found — none is attached, or it is disabled \
+                        (on a Raspberry Pi, check /boot/firmware/config.txt for a \
+                        `disable-bt` overlay)"
+                    .into()
+            }
+            _ => {}
+        }
+    }
+    why.to_string()
+}
+
 async fn run_ble_listener_task(state: AppState) {
     let bluetooth = Bluetooth::shared();
+    // The reason last warned about: a machine without Bluetooth keeps failing
+    // the same way, and one warning per 5 s retry is ~17 000 identical lines a
+    // day. Warn when the reason changes; repeats go to debug.
+    let mut last_why: Option<Availability> = None;
 
     loop {
         // Stop when the outer scanner has been turned off.
@@ -289,9 +320,18 @@ async fn run_ble_listener_task(state: AppState) {
 
         // Wait for the adapter, and say why when there isn't a usable one.
         if let Err(why) = bluetooth.availability().await {
-            warn!(%why, "Bluetooth is not usable — retrying in 5 s");
+            let why_text = explain_unavailable(why);
+            if last_why == Some(why) {
+                debug!(why = %why_text, "Bluetooth is still not usable — retrying in 5 s");
+            } else {
+                warn!(why = %why_text, "Bluetooth is not usable — retrying every 5 s");
+                last_why = Some(why);
+            }
             tokio::time::sleep(Duration::from_secs(5)).await;
             continue;
+        }
+        if last_why.take().is_some() {
+            info!("Bluetooth is usable again");
         }
 
         // `keep_repeated_devices` is off in the specification by default, which
@@ -1491,5 +1531,22 @@ mod tests {
         };
         let found = detect_wifi_devices(&cfg);
         assert!(found.is_empty());
+    }
+
+    #[test]
+    fn unavailable_bluetooth_is_explained_for_this_os() {
+        let unauthorized = explain_unavailable(Availability::Unauthorized);
+        let unsupported = explain_unavailable(Availability::Unsupported);
+        if cfg!(target_os = "linux") {
+            assert!(unauthorized.contains("bluetoothd"), "{unauthorized}");
+            assert!(!unauthorized.contains("Info.plist"), "{unauthorized}");
+            assert!(unsupported.contains("no Bluetooth adapter"), "{unsupported}");
+        } else {
+            assert_eq!(unauthorized, Availability::Unauthorized.to_string());
+        }
+        assert_eq!(
+            explain_unavailable(Availability::PoweredOff),
+            Availability::PoweredOff.to_string()
+        );
     }
 }

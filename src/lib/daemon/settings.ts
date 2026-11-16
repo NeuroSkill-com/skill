@@ -128,13 +128,47 @@ export function getGpuStats(): Promise<GpuStats | null> {
   return daemonGet<GpuStats | null>("/v1/settings/gpu-stats");
 }
 
-export async function getStorageFormat(): Promise<"csv" | "parquet" | "both"> {
+export async function getStorageFormat(): Promise<"auto" | "csv" | "parquet" | "both"> {
   const r = await daemonGet<{ value: "csv" | "parquet" | "both" }>("/v1/settings/storage-format");
   return r.value;
 }
 
-export async function setStorageFormat(format: "csv" | "parquet" | "both"): Promise<void> {
+export async function setStorageFormat(format: "auto" | "csv" | "parquet" | "both"): Promise<void> {
   await daemonPost("/v1/settings/storage-format", { value: format });
+}
+
+export async function getLosslessRecording(): Promise<boolean> {
+  const r = await daemonGet<{ value: boolean }>("/v1/settings/lossless-recording");
+  return r.value;
+}
+
+export async function setLosslessRecording(enabled: boolean): Promise<void> {
+  await daemonPost("/v1/settings/lossless-recording", { value: enabled });
+}
+
+/** Devices recorded in parallel with every session (connect targets, e.g. `emotibit`). */
+export function getCompanionDevices(): Promise<string[]> {
+  return daemonGet<string[]>("/v1/settings/companion-devices");
+}
+
+export async function setCompanionDevices(targets: string[]): Promise<void> {
+  await daemonPost("/v1/settings/companion-devices", targets);
+}
+
+export interface TimeCheckConfig {
+  enabled: boolean;
+  /** NTP server, `host` or `host:port`; empty = the operating system's default. */
+  server: string;
+  interval_minutes: number;
+  warn_ms: number;
+}
+
+export function getTimeCheck(): Promise<TimeCheckConfig> {
+  return daemonGet<TimeCheckConfig>("/v1/settings/time-check");
+}
+
+export async function setTimeCheck(config: TimeCheckConfig): Promise<void> {
+  await daemonPost("/v1/settings/time-check", config);
 }
 
 export async function getWsConfig(): Promise<[string, number]> {

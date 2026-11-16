@@ -12,6 +12,13 @@ use crate::session_parquet::ParquetState;
 use anyhow::Context;
 use skill_eeg::eeg_bands::BandSnapshot;
 
+/// With `storage_format = "auto"`, streams of at least this many values per
+/// second (channels × sample rate) are recorded as Parquet: a 4-channel
+/// 256 Hz headband (1 024) or 8 channels at 500 Hz (4 000) stay CSV, 32
+/// channels at 256 Hz (8 192) or 500 Hz (16 000) go to Parquet. At the
+/// threshold a CSV recording grows by roughly 120 MB an hour.
+pub const AUTO_PARQUET_VALUES_PER_SEC: f64 = 4096.0;
+
 /// Storage format for EEG recordings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageFormat {
@@ -31,6 +38,23 @@ impl StorageFormat {
             "both" => Self::Both,
             _ => Self::Csv,
         }
+    }
+
+    /// The format for a stream of `channels` at `sample_rate` Hz under the
+    /// `storage_format` setting. `"auto"` picks by how much data the stream
+    /// makes: CSV (readable anywhere) for small streams, Parquet (a third of
+    /// the size, crash-recoverable) from [`AUTO_PARQUET_VALUES_PER_SEC`] up.
+    /// Every other value is taken as [`parse`](Self::parse) reads it.
+    pub fn for_stream(setting: &str, channels: usize, sample_rate: f64) -> Self {
+        if !setting.eq_ignore_ascii_case("auto") {
+            return Self::parse(setting);
+        }
+        #[cfg(feature = "parquet")]
+        if channels as f64 * sample_rate >= AUTO_PARQUET_VALUES_PER_SEC {
+            return Self::Parquet;
+        }
+        let _ = (channels, sample_rate);
+        Self::Csv
     }
 
     pub fn as_str(self) -> &'static str {
@@ -87,8 +111,31 @@ impl SessionWriter {
         }
     }
 
+    /// Declare that the EEG samples are whole counts of `scale_uv` microvolts
+    /// (`0.001`: nanovolts), so that a Parquet recording stores them as
+    /// integers — exact, and about a third of the size (see
+    /// [`ParquetState::set_eeg_scale_uv`]). Only before the first sample.
+    /// CSV is text and is written the same either way. Returns whether the
+    /// recording now stores integers.
+    pub fn set_eeg_scale_uv(&mut self, scale_uv: f64) -> anyhow::Result<bool> {
+        match self {
+            Self::Csv(_) => {
+                let _ = scale_uv;
+                Ok(false)
+            }
+            #[cfg(feature = "parquet")]
+            Self::Parquet(p) | Self::Both(_, p) => p.set_eeg_scale_uv(scale_uv),
+        }
+    }
+
     pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
         dispatch!(self, push_eeg(electrode, samples, packet_ts, sample_rate));
+    }
+
+    /// One complete row: a sample of every channel taken at `ts`. Same result
+    /// as `push_eeg` once per electrode, without the per-electrode queueing.
+    pub fn push_eeg_frame(&mut self, channels: &[f64], ts: f64, sample_rate: f64) {
+        dispatch!(self, push_eeg_frame(channels, ts, sample_rate));
     }
 
     pub fn push_ppg(
@@ -146,6 +193,19 @@ impl SessionWriter {
         dispatch!(self, flush());
     }
 
+    /// Raw EEG rows handed to storage and the number of failed writes, summed
+    /// over the open formats. A non-zero error count means samples are being
+    /// lost to the disk (full, unplugged, I/O error).
+    pub fn eeg_write_counts(&self) -> (u64, u64) {
+        match self {
+            Self::Csv(c) => c.eeg_write_counts(),
+            #[cfg(feature = "parquet")]
+            Self::Parquet(p) => (p.eeg_stats().rows, p.eeg_stats().errors),
+            #[cfg(feature = "parquet")]
+            Self::Both(c, p) => (c.eeg_write_counts().0, c.eeg_write_counts().1 + p.eeg_stats().errors),
+        }
+    }
+
     /// Finalise underlying writers (writes Parquet footer; no-op for CSV).
     /// Idempotent. Drop also calls this for crash safety, but calling it
     /// explicitly gives deterministic ordering and surfaces errors via logs.
@@ -170,6 +230,24 @@ mod tests {
         assert_eq!(StorageFormat::parse("CSV"), StorageFormat::Csv);
         assert_eq!(StorageFormat::parse("unknown"), StorageFormat::Csv);
         assert_eq!(StorageFormat::parse(""), StorageFormat::Csv);
+    }
+
+    #[test]
+    fn auto_follows_the_data_rate_and_explicit_settings_are_kept() {
+        // small streams stay CSV
+        assert_eq!(StorageFormat::for_stream("auto", 4, 256.0), StorageFormat::Csv);
+        assert_eq!(StorageFormat::for_stream("AUTO", 8, 500.0), StorageFormat::Csv);
+        #[cfg(feature = "parquet")]
+        {
+            assert_eq!(StorageFormat::for_stream("auto", 16, 256.0), StorageFormat::Parquet);
+            assert_eq!(StorageFormat::for_stream("auto", 32, 500.0), StorageFormat::Parquet);
+            // an explicit choice wins whatever the stream
+            assert_eq!(StorageFormat::for_stream("csv", 32, 500.0), StorageFormat::Csv);
+            assert_eq!(StorageFormat::for_stream("parquet", 4, 256.0), StorageFormat::Parquet);
+            assert_eq!(StorageFormat::for_stream("both", 4, 256.0), StorageFormat::Both);
+        }
+        // a plain parse never picks for itself
+        assert_eq!(StorageFormat::parse("auto"), StorageFormat::Csv);
     }
 
     #[cfg(feature = "parquet")]

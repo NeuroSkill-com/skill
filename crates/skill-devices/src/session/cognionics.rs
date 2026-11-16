@@ -150,6 +150,7 @@ impl CognionicsAdapter {
                     let az = self.acc_signal_indices[2];
                     if ch.len() > ax && ch.len() > ay && ch.len() > az {
                         self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                            timestamp_s: None,
                             accel: [ch[ax] as f32, ch[ay] as f32, ch[az] as f32],
                             gyro: None,
                             mag: None,

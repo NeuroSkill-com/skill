@@ -18,6 +18,7 @@ import { SectionHeader } from "#lib/components/ui/section-header";
 import { Separator } from "#lib/components/ui/separator";
 import { SettingsCard } from "#lib/components/ui/settings-card";
 import { ToggleRow } from "#lib/components/ui/toggle-row";
+import MontageDialog from "#lib/montage/MontageDialog.svelte";
 import {
   getActiveWindow,
   getActiveWindowTracking,
@@ -29,8 +30,11 @@ import {
   getIrohLogs,
   getLastInputActivity,
   getLocationEnabled,
+  getCompanionDevices,
+  getLosslessRecording,
   getMainWindowAutoFit,
   getStorageFormat,
+  getTimeCheck,
   getWsConfig,
   setActiveWindowTracking,
   setApiToken,
@@ -39,8 +43,11 @@ import {
   setInputActivityTracking,
   setIrohLogs,
   setLocationEnabled,
+  setCompanionDevices,
+  setLosslessRecording,
   setMainWindowAutoFit,
   setStorageFormat,
+  setTimeCheck,
   setWsConfig,
 } from "#lib/daemon/client";
 import {
@@ -96,7 +103,12 @@ let locationTestResult = $state<{
   error?: string;
 } | null>(null);
 
-let storageFormat = $state<"csv" | "parquet" | "both">("csv");
+let storageFormat = $state<"auto" | "csv" | "parquet" | "both">("auto");
+let losslessRecording = $state(false);
+let companionDevices = $state<string[]>([]);
+let montageOpen = $state(false);
+const isEmotibit = (target: string) => target.trim().toLowerCase().startsWith("emotibit");
+let timeCheck = $state({ enabled: true, server: "", interval_minutes: 5, warn_ms: 50 });
 let logConfig = $state<LogConfig>({
   embedder: true,
   bluetooth: true,
@@ -191,7 +203,10 @@ let nowTimer: ReturnType<typeof setInterval>;
 
 onMount(async () => {
   gpuStats = await getGpuStats().catch(() => null);
-  storageFormat = (await getStorageFormat().catch(() => "csv")) as "csv" | "parquet" | "both";
+  storageFormat = (await getStorageFormat().catch(() => "auto")) as "auto" | "csv" | "parquet" | "both";
+  losslessRecording = await getLosslessRecording().catch(() => false);
+  companionDevices = await getCompanionDevices().catch(() => []);
+  timeCheck = await getTimeCheck().catch(() => timeCheck);
   logConfig = await invoke<LogConfig>("get_log_config");
   irohLogs = await getIrohLogs().catch(() => false);
   {
@@ -343,7 +358,7 @@ onDestroy(() => {
         {t("settings.storageFormatDesc")}
       </p>
       <div class="flex gap-2">
-        {#each (["csv", "parquet", "both"] as const) as fmt}
+        {#each (["auto", "csv", "parquet", "both"] as const) as fmt}
           <button onclick={async () => { storageFormat = fmt; await setStorageFormat(fmt); }}
             class="flex flex-col items-center gap-1 rounded-xl border px-4 py-3 flex-1
                    transition-all cursor-pointer select-none
@@ -352,10 +367,11 @@ onDestroy(() => {
                      : 'border-border dark:border-white/[0.08] bg-muted dark:bg-surface-2 hover:bg-accent dark:hover:bg-white/[0.04]'}">
             <span class="text-ui-lg font-bold leading-tight
                          {storageFormat === fmt ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}">
-              {fmt === "csv" ? "CSV" : fmt === "parquet" ? "Parquet" : t("settings.storageFormatBoth")}
+              {fmt === "auto" ? t("settings.storageFormatAuto") : fmt === "csv" ? "CSV" : fmt === "parquet" ? "Parquet" : t("settings.storageFormatBoth")}
             </span>
             <span class="text-ui-xs text-muted-foreground text-center leading-tight">
-              {fmt === "csv" ? t("settings.storageFormatCsvDesc") :
+              {fmt === "auto" ? t("settings.storageFormatAutoDesc") :
+               fmt === "csv" ? t("settings.storageFormatCsvDesc") :
                fmt === "parquet" ? t("settings.storageFormatParquetDesc") :
                t("settings.storageFormatBothDesc")}
             </span>
@@ -365,6 +381,47 @@ onDestroy(() => {
           </button>
         {/each}
       </div>
+    </CardContent>
+    <CardContent class="py-0 px-0">
+      <ToggleRow
+        checked={losslessRecording}
+        label={t("settings.losslessRecording")}
+        description={t("settings.losslessRecordingDesc")}
+        ontoggle={async () => {
+          losslessRecording = !losslessRecording;
+          await setLosslessRecording(losslessRecording);
+        }}
+      />
+      <ToggleRow
+        checked={companionDevices.some(isEmotibit)}
+        label={t("settings.companionEmotibit")}
+        description={t("settings.companionEmotibitDesc")}
+        ontoggle={async () => {
+          // other companions (set through the settings file or the API) stay as they are
+          companionDevices = companionDevices.some(isEmotibit)
+            ? companionDevices.filter((target) => !isEmotibit(target))
+            : [...companionDevices, "emotibit"];
+          await setCompanionDevices(companionDevices);
+        }}
+      />
+      <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-ui-md font-semibold text-foreground">{t("settings.montage")}</span>
+          <span class="text-ui-sm text-muted-foreground leading-snug">{t("settings.montageDesc")}</span>
+        </div>
+        <Button size="sm" variant="outline" class="shrink-0" onclick={() => { montageOpen = true; }}>
+          {t("settings.montageOpen")}
+        </Button>
+      </div>
+      <ToggleRow
+        checked={timeCheck.enabled}
+        label={t("settings.timeCheck")}
+        description={t("settings.timeCheckDesc")}
+        ontoggle={async () => {
+          timeCheck = { ...timeCheck, enabled: !timeCheck.enabled };
+          await setTimeCheck(timeCheck);
+        }}
+      />
     </CardContent>
   </SettingsCard>
 </section>
@@ -1022,3 +1079,4 @@ onDestroy(() => {
 
 <DaemonActivityPanel />
 
+<MontageDialog bind:open={montageOpen} />

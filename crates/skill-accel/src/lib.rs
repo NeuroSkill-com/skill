@@ -9,6 +9,13 @@
 //! *panics* while loading moves on to the next one instead of breaking the
 //! feature (a panic crossing rlx FFI would otherwise abort the daemon).
 //!
+//! On a Raspberry Pi the platform chain is empty: `auto` means CPU. The Pi's
+//! VideoCore GPU (and the llvmpipe software Vulkan some images fall back to)
+//! enumerates as a wgpu adapter, so wgpu would otherwise be picked — and it
+//! is slower than the Pi's NEON CPU path, short on buffer limits for model
+//! weights, and has produced wrong output where a load did succeed. An
+//! explicit `wgpu`/`vulkan` setting is still honoured.
+//!
 //! MLX is never probed unless it is compiled in: its availability check runs a
 //! kernel, and without MLX's Metal library that traps in C++ and kills the
 //! process (0.1.0-rc.8). macOS product builds don't include MLX.
@@ -29,7 +36,9 @@ pub fn usable(d: Device) -> bool {
 
 /// GPU backends to try after the requested one, best first, for this platform.
 fn platform_order() -> &'static [Device] {
-    if cfg!(target_os = "macos") {
+    if is_raspberry_pi() {
+        &[]
+    } else if cfg!(target_os = "macos") {
         &[Device::Metal, Device::Gpu]
     } else {
         &[Device::Cuda, Device::Rocm, Device::Gpu]
@@ -77,7 +86,33 @@ pub fn parse_device(setting: &str) -> Device {
         "mlx" if mac && !feature_compiled(Device::Mlx) => Some(Device::Metal),
         other => other.parse::<Device>().ok(),
     };
-    parsed.unwrap_or_else(|| platform_order()[0])
+    parsed.unwrap_or_else(|| platform_order().first().copied().unwrap_or(Device::Cpu))
+}
+
+/// Whether this is a Raspberry Pi, from the device-tree model string
+/// (`/proc/device-tree/model`, e.g. "Raspberry Pi 5 Model B Rev 1.0").
+/// Read once. `SKILL_ACCEL_RASPBERRY_PI=1|0` overrides detection, to try the
+/// Pi policy elsewhere or to give a Pi the normal GPU chain.
+pub fn is_raspberry_pi() -> bool {
+    static PI: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PI.get_or_init(|| {
+        if let Ok(v) = std::env::var("SKILL_ACCEL_RASPBERRY_PI") {
+            return matches!(v.trim(), "1" | "true" | "yes");
+        }
+        cfg!(target_os = "linux")
+            && ["/proc/device-tree/model", "/sys/firmware/devicetree/base/model"]
+                .iter()
+                .filter_map(|p| std::fs::read(p).ok())
+                .any(|m| is_raspberry_pi_model(&m))
+    })
+}
+
+/// The device-tree model names a Raspberry Pi (the file is NUL-terminated).
+fn is_raspberry_pi_model(model: &[u8]) -> bool {
+    String::from_utf8_lossy(model)
+        .trim_end_matches('\0')
+        .trim()
+        .starts_with("Raspberry Pi")
 }
 
 /// The device to move to when `current` stops working at run time: the next
@@ -192,6 +227,9 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn mac_order_is_metal_then_wgpu_then_cpu() {
+        if is_raspberry_pi() {
+            return; // SKILL_ACCEL_RASPBERRY_PI=1 forces the Pi policy
+        }
         let c = fallback_chain(Device::Metal);
         let want: Vec<Device> = [Device::Metal, Device::Gpu, Device::Cpu]
             .into_iter()
@@ -235,6 +273,26 @@ mod tests {
                     "wgpu must not go back to Metal"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn recognises_raspberry_pi_device_tree_models() {
+        assert!(is_raspberry_pi_model(b"Raspberry Pi 5 Model B Rev 1.0\0"));
+        assert!(is_raspberry_pi_model(b"Raspberry Pi 4 Model B Rev 1.4\0"));
+        assert!(is_raspberry_pi_model(b"Raspberry Pi Compute Module 4 Rev 1.1"));
+        assert!(!is_raspberry_pi_model(b"NVIDIA Jetson Orin Nano Developer Kit\0"));
+        assert!(!is_raspberry_pi_model(b""));
+    }
+
+    #[test]
+    fn auto_never_indexes_past_an_empty_platform_chain() {
+        // On a Pi the chain is empty; `auto` must mean CPU, not panic.
+        let d = parse_device("auto");
+        if is_raspberry_pi() {
+            assert_eq!(d, Device::Cpu);
+            assert_eq!(best(d), Device::Cpu);
+            assert_eq!(next_after(Device::Gpu), Some(Device::Cpu));
         }
     }
 

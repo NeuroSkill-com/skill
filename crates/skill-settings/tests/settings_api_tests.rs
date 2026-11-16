@@ -19,7 +19,7 @@ fn websocket_defaults_are_stable() {
 
 #[test]
 fn storage_default_is_csv() {
-    assert_eq!(default_storage_format(), "csv");
+    assert_eq!(default_storage_format(), "auto");
 }
 
 #[test]

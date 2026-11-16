@@ -124,6 +124,7 @@ impl DeviceAdapter for OpenBciAdapter {
             // Accelerometer (Ganglion + Cyton with end_byte 0xC0).
             if let Some(accel) = sample.accel {
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: [accel[0] as f32, accel[1] as f32, accel[2] as f32],
                     gyro: None,
                     mag: None,

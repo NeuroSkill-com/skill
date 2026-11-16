@@ -196,6 +196,7 @@ impl VitalAdapter {
             VitalEvent::Accelerometer(a) => {
                 let g = a.g();
                 self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                    timestamp_s: None,
                     accel: [g[0] as f32, g[1] as f32, g[2] as f32],
                     gyro: None,
                     mag: None,

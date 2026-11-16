@@ -29,6 +29,9 @@ pub struct Recording {
     pub end_utc: Option<f64>,
     pub sample_rate: f64,
     pub channel_names: Vec<String>,
+    /// The recording's montage (default or given later), laid over its
+    /// channels: `channel_names` are then its labels.
+    pub montage: Option<skill_data::montage::ResolvedMontage>,
     pub device_name: Option<String>,
     pub device_kind: Option<String>,
     pub firmware_version: Option<String>,
@@ -153,9 +156,17 @@ fn load_recording(eeg_path: &Path) -> Result<Recording> {
             .map(String::from)
     };
 
-    let channel_names = eeg_channel_names(eeg_path)?;
+    let mut channel_names = eeg_channel_names(eeg_path)?;
     if channel_names.is_empty() {
         bail!("no channel columns");
+    }
+    // A montage belongs to the channels the device delivered; one that is for another
+    // number of channels than the file holds says nothing about this file.
+    let montage = skill_data::montage::read_session_montage(eeg_path)
+        .map(|m| m.montage.resolve(&m.recorded_channel_names))
+        .filter(|m| m.channels.len() == channel_names.len());
+    if let Some(m) = &montage {
+        channel_names = m.labels();
     }
     Ok(Recording {
         eeg_path: eeg_path.to_path_buf(),
@@ -166,6 +177,7 @@ fn load_recording(eeg_path: &Path) -> Result<Recording> {
             .filter(|r| *r > 0.0)
             .unwrap_or(skill_data::session_csv::EEG_SAMPLE_RATE),
         channel_names,
+        montage,
         device_name: text("device_name"),
         device_kind: text("device_kind"),
         firmware_version: text("firmware_version"),

@@ -661,6 +661,12 @@
   },
   {
     "tab": "settings",
+    "key": "settings.companionEmotibit",
+    "label": "EmotiBit を並行して記録",
+    "desc": "EmotiBit リストバンド（皮膚コンダクタンス、脈拍、温度、動き）を各セッションと並行して、同じ記録に同じ時計で記録します。リストバンドがなくてもセッションは始まり、探し続けます。接続や切断のたびにマーカーが記録されます。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.dailyGoal",
     "label": "デイリー目標",
     "desc": "デイリー記録目標を設定します。進捗はダッシュボードに表示されます。"
@@ -787,6 +793,18 @@
   },
   {
     "tab": "settings",
+    "key": "settings.losslessRecording",
+    "label": "ロスレス記録",
+    "desc": "記録を書き込めない間はサンプルをメモリに保持し、書き込めるようになった時点で書き込みます。セッションを閉じる前に、デバイスが既に届けたデータをすべて書き込みます。"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.montage",
+    "label": "モンタージュ",
+    "desc": "記録のチャンネルに名前を付けます。ラベル、各チャンネルが何を測っているか、どれが不良か。保存したモンタージュは新しいセッションの既定にでき、どの記録にも後から別のものを割り当てられます。記録済みのデータは書き換えられません。"
+  },
+  {
+    "tab": "settings",
     "key": "settings.openbci",
     "label": "OpenBCI",
     "desc": "別のBCIデバイスと一緒に、または代わりにOpenBCIボードを設定します。"
@@ -814,6 +832,18 @@
     "key": "settings.scanner.usbSerial",
     "label": "USBシリアル",
     "desc": "OpenBCI Cyton / CytonDaisyドングル"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.storageFormatAuto",
+    "label": "自動",
+    "desc": "小さなストリームはCSV、高レートはParquet"
+  },
+  {
+    "tab": "settings",
+    "key": "settings.timeCheck",
+    "label": "記録中に時計を確認",
+    "desc": "記録中、数分ごとにこのコンピューターの時計をタイムサーバーと比較します。差は測定して記録と一緒に保存するだけで、後から複数のコンピューターの記録を揃えられます。時計が大きくずれている場合は警告を表示します。"
   },
   {
     "tab": "settings",

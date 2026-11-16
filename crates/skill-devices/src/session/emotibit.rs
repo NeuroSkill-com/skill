@@ -317,6 +317,7 @@ impl EmotibitAdapter {
                 _ => None,
             };
             self.pending.push_back(DeviceEvent::Imu(ImuFrame {
+                timestamp_s: None,
                 accel: [x as f32, y as f32, z as f32],
                 gyro,
                 mag: None,

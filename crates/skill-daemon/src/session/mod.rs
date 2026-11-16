@@ -6,6 +6,8 @@
 //! Per-device connect functions handle the transport-specific setup (BLE scan,
 //! serial open, Cortex WS, PCAN, …) and return a `Box<dyn DeviceAdapter>`.
 
+mod clock_check;
+mod companion;
 mod connect;
 mod connect_ble;
 mod connect_wired;
@@ -13,5 +15,6 @@ pub(crate) mod pipeline;
 pub(crate) mod retention;
 mod runner;
 pub(crate) mod shared;
+pub(crate) mod trace;
 
 pub use connect::spawn_device_session;
