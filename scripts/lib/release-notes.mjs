@@ -13,20 +13,25 @@ import { join } from "node:path";
 
 /// Category headings in the order they first appear across the files.
 /// Bullets are kept verbatim, including wrapped continuation lines.
+/** @param {string[]} files @returns {string} */
 export function mergeRcNotes(files) {
   /** @type {Map<string, string[]>} */
   const categories = new Map();
+  /** @type {Map<string, Set<string>>} */
   const seen = new Map();
 
   for (const text of files) {
+    /** @type {string | null} */
     let category = null;
+    /** @type {string[] | null} */
     let bullet = null;
     const flush = () => {
       if (!category || !bullet) return;
       const body = bullet.join("\n").trimEnd();
-      if (!seen.get(category).has(body)) {
-        seen.get(category).add(body);
-        categories.get(category).push(body);
+      const known = seen.get(category);
+      if (known && !known.has(body)) {
+        known.add(body);
+        categories.get(category)?.push(body);
       }
       bullet = null;
     };
@@ -65,17 +70,21 @@ export function mergeRcNotes(files) {
 }
 
 /// RC note files for `base` (e.g. "0.1.2") in `dir`, oldest candidate first.
+/** @param {string} base @param {string} [dir] @returns {string[]} */
 export function rcNoteFiles(base, dir = "changes/releases") {
   if (!existsSync(dir)) return [];
   const rx = new RegExp(`^${base.replace(/\./g, "\\.")}-rc\\.(\\d+)\\.md$`);
   return readdirSync(dir)
-    .map((name) => ({ name, m: name.match(rx) }))
-    .filter((x) => x.m)
-    .sort((a, b) => Number(a.m[1]) - Number(b.m[1]))
+    .flatMap((name) => {
+      const m = name.match(rx);
+      return m ? [{ name, rc: Number(m[1]) }] : [];
+    })
+    .sort((a, b) => a.rc - b.rc)
     .map((x) => join(dir, x.name));
 }
 
 /// The merged fragment for `base`, or "" when no RC left notes.
+/** @param {string} base @param {string} [dir] @returns {string} */
 export function stableFragmentFromRcNotes(base, dir = "changes/releases") {
   return mergeRcNotes(rcNoteFiles(base, dir).map((f) => readFileSync(f, "utf8")));
 }

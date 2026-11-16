@@ -5,7 +5,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-// @ts-expect-error — plain .mjs module without type declarations
 import { mergeRcNotes, rcNoteFiles, stableFragmentFromRcNotes } from "../../scripts/lib/release-notes.mjs";
 
 const rc1 = `## [0.1.2-rc.1] — 2026-11-13

@@ -363,12 +363,35 @@ jobs:
         run: |
           set -euo pipefail
           start_ts="$(date +%s)"
+          # Integration-test targets of the selected crates, as `--test NAME` args,
+          # minus any with `required-features` (skill-eeg's fft_* need
+          # `slow-tests`). `--test '*'` names every target, and cargo errors on one
+          # whose features are off instead of skipping it — that failed this step
+          # whenever skill-eeg changed. `--tests` would skip them but rerun the
+          # unit tests the step above already ran. A name absent from some of the
+          # selected crates is fine: cargo only errors when no crate has it.
+          int_test_args() {
+            local pkgs
+            pkgs="$(printf '%s\n' "$@" | grep -vx -- '-p' | jq -R . | jq -sc .)"
+            cargo metadata --locked --no-deps --format-version 1 \
+              | jq -r --argjson pkgs "$pkgs" '
+                  .packages[] | select(.name as $n | $pkgs | index($n))
+                  | .targets[]
+                  | select(.kind == ["test"] and ((.["required-features"] // []) | length) == 0)
+                  | "--test \(.name)"' \
+              | sort -u | tr '\n' ' '
+          }
           run_cmd() {
             local flags="$1"
             [[ -z "$flags" ]] && return 0
+            local tests
+            # shellcheck disable=SC2086  # flags is a space-separated -p list by design
+            tests="$(int_test_args $flags)"
+            [[ -z "$tests" ]] && return 0
+            # shellcheck disable=SC2086
             cargo test --locked --target x86_64-unknown-linux-gnu \
               $flags \
-              --test '*'
+              $tests
           }
           run_router_cmd() {
             cargo test --locked --target x86_64-unknown-linux-gnu \

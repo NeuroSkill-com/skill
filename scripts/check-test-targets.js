@@ -19,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /// Cargo.toml files of every workspace member that can hold tests.
+/** @param {string} root @returns {string[]} */
 function manifests(root) {
   const found = [];
   const crates = join(root, "crates");
@@ -35,6 +36,7 @@ function manifests(root) {
 
 /// Test files registered by a manifest: each `[[test]] path = "tests/x.rs"`, plus
 /// the modules those roots pull in with `#[path = "x.rs"] mod x;` or `mod x;`.
+/** @param {string} manifestText @param {string} testsDir */
 function registeredFiles(manifestText, testsDir) {
   const roots = [...manifestText.matchAll(/^\s*path\s*=\s*"tests\/([^"/]+\.rs)"/gm)].map((m) => m[1]);
   const registered = new Set(roots);

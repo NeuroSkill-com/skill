@@ -5,7 +5,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-// @ts-expect-error — plain .mjs-style module without type declarations
 import { findUnregisteredTests } from "../../scripts/check-test-targets.js";
 
 /** A throwaway repo with one crate: its Cargo.toml text, and the files under tests/. */
