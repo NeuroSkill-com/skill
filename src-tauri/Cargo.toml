@@ -63,7 +63,7 @@ stacker = "0.1"
 # rustls cannot auto-detect a CryptoProvider at runtime.  We add it as a
 # direct dep so we can call `ring::default_provider().install_default()`
 # once at startup and avoid the panic.
-rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+rustls = { workspace = true }
 
 # Cross-platform GPU detection (VRAM, unified memory, backend).
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.

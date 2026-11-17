@@ -7,10 +7,15 @@ description = "Cross-platform GPU utilisation and memory stats (macOS IOKit, Lin
 
 [dependencies]
 serde = { workspace = true }
-serde_json = { workspace = true }
-llmfit-core = "1.1.17"
 sysinfo    = "0.40"
 libc       = "0.2"
+
+# Linux/Windows GPU stats only (`stats::non_macos`); macOS reads IOKit directly.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+llmfit-core = "1.1.17"
+
+[dev-dependencies]
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

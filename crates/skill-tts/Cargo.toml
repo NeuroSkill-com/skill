@@ -13,12 +13,15 @@ build = "build.rs"
 # `cargo test-slow` (see .cargo/config.toml) turns this on for every crate.
 slow-tests = []
 default     = []
-tts-kitten  = ["dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio", "dep:skill-accel"]
-tts-neutts  = ["dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
+tts-kitten  = ["dep:hf-hub", "dep:serde_json", "dep:tokio", "dep:rlx-kittentts", "dep:rlx-runtime", "dep:rodio", "dep:skill-accel"]
+tts-neutts  = ["dep:hf-hub", "dep:serde_json", "dep:tokio", "dep:neutts", "dep:rodio", "dep:sha2", "dep:hound"]
 # Pluggable RLX TTS engines. Legacy HF paths (Qwen3/Orpheus/Kyutai/Inflect) stay
 # for auto-download UX; the full native catalog routes through `rlx-tts-bench`
 # (no ONNX Runtime — `ort` features are never enabled).
 tts-engines = [
+    "dep:hf-hub",
+    "dep:serde_json",
+    "dep:tokio",
     "dep:skill-accel",
     "dep:rlx-qwen3-tts",
     "dep:rlx-orpheus",
@@ -36,9 +39,9 @@ skill-accel = { path = "../skill-accel", optional = true }
 anyhow      = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 serde      = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio      = { version = "1", features = ["sync"] }
-hf-hub     = "0.5"
+serde_json = { version = "1", optional = true }
+tokio      = { version = "1", features = ["sync"], optional = true }
+hf-hub     = { version = "0.5", optional = true }
 dirs       = "7"
 
 rodio      = { version = "0.23", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -76,6 +79,9 @@ rlx-kyutai-tts = { workspace = true, features = ["hf-download", "metal"], option
 rlx-inflect-nano = { workspace = true, features = ["rlx-graph", "metal"], optional = true }
 # `matrix-onnx` is a deprecated alias for native RLX engines (no `ort`).
 rlx-tts-bench = { workspace = true, features = ["rlx-tts", "matrix-onnx", "matrix-ar", "lm-tts", "kyutai", "metal"], optional = true }
+
+[dev-dependencies]
+serde_json = "1"
 
 [lints]
 workspace = true

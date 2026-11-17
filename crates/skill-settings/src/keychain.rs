@@ -12,6 +12,11 @@
 
 #[cfg(not(debug_assertions))]
 use keyring::Entry;
+// Debug builds never touch the keychain (see below), so nothing would reference
+// `keyring` and cargo's `unused_dependencies` lint would flag it; a profile
+// cannot gate a dependency, so keep it referenced here instead.
+#[cfg(debug_assertions)]
+use keyring as _;
 
 /// Service name used as the keychain namespace for all NeuroSkill secrets.
 #[cfg(not(debug_assertions))]

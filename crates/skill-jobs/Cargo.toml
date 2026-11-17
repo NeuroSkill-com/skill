@@ -8,7 +8,6 @@ description = "Sequential job queue for expensive compute tasks — extracted wo
 [dependencies]
 skill-constants = { path = "../skill-constants" }
 anyhow     = { workspace = true }
-thiserror  = { workspace = true }
 serde      = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 

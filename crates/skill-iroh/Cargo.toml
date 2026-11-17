@@ -27,3 +27,6 @@ zstd = "0.14"
 
 [dev-dependencies]
 tempfile = "3"
+
+[lints]
+workspace = true

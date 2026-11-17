@@ -26,7 +26,7 @@ default    = []
 apple   = ["llm-rlx-metal", "llm-rlx-wgpu"]  # Metal → wgpu → CPU; no MLX — see skill-daemon `apple`
 linux   = ["llm-rlx-wgpu", "llm-rlx-cuda"]
 windows = ["llm-rlx-wgpu", "llm-rlx-cuda"]
-llm                = []
+llm                = ["dep:axum", "dep:async-stream"]
 # Base rlx feature pulls cpu dispatch so the runtime always has at least
 # one usable target. GPU-flavor features add their backend on top.
 # `rlx-models/runner` gates the `run` module (LmRunner, Qwen3Runner, auto_*,
@@ -54,15 +54,14 @@ llm-model-discovery = ["llm-rlx"]
 skill-accel = { path = "../skill-accel", optional = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-glob = "0.3"
 skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 skill-db = { path = "../skill-db" }
-axum       = { version = "0.8", features = ["ws"] }
+axum       = { version = "0.8", features = ["ws"], optional = true }
 tokio      = { version = "1", features = ["full"] }
-async-stream = "0.3"
+async-stream = { version = "0.3", optional = true }
 log        = "0.4"
 base64 = { workspace = true }
 ureq       = { version = "3", features = ["native-tls", "json"] }

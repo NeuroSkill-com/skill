@@ -47,7 +47,6 @@ hotpath-alloc = ["dep:hotpath", "hotpath/hotpath-alloc"]
 skill-accel = { path = "../skill-accel", optional = true }
 anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
-skill-commands  = { path = "../skill-commands" }
 skill-data      = { path = "../skill-data" }
 skill-settings  = { path = "../skill-settings" }
 serde           = { version = "1", features = ["derive"] }

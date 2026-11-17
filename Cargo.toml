@@ -296,7 +296,6 @@ rlx-gemma    = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "ma
 rlx-neutts   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 rlx-kittentts = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 rlx-inflect-nano = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
-rlx-tiny-tts  = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 rlx-whisper   = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 rlx-vad       = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }
 rlx-qwen3-asr = { git = "https://github.com/MIT-RLX/rlx-models.git", branch = "main", default-features = false }

@@ -17,3 +17,6 @@ anyhow = { workspace = true }
 base32 = "0.5"
 url = "2"
 tempfile = "3"
+
+[lints]
+workspace = true

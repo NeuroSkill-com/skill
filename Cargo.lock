@@ -13666,7 +13666,6 @@ dependencies = [
  "skill-health",
  "skill-history",
  "skill-iroh",
- "skill-jobs",
  "skill-label-index",
  "skill-llm",
  "skill-location",
@@ -13764,7 +13763,6 @@ dependencies = [
  "csv",
  "grayscale",
  "libc",
- "llmfit-core",
  "macos-focus",
  "parquet",
  "rusqlite",
@@ -13943,7 +13941,6 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-constants",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -13969,7 +13966,6 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "either",
- "glob",
  "hex",
  "hf-hub",
  "image",
@@ -14073,7 +14069,6 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-accel",
- "skill-commands",
  "skill-constants",
  "skill-data",
  "skill-settings",
