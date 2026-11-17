@@ -37,7 +37,7 @@ ignore = [
     # these advisories, so cargo-deny warns `advisory-not-detected`. Re-enable
     # both lines together with rlx-tiny-tts in crates/skill-tts/Cargo.toml.
     #   protobuf 1.7.5 — recursion DoS, fixed in >=3.7.2 (build-only, never shipped)
-    { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
+    # { id = "RUSTSEC-2024-0437", reason = "build-only protoc codegen via onnx/rlx-tiny-tts; not in shipped binary" },
     # NOTE: noyalib's RUSTSEC-2026-0333 (YAML budget DoS) needed an entry here
     # until 2026-10-15, when llmfit-core 0.9 -> 1.1.17 replaced serde_yml with
     # yaml_serde and took serde_yml and noyalib out of the graph with it. Do

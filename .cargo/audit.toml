@@ -12,35 +12,19 @@ enabled = false
 
 [advisories]
 ignore = [
-    # ── gtk-rs GTK3 family — unmaintained, no GTK4 upgrade path until Tauri migrates ──
-    "RUSTSEC-2024-0411", # gdkwayland-sys
-    "RUSTSEC-2024-0412", # gdk
-    "RUSTSEC-2024-0413", # atk
-    "RUSTSEC-2024-0414", # gdkx11-sys
-    "RUSTSEC-2024-0415", # gtk
-    "RUSTSEC-2024-0416", # atk-sys
-    "RUSTSEC-2024-0417", # gdkx11
-    "RUSTSEC-2024-0418", # gdk-sys
-    "RUSTSEC-2024-0419", # gtk3-macros
-    "RUSTSEC-2024-0420", # gtk-sys
+    # The gtk-rs GTK3 "unmaintained" advisories (RUSTSEC-2024-0411 … 0420) were
+    # withdrawn on 2026-08-14 and need no entry.
 
-    # ── glib — unsound VariantStrIter, patched in >=0.20.0; blocked by gtk3 above ──
+    # ── glib — unsound VariantStrIter, patched in >=0.20.0; GTK3 pins glib 0.18 ──
+    # glib now comes from the eugenehp/gtk-rs-core fork (git), which RustSec does
+    # not match, so this ignore is idle today. It stays because dropping the fork
+    # puts crates.io glib 0.18 back in the graph, and that is still affected.
     "RUSTSEC-2024-0429", # glib
 
     # ── Other unmaintained transitive deps ────────────────────────────────────
-    "RUSTSEC-2021-0139", # ansi_term (via structopt/clap2 in iroh test clients)
-    "RUSTSEC-2023-0089", # atomic-polyfill (via heapless 0.7 in iroh stack)
     "RUSTSEC-2024-0370", # proc-macro-error (via gtk3-macros)
-    "RUSTSEC-2024-0375", # atty unmaintained (via structopt/clap2 in iroh test clients)
     "RUSTSEC-2024-0436", # paste
     "RUSTSEC-2025-0057", # fxhash
-    "RUSTSEC-2025-0075", # unic-char-range
-    "RUSTSEC-2025-0080", # unic-common
-    "RUSTSEC-2025-0081", # unic-char-property
-    "RUSTSEC-2025-0098", # unic-ucd-version
-    "RUSTSEC-2025-0100", # unic-ucd-ident
-    "RUSTSEC-2025-0119", # number_prefix
-    "RUSTSEC-2025-0134", # rustls-pemfile (via oura-api/reqwest 0.11)
     "RUSTSEC-2025-0141", # bincode
 
     # ── zbus stack — folded into `zbus` 6.0.0, so there is nothing to upgrade ──
@@ -56,16 +40,6 @@ ignore = [
     "RUSTSEC-2026-0371", # zbus_names unmaintained — merged into zbus 6.0.0
     "RUSTSEC-2026-0372", # zvariant_derive unmaintained — merged into zbus 6.0.0
 
-    # ── Unsound warnings in legacy transitive deps ────────────────────────────
-    "RUSTSEC-2021-0145", # atty potential unaligned read (legacy clap2 chain)
-
-    # ── rand — unsound with custom logger using rand::rng(); transitive dep ──
-    # 0.8.7 only, as of 2026-10-19: nalgebra / statrs / turbovec / fast-hnsw /
-    # tungstenite, the rlx-models TTS crates, and phf_generator as a build dep.
-    # (The 0.7.3 copy tauri/phf used to pull is gone, and so is emotiv's — it
-    # dropped rand in 0.0.13.)
-    "RUSTSEC-2026-0097", # rand
-
     # ── unsafe-libyaml — unmaintained, no patched release ────────────────────
     # Reached as neurorvq-rs 0.2 -> serde_yaml 0.9 (itself deprecated) ->
     # unsafe-libyaml. `patched = []`, so there is nothing to upgrade to short of
@@ -74,12 +48,4 @@ ignore = [
     # gone as of llmfit-core 1.1.17, which also removed serde_yml's own
     # RUSTSEC-2025-0068 and noyalib's RUSTSEC-2026-0333 from this list.
     "RUSTSEC-2024-0449", # unsafe-libyaml — unmaintained (serde_yaml's backend)
-
-    # ── Mirrors of deny.toml's reviewed ignores ─────────────────────────────
-    # cargo-deny reads deny.toml and cargo-audit reads this file, so a decision
-    # recorded in one is invisible to the other — and CI runs both. This one is
-    # the same call, with the same reasoning, as its `[advisories] ignore`
-    # entry in deny.toml; change them together or the audit job disagrees
-    # with the deny job.
-    "RUSTSEC-2024-0437", # protobuf <3.7.2, build-only protoc codegen; not in the shipped binary
 ]
