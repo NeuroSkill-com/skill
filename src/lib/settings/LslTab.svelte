@@ -93,7 +93,7 @@ let autoConnect = $state(false);
 let pairedStreams = $state<LslPairedStream[]>([]);
 
 // Idle timeout
-let idleTimeoutSecs = $state<number | null>(15); // null = disabled
+let idleTimeoutSecs = $state<number | null>(120); // null = disabled
 let idleTimeoutSaving = $state(false);
 
 // Live session status

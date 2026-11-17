@@ -137,10 +137,12 @@ jobs:
         shell: pwsh
         run: ./scripts/lint-powershell.ps1
 
-  rust-check:
-    name: Rust — clippy + test
+  # Clippy and tests run as parallel jobs: each compiles the workspace its own
+  # way (clippy = metadata, tests = codegen) and shares nothing with the other,
+  # so in one job they only added up (~31 + ~31 min).
+  rust-clippy:
+    name: Rust — clippy
     runs-on: ubuntu-24.04
-    # Pinned, not ubuntu-latest: 24.04 is what release-linux.yml builds on.
     steps:
       # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
       # ubuntu-latest ships Android SDK, .NET, Swift, Haskell, CodeQL, large
@@ -174,19 +176,22 @@ jobs:
           shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
           cache-targets: false
           cache-on-failure: false
+          # rust-check writes this shared registry cache; restore only.
+          save-if: false
 
-      # kache = the compile cache (rustc outputs, content-addressed). rust-cache
-      # above only covers the ~/.cargo registry (cache-targets: false), so the
-      # two don't overlap. This job is the sole writer of the Linux store: the
-      # action keys on platform + Cargo.lock only (not job), keys are immutable,
-      # and the e2e jobs restore it read-only.
+      # kache = the compile cache. This job writes its own store
+      # (kache-linux-ci-clippy); rust-check owns kache-linux-ci.
       - name: Compiler cache (kache)
         uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
         with:
           version: v2.0.0
-          cache-key-prefix: kache-linux-ci
+          # Own store: clippy emits metadata only, which test builds can't reuse,
+          # and each kache prefix must have exactly one writer.
+          cache-key-prefix: kache-linux-ci-clippy
           max-size: 3GiB
           pr-comment: false
+          # DuckDB's bundled C++ (libduckdb-sys build script) — see rust-check.
+          cache-c-cpp: true
 
       # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
       # package versions the mirror no longer has, and the install fails as a whole
@@ -251,6 +256,96 @@ jobs:
             cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu -- -D warnings
           }
           run_cmd
+
+
+  rust-check:
+    name: Rust — test
+    runs-on: ubuntu-24.04
+    # Pinned, not ubuntu-latest: 24.04 is what release-linux.yml builds on.
+    steps:
+      # ── Free pre-installed software we don't use (~10 GB reclaimed) ──────────
+      # ubuntu-latest ships Android SDK, .NET, Swift, Haskell, CodeQL, large
+      # Docker layers, and mono — none of which this project needs.
+      # Without this, the Rust build cache restore + compile fills the ~14 GB
+      # runner disk and causes "No space left on device" failures.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /usr/local/share/powershell /usr/local/share/chromium /usr/share/swift \
+                      /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af 2>/dev/null || true
+          df -h /
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Fetch skills submodule
+        run: git submodule update --init --depth=1 skills
+
+      - name: Setup Rust bootstrap (Linux)
+        uses: ./.github/actions/setup-rust-bootstrap-linux
+
+      # Swatinem/rust-cache gives smarter per-crate invalidation and automatic
+      # pruning vs manual actions/cache — matches the release workflows.
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          workspaces: ". -> src-tauri/target"
+          shared-key: linux-ci-x86_64-unknown-linux-gnu-v1
+          cache-targets: false
+          cache-on-failure: false
+
+      # kache = the compile cache (rustc outputs, content-addressed). rust-cache
+      # above only covers the ~/.cargo registry (cache-targets: false), so the
+      # two don't overlap. This job is the sole writer of the Linux store: the
+      # action keys on platform + Cargo.lock only (not job), keys are immutable,
+      # and the e2e jobs restore it read-only.
+      - name: Compiler cache (kache)
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+        with:
+          version: v2.0.0
+          cache-key-prefix: kache-linux-ci
+          max-size: 4GiB
+          pr-comment: false
+          # libduckdb-sys builds DuckDB's bundled C++ in its build script: ~10 min
+          # of compile per build, never cached with this off, and the single
+          # biggest cost in this job (kache: 73% of crates hit but only 23% of
+          # compile cost). Room for its objects is why max-size went 3 → 4 GiB.
+          cache-c-cpp: true
+
+      # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
+      # package versions the mirror no longer has, and the install fails as a whole
+      # while the step still reports success.
+      - name: Refresh apt package index
+        run: sudo apt-get update -o Acquire::Retries=5
+
+      - name: Cache + install Tauri system deps (incl. mold + clang)
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev libappindicator3-dev
+            librsvg2-dev patchelf libssl-dev
+            libudev-dev libdbus-1-dev pkg-config
+            libespeak-ng-dev libasound2-dev
+            libpipewire-0.3-dev libgbm-dev
+            cmake binutils mold clang
+            protobuf-compiler libopenblas-dev
+          version: tauri-rust-check-v8
+
+      - name: Verify system libraries
+        run: |
+          # Fail here, with a clear message, rather than minutes later inside a *-sys build script.
+          missing=0
+          for m in glib-2.0 gtk+-3.0 libsoup-3.0 webkit2gtk-4.1; do
+            pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
+          done
+          exit $missing
+
+      # Always lint/test against the latest rlx / rlx-models main (rewrites
+      # Cargo.lock pins before the `--locked` clippy/test steps below).
+      - name: Refresh rlx to main
+        uses: ./.github/actions/refresh-rlx-main
 
       # Determine which crates need testing based on changed files.
       # On PRs: compare against the base branch.
@@ -321,8 +416,13 @@ jobs:
           ROUTERLESS_INT="$(echo "$INT_FLAGS" | sed 's/-p skill-router//g' | xargs || true)"
           echo "routerless_int_flags=$ROUTERLESS_INT" >> "$GITHUB_OUTPUT"
 
-      - name: cargo test (affected crates — unit)
-        id: rust_unit_tests
+      # Unit and integration tests in ONE cargo invocation per crate selection.
+      # As two steps they selected different crates (`--lib` over all affected
+      # crates, `--test` over the integration subset), so Cargo unified
+      # features differently and rebuilt shared dependencies — DuckDB's C++
+      # included — for the second step (~12 min, of which 3 s ran tests).
+      - name: cargo test (affected crates — unit + integration)
+        id: rust_tests
         if: steps.changed.outputs.skip != 'true'
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -331,45 +431,11 @@ jobs:
         run: |
           set -euo pipefail
           start_ts="$(date +%s)"
-          run_cmd() {
-            local flags="$1"
-            [[ -z "$flags" ]] && return 0
-            cargo test --locked --target x86_64-unknown-linux-gnu \
-              $flags \
-              --lib
-          }
-          run_router_cmd() {
-            cargo test --locked --target x86_64-unknown-linux-gnu \
-              --no-default-features -p skill-router --features cpu \
-              --lib
-          }
-          run_all() {
-            run_cmd "${{ steps.changed.outputs.routerless_flags }}"
-            if [[ "${{ steps.changed.outputs.test_router }}" == "true" ]]; then
-              run_router_cmd
-            fi
-          }
-          run_all
-          end_ts="$(date +%s)"
-          echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
-
-      - name: cargo test (affected crates — integration)
-        id: rust_integration_tests
-        if: steps.changed.outputs.skip_int != 'true'
-        env:
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
-        shell: bash
-        run: |
-          set -euo pipefail
-          start_ts="$(date +%s)"
-          # Integration-test targets of the selected crates, as `--test NAME` args,
+          # Integration-test targets of the given crates, as `--test NAME` args,
           # minus any with `required-features` (skill-eeg's fft_* need
           # `slow-tests`). `--test '*'` names every target, and cargo errors on one
-          # whose features are off instead of skipping it — that failed this step
-          # whenever skill-eeg changed. `--tests` would skip them but rerun the
-          # unit tests the step above already ran. A name absent from some of the
-          # selected crates is fine: cargo only errors when no crate has it.
+          # whose features are off instead of skipping it. A name absent from some
+          # of the selected crates is fine: cargo only errors when no crate has it.
           int_test_args() {
             local pkgs
             pkgs="$(printf '%s\n' "$@" | grep -vx -- '-p' | jq -R . | jq -sc .)"
@@ -382,24 +448,22 @@ jobs:
               | sort -u | tr '\n' ' '
           }
           run_cmd() {
-            local flags="$1"
+            local flags="$1" int_flags="$2" tests=""
             [[ -z "$flags" ]] && return 0
-            local tests
-            # shellcheck disable=SC2086  # flags is a space-separated -p list by design
-            tests="$(int_test_args $flags)"
-            [[ -z "$tests" ]] && return 0
+            # shellcheck disable=SC2086  # space-separated -p lists by design
+            [[ -n "$int_flags" ]] && tests="$(int_test_args $int_flags)"
             # shellcheck disable=SC2086
             cargo test --locked --target x86_64-unknown-linux-gnu \
               $flags \
-              $tests
+              --lib $tests
           }
           run_router_cmd() {
             cargo test --locked --target x86_64-unknown-linux-gnu \
               --no-default-features -p skill-router --features cpu \
-              --test '*'
+              --lib --test '*'
           }
           run_all() {
-            run_cmd "${{ steps.changed.outputs.routerless_int_flags }}"
+            run_cmd "${{ steps.changed.outputs.routerless_flags }}" "${{ steps.changed.outputs.routerless_int_flags }}"
             if [[ "${{ steps.changed.outputs.test_router }}" == "true" ]]; then
               run_router_cmd
             fi
@@ -414,21 +478,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ci-metrics
-          UNIT_SEC="${{ steps.rust_unit_tests.outputs.duration_sec || '0' }}"
-          INT_SEC="${{ steps.rust_integration_tests.outputs.duration_sec || '0' }}"
+          TEST_SEC="${{ steps.rust_tests.outputs.duration_sec || '0' }}"
 
           {
             echo '{'
             echo '  "job": "rust-check",'
-            echo '  "unit_test_duration_sec":' "$UNIT_SEC" ','
-            echo '  "integration_test_duration_sec":' "$INT_SEC"
+            echo '  "test_duration_sec":' "$TEST_SEC"
             echo '}'
           } > ci-metrics/rust-check.json
 
           {
             echo "## Rust health metrics"
-            echo "- Unit test duration: ${UNIT_SEC}s"
-            echo "- Integration test duration: ${INT_SEC}s"
+            echo "- Test duration (unit + integration, incl. build): ${TEST_SEC}s"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Rust health metrics
@@ -772,9 +833,11 @@ jobs:
         with:
           version: v2.0.0
           cache-key-prefix: kache-linux-ci
-          max-size: 3GiB
+          max-size: 4GiB
           pr-comment: false
           save-cache: false
+          # Read rust-check's cached DuckDB C++ objects too.
+          cache-c-cpp: true
 
       # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
       # package versions the mirror no longer has, and the install fails as a whole
@@ -888,9 +951,11 @@ jobs:
         with:
           version: v2.0.0
           cache-key-prefix: kache-linux-ci
-          max-size: 3GiB
+          max-size: 4GiB
           pr-comment: false
           save-cache: false
+          # Read rust-check's cached DuckDB C++ objects too.
+          cache-c-cpp: true
 
       # Refresh the apt index first: a stale one makes cache-apt-pkgs-action request
       # package versions the mirror no longer has, and the install fails as a whole
@@ -1103,7 +1168,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [version-gate, rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e, coverage]
+    needs: [version-gate, rust-clippy, rust-check, windows-check, frontend-check, audit, llm-e2e, lsl-e2e, coverage]
     if: always()
     # Secret is empty for Dependabot PRs (separate secret store) and forks.
     # Hoist to job-level env so the step's `if` can gate on it.
@@ -1133,6 +1198,7 @@ jobs:
             COMMIT_MSG="${COMMIT_MSG:0:500}…"
           fi
           VERSION="${{ needs.version-gate.result }}"
+          RUST_CLIPPY="${{ needs.rust-clippy.result }}"
           RUST="${{ needs.rust-check.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
@@ -1141,9 +1207,9 @@ jobs:
           LSL_E2E="${{ needs.lsl-e2e.result }}"
           COVERAGE="${{ needs.coverage.result }}"
 
-          # Determine overall status — VERSION, Rust (Linux), Windows, and Frontend
+          # Determine overall status — VERSION, Rust clippy + tests (Linux), Windows, and Frontend
           # are required gates.  Audit and LLM E2E are advisory.
-          if [[ "$VERSION" == "success" && "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
+          if [[ "$VERSION" == "success" && "$RUST_CLIPPY" == "success" && "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
             COLOR=3066993   # green
             STATUS="✅ Passed"
           else
@@ -1152,6 +1218,7 @@ jobs:
           fi
 
           EMOJI_VERSION=$([ "$VERSION" = "success" ] && echo "✅" || echo "❌")
+          EMOJI_RUST_CLIPPY=$([ "$RUST_CLIPPY" = "success" ] && echo "✅" || echo "❌")
           EMOJI_RUST=$([ "$RUST" = "success" ] && echo "✅" || echo "❌")
           EMOJI_WINDOWS=$([ "$WINDOWS" = "success" ] && echo "✅" || echo "❌")
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
@@ -1182,7 +1249,8 @@ jobs:
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
                   {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false},
                   {\"name\": \"VERSION\", \"value\": \"$EMOJI_VERSION $VERSION\", \"inline\": true},
-                  {\"name\": \"Rust (Linux)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
+                  {\"name\": \"Rust clippy (Linux)\", \"value\": \"$EMOJI_RUST_CLIPPY $RUST_CLIPPY\", \"inline\": true},
+                  {\"name\": \"Rust tests (Linux)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
                   {\"name\": \"Frontend\", \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
                   {\"name\": \"Audit\", \"value\": \"$EMOJI_AUDIT $AUDIT\", \"inline\": true},

@@ -168,7 +168,7 @@ fn follow_marker_stream(info: &StreamInfo, tx: &mpsc::Sender<DeviceEvent>) {
     let mut numbers = vec![0.0f64; info.channel_count() as usize];
     // The marker's own instant on our clock when the stream's time service
     // answers; else its arrival, less the transport delay as far as known.
-    let mut synced = synchronise_clock(&inlet, false).then(WallClock::new);
+    let mut synced = synchronise_clock(&inlet, info, false).map(|sender| (sender, WallClock::new()));
     let mut clock = MarkerClock::default();
     let mut warned = false;
     while !tx.is_closed() {
@@ -191,7 +191,7 @@ fn follow_marker_stream(info: &StreamInfo, tx: &mpsc::Sender<DeviceEvent>) {
         let frame = MarkerFrame {
             timestamp_s: plausible_marker_time(
                 match synced.as_mut() {
-                    Some(wall) => stamp + wall.offset(),
+                    Some((sender, wall)) => stamp + sender.offset() + wall.offset(),
                     None => clock.unix_time(stamp, now),
                 },
                 now,
@@ -240,18 +240,19 @@ pub(crate) use rlsl::clock::UnixOffset as WallClock;
 /// outlet's time service answered and the inlet now keeps the offset itself
 /// (re-measuring it in the background), `false` when it did not — the stamps
 /// then stay on the sender's clock.
-fn synchronise_clock(inlet: &rlsl::inlet::StreamInlet, regular_rate: bool) -> bool {
-    if inlet.clock_offset(2.0).is_none() {
-        return false;
-    }
-    inlet.set_clock_sync(true);
-    // Regular streams are also smoothed (which absorbs the small steps of each
-    // re-measured offset); markers keep their own instants.
+fn synchronise_clock(
+    inlet: &rlsl::inlet::StreamInlet,
+    info: &StreamInfo,
+    regular_rate: bool,
+) -> Option<crate::sender_clock::SenderClock> {
+    // The sender's clock against ours is measured here, not by the inlet (see
+    // `sender_clock` for why), and added to the stamps where they are used.
+    let sender = crate::sender_clock::SenderClock::of(info)?;
+    inlet.set_clock_sync(false);
+    // Regular streams are smoothed; markers keep their own instants.
     let smoothing = if regular_rate { rlsl::types::PROC_DEJITTER } else { 0 };
-    inlet.set_postprocessing(
-        rlsl::types::PROC_CLOCKSYNC | smoothing | rlsl::types::PROC_MONOTONIZE | rlsl::types::PROC_THREADSAFE,
-    );
-    true
+    inlet.set_postprocessing(smoothing | rlsl::types::PROC_MONOTONIZE | rlsl::types::PROC_THREADSAFE);
+    Some(sender)
 }
 
 fn unix_now() -> f64 {
@@ -342,6 +343,11 @@ pub struct LslStreamStats {
 /// for again on the network.
 const SILENCE_BEFORE_SEARCH: std::time::Duration = std::time::Duration::from_millis(1500);
 
+/// How much of what a restarted sender has already sent is asked for when it is
+/// gone over to: a sender that keeps its last seconds gives them, any other
+/// ignores the request.
+const RESTART_REPLAY_SECS: f64 = 3.0;
+
 /// The marker source of a stream that went away and came back.
 pub const RESTART_MARKER_SOURCE: &str = "lsl";
 
@@ -357,10 +363,16 @@ pub const RESTART_MARKER_SOURCE: &str = "lsl";
 /// is then flowing, and nobody looks).
 fn find_restarted(lost: &StreamInfo) -> Option<StreamInfo> {
     let source_id = lost.source_id();
+    // By name as well as by source: a device's streams share its source id (its
+    // EEG and its accelerometer), and the search ends with the first answer —
+    // the accelerometer's, as often as not, and then nothing was found.
+    let name = lost.name();
     let found = if source_id.is_empty() {
-        resolver::resolve_query(&format!("name='{}'", lost.name()), 1, 1.0)
+        resolver::resolve_query(&format!("name='{name}'"), 1, 1.0)
+    } else if source_id.contains('\'') || name.contains('\'') {
+        resolver::resolve_by_property("source_id", &source_id, 0, 1.0)
     } else {
-        resolver::resolve_by_property("source_id", &source_id, 1, 1.0)
+        resolver::resolve_query(&format!("source_id='{source_id}' and name='{name}'"), 1, 1.0)
     };
     if found.iter().any(|s| s.uid() == lost.uid()) {
         return None;
@@ -547,11 +559,13 @@ impl LslAdapter {
                 inlet.set_compression(wants_compression(&info_clone));
                 let mut clock = clock;
                 let mut wall: Option<WallClock> = None;
-                if synchronise_clock(&inlet, sample_rate > 0.0) {
+                let mut sender = synchronise_clock(&inlet, &info_clone, sample_rate > 0.0);
+                if sender.is_some() {
                     wall = Some(WallClock::new());
                     // On our LSL clock now; that clock to Unix is a constant.
                     clock = ClockMap::Offset {
-                        offset: rlsl::clock::unix_offset_now(),
+                        offset: rlsl::clock::unix_offset_now()
+                            + sender.as_ref().map_or(0.0, crate::sender_clock::SenderClock::offset),
                         exact: true,
                     };
                     if let Ok(mut s) = thread_stats.lock() {
@@ -618,7 +632,7 @@ impl LslAdapter {
                     let inlet = rlsl::inlet::StreamInlet::new(&a, 360, 0, true);
                     // Its readings on our clock too, so that they sit on
                     // the EEG's timeline and not at whenever they got here.
-                    let synced = synchronise_clock(&inlet, true);
+                    let synced = synchronise_clock(&inlet, &a, true);
                     inlet.open_stream(5.0).ok().map(|()| (inlet, to_g, synced))
                 };
                 let mut accel = accel_info.and_then(open_accelerometer);
@@ -628,6 +642,13 @@ impl LslAdapter {
                 let mut last_stamp: Option<f64> = None;
                 let mut last_data = std::time::Instant::now();
                 let mut searched = std::time::Instant::now();
+                // the sender's own stamp of the newest sample, to see its clock change
+                let mut last_raw: Option<f64> = None;
+                // the outlet that took the place of the one we were on, to be gone over to
+                let mut restarted: Option<StreamInfo> = None;
+                // the inlet went over to another outlet by itself, and we have not yet: what
+                // it delivers meanwhile is on a clock we have not measured
+                let mut behind = false;
                 loop {
                     if shutdown_rx.try_recv().is_ok() {
                         break;
@@ -636,61 +657,78 @@ impl LslAdapter {
                     // A stream that should be sending and is not: its sender may
                     // have been restarted, and is then another outlet.
                     if period > 0.0
-                        && last_data.elapsed() >= SILENCE_BEFORE_SEARCH
+                        && restarted.is_none()
+                        && (behind || last_data.elapsed() >= SILENCE_BEFORE_SEARCH)
                         && searched.elapsed() >= std::time::Duration::from_secs(1)
                     {
                         searched = std::time::Instant::now();
-                        if let Some(found) = find_restarted(&current) {
-                            let fresh = rlsl::inlet::StreamInlet::new(&found, 360, 0, true);
-                            fresh.set_compression(wants_compression(&found));
-                            // On the clock the recording is on, or not at all: a
-                            // stream whose stamps were being put on this machine's
-                            // clock is not taken back on its sender's.
-                            let synced = synchronise_clock(&fresh, true);
+                        restarted = find_restarted(&current);
+                    }
+                    // Go over to it: a new inlet, its clock measured anew — nothing of the
+                    // old sender's clock is carried along.
+                    if let Some(found) = restarted.take() {
+                        let fresh = rlsl::inlet::StreamInlet::new(&found, 360, 0, true);
+                        fresh.set_compression(wants_compression(&found));
+                        // what the new sender has sent since it started, if it keeps it:
+                        // the moments it took us to get here
+                        fresh.set_replay(RESTART_REPLAY_SECS);
+                        // On the clock the recording is on, or not at all: a
+                        // stream whose stamps were being put on this machine's
+                        // clock is not taken back on its sender's.
+                        let fresh_sender = synchronise_clock(&fresh, &found, true);
+                        let synced = fresh_sender.is_some();
+                        if !synced {
+                            fresh.set_postprocessing(
+                                rlsl::types::PROC_DEJITTER | rlsl::types::PROC_MONOTONIZE | rlsl::types::PROC_THREADSAFE,
+                            );
+                        }
+                        if (synced || wall.is_none()) && fresh.open_stream(5.0).is_ok() {
                             if !synced {
-                                fresh.set_postprocessing(
-                                    rlsl::types::PROC_DEJITTER
-                                        | rlsl::types::PROC_MONOTONIZE
-                                        | rlsl::types::PROC_THREADSAFE,
-                                );
+                                // the new sender's clock: its declared reference, or
+                                // the arrival of its first samples
+                                clock = fetch_fullinfo_xml(&found)
+                                    .and_then(|xml| parse_clock_reference(&xml))
+                                    .unwrap_or(ClockMap::Pending);
                             }
-                            if (synced || wall.is_none()) && fresh.open_stream(5.0).is_ok() {
-                                if !synced {
-                                    // the new sender's clock: its declared reference, or
-                                    // the arrival of its first samples
-                                    clock = fetch_fullinfo_xml(&found)
-                                        .and_then(|xml| parse_clock_reference(&xml))
-                                        .unwrap_or(ClockMap::Pending);
-                                }
-                                if synced && wall.is_none() {
-                                    // this sender has a time service, the first had not
-                                    wall = Some(WallClock::new());
-                                    if let Ok(mut s) = thread_stats.lock() {
-                                        s.exact_clock = true;
-                                        s.lsl_synced = true;
-                                    }
-                                }
-                                eprintln!("[lsl] '{name}' was restarted by its sender; connected to it again");
-                                accel = find_accelerometer_sibling(&found).and_then(open_accelerometer);
-                                inlet = fresh;
-                                current = found;
-                                last_data = std::time::Instant::now();
+                            if synced && wall.is_none() {
+                                // this sender has a time service, the first had not
+                                wall = Some(WallClock::new());
                                 if let Ok(mut s) = thread_stats.lock() {
-                                    s.restarts += 1;
-                                    s.compressed = inlet.is_compressed();
+                                    s.exact_clock = true;
+                                    s.lsl_synced = true;
                                 }
-                                let _ = tx.blocking_send(DeviceEvent::Marker(MarkerFrame {
-                                    timestamp_s: unix_now(),
-                                    text: "source restarted".into(),
-                                    source: RESTART_MARKER_SOURCE.into(),
-                                }));
                             }
+                            eprintln!("[lsl] '{name}' was restarted by its sender; connected to it again");
+                            accel = find_accelerometer_sibling(&found).and_then(open_accelerometer);
+                            inlet = fresh;
+                            sender = fresh_sender;
+                            current = found;
+                            behind = false;
+                            last_raw = None;
+                            if !synced {
+                                // another clock, not measured against ours: the break
+                                // cannot be counted in its stamps
+                                last_stamp = None;
+                            }
+                            last_data = std::time::Instant::now();
+                            if let Ok(mut s) = thread_stats.lock() {
+                                s.restarts += 1;
+                                s.compressed = inlet.is_compressed();
+                            }
+                            let _ = tx.blocking_send(DeviceEvent::Marker(MarkerFrame {
+                                timestamp_s: unix_now(),
+                                text: "source restarted".into(),
+                                source: RESTART_MARKER_SOURCE.into(),
+                            }));
                         }
                     }
 
                     if let Some((accel, to_g, accel_synced)) = accel.as_ref() {
                         if let Ok((stamps, values)) = accel.pull_chunk_d(64, 0.0) {
-                            let to_unix = wall.as_mut().filter(|_| *accel_synced).map(WallClock::offset);
+                            let to_unix = wall
+                                .as_mut()
+                                .zip(accel_synced.as_ref())
+                                .map(|(wall, sender)| wall.offset() + sender.offset());
                             for (row, stamp) in values.as_chunks::<3>().0.iter().zip(&stamps) {
                                 let g = |v: f64| (v * to_g) as f32;
                                 let frame = ImuFrame {
@@ -709,9 +747,28 @@ impl LslAdapter {
                     let Ok((timestamps, data)) = inlet.pull_chunk_d(256, 0.1) else {
                         continue;
                     };
-                    let Some(&newest) = timestamps.last() else {
+                    let (Some(&oldest), Some(&newest)) = (timestamps.first(), timestamps.last()) else {
                         continue;
                     };
+                    // Data again after a silence, or stamps that are suddenly from
+                    // another clock, and nobody above went looking: the inlet found its
+                    // stream again by itself. If that is another outlet — the sender was
+                    // restarted — its clock is not the one we measured: what the inlet
+                    // delivers is left aside, and the stream is gone over to as above
+                    // (which asks the sender for what it has sent meanwhile).
+                    if period > 0.0 {
+                        let silent = last_data.elapsed();
+                        let step = last_raw.map(|raw| oldest - raw);
+                        let another_clock = step.is_some_and(|s| s < -0.001 || s > silent.as_secs_f64() + 1.0);
+                        if behind || silent >= std::time::Duration::from_millis(300) || another_clock {
+                            restarted = find_restarted(&current);
+                            behind = behind || restarted.is_some();
+                        }
+                        if behind {
+                            continue;
+                        }
+                    }
+                    last_raw = Some(newest);
                     last_data = std::time::Instant::now();
                     let now = unix_now();
                     // On our LSL clock: keep its place on the Unix timeline
@@ -719,7 +776,8 @@ impl LslAdapter {
                     // microseconds between chunks).
                     if let Some(wall) = wall.as_mut() {
                         clock = ClockMap::Offset {
-                            offset: wall.offset(),
+                            // the sender's clock to ours, and ours to Unix time
+                            offset: wall.offset() + sender.as_ref().map_or(0.0, crate::sender_clock::SenderClock::offset),
                             exact: true,
                         };
                     }
@@ -728,7 +786,11 @@ impl LslAdapter {
                     // buffers) dropped shows up as a jump in the stamps.
                     let (mut gaps, mut missing) = (0u64, 0u64);
                     if period > 0.0 {
-                        for &ts in &timestamps {
+                        // (on our clock, where the sender's is measured: a break is
+                        // then as long as it was, also across a sender that was
+                        // restarted and counts its time from somewhere else)
+                        let to_ours = sender.as_ref().map_or(0.0, crate::sender_clock::SenderClock::offset);
+                        for ts in timestamps.iter().map(|ts| ts + to_ours) {
                             if let Some(prev) = last_stamp {
                                 let steps = (ts - prev) / period;
                                 if steps > 1.5 {

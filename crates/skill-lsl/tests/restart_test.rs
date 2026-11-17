@@ -16,11 +16,20 @@ use std::time::{Duration, Instant};
 fn source(name: &str, base: f32) -> (Arc<AtomicBool>, std::thread::JoinHandle<()>) {
     let info = StreamInfo::new(name, "EEG", 4, 250.0, ChannelFormat::Float32, "restart-test-device");
     let out = StreamOutlet::new(&info, 0, 360);
+    // A second stream of the same device, as a device with an accelerometer has: the same
+    // source id. Looking for the restarted stream by source id alone finds this one as often
+    // as the other.
+    let sibling = StreamOutlet::new(
+        &StreamInfo::new(&format!("{name}-Accelerometer"), "Accelerometer", 3, 0.0, ChannelFormat::Float32, "restart-test-device"),
+        0,
+        360,
+    );
     let stop = Arc::new(AtomicBool::new(false));
     let stop2 = stop.clone();
     let thread = std::thread::spawn(move || {
         let start = rlsl::clock::local_clock();
         let mut k = 0u32;
+        let _sibling = sibling;
         while !stop2.load(Ordering::Relaxed) {
             let due = start + f64::from(k) / 250.0;
             let wait = due - rlsl::clock::local_clock();
@@ -85,7 +94,8 @@ fn a_restarted_source_is_found_again() {
     let stats = adapter.stats();
     assert_eq!(stats.restarts, 1);
     assert!(
-        stats.gaps >= 1 && stats.missing_samples > 250,
+        // (the sender was gone for half a second: 125 samples at least)
+        stats.gaps >= 1 && stats.missing_samples > 100,
         "the break is counted: {stats:?}"
     );
     // still on this machine's clock, and after what came before
