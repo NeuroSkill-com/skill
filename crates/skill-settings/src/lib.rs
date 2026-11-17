@@ -1110,7 +1110,8 @@ pub struct UserSettings {
 
     /// Stop an LSL session automatically when no samples arrive for this many
     /// seconds.  `None` disables the idle watchdog for LSL streams entirely.
-    /// Default: `Some(15)` — matches the built-in data watchdog.
+    /// Default: `Some(120)` — long enough for a sender that is restarted, or
+    /// whose link is cut for a while, to be back in the same session.
     #[serde(default = "default_lsl_idle_timeout_secs")]
     pub lsl_idle_timeout_secs: Option<u64>,
 
@@ -1289,7 +1290,7 @@ pub fn default_tts_engine() -> String {
     skill_constants::TTS_ENGINE_DEFAULT.to_string()
 }
 pub fn default_lsl_idle_timeout_secs() -> Option<u64> {
-    Some(15)
+    Some(120)
 }
 pub fn default_inference_device() -> String {
     "gpu".into()

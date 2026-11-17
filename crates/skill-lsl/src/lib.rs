@@ -14,6 +14,7 @@
 
 mod iroh_lsl_adapter;
 mod lsl_adapter;
+mod sender_clock;
 #[cfg(test)]
 mod tests;
 mod virtual_source;

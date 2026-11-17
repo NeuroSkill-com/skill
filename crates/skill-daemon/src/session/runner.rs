@@ -346,8 +346,23 @@ pub(crate) async fn run_adapter_session(
     // Idle timeout: if no event arrives for this long after receiving at least
     // one EEG frame, treat it as a silent disconnect (e.g. BLE out of range
     // without a formal disconnect event).
+    //
+    // An LSL stream is different: its sender is a program that is restarted, or
+    // sits behind a link that is cut for a while, and the adapter goes over to
+    // it again when it is back — into the same session. How long such a stream
+    // may be silent is the user's setting (LSL tab: idle timeout; off: for as
+    // long as it takes), read each time it is needed, so a change counts at once.
     const IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
-    let idle_sleep = tokio::time::sleep(IDLE_TIMEOUT);
+    let idle_after = |kind: &str| -> std::time::Duration {
+        if kind.starts_with("lsl") {
+            let secs = state.lsl_idle_timeout_secs.lock().map(|g| *g).unwrap_or(None);
+            // off: a timer that does not go off in this session's lifetime
+            secs.map_or(std::time::Duration::from_secs(10 * 365 * 86_400), std::time::Duration::from_secs)
+        } else {
+            IDLE_TIMEOUT
+        }
+    };
+    let idle_sleep = tokio::time::sleep(idle_after(current_desc.kind));
     tokio::pin!(idle_sleep);
 
     // Session rollover: bound the blast radius of a daemon crash to ≤ N
@@ -389,7 +404,7 @@ pub(crate) async fn run_adapter_session(
                 break;
             }
             () = &mut idle_sleep, if sample_count > 0 => {
-                info!("no data for {}s — treating as silent disconnect", IDLE_TIMEOUT.as_secs());
+                info!("no data for {}s — treating as silent disconnect", idle_after(current_desc.kind).as_secs());
                 adapter.disconnect().await;
                 if let Ok(mut s) = state.status.lock() {
                     s.clear_device();
@@ -425,7 +440,7 @@ pub(crate) async fn run_adapter_session(
             }
             ev = adapter.next_event() => {
                 // Reset idle timer on every event.
-                idle_sleep.as_mut().reset(tokio::time::Instant::now() + IDLE_TIMEOUT);
+                idle_sleep.as_mut().reset(tokio::time::Instant::now() + idle_after(current_desc.kind));
 
                 let Some(ev) = ev else {
                     info!("event stream ended");
@@ -1195,6 +1210,48 @@ mod tests {
             }
         }
         assert!(saw_disconnect, "no DeviceDisconnected broadcast after idle timeout");
+    }
+
+    /// An LSL stream that goes silent is waited for as long as the LSL idle
+    /// timeout says — its sender may be back — and for ever when that is off.
+    #[tokio::test(start_paused = true)]
+    async fn a_silent_lsl_stream_is_waited_for_as_long_as_the_setting_says() {
+        let silent_lsl = |state: &AppState, wait_secs: u64| {
+            let mut queue = VecDeque::new();
+            queue.push_back(DeviceEvent::Connected(DeviceInfo {
+                name: "Stream".to_string(),
+                id: "lsl:test".to_string(),
+                ..Default::default()
+            }));
+            for i in 0..8 {
+                queue.push_back(DeviceEvent::Eeg(EegFrame {
+                    channels: vec![1.0, 2.0, 3.0, 4.0],
+                    timestamp_s: i as f64 / 256.0,
+                }));
+            }
+            let adapter = SilentAfterDataAdapter {
+                desc: eeg_desc("lsl", 4, 256.0),
+                queue,
+            };
+            let state = state.clone();
+            async move {
+                // (the sender of the cancel is kept for as long as the session runs)
+                let (_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
+                tokio::time::timeout(
+                    Duration::from_secs(wait_secs),
+                    run_adapter_session(state, cancel_rx, Box::new(adapter)),
+                )
+                .await
+                .is_ok()
+            }
+        };
+        let dir = TempDir::new().unwrap();
+        let state = test_state(dir.path());
+        *state.lsl_idle_timeout_secs.lock().unwrap() = Some(60);
+        assert!(!silent_lsl(&state, 45).await, "ended before the 60 s were over");
+        assert!(silent_lsl(&state, 70).await, "still waiting after the 60 s");
+        *state.lsl_idle_timeout_secs.lock().unwrap() = None;
+        assert!(!silent_lsl(&state, 24 * 3600).await, "ended although the timeout is off");
     }
 
     /// Panics mid-session, the way a real bug in the notification path would.
