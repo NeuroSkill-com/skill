@@ -2,7 +2,6 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! System tool handlers — `date`, `location`, `bash`, `skill`.
 
-use chrono::{Local, SecondsFormat, Utc};
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,22 +15,21 @@ use crate::types::LlmToolConfig;
 
 pub(crate) fn exec_date() -> Value {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    let now_utc = Utc::now();
-    let now_local = now_utc.with_timezone(&Local);
-    let offset_seconds = now_local.offset().local_minus_utc();
+    let now_local = skill_time::LocalNow::now();
+    let offset_seconds = now_local.offset_secs();
     let offset = format_utc_offset(offset_seconds);
-    // chrono's `%Z` for `Local` is only the offset again; ask the OS for the
-    // zone's name so the model does not mistake the time for UTC.
+    // Ask the OS for the zone's name (a bare `TZ` offset has none) so the
+    // model does not mistake the time for UTC.
     let zone = iana_time_zone::get_timezone().unwrap_or_else(|_| format!("UTC{offset}"));
     json!({
         "ok": true,
         "tool": "date",
-        "local_time": now_local.format("%A, %B %-d, %Y, %H:%M:%S").to_string(),
+        "local_time": now_local.format("%A, %B %-d, %Y, %H:%M:%S"),
         "note": format!("local_time is the user's wall-clock time in {zone} (UTC{offset}); report that, not iso_utc."),
         "unix": now.as_secs(),
         "unix_ms": now.as_millis() as u64,
-        "iso_utc": now_utc.to_rfc3339_opts(SecondsFormat::Millis, true),
-        "iso_local": now_local.to_rfc3339_opts(SecondsFormat::Millis, false),
+        "iso_utc": now_local.rfc3339_utc_millis(),
+        "iso_local": now_local.rfc3339_local_millis(),
         "timezone": {
             "name": zone,
             "offset": offset,

@@ -48,6 +48,7 @@ members = [
     "crates/skill-tts",
     "crates/skill-asr",
     "crates/skill-tty",
+    "crates/skill-time",
     "crates/skill-vision",
     "crates/iroh_test_client",
     "crates/iroh-example-client",
@@ -236,19 +237,19 @@ rlx-assets        = { git = "https://github.com/MIT-RLX/rlx-models.git", branch 
 anyhow = "1"
 thiserror = "2"
 base64 = "0.23"
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 # DuckDB — one version for the whole graph: libduckdb-sys declares
-# `links = "duckdb"`, so bids-layout (via bids-eeg) and our own stores must
-# agree on it.
+# `links = "duckdb"`, so every crate that links it must agree on it.  (bids-rs
+# no longer does: bids-layout dropped its DuckDB index in 0.0.5.)
 duckdb = { version = "1.20000", features = ["bundled", "json"] }
 # bids-rs — BIDS dataset reading/writing/validation (https://github.com/eugenehp/bids-rs).
 # Only the sqlite-free, network-free subcrates: the `bids` umbrella also pulls
 # bids-dataset (ureq 3 + its own TLS stack).
-bids-core     = { git = "https://github.com/eugenehp/bids-rs", branch = "main" }
-bids-io       = { git = "https://github.com/eugenehp/bids-rs", branch = "main" }
-bids-eeg      = { git = "https://github.com/eugenehp/bids-rs", branch = "main" }
-bids-validate = { git = "https://github.com/eugenehp/bids-rs", branch = "main" }
-bids-layout   = { git = "https://github.com/eugenehp/bids-rs", branch = "main" }
+bids-core     = "0.0.6"
+bids-io       = "0.0.6"
+bids-eeg      = "0.0.6"
+bids-validate = "0.0.6"
+bids-layout   = "0.0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # ── TLS crypto provider ──────────────────────────────────────────────────────

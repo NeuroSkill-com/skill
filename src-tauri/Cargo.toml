@@ -18,9 +18,8 @@ license = "GPL-3.0-only"
 # Chat, downloads, and shortcut UI are always compiled (no feature gate).
 #
 [features]
-default    = ["tts-kitten", "mw75-rfcomm", "gps"]
+default    = ["tts-kitten", "gps"]
 gps        = ["skill-data/gps"]
-mw75-rfcomm = ["skill-devices/mw75-rfcomm"]
 tts-kitten = ["dep:rodio", "skill-tts/tts-kitten"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:hound", "skill-tts/tts-neutts"]
 
@@ -87,9 +86,6 @@ tauri-plugin-process         = "2"
 tauri-plugin-notification    = "2"
 libc                         = "0.2"
 
-# Serial port enumeration (for Cyton board selection in settings)
-serialport = "4"
-
 # Async runtime (Tauri re-exports tokio but we need 'full' for select! etc.)
 tokio      = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
@@ -130,10 +126,6 @@ sha2 = "0.11"
 # WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
 hound = { version = "3", optional = true }
 
-# Apple Vision framework OCR — compiled ObjC FFI, runs on GPU/ANE.
-# No-op on non-macOS platforms.  (Renamed from apple-ocr → skill-vision.)
-skill-vision = { path = "../crates/skill-vision" }
-
 # Image processing — resize/pad screenshots before saving and embedding.
 # Compiled transitively via several deps; listing it here gives
 # screenshot.rs direct access to DynamicImage, GenericImageView, etc.
@@ -157,7 +149,6 @@ oura-api        = "0.1.2"
 skill-history   = { path = "../crates/skill-history" }
 skill-tray      = { path = "../crates/skill-tray" }
 # skill-exg removed — EXG embedding runs in skill-daemon only.
-skill-devices   = { path = "../crates/skill-devices" }
 skill-autostart     = { path = "../crates/skill-autostart" }
 skill-calendar      = { path = "../crates/skill-calendar" }
 skill-location      = { path = "../crates/skill-location" }
@@ -166,7 +157,7 @@ skill-label-index   = { path = "../crates/skill-label-index", features = ["turbo
 # skill-screenshots removed — screenshot capture/OCR/embedding runs in skill-daemon only.
 skill-daemon-common = { path = "../crates/skill-daemon-common" }
 skill-skills        = { path = "../crates/skill-skills", features = ["sync"] }
-chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }
+skill-time = { path = "../crates/skill-time" }
 
 # PNG encoding for the About-window icon data URL
 png    = "0.18"

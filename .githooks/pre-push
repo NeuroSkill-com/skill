@@ -140,6 +140,7 @@ if [ -n "$RUST_CHANGED" ]; then
   cargo fmt --check
 
   declare -a CRATES=()
+  declare -a STANDALONE=()
   NEED_SKILL=0
 
   while IFS= read -r f; do
@@ -148,8 +149,14 @@ if [ -n "$RUST_CHANGED" ]; then
       crates/*)
         crate_dir="${f#crates/}"
         crate_name="${crate_dir%%/*}"
+        # A crate with its own [workspace] (skill-viz3d) is not a member of
+        # the root one, so `-p` cannot name it; format-check it on its own.
         if [[ "$crate_name" == skill-* ]]; then
-          CRATES+=("-p" "$crate_name")
+          if grep -q '^\[workspace\]' "crates/$crate_name/Cargo.toml" 2>/dev/null; then
+            STANDALONE+=("crates/$crate_name/Cargo.toml")
+          else
+            CRATES+=("-p" "$crate_name")
+          fi
         fi
         ;;
       src-tauri/*)
@@ -171,6 +178,12 @@ if [ -n "$RUST_CHANGED" ]; then
     done <<EOP
 $uniq_pairs
 EOP
+  fi
+
+  if [ "${#STANDALONE[@]}" -gt 0 ]; then
+    while IFS= read -r manifest; do
+      cargo fmt --check --manifest-path "$manifest"
+    done < <(printf '%s\n' "${STANDALONE[@]}" | sort -u)
   fi
 
   if [ "${#CRATES[@]}" -gt 0 ]; then

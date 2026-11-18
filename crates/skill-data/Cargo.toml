@@ -23,7 +23,7 @@ arrow-array = { version = "60", optional = true }
 arrow-schema = { version = "60", optional = true }
 sysinfo     = "0.40"
 libc        = "0.2"
-chrono      = { version = "0.4", default-features = false, features = ["clock", "std"] }
+skill-time  = { path = "../skill-time" }
 
 [features]
 gps = ["skill-health/gps"]

@@ -192,13 +192,12 @@ pub(super) async fn cmd_oura_sync(state: &AppState, msg: &Value) -> Result<Value
             return json!({ "error": "health store not available" });
         };
         let oura = skill_oura::OuraSync::new(&token);
-        let now = chrono::Utc::now();
         let end = end_date
-            .and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok())
-            .unwrap_or(now.date_naive());
+            .and_then(|d| skill_time::Date::parse_ymd(&d))
+            .unwrap_or_else(skill_time::Date::today_utc);
         let start = start_date
-            .and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok())
-            .unwrap_or(end - chrono::Duration::days(30));
+            .and_then(|d| skill_time::Date::parse_ymd(&d))
+            .unwrap_or_else(|| end.minus_days(30));
 
         match oura.fetch(&start.to_string(), &end.to_string()) {
             Ok(payload) => {
@@ -250,7 +249,7 @@ fn read_oura_cursor(skill_dir: &std::path::Path) -> u32 {
 fn write_oura_cursor(skill_dir: &std::path::Path, cursor: u32, stats: &skill_oura::RingSyncStats) {
     let body = json!({
         "cursor": cursor,
-        "last_sync_unix": chrono::Utc::now().timestamp(),
+        "last_sync_unix": skill_time::now_unix(),
         "last_events": stats.events,
         "last_undated": stats.undated,
     });

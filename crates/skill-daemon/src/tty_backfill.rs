@@ -158,18 +158,15 @@ fn parse_filename_meta(path: &Path) -> Option<(u64, i64)> {
     if date.len() != 8 || clock.len() != 6 {
         return None;
     }
-    let yyyy: i32 = date[..4].parse().ok()?;
-    let mm: u32 = date[4..6].parse().ok()?;
-    let dd: u32 = date[6..8].parse().ok()?;
-    let hh: u32 = clock[..2].parse().ok()?;
-    let min: u32 = clock[2..4].parse().ok()?;
-    let ss: u32 = clock[4..6].parse().ok()?;
+    let yyyy: i16 = date[..4].parse().ok()?;
+    let mm: i8 = date[4..6].parse().ok()?;
+    let dd: i8 = date[6..8].parse().ok()?;
+    let hh: i8 = clock[..2].parse().ok()?;
+    let min: i8 = clock[2..4].parse().ok()?;
+    let ss: i8 = clock[4..6].parse().ok()?;
 
-    let dt = chrono::NaiveDate::from_ymd_opt(yyyy, mm, dd)?
-        .and_hms_opt(hh, min, ss)?
-        .and_local_timezone(chrono::Local)
-        .single()?;
-    Some((dt.timestamp() as u64, pid))
+    let ts = skill_time::local_civil_to_unix(yyyy, mm, dd, hh, min, ss)?;
+    Some((ts as u64, pid))
 }
 
 fn session_already_migrated(store: &skill_data::activity_store::ActivityStore, session_id: &str) -> bool {

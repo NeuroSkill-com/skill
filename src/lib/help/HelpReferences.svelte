@@ -99,11 +99,11 @@ const repos: { name: string; url: string; desc: string; lang: string; role: stri
       role: "All UI components, dashboard, charts, settings",
     },
     {
-      name: "Threlte",
-      url: "https://github.com/threlte/threlte",
-      desc: "Svelte wrapper for Three.js (3D rendering)",
-      lang: "TypeScript",
-      role: "3D electrode head, UMAP point cloud viewer",
+      name: "threers",
+      url: "https://github.com/eugenehp/threers",
+      desc: "three.js-style 3D renderer in Rust on wgpu, run as WebAssembly (WebGPU, WebGL2 fallback)",
+      lang: "Rust",
+      role: "3D electrode head, search graph, UMAP point cloud viewer",
     },
     {
       name: "shadcn-svelte",

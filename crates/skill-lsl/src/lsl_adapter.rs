@@ -679,7 +679,9 @@ impl LslAdapter {
                         let synced = fresh_sender.is_some();
                         if !synced {
                             fresh.set_postprocessing(
-                                rlsl::types::PROC_DEJITTER | rlsl::types::PROC_MONOTONIZE | rlsl::types::PROC_THREADSAFE,
+                                rlsl::types::PROC_DEJITTER
+                                    | rlsl::types::PROC_MONOTONIZE
+                                    | rlsl::types::PROC_THREADSAFE,
                             );
                         }
                         if (synced || wall.is_none()) && fresh.open_stream(5.0).is_ok() {
@@ -777,7 +779,8 @@ impl LslAdapter {
                     if let Some(wall) = wall.as_mut() {
                         clock = ClockMap::Offset {
                             // the sender's clock to ours, and ours to Unix time
-                            offset: wall.offset() + sender.as_ref().map_or(0.0, crate::sender_clock::SenderClock::offset),
+                            offset: wall.offset()
+                                + sender.as_ref().map_or(0.0, crate::sender_clock::SenderClock::offset),
                             exact: true,
                         };
                     }

@@ -404,7 +404,7 @@ pub(crate) async fn activity_hourly_heatmap_impl(
 ) -> Json<Vec<HourlyEditRow>> {
     let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
     let since = req.since;
-    let tz = chrono::Local::now().offset().local_minus_utc();
+    let tz = skill_time::local_offset_secs();
     let rows = tokio::task::spawn_blocking(move || {
         ActivityStore::open_readonly(&skill_dir)
             .map(|s| s.hourly_edit_heatmap(since, tz))

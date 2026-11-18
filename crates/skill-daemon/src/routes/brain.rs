@@ -183,7 +183,7 @@ async fn meeting_recovery(
 async fn optimal_hours(State(state): State<AppState>, Json(req): Json<SinceRequest>) -> BrainResult<serde_json::Value> {
     let since = req.since.unwrap_or(0);
     let top_n = req.top_n.unwrap_or(5);
-    let tz = chrono::Local::now().offset().local_minus_utc();
+    let tz = skill_time::local_offset_secs();
     run_query(&state, move |s| {
         serde_json::to_value(s.optimal_hours(since, top_n, tz)).unwrap_or_default()
     })
@@ -384,7 +384,7 @@ async fn developer_insights(
         .unwrap_or_default()
         .as_secs();
     let since = req.since.unwrap_or(now.saturating_sub(7 * 86400));
-    let tz = chrono::Local::now().offset().local_minus_utc();
+    let tz = skill_time::local_offset_secs();
     run_query(&state, move |s| s.developer_insights(since, tz)).await
 }
 
@@ -828,7 +828,7 @@ async fn browser_optimal_hours(
     Json(req): Json<SinceRequest>,
 ) -> BrainResult<serde_json::Value> {
     let since = req.since.unwrap_or(0);
-    let tz = chrono::Local::now().offset().local_minus_utc();
+    let tz = skill_time::local_offset_secs();
     run_query(&state, move |s| {
         serde_json::to_value(s.browser_optimal_research_hours(since, tz)).unwrap_or_default()
     })
@@ -917,7 +917,7 @@ async fn browser_night_owl(
     Json(req): Json<SinceRequest>,
 ) -> BrainResult<serde_json::Value> {
     let since = req.since.unwrap_or(0);
-    let tz = chrono::Local::now().offset().local_minus_utc();
+    let tz = skill_time::local_offset_secs();
     run_query(&state, move |s| {
         serde_json::to_value(s.browser_night_owl_analysis(since, tz)).unwrap_or_default()
     })

@@ -395,10 +395,10 @@ export const DEFAULT_FILTER_CONFIG = {
 
 // ── UMAP 3D viewer ───────────────────────────────────────────────────────────
 
-/** Colour for session A (query) points (hex integer for Three.js). */
+/** Colour for session A (query) points (hex integer, sRGB). */
 export const UMAP_COLOR_A = 0x3b82f6; // blue-500
 
-/** Colour for session B (neighbor) points (hex integer for Three.js). */
+/** Colour for session B (neighbor) points (hex integer, sRGB). */
 export const UMAP_COLOR_B = 0xf59e0b; // amber-500
 
 /** UMAP point cloud normalisation scale. */

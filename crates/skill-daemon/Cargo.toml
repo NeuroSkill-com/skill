@@ -174,7 +174,7 @@ async-trait = "0.1"
 hf-hub = "0.5"
 sha2 = "0.11"
 image = { version = "0.25", default-features = false, features = ["png"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+skill-time = { path = "../skill-time" }
 skill-daemon-common = { path = "../skill-daemon-common" }
 skill-daemon-state  = { path = "../skill-daemon-state" }
 skill-lsl           = { path = "../skill-lsl" }
@@ -227,7 +227,7 @@ rusqlite = { workspace = true }
 tempfile             = "3"
 mendi                = { version = "0.0.3", features = ["simulate"] }
 mw75                 = { version = "0.0.8" }
-rlsl                 = { version = "0.1.1" }
+rlsl                 = { version = "0.1.2" }
 tokio-tungstenite    = "0.30"
 
 # macOS: enable Metal backend for ZUNA/LUNA/TRIBEv2 GPU paths (embed-*-gpu).

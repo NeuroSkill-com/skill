@@ -22,7 +22,14 @@ fn source(name: &str, base: f32, history: f64) -> (Arc<AtomicBool>, std::thread:
     // source id. Looking for the restarted stream by source id alone finds this one as often
     // as the other.
     let sibling = StreamOutlet::new(
-        &StreamInfo::new(&format!("{name}-Accelerometer"), "Accelerometer", 3, 0.0, ChannelFormat::Float32, "restart-test-device"),
+        &StreamInfo::new(
+            &format!("{name}-Accelerometer"),
+            "Accelerometer",
+            3,
+            0.0,
+            ChannelFormat::Float32,
+            "restart-test-device",
+        ),
         0,
         360,
     );
@@ -139,6 +146,13 @@ fn nothing_a_restarted_source_has_sent_is_missing_when_it_keeps_its_last_seconds
         again.windows(2).find(|w| w[1] - w[0] != 1.0)
     );
     // and their times are the sender's own, in order, not the moment they were handed over
-    let stamps: Vec<f64> = after.iter().filter(|(v, _)| *v >= 1_000_000.0).map(|(_, t)| *t).collect();
-    assert!(stamps.windows(2).all(|w| w[1] > w[0] && w[1] - w[0] < 0.02), "4 ms apart, the replayed ones too");
+    let stamps: Vec<f64> = after
+        .iter()
+        .filter(|(v, _)| *v >= 1_000_000.0)
+        .map(|(_, t)| *t)
+        .collect();
+    assert!(
+        stamps.windows(2).all(|w| w[1] > w[0] && w[1] - w[0] < 0.02),
+        "4 ms apart, the replayed ones too"
+    );
 }

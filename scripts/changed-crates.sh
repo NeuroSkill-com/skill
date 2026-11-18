@@ -26,7 +26,7 @@ BASE_REF="${1:-origin/main}"
 ALL_TESTABLE="skill-eeg skill-data skill-constants skill-tools skill-devices \
 skill-settings skill-history skill-health skill-router skill-llm skill-autostart \
 skill-tts skill-gpu skill-headless skill-label-index skill-skills skill-jobs \
-skill-commands skill-exg skill-screenshots"
+skill-commands skill-exg skill-screenshots skill-time"
 
 # ── Get changed files ────────────────────────────────────────────────────────
 if [[ -n "${CHANGED_FILES:-}" ]]; then

@@ -8,8 +8,6 @@ the Free Software Foundation, version 3 only. -->
   Electrode guide — 3D interactive head with electrode positions and live signal quality.
 -->
 <script lang="ts">
-import { Canvas } from "@threlte/core";
-import { WebGLRenderer } from "three";
 import { Badge } from "#lib/components/ui/badge";
 import {
   electrodes as allElectrodes,
@@ -285,10 +283,6 @@ let head3DRef: any = $state(null);
 let isDragging = $state(false);
 let pointerDownPos = $state({ x: 0, y: 0 });
 
-function createRenderer(canvas: HTMLCanvasElement) {
-  return new WebGLRenderer({ canvas, antialias: true, alpha: true });
-}
-
 if (typeof window !== "undefined") {
   import("#lib/charts/ElectrodeHead3D.svelte").then((m) => {
     Head3D = m.default;
@@ -452,7 +446,6 @@ function qualityBg(val: number): string {
     onclick={onCanvasClick}
   >
     {#if Head3D}
-      <Canvas {createRenderer}>
         <Head3D bind:this={head3DRef} {system}
                 electrodesOverride={
                   activeTab === "muse"
@@ -482,7 +475,6 @@ function qualityBg(val: number): string {
                                           : null
                 }
                 {onSelect} selectedName={selectedElectrode?.name} />
-      </Canvas>
     {:else}
       <div class="absolute inset-0 flex items-center justify-center text-muted-foreground text-ui-md">
         Loading 3D view…
