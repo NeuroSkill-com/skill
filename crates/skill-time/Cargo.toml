@@ -1,0 +1,12 @@
+[package]
+name = "skill-time"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Wall-clock time, time zones and date parsing for NeuroSkill. The only crate that names the date library, so replacing it touches this crate alone."
+
+[dependencies]
+jiff = "1"
+
+[lints]
+workspace = true

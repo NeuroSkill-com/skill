@@ -104,7 +104,7 @@ pub(crate) fn encode_webp(img: &DynamicImage, _quality: u8, out_path: &Path) -> 
 /// Generate `YYYYMMDDHHmmss` timestamp (UTC) from current time.
 ///
 /// All timestamps in the screenshot system are **UTC** — matching the EEG
-/// embedding pipeline's `YYYYMMDDHHmmss` convention.  `chrono::DateTime::from_timestamp`
+/// embedding pipeline's `YYYYMMDDHHmmss` convention.
 /// Returns `("YYYYMMDDHHmmss", unix_secs)` — always UTC.
 ///
 /// Delegates to [`skill_data::util::yyyymmddhhmmss_utc_str`].

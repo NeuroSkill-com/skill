@@ -155,7 +155,7 @@ if [[ -f "$TTY_SRC" ]]; then
   cp "$TTY_SRC" "$TTY_MACOS/skill-tty"
   chmod +x "$TTY_MACOS/skill-tty"
 
-  # skill-tty has no heavy dylib deps (libc / dirs / chrono / zstd are all
+  # skill-tty has no heavy dylib deps (libc / dirs / skill-time / zstd are all
   # statically linked or system frameworks), so we don't need a Frameworks dir.
 
   if [[ -f "$TAURI_DIR/icons/icon.icns" ]]; then

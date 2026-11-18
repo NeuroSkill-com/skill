@@ -450,7 +450,7 @@ mod unix {
         let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("no $HOME"))?;
         let dir = home.join(".skill").join("terminal-logs");
         std::fs::create_dir_all(&dir)?;
-        let ts = chrono::Local::now().format("%Y%m%d-%H%M%S");
+        let ts = skill_time::local_now_format("%Y%m%d-%H%M%S");
         let pid = std::process::id();
         Ok(dir.join(format!("{ts}-{pid}.log")))
     }

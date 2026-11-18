@@ -385,7 +385,7 @@ pub fn unload_os_service_best_effort() {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339()
+    skill_time::now_rfc3339_utc()
 }
 
 pub fn copy_atomic(src: &Path, dst: &Path) -> std::io::Result<()> {

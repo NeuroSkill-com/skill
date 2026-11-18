@@ -362,7 +362,7 @@ jobs:
             BASE=""
           fi
 
-          ALL_CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg"
+          ALL_CRATE_FLAGS="-p skill-eeg -p skill-data -p skill-constants -p skill-tools -p skill-devices -p skill-settings -p skill-history -p skill-health -p skill-router -p skill-llm -p skill-autostart -p skill-tts -p skill-gpu -p skill-headless -p skill-label-index -p skill-skills -p skill-jobs -p skill-commands -p skill-exg -p skill-time"
 
           if [[ "${{ inputs.run_all_tests }}" == "true" ]]; then
             # Manual dispatch with run_all_tests — test everything

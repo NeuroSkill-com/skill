@@ -18,11 +18,10 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
 import { onDestroy, onMount, untrack } from "svelte";
-import type * as THREE_NS from "three";
-import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
 import { fmtDateTimeLocale } from "#lib/format";
 import { t } from "#lib/i18n/index.svelte";
 import { getResolved } from "#lib/stores/theme.svelte";
+import { loadViz3d, runView, type SceneViewer } from "#lib/viz3d";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface GraphNode {
@@ -59,21 +58,18 @@ interface GraphEdge {
     | "meeting_prox";
 }
 
-type ThreeModule = typeof import("three");
-type NodeMesh = THREE_NS.Mesh<THREE_NS.BufferGeometry, THREE_NS.MeshPhongMaterial>;
-type NodeSprite = THREE_NS.Sprite;
-type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
-
-// Internal scene-object records ──────────────────────────────────────────
+// Internal scene-object records — meshes, sprites and lines are handles
+// into the threers scene (crates/skill-viz3d, `SceneViewer`).
 interface NodeEntry {
-  mesh: NodeMesh;
-  sprite: NodeSprite | null;
+  mesh: number;
+  sprite: number | null;
   node: GraphNode;
+  position: [number, number, number];
   baseColor: number; // original hex color
   baseEmissive: number; // original emissiveIntensity
 }
 interface EdgeEntry {
-  line: EdgeLine;
+  line: number;
   fromId: string;
   toId: string;
   baseOpacity: number; // opacity at rest
@@ -208,16 +204,13 @@ let eegGradientCss = $derived.by(() => {
   return `linear-gradient(to right, ${stops.join(", ")})`;
 });
 
-// ── Three.js refs ─────────────────────────────────────────────────────────
-let THREE!: ThreeModule;
-let scene!: THREE_NS.Scene;
-let camera!: THREE_NS.PerspectiveCamera;
-let renderer!: THREE_NS.WebGLRenderer;
-let controls!: OrbitControlsType;
-let animId = 0;
-let resizeObs: ResizeObserver | null = null;
-let raycaster!: THREE_NS.Raycaster;
-let mouse!: THREE_NS.Vector2;
+// ── Scene refs ────────────────────────────────────────────────────────────
+let viewer: SceneViewer | null = null;
+let canvas: HTMLCanvasElement | null = null;
+/** Everything `buildGraph` makes, so a rebuild can clear it at once. */
+let graphGroup = 0;
+let stopView: (() => void) | null = null;
+let destroyed = false;
 let canvasClickHandler: ((e: MouseEvent) => void) | null = null;
 let canvasPointerDownHandler: ((e: PointerEvent) => void) | null = null;
 
@@ -346,103 +339,65 @@ function computePositions(ns: GraphNode[], usePcaLayout: boolean): Map<string, [
 
 // ── Scene init ────────────────────────────────────────────────────────────
 async function initScene() {
-  THREE = await import("three");
-  const controlsMod = (await import("three/addons/controls/OrbitControls.js")) as {
-    OrbitControls: new (object: THREE_NS.Camera, domElement?: HTMLElement) => OrbitControlsType;
-  };
-  const OrbitControls = controlsMod.OrbitControls;
   if (!container) return;
+  const viz = await loadViz3d();
+  if (destroyed || !container) return;
 
-  const w = container.clientWidth,
-    h = container.clientHeight;
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(w, h);
-  container.appendChild(renderer.domElement);
+  const el = document.createElement("canvas");
+  el.className = "absolute inset-0 block h-full w-full touch-none";
+  container.prepend(el);
+  canvas = el;
+  const v = await viz.SceneViewer.create(el, 55, 0.1, 500);
+  if (destroyed) {
+    v.free();
+    return;
+  }
+  viewer = v;
+  v.setCameraPosition(0, 8, 28);
+  v.setTarget(0, 0, 0);
 
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 500);
-  camera.position.set(0, 8, 28);
+  v.addAmbientLight(0xffffff, 0.6);
+  v.addDirectionalLight(0xffffff, 0.9, 10, 20, 10);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-  dir.position.set(10, 20, 10);
-  scene.add(dir);
-
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.07;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.5;
-
-  raycaster = new THREE.Raycaster();
-  raycaster.params.Points = { threshold: 0.5 };
-  mouse = new THREE.Vector2();
-
-  scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
+  // OrbitControls: damping 0.07, auto-rotate 0.5, default buttons.
+  v.setOrbit(true, 0.07, true, 0.5, 0, Number.POSITIVE_INFINITY, 0, 1, 2);
+  v.setBackground(isDark ? BG_DARK : BG_LIGHT);
 
   // Subtle grid pattern
   const gridColor = isDark ? 0x1a1a28 : 0xe8ecf0;
-  const grid = new THREE.GridHelper(60, 20, gridColor, gridColor);
-  grid.position.y = -15;
-  grid.material.opacity = isDark ? 0.08 : 0.1;
-  grid.material.transparent = true;
-  scene.add(grid);
+  const grid = v.addGrid(0, 60, 20, gridColor, gridColor, isDark ? 0.08 : 0.1);
+  v.setPosition(grid, 0, -15, 0);
 
+  graphGroup = v.addGroup(0);
   buildGraph();
   loaded = true;
-  animate();
+  stopView = runView(el, v, { onFrame: stepFly });
 
-  // Attach click directly to the canvas so OrbitControls pointer-event
-  // handling doesn't interfere with event bubbling to the container div.
-  // Track pointer-down position; only treat as a click if the pointer
-  // moved less than 5 px (i.e. not a drag/orbit gesture).
+  // Only treat it as a click if the pointer moved less than 5 px (i.e. not a
+  // drag/orbit gesture).
   let downX = 0,
     downY = 0;
   canvasPointerDownHandler = (e: PointerEvent) => {
     downX = e.clientX;
     downY = e.clientY;
   };
-  renderer.domElement.addEventListener("pointerdown", canvasPointerDownHandler, { passive: true });
+  el.addEventListener("pointerdown", canvasPointerDownHandler, { passive: true });
   canvasClickHandler = (e: MouseEvent) => {
     const dx = e.clientX - downX,
       dy = e.clientY - downY;
     if (dx * dx + dy * dy > 25) return; // was a drag, ignore
     onClick(e);
   };
-  renderer.domElement.addEventListener("click", canvasClickHandler);
-  renderer.domElement.addEventListener("dblclick", onDblClick);
-
-  resizeObs = new ResizeObserver(() => {
-    if (!container) return;
-    const w2 = container.clientWidth,
-      h2 = container.clientHeight;
-    camera.aspect = w2 / h2;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w2, h2);
-  });
-  resizeObs.observe(container);
+  el.addEventListener("click", canvasClickHandler);
+  el.addEventListener("dblclick", onDblClick);
 }
 
 function buildGraph() {
-  if (!THREE || !scene) return;
+  const v = viewer;
+  if (!v) return;
 
   // Clear previous
-  for (const ne of nodeEntries) {
-    ne.mesh.geometry.dispose();
-    ne.mesh.material.dispose();
-    scene.remove(ne.mesh);
-    if (ne.sprite) {
-      ne.sprite.material.map?.dispose();
-      ne.sprite.material.dispose();
-      scene.remove(ne.sprite);
-    }
-  }
-  for (const ee of edgeEntries) {
-    ee.line.geometry.dispose();
-    ee.line.material.dispose();
-    scene.remove(ee.line);
-  }
+  v.clear(graphGroup);
   nodeEntries = [];
   edgeEntries = [];
   selectedNodeId = null;
@@ -494,14 +449,18 @@ function buildGraph() {
       if (toNode?.kind === "eeg_point") edgeCol = eegColor(toNode.timestamp_unix);
     }
 
-    const geo = new THREE.BufferGeometry();
-    geo.setFromPoints([
-      new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
-      new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
-    ]);
-    const mat = new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: opa, linewidth: 1 });
-    const line = new THREE.Line(geo, mat);
-    scene.add(line);
+    const line = v.addLines(
+      graphGroup,
+      new Float32Array([...fromPos, ...toPos]),
+      undefined,
+      true,
+      0,
+      0,
+      edgeCol,
+      opa,
+      true,
+      true,
+    );
     edgeEntries.push({ line, fromId: edge.from_id, toId: edge.to_id, baseOpacity: opa });
   }
 
@@ -536,48 +495,35 @@ function buildGraph() {
     }
     const emissive = BASE_EMISSIVE[node.kind];
 
-    // EEG nodes = diamond (octahedron), meetings = pyramid (tetrahedron), rest = sphere
-    const geo =
-      node.kind === "eeg_point"
-        ? new THREE.OctahedronGeometry(radius)
-        : node.kind === "meeting"
-          ? new THREE.TetrahedronGeometry(radius)
-          : new THREE.SphereGeometry(radius, 24, 16);
-    const mat = new THREE.MeshPhongMaterial({
-      color,
-      shininess: 90,
-      emissive: color,
-      emissiveIntensity: emissive,
-      transparent: true, // required so we can dim with opacity
-      opacity: 1.0,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(pos[0], pos[1], pos[2]);
-    scene.add(mesh);
+    // EEG nodes = diamond (octahedron), meetings = pyramid (tetrahedron), rest = sphere.
+    // Phong, shininess 90, glowing in its own colour; transparent so it can be dimmed.
+    const shape = node.kind === "eeg_point" ? 1 : node.kind === "meeting" ? 2 : 0;
+    const mesh = v.addMesh(graphGroup, shape, radius, 24, 16, 1, color, 1.0, true, true, 1, 0, 90, color, emissive);
+    v.setPosition(mesh, pos[0], pos[1], pos[2]);
 
     // Label sprite — text labels for most kinds, thumbnail for screenshots
-    let sprite: NodeSprite | null = null;
+    let sprite: number | null = null;
     if (node.kind === "screenshot" && node.screenshot_url) {
       sprite = makeScreenshotSprite(node.screenshot_url, node.text ?? "");
-      if (sprite) {
-        sprite.position.set(pos[0], pos[1] + radius + 2.0, pos[2]);
-        scene.add(sprite);
-      }
+      if (sprite !== null) v.setPosition(sprite, pos[0], pos[1] + radius + 2.0, pos[2]);
     } else if (node.kind === "query" || node.kind === "text_label" || node.kind === "found_label") {
       sprite = makeTextSprite(node.text ?? "", color, node.kind);
-      if (sprite) {
-        sprite.position.set(pos[0], pos[1] + radius + 1.2, pos[2]);
-        scene.add(sprite);
-      }
+      if (sprite !== null) v.setPosition(sprite, pos[0], pos[1] + radius + 1.2, pos[2]);
     }
 
-    nodeEntries.push({ mesh, sprite, node, baseColor: color, baseEmissive: emissive });
+    nodeEntries.push({ mesh, sprite, node, position: pos, baseColor: color, baseEmissive: emissive });
   }
 }
 
+/** A 2D canvas's pixels, for a sprite. */
+function pixels(c: HTMLCanvasElement, ctx: CanvasRenderingContext2D): Uint8Array {
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  return new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+}
+
 // ── Text sprite ───────────────────────────────────────────────────────────
-function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"]): NodeSprite | null {
-  if (!text || !THREE) return null;
+function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"]): number | null {
+  if (!text || !viewer) return null;
   const W = 1024,
     H = 128;
   const canvas = document.createElement("canvas");
@@ -609,18 +555,13 @@ function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"])
   while (ctx.measureText(label).width > maxW && label.length > 4) label = `${label.slice(0, -4)}…`;
   ctx.fillText(label, W / 2, H / 2);
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
-  const spr = new THREE.Sprite(mat);
   const sW = kind === "query" ? 9 : kind === "text_label" ? 7.5 : 6;
-  spr.scale.set(sW, sW * (H / W), 1);
-  return spr;
+  return viewer.addSprite(graphGroup, W, H, pixels(canvas, ctx), sW, sW * (H / W), 1.0, false);
 }
 
 // ── Screenshot thumbnail sprite ─────────────────────────────────────────
-function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
-  if (!THREE) return null;
+function makeScreenshotSprite(url: string, label: string): number | null {
+  if (!viewer) return null;
   const W = 512,
     H = 384;
   // Start with a placeholder frame; the image loads asynchronously.
@@ -650,12 +591,9 @@ function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
     ctx.fillText(lbl, W / 2, H - 12);
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
-  const spr = new THREE.Sprite(mat);
   const sW = 5.5;
-  spr.scale.set(sW, sW * (H / W), 1);
+  const spr = viewer.addSprite(graphGroup, W, H, pixels(canvas, ctx), sW, sW * (H / W), 1.0, false);
+  const repaint = () => viewer?.setSpriteImage(spr, W, H, pixels(canvas, ctx));
 
   // Load actual screenshot image asynchronously and repaint the canvas
   const img = new Image();
@@ -697,7 +635,7 @@ function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
       ctx.fillText(lbl, W / 2, H - 12);
     }
 
-    tex.needsUpdate = true;
+    repaint();
   };
   img.onerror = () => {
     // On failure, draw a fallback "no image" indicator
@@ -706,7 +644,7 @@ function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("(no image)", W / 2, H / 2);
-    tex.needsUpdate = true;
+    repaint();
   };
   img.src = url;
 
@@ -716,18 +654,20 @@ function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
 // ── Selection / highlight ─────────────────────────────────────────────────
 function applySelection(nodeId: string | null) {
   selectedNodeId = nodeId;
+  const v = viewer;
+  if (!v) return;
 
   if (nodeId === null) {
     // Reset everything
     for (const ne of nodeEntries) {
-      ne.mesh.material.opacity = 1.0;
-      ne.mesh.material.emissiveIntensity = ne.baseEmissive;
-      if (ne.sprite) ne.sprite.material.opacity = 1.0;
+      v.setOpacity(ne.mesh, 1.0);
+      v.setEmissive(ne.mesh, ne.baseColor, ne.baseEmissive);
+      if (ne.sprite !== null) v.setOpacity(ne.sprite, 1.0);
     }
     for (const ee of edgeEntries) {
-      ee.line.material.opacity = ee.baseOpacity;
+      v.setOpacity(ee.line, ee.baseOpacity);
     }
-    if (controls) controls.autoRotate = true;
+    v.setAutoRotate(true);
     return;
   }
 
@@ -750,42 +690,41 @@ function applySelection(nodeId: string | null) {
     const isDimmed = !connectedNodeIds.has(ne.node.id);
 
     if (isSelected) {
-      ne.mesh.material.opacity = 1.0;
-      ne.mesh.material.emissiveIntensity = SEL_EMISSIVE;
+      v.setOpacity(ne.mesh, 1.0);
+      v.setEmissive(ne.mesh, ne.baseColor, SEL_EMISSIVE);
     } else if (isNeighbor) {
-      ne.mesh.material.opacity = 1.0;
-      ne.mesh.material.emissiveIntensity = Math.min(0.9, ne.baseEmissive * NEIGHBOR_EMISSIVE_MULT);
+      v.setOpacity(ne.mesh, 1.0);
+      v.setEmissive(ne.mesh, ne.baseColor, Math.min(0.9, ne.baseEmissive * NEIGHBOR_EMISSIVE_MULT));
     } else {
-      ne.mesh.material.opacity = DIM_OPACITY;
-      ne.mesh.material.emissiveIntensity = DIM_EMISSIVE;
+      v.setOpacity(ne.mesh, DIM_OPACITY);
+      v.setEmissive(ne.mesh, ne.baseColor, DIM_EMISSIVE);
     }
 
-    if (ne.sprite) ne.sprite.material.opacity = isDimmed ? DIM_OPACITY * 0.8 : 1.0;
+    if (ne.sprite !== null) v.setOpacity(ne.sprite, isDimmed ? DIM_OPACITY * 0.8 : 1.0);
   }
 
   // Apply to edges
   for (let i = 0; i < edgeEntries.length; i++) {
     const ee = edgeEntries[i];
     if (connectedEdgeIdx.has(i)) {
-      ee.line.material.opacity = Math.min(1.0, ee.baseOpacity * EDGE_BRIGHT_MULT);
+      v.setOpacity(ee.line, Math.min(1.0, ee.baseOpacity * EDGE_BRIGHT_MULT));
     } else {
-      ee.line.material.opacity = DIM_EDGE_OPACITY;
+      v.setOpacity(ee.line, DIM_EDGE_OPACITY);
     }
   }
 
-  if (controls) controls.autoRotate = false;
+  v.setAutoRotate(false);
 }
 
 // ── Raycasting helper ─────────────────────────────────────────────────────
 function getHitNode(e: MouseEvent): NodeEntry | null {
-  if (!renderer || !container || !raycaster || !mouse) return null;
-  const rect = renderer.domElement.getBoundingClientRect();
-  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(nodeEntries.map((ne) => ne.mesh));
-  if (!hits.length) return null;
-  return nodeEntries.find((ne) => ne.mesh === hits[0].object) ?? null;
+  if (!viewer || !canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  const hit = viewer.pick(x, y, new Uint32Array(nodeEntries.map((ne) => ne.mesh)), 0.5);
+  if (!hit.length) return null;
+  return nodeEntries.find((ne) => ne.mesh === hit[0]) ?? null;
 }
 
 // ── Mouse move (hover tooltip + cursor) ───────────────────────────────────
@@ -824,11 +763,9 @@ function onMouseMove(e: MouseEvent) {
         edgeEntries
           .filter((ee) => ee.fromId === n.id || ee.toId === n.id)
           .map((ee) =>
-            ee.line.material.color
-              ? edgeEntries.find((e) => e === ee)?.fromId === n.id
-                ? `→ ${edges.find((ed) => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}`
-                : `← ${edges.find((ed) => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}`
-              : "",
+            ee.fromId === n.id
+              ? `→ ${edges.find((ed) => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}`
+              : `← ${edges.find((ed) => ed.from_id === ee.fromId && ed.to_id === ee.toId)?.kind ?? ""}`,
           ),
       );
       if (edgeKinds.size > 0) lines.push([...edgeKinds].filter(Boolean).join(", "));
@@ -870,7 +807,7 @@ function resetCamera() {
     tz: 0,
     t: 0,
   };
-  if (controls) controls.autoRotate = true;
+  viewer?.setAutoRotate(true);
 }
 
 // ── Fly camera to a node (smooth tween) ──────────────────────────────────
@@ -878,22 +815,23 @@ let flyTarget: { x: number; y: number; z: number; tx: number; ty: number; tz: nu
 
 function flyToNode(node: GraphNode) {
   const ne = nodeEntries.find((n) => n.node.id === node.id);
-  if (!ne || !camera || !controls) return;
-  const p = ne.mesh.position;
+  if (!ne || !viewer) return;
+  const [px, py, pz] = ne.position;
   const radius = KIND_RADIUS[node.kind] ?? 0.5;
   // Target: position the camera at a comfortable distance from the node
-  const dir = camera.position.clone().sub(p).normalize();
+  const [cx, cy, cz] = viewer.cameraPosition();
+  const dir = normalize3([cx - px, cy - py, cz - pz]);
   const dist = radius * 8 + 4;
   flyTarget = {
-    x: p.x + dir.x * dist,
-    y: p.y + dir.y * dist + 2,
-    z: p.z + dir.z * dist,
-    tx: p.x,
-    ty: p.y,
-    tz: p.z,
+    x: px + dir[0] * dist,
+    y: py + dir[1] * dist + 2,
+    z: pz + dir[2] * dist,
+    tx: px,
+    ty: py,
+    tz: pz,
     t: 0,
   };
-  if (controls) controls.autoRotate = false;
+  viewer.setAutoRotate(false);
 }
 
 function onDblClick(e: MouseEvent) {
@@ -905,28 +843,25 @@ function onDblClick(e: MouseEvent) {
   }
 }
 
-// ── Animation loop ────────────────────────────────────────────────────────
-function animate() {
-  animId = requestAnimationFrame(animate);
-
-  // Smooth camera fly-to
-  if (flyTarget) {
-    flyTarget.t += 0.03;
-    const t = Math.min(1, flyTarget.t);
-    const ease = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; // easeInOutQuad
-    camera.position.x += (flyTarget.x - camera.position.x) * ease * 0.08;
-    camera.position.y += (flyTarget.y - camera.position.y) * ease * 0.08;
-    camera.position.z += (flyTarget.z - camera.position.z) * ease * 0.08;
-    if (controls) {
-      controls.target.x += (flyTarget.tx - controls.target.x) * ease * 0.08;
-      controls.target.y += (flyTarget.ty - controls.target.y) * ease * 0.08;
-      controls.target.z += (flyTarget.tz - controls.target.z) * ease * 0.08;
-    }
-    if (t >= 1) flyTarget = null;
-  }
-
-  controls?.update();
-  renderer?.render(scene, camera);
+// ── Animation: the smooth camera fly-to, before each frame ────────────────
+function stepFly() {
+  if (!flyTarget || !viewer) return;
+  flyTarget.t += 0.03;
+  const t = Math.min(1, flyTarget.t);
+  const ease = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; // easeInOutQuad
+  const [cx, cy, cz] = viewer.cameraPosition();
+  const [tx, ty, tz] = viewer.target();
+  viewer.setCameraPosition(
+    cx + (flyTarget.x - cx) * ease * 0.08,
+    cy + (flyTarget.y - cy) * ease * 0.08,
+    cz + (flyTarget.z - cz) * ease * 0.08,
+  );
+  viewer.setTarget(
+    tx + (flyTarget.tx - tx) * ease * 0.08,
+    ty + (flyTarget.ty - ty) * ease * 0.08,
+    tz + (flyTarget.tz - tz) * ease * 0.08,
+  );
+  if (t >= 1) flyTarget = null;
 }
 
 // ── Reactivity on data change or PCA toggle ──────────────────────────────
@@ -934,13 +869,14 @@ function animate() {
 // Concatenate all deps into a string to force Svelte to track every value.
 $effect(() => {
   const _trigger = `${nodes.length}|${edges.length}|${usePca}|${colorMode}|${hiddenKinds.join(",")}`;
-  if (!loaded || !THREE || (nodes.length === 0 && edges.length === 0)) return;
+  if (!loaded || !viewer || (nodes.length === 0 && edges.length === 0)) return;
   untrack(() => buildGraph());
 });
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 $effect(() => {
-  if (scene) scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
+  const bg = isDark ? BG_DARK : BG_LIGHT;
+  viewer?.setBackground(bg);
 });
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -948,16 +884,16 @@ onMount(() => {
   initScene();
 });
 onDestroy(() => {
-  cancelAnimationFrame(animId);
-  resizeObs?.disconnect();
-  if (renderer?.domElement) {
-    if (canvasClickHandler) renderer.domElement.removeEventListener("click", canvasClickHandler);
-    renderer.domElement.removeEventListener("dblclick", onDblClick);
-    if (canvasPointerDownHandler) renderer.domElement.removeEventListener("pointerdown", canvasPointerDownHandler);
+  destroyed = true;
+  stopView?.();
+  if (canvas) {
+    if (canvasClickHandler) canvas.removeEventListener("click", canvasClickHandler);
+    canvas.removeEventListener("dblclick", onDblClick);
+    if (canvasPointerDownHandler) canvas.removeEventListener("pointerdown", canvasPointerDownHandler);
+    canvas.remove();
   }
-  controls?.dispose();
-  renderer?.dispose();
-  if (renderer?.domElement?.parentNode === container) container?.removeChild(renderer.domElement);
+  viewer?.free();
+  viewer = null;
 });
 
 // ── Legend helpers ────────────────────────────────────────────────────────
@@ -1016,7 +952,7 @@ function fmtTs(unix: number) {
 }
 </script>
 
-<!-- Canvas container — click handled directly on renderer.domElement in initScene() -->
+<!-- Canvas container — the canvas is added by initScene(), which handles clicks on it -->
 <div class="relative w-full h-full" bind:this={container}
      style="cursor:{hoveredNodeId ? 'pointer' : 'default'}"
      onmousemove={onMouseMove}
@@ -1041,8 +977,8 @@ function fmtTs(unix: number) {
   {#if loaded && nodeEntries.length > 1}
     {@const mmSize = 80}
     {@const mmNodes = nodeEntries.map(ne => ({
-      x: ne.mesh.position.x,
-      z: ne.mesh.position.z,
+      x: ne.position[0],
+      z: ne.position[2],
       kind: ne.node.kind,
       selected: ne.node.id === selectedNodeId,
     }))}

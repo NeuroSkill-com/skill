@@ -104,7 +104,12 @@ fn time_service(info: &StreamInfo) -> Option<String> {
 
 /// Ask the sender's time service a few times; what was answered in time.
 fn measure(address: &str) -> Option<f64> {
-    let socket = UdpSocket::bind(if address.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" }).ok()?;
+    let socket = UdpSocket::bind(if address.starts_with('[') {
+        "[::]:0"
+    } else {
+        "0.0.0.0:0"
+    })
+    .ok()?;
     let mut sent: Vec<(u32, f64)> = Vec::with_capacity(PROBES);
     let mut exchanges = Vec::new();
     let mut buf = [0u8; 256];
@@ -113,7 +118,10 @@ fn measure(address: &str) -> Option<f64> {
         // (as it will come back: the time is matched as text read again)
         let text = format!("{t0}");
         let t0: f64 = text.parse().ok()?;
-        if socket.send_to(format!("LSL:timedata\r\n{number} {text}\r\n").as_bytes(), address).is_err() {
+        if socket
+            .send_to(format!("LSL:timedata\r\n{number} {text}\r\n").as_bytes(), address)
+            .is_err()
+        {
             continue;
         }
         sent.push((number, t0));
@@ -126,7 +134,10 @@ fn measure(address: &str) -> Option<f64> {
             }
             let Ok((n, _)) = socket.recv_from(&mut buf) else { break };
             let t3 = rlsl::clock::local_clock();
-            if let Some(e) = std::str::from_utf8(&buf[..n]).ok().and_then(|a| read_answer(a, &sent, t3)) {
+            if let Some(e) = std::str::from_utf8(&buf[..n])
+                .ok()
+                .and_then(|a| read_answer(a, &sent, t3))
+            {
                 exchanges.push(e);
             }
         }
@@ -151,23 +162,25 @@ impl SenderClock {
         let offset = Arc::new(AtomicU64::new(first.to_bits()));
         let stop = Arc::new(AtomicBool::new(false));
         let (shared, stopped) = (offset.clone(), stop.clone());
-        let spawned = std::thread::Builder::new().name("lsl-sender-clock".into()).spawn(move || {
-            let mut jumps = 0;
-            while !stopped.load(Ordering::Relaxed) {
-                // in short sleeps: the thread ends soon after its owner does
-                let until = Instant::now() + MEASURE_EVERY;
-                while Instant::now() < until && !stopped.load(Ordering::Relaxed) {
-                    std::thread::sleep(Duration::from_millis(100));
+        let spawned = std::thread::Builder::new()
+            .name("lsl-sender-clock".into())
+            .spawn(move || {
+                let mut jumps = 0;
+                while !stopped.load(Ordering::Relaxed) {
+                    // in short sleeps: the thread ends soon after its owner does
+                    let until = Instant::now() + MEASURE_EVERY;
+                    while Instant::now() < until && !stopped.load(Ordering::Relaxed) {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    if stopped.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    if let Some(measured) = measure(&address) {
+                        let in_use = f64::from_bits(shared.load(Ordering::Relaxed));
+                        shared.store(follow(in_use, measured, &mut jumps).to_bits(), Ordering::Relaxed);
+                    }
                 }
-                if stopped.load(Ordering::Relaxed) {
-                    break;
-                }
-                if let Some(measured) = measure(&address) {
-                    let in_use = f64::from_bits(shared.load(Ordering::Relaxed));
-                    shared.store(follow(in_use, measured, &mut jumps).to_bits(), Ordering::Relaxed);
-                }
-            }
-        });
+            });
         spawned.ok().map(|_| Self { offset, stop })
     }
 
@@ -192,7 +205,10 @@ mod tests {
         // the sender's clock is 100 s ahead; 2 ms each way, 1 ms at the sender
         let sent = [(0, 10.000), (1, 10.060), (2, 10.120)];
         let quick = read_answer(" 2 10.12 110.122 110.123", &sent, 10.125).unwrap();
-        assert!((quick.round_trip_s - 0.004).abs() < 1e-9 && (quick.offset_s + 100.0).abs() < 1e-9, "{quick:?}");
+        assert!(
+            (quick.round_trip_s - 0.004).abs() < 1e-9 && (quick.offset_s + 100.0).abs() < 1e-9,
+            "{quick:?}"
+        );
         // The link is slow: the answer to the first query arrives while the third is waited
         // for. Read against its own query it is a slow exchange, and not believed —
         let late = read_answer(" 0 10 110.2 110.201", &sent, 10.401).unwrap();
@@ -206,7 +222,16 @@ mod tests {
         assert_eq!(read_answer("nonsense", &sent, 10.125), None);
         // the quickest exchanges decide
         let e = |round_trip_s, offset_s| Exchange { round_trip_s, offset_s };
-        assert_eq!(offset_of(vec![e(0.09, 5.0), e(0.002, 1.0), e(0.003, 1.1), e(0.004, 0.9), e(0.2, 9.0)]), Some(1.0));
+        assert_eq!(
+            offset_of(vec![
+                e(0.09, 5.0),
+                e(0.002, 1.0),
+                e(0.003, 1.1),
+                e(0.004, 0.9),
+                e(0.2, 9.0)
+            ]),
+            Some(1.0)
+        );
     }
 
     #[test]
@@ -230,7 +255,14 @@ mod tests {
 
     #[test]
     fn a_sender_in_this_program_is_on_the_same_clock() {
-        let info = StreamInfo::new(&format!("SenderClock-{}", std::process::id()), "EEG", 1, 100.0, rlsl::types::ChannelFormat::Float32, "sender-clock-test");
+        let info = StreamInfo::new(
+            &format!("SenderClock-{}", std::process::id()),
+            "EEG",
+            1,
+            100.0,
+            rlsl::types::ChannelFormat::Float32,
+            "sender-clock-test",
+        );
         let _outlet = rlsl::outlet::StreamOutlet::new(&info, 0, 360);
         let found = rlsl::resolver::resolve_by_property("name", &info.name(), 1, 5.0);
         let clock = SenderClock::of(found.first().expect("the stream resolves")).expect("its time service answers");

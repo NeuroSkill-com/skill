@@ -39,7 +39,7 @@ pub fn save_json<T: serde::Serialize>(path: &Path, val: &T) {
 
 /// Return the local timezone's UTC offset in seconds (e.g. -28800 for UTC-8).
 pub fn local_tz_offset_secs() -> i32 {
-    chrono::Local::now().offset().local_minus_utc()
+    skill_time::local_offset_secs()
 }
 
 // ── Blob ↔ f32 conversion ─────────────────────────────────────────────────────

@@ -5,8 +5,8 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!--
-  3D UMAP scatter viewer — raw Three.js (no Threlte).
-  Creates its own canvas and renderer, bypassing any framework issues.
+  3D UMAP scatter viewer, drawn by threers in WebAssembly (crates/skill-viz3d,
+  `SceneViewer`). Creates its own canvas.
 
   - Shows random placeholder cloud immediately while UMAP computes
   - Animates smoothly to real positions when data arrives
@@ -15,9 +15,6 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
-import type * as THREE_NS from "three";
-import type { Color as ThreeColor, Vector3 as ThreeVector3 } from "three";
-import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
 import { Spinner } from "#lib/components/ui/spinner";
 import {
   UMAP_ANIM_MS,
@@ -51,12 +48,9 @@ import {
   turboRaw,
   utcToLocalDate,
 } from "#lib/umap/umap-helpers";
+import { colorFromHsl, linearFromHex, loadViz3d, runView, type SceneViewer } from "#lib/viz3d";
 
-type ThreeModule = typeof import("three");
-type LabelCloudGroup = THREE_NS.Group & { __updatePositions?: (pos: Float32Array) => void };
-type LabelMesh = THREE_NS.Mesh<THREE_NS.BufferGeometry, THREE_NS.MeshBasicMaterial> & { _baseScale?: number };
-type TraceLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
-type TraceSphere = THREE_NS.Mesh<THREE_NS.SphereGeometry, THREE_NS.MeshBasicMaterial>;
+type Rgb = [number, number, number];
 
 let {
   data,
@@ -131,7 +125,7 @@ let jetGradientCSS = $derived(
 let traceActive = $state(false);
 let traceProgress = $state(0); // how many segments drawn so far
 let traceTotal = $state(0); // total segments
-let traceGroup: THREE_NS.Group | null = null; // THREE.Group holding trace objects
+let traceGroup: number | null = null; // scene group holding trace objects
 let traceSorted: number[] = []; // indices into curPoints sorted by utc
 let traceTimer: ReturnType<typeof setInterval> | null = null;
 /** Time range of the trace for the gradient legend. */
@@ -175,9 +169,9 @@ function buildTraceTimeTicks(sorted: number[]) {
 }
 // Per-segment grow animation
 let traceGrowing: {
-  line: TraceLine;
-  sphere: TraceSphere;
-  edgeLine?: TraceLine;
+  line: number;
+  sphere: number;
+  edgeLine?: number;
   start: number;
   from: number[];
   to: number[];
@@ -224,19 +218,25 @@ const uniqueLabels = $derived.by((): LabelEntry[] => {
   return all.map((e, i) => ({ ...e, hue: i / Math.max(all.length, 1) }));
 });
 
-// ── Imperative refs ──────────────────────────────────────────────────────
-let THREE!: ThreeModule;
-let scene!: THREE_NS.Scene;
-let camera!: THREE_NS.PerspectiveCamera;
-let renderer!: THREE_NS.WebGLRenderer;
-let controls!: OrbitControlsType;
-let animId = 0;
-let resizeObs: ResizeObserver | null = null;
+// ── Imperative refs — objects are handles into the threers scene ─────────
+let viewer: SceneViewer | null = null;
+let canvasEl: HTMLCanvasElement | null = null;
+let stopView: (() => void) | null = null;
+let destroyed = false;
+let grid = 0;
 
-let mainCloud: THREE_NS.Points<THREE_NS.BufferGeometry, THREE_NS.PointsMaterial> | null = null;
-let labelCloud: LabelCloudGroup | null = null;
+let mainCloud: number | null = null;
+/** World units within which a hover or click lands on a point. */
+let pointThreshold = 0.5;
+/** The labelled points' group, and per labelled point its dot and ring. */
+let labelCloud: number | null = null;
+let labelDots: number[] = [];
+let labelRings: number[] = [];
+let labelBaseScale: number[] = [];
+/** Dot or ring handle → index into `labeledIdx`. */
+let labelOfHandle = new Map<number, number>();
 // Multi-label: map from label name → { group, colorIdx }
-let linkGroups = new Map<string, { group: THREE_NS.Group; colorIdx: number }>();
+let linkGroups = new Map<string, { group: number; colorIdx: number }>();
 let curPoints = $state<UmapPoint[]>([]);
 let labeledIdx: number[] = [];
 let curPositions: Float32Array<ArrayBufferLike> = new Float32Array(0);
@@ -244,7 +244,7 @@ let baseColors: Float32Array | null = null;
 /** Saved dot/ring base colors for each labeled point (index matches labeledIdx). */
 let labelCloudBase: { dc: number; rr: number; rg: number; rb: number }[] = [];
 /** Group of cylinder meshes drawn between selected and proximate labeled nodes. */
-let highlightEdgesGroup: THREE_NS.Group | null = null;
+let highlightEdgesGroup: number | null = null;
 let _onCmdDown: ((e: KeyboardEvent) => void) | null = null;
 let _onCmdUp: ((e: KeyboardEvent) => void) | null = null;
 let _onPointerMove: ((e: PointerEvent) => void) | null = null;
@@ -256,8 +256,6 @@ let fromPos: Float32Array | null = null;
 let toPos: Float32Array | null = null;
 let animStart = 0;
 
-let raycaster!: THREE_NS.Raycaster;
-let mouse!: THREE_NS.Vector2;
 let downPos = { x: 0, y: 0 };
 
 // Track data changes
@@ -305,31 +303,19 @@ function randomPositions(pts: UmapPoint[]): Float32Array {
   return out;
 }
 
-function disposeSceneObject(obj: THREE_NS.Object3D) {
-  const geometry = (obj as { geometry?: { dispose?: () => void } }).geometry;
-  geometry?.dispose?.();
-  const material = (obj as { material?: THREE_NS.Material | THREE_NS.Material[] }).material;
-  if (Array.isArray(material)) {
-    for (const mat of material) mat.dispose();
-  } else {
-    material?.dispose?.();
-  }
-}
-
 // ── Label-connection lines (multi-label) ──────────────────────────────
 let nextColorIdx = 0;
 
 function removeLinkGroup(label: string) {
   const entry = linkGroups.get(label);
-  if (!entry || !scene) return;
-  entry.group.traverse(disposeSceneObject);
-  scene.remove(entry.group);
+  if (!entry || !viewer) return;
+  viewer.remove(entry.group);
   linkGroups.delete(label);
   activeLabels = activeLabels.filter((l) => l !== label);
 }
 
 function clearAllLinks() {
-  if (!scene) return;
+  if (!viewer) return;
   for (const [label] of linkGroups) removeLinkGroup(label);
   linkGroups.clear();
   activeLabels = [];
@@ -365,16 +351,15 @@ function runAutoConnect() {
 // ── Proximity highlight ───────────────────────────────────────────────────
 
 function clearHighlightEdges() {
-  if (!highlightEdgesGroup || !scene) return;
-  scene.remove(highlightEdgesGroup);
-  highlightEdgesGroup.traverse(disposeSceneObject);
+  if (highlightEdgesGroup === null || !viewer) return;
+  viewer.remove(highlightEdgesGroup);
   highlightEdgesGroup = null;
 }
 
 function applyHighlight() {
-  if (!mainCloud) return;
-  const colorAttr = mainCloud.geometry.getAttribute("color");
-  if (!colorAttr) return;
+  const v = viewer;
+  if (!v || mainCloud === null) return;
+  const cloud = mainCloud;
   const n = curPoints.length;
 
   // ── 1. Compute selection / proximity sets ─────────────────────────────
@@ -404,10 +389,7 @@ function applyHighlight() {
 
   // ── 2. Recolor mainCloud point buffer ─────────────────────────────────
   if (!selectedLabel || !baseColors) {
-    if (baseColors) {
-      colorAttr.array.set(baseColors);
-      colorAttr.needsUpdate = true;
-    }
+    if (baseColors) v.setAttribute(cloud, "color", baseColors);
   } else {
     const newC = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
@@ -427,80 +409,74 @@ function applyHighlight() {
         newC[i * 3 + 2] = baseColors[i * 3 + 2] * 0.5;
       }
     }
-    colorAttr.array.set(newC);
-    colorAttr.needsUpdate = true;
+    v.setAttribute(cloud, "color", newC);
   }
 
   // ── 3. Recolor labelCloud dot + ring meshes ───────────────────────────
-  if (labelCloud && labeledIdx.length) {
+  if (labelCloud !== null && labeledIdx.length) {
     for (let li = 0; li < labeledIdx.length; li++) {
       const ptIdx = labeledIdx[li];
-      const dot = labelCloud.children[li * 2] as LabelMesh | undefined;
-      const ring = labelCloud.children[li * 2 + 1] as LabelMesh | undefined;
-      if (!dot?.material || !ring?.material) continue;
+      const dot = labelDots[li];
+      const ring = labelRings[li];
+      if (dot === undefined || ring === undefined) continue;
 
-      const baseScale = dot._baseScale ?? 1;
+      const baseScale = labelBaseScale[li] ?? 1;
+      const scale = (h: number, k: number) => v.setScale(h, k, k, k);
 
       if (!selectedLabel) {
         const base = labelCloudBase[li];
         if (base) {
-          dot.material.color.setHex(base.dc);
-          dot.material.transparent = false;
-          dot.material.opacity = 1;
-          ring.material.color.setRGB(base.rr, base.rg, base.rb);
-          ring.material.opacity = 0.85;
+          v.setColor(dot, base.dc);
+          v.setOpacity(dot, 1, false);
+          v.setColorRgb(ring, base.rr, base.rg, base.rb);
+          v.setOpacity(ring, 0.85);
         }
-        dot.scale.setScalar(baseScale);
-        ring.scale.setScalar(baseScale);
+        scale(dot, baseScale);
+        scale(ring, baseScale);
       } else if (selIdx.has(ptIdx)) {
         // Selected: bright gold, scaled up for emphasis.
-        dot.material.color.setRGB(1, 0.88, 0.2);
-        dot.material.transparent = false;
-        dot.material.opacity = 1;
-        ring.material.color.setRGB(1, 0.88, 0.2);
-        ring.material.opacity = 1.0;
-        dot.scale.setScalar(baseScale * 1.45);
-        ring.scale.setScalar(baseScale * 1.45);
+        v.setColorRgb(dot, 1, 0.88, 0.2);
+        v.setOpacity(dot, 1, false);
+        v.setColorRgb(ring, 1, 0.88, 0.2);
+        v.setOpacity(ring, 1.0);
+        scale(dot, baseScale * 1.45);
+        scale(ring, baseScale * 1.45);
       } else if (proxIdx.has(ptIdx)) {
         const entry = uniqueLabels.find((u) => u.label === curPoints[ptIdx].label);
         const [r, g, b] = hslToRgb(entry?.hue ?? 0, 0.85, 0.62);
-        dot.material.color.setRGB(r, g, b);
-        dot.material.transparent = false;
-        dot.material.opacity = 1;
-        ring.material.color.setRGB(r, g, b);
-        ring.material.opacity = 0.9;
-        dot.scale.setScalar(baseScale);
-        ring.scale.setScalar(baseScale);
+        v.setColorRgb(dot, r, g, b);
+        v.setOpacity(dot, 1, false);
+        v.setColorRgb(ring, r, g, b);
+        v.setOpacity(ring, 0.9);
+        scale(dot, baseScale);
+        scale(ring, baseScale);
       } else {
         // Unrelated: 50% transparent, full colour, normal size.
         const base = labelCloudBase[li];
         if (base) {
-          dot.material.color.setHex(base.dc);
-          ring.material.color.setRGB(base.rr, base.rg, base.rb);
+          v.setColor(dot, base.dc);
+          v.setColorRgb(ring, base.rr, base.rg, base.rb);
         }
-        dot.material.transparent = true;
-        dot.material.opacity = 0.5;
-        ring.material.opacity = 0.5 * 0.85;
-        dot.scale.setScalar(baseScale);
-        ring.scale.setScalar(baseScale);
+        v.setOpacity(dot, 0.5, true);
+        v.setOpacity(ring, 0.5 * 0.85);
+        scale(dot, baseScale);
+        scale(ring, baseScale);
       }
-      dot.material.needsUpdate = true;
-      ring.material.needsUpdate = true;
     }
   }
 
   // ── 4. Cylinder edges between selected and proximate labeled nodes ─────
   clearHighlightEdges();
-  if (selectedLabel && scene && THREE && selIdx.size > 0 && proxIdx.size > 0) {
-    // Pre-build selected-label position vectors.
-    const selVecs = [...selIdx].map(
-      (i) => new THREE.Vector3(curPositions[i * 3], curPositions[i * 3 + 1], curPositions[i * 3 + 2]),
-    );
+  if (selectedLabel && selIdx.size > 0 && proxIdx.size > 0) {
+    const at = (i: number): Rgb => [curPositions[i * 3], curPositions[i * 3 + 1], curPositions[i * 3 + 2]];
+    const distance = (a: Rgb, b: Rgb) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    // Pre-build selected-label positions.
+    const selVecs = [...selIdx].map(at);
 
     // For each proximate label keep only the single closest (proxPt → selPt) pair.
     interface BestEdge {
-      pVec: ThreeVector3;
-      sVec: ThreeVector3;
+      pVec: Rgb;
+      sVec: Rgb;
       dist: number;
       hue: number;
     }
@@ -508,11 +484,11 @@ function applyHighlight() {
     for (const ptIdx of proxIdx) {
       // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
       const lbl = curPoints[ptIdx].label!;
-      const pVec = new THREE.Vector3(curPositions[ptIdx * 3], curPositions[ptIdx * 3 + 1], curPositions[ptIdx * 3 + 2]);
+      const pVec = at(ptIdx);
       let minD = Infinity,
         nearSel = selVecs[0];
       for (const sv of selVecs) {
-        const d = pVec.distanceTo(sv);
+        const d = distance(pVec, sv);
         if (d < minD) {
           minD = d;
           nearSel = sv;
@@ -527,8 +503,8 @@ function applyHighlight() {
 
     // Dot-sphere radius in world units (matches buildCloud: UMAP_POINT_SIZE * pointScale * 1.2)
     const dotR = UMAP_POINT_SIZE * pointScale * 1.2;
-    const yAxis = new THREE.Vector3(0, 1, 0);
-    const edgesGrp = new THREE.Group();
+    const edgesGrp = v.addGroup(0);
+    let count = 0;
 
     for (const { pVec, sVec, dist, hue } of best.values()) {
       // t ∈ [0,1]: 1 = touching, 0 = at the radius limit → thicker when closer.
@@ -536,39 +512,27 @@ function applyHighlight() {
       const radius = dotR * (0.06 + 0.7 * t); // thin at edge, fat when close
       const opacity = 0.2 + 0.7 * t; // subtle at edge, strong when close
 
-      const dir = new THREE.Vector3().subVectors(sVec, pVec);
-      const len = dir.length();
+      const dir: Rgb = [sVec[0] - pVec[0], sVec[1] - pVec[1], sVec[2] - pVec[2]];
+      const len = Math.hypot(...dir);
       if (len < 0.001) continue;
 
       const [r, g, b] = hslToRgb(hue, 0.85, 0.62);
-      const geo = new THREE.CylinderGeometry(radius, radius, len, 8, 1);
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(r, g, b),
-        transparent: true,
-        opacity,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(new THREE.Vector3().addVectors(pVec, sVec).multiplyScalar(0.5));
-
-      const dirNorm = dir.clone().normalize();
-      if (Math.abs(yAxis.dot(dirNorm)) < 0.9999) {
-        mesh.quaternion.setFromUnitVectors(yAxis, dirNorm);
-      } else if (dirNorm.y < 0) {
-        mesh.rotation.z = Math.PI;
-      }
-      edgesGrp.add(mesh);
+      // Cylinder along +Y, `len` tall, turned onto the edge.
+      const mesh = v.addMesh(edgesGrp, 4, radius, len, 8, 0, 0xffffff, opacity, true, true, 0, 0, 0, 0, 0);
+      v.setColorRgb(mesh, r, g, b);
+      v.setPosition(mesh, (pVec[0] + sVec[0]) / 2, (pVec[1] + sVec[1]) / 2, (pVec[2] + sVec[2]) / 2);
+      v.alignY(mesh, dir[0], dir[1], dir[2]);
+      count++;
     }
 
-    if (edgesGrp.children.length) {
-      highlightEdgesGroup = edgesGrp;
-      scene.add(highlightEdgesGroup);
-    }
+    if (count) highlightEdgesGroup = edgesGrp;
+    else v.remove(edgesGrp);
   }
 }
 
 function addLinks(label: string) {
-  if (!THREE || !scene || linkGroups.has(label)) return;
+  const v = viewer;
+  if (!v || linkGroups.has(label)) return;
   const matching: number[] = [];
   for (let i = 0; i < curPoints.length; i++) if (curPoints[i].label === label) matching.push(i);
   if (matching.length < 2) return;
@@ -578,31 +542,18 @@ function addLinks(label: string) {
   const linkColor = LINK_PALETTE[colorIdx % LINK_PALETTE.length];
   nextColorIdx++;
 
-  const group = new THREE.Group();
+  const group = v.addGroup(0);
 
-  // Main connecting line (2× thick)
+  // Main connecting line
   const lp: number[] = [];
   for (const idx of matching) lp.push(curPositions[idx * 3], curPositions[idx * 3 + 1], curPositions[idx * 3 + 2]);
-  const lg = new THREE.BufferGeometry();
-  lg.setAttribute("position", new THREE.Float32BufferAttribute(lp, 3));
-  group.add(
-    new THREE.Line(
-      lg,
-      new THREE.LineBasicMaterial({
-        color: linkColor,
-        transparent: true,
-        opacity: 0.6,
-        linewidth: 2,
-      }),
-    ),
-  );
+  v.addLines(group, new Float32Array(lp), undefined, true, 0, 0, linkColor, 0.6, true, true);
 
   // Node spheres
-  const sg = new THREE.SphereGeometry(UMAP_POINT_SIZE * pointScale * 0.44, 8, 8);
+  const sr = UMAP_POINT_SIZE * pointScale * 0.44;
   for (const idx of matching) {
-    const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: linkColor, transparent: true, opacity: 0.9 }));
-    m.position.set(curPositions[idx * 3], curPositions[idx * 3 + 1], curPositions[idx * 3 + 2]);
-    group.add(m);
+    const m = v.addMesh(group, 0, sr, 8, 8, 0, linkColor, 0.9, true, true, 1, 0, 0, 0, 0);
+    v.setPosition(m, curPositions[idx * 3], curPositions[idx * 3 + 1], curPositions[idx * 3 + 2]);
   }
 
   // Dashed lines to centroid
@@ -617,25 +568,11 @@ function addLinks(label: string) {
   cx2 /= matching.length;
   cy2 /= matching.length;
   cz2 /= matching.length;
-  const dm = new THREE.LineDashedMaterial({
-    color: linkColor,
-    transparent: true,
-    opacity: 0.25,
-    dashSize: 0.3,
-    gapSize: 0.2,
-    linewidth: 2,
-  });
   for (const idx of matching) {
-    const dg = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(curPositions[idx * 3], curPositions[idx * 3 + 1], curPositions[idx * 3 + 2]),
-      new THREE.Vector3(cx2, cy2, cz2),
-    ]);
-    const dl = new THREE.Line(dg, dm.clone());
-    dl.computeLineDistances();
-    group.add(dl);
+    const seg = [curPositions[idx * 3], curPositions[idx * 3 + 1], curPositions[idx * 3 + 2], cx2, cy2, cz2];
+    v.addLines(group, new Float32Array(seg), undefined, true, 0.3, 0.2, linkColor, 0.25, true, true);
   }
 
-  scene.add(group);
   linkGroups.set(label, { group, colorIdx });
   activeLabels = [...activeLabels, label];
 }
@@ -648,10 +585,7 @@ function stopTrace() {
     traceTimer = null;
   }
   traceGrowing = [];
-  if (traceGroup && scene) {
-    traceGroup.traverse(disposeSceneObject);
-    scene.remove(traceGroup);
-  }
+  if (traceGroup !== null) viewer?.remove(traceGroup);
   traceGroup = null;
   traceSorted = [];
   traceProgress = 0;
@@ -662,7 +596,8 @@ function stopTrace() {
 }
 
 function startTrace() {
-  if (!THREE || !scene || curPoints.length < 2) return;
+  const v = viewer;
+  if (!v || curPoints.length < 2) return;
   stopTrace(); // clean any previous
 
   // Sort all point indices chronologically
@@ -676,30 +611,45 @@ function startTrace() {
   traceActive = true;
   buildTraceTimeTicks(indices);
 
-  traceGroup = new THREE.Group();
-  scene.add(traceGroup);
-  const activeTraceGroup = traceGroup;
+  const activeTraceGroup = v.addGroup(0);
+  traceGroup = activeTraceGroup;
 
   // Trace line edge color: white on dark, black on light
-  const edgeColor = new THREE.Color(isDark ? 0xffffff : 0x000000);
+  const edgeColor = isDark ? 0xffffff : 0x000000;
 
   // Place a small sphere on the first point (jet start)
   const firstIdx = traceSorted[0];
   const [jr0, jg0, jb0] = jet(0);
-  const sphereGeo = new THREE.SphereGeometry(UMAP_POINT_SIZE * pointScale * 0.8, 8, 8);
-  const sphereMat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(jr0, jg0, jb0),
-    transparent: true,
-    opacity: 1.0,
-  });
-  const firstSphere = new THREE.Mesh(sphereGeo, sphereMat);
-  firstSphere.position.set(curPositions[firstIdx * 3], curPositions[firstIdx * 3 + 1], curPositions[firstIdx * 3 + 2]);
-  activeTraceGroup.add(firstSphere);
+  const firstSphere = v.addMesh(
+    activeTraceGroup,
+    0,
+    UMAP_POINT_SIZE * pointScale * 0.8,
+    8,
+    8,
+    0,
+    0xffffff,
+    1.0,
+    true,
+    true,
+    1,
+    0,
+    0,
+    0,
+    0,
+  );
+  v.setColorRgb(firstSphere, jr0, jg0, jb0);
+  v.setPosition(
+    firstSphere,
+    curPositions[firstIdx * 3],
+    curPositions[firstIdx * 3 + 1],
+    curPositions[firstIdx * 3 + 2],
+  );
 
   let segIdx = 0;
 
   traceTimer = setInterval(() => {
-    if (segIdx >= traceSorted.length - 1) {
+    const tv = viewer;
+    if (!tv || segIdx >= traceSorted.length - 1) {
       if (traceTimer) {
         clearInterval(traceTimer);
         traceTimer = null;
@@ -716,40 +666,48 @@ function startTrace() {
       by = curPositions[iB * 3 + 1],
       bz = curPositions[iB * 3 + 2];
 
-    // Create line starting at point A with zero length (will animate to B)
+    // Lines start at point A with zero length (they animate to B).
+    const zero = new Float32Array([ax, ay, az, ax, ay, az]);
     // Edge line (contrasting outline behind the jet-colored line)
-    const edgeLineGeo = new THREE.BufferGeometry();
-    edgeLineGeo.setAttribute("position", new THREE.Float32BufferAttribute([ax, ay, az, ax, ay, az], 3));
-    const edgeLineMat = new THREE.LineBasicMaterial({
-      color: edgeColor,
-      transparent: true,
-      opacity: isDark ? 0.5 : 0.3,
-      linewidth: 3,
-    });
-    const edgeLine = new THREE.Line(edgeLineGeo, edgeLineMat);
-    activeTraceGroup.add(edgeLine);
+    const edgeLine = tv.addLines(
+      activeTraceGroup,
+      zero,
+      undefined,
+      true,
+      0,
+      0,
+      edgeColor,
+      isDark ? 0.5 : 0.3,
+      true,
+      true,
+    );
 
     // Jet-colored line on top
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute("position", new THREE.Float32BufferAttribute([ax, ay, az, ax, ay, az], 3));
     const age = segIdx / Math.max(traceSorted.length - 1, 1);
     const [jr, jg, jb] = jet(age);
-    const lineColor = new THREE.Color(jr, jg, jb);
-    const lineMat = new THREE.LineBasicMaterial({
-      color: lineColor,
-      transparent: true,
-      opacity: 0.9,
-      linewidth: 2,
-    });
-    const line = new THREE.Line(lineGeo, lineMat);
-    activeTraceGroup.add(line);
+    const line = tv.addLines(activeTraceGroup, zero, undefined, true, 0, 0, 0xffffff, 0.9, true, true);
+    tv.setColorRgb(line, jr, jg, jb);
 
     // Destination sphere — also jet-colored for continuity
-    const sGeo = new THREE.SphereGeometry(UMAP_POINT_SIZE * pointScale * 0.6, 8, 8);
-    const sMat = new THREE.MeshBasicMaterial({ color: lineColor, transparent: true, opacity: 0 });
-    const sphere = new THREE.Mesh(sGeo, sMat);
-    sphere.position.set(bx, by, bz);
-    activeTraceGroup.add(sphere);
+    const sphere = tv.addMesh(
+      activeTraceGroup,
+      0,
+      UMAP_POINT_SIZE * pointScale * 0.6,
+      8,
+      8,
+      0,
+      0xffffff,
+      0,
+      true,
+      true,
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+    tv.setColorRgb(sphere, jr, jg, jb);
+    tv.setPosition(sphere, bx, by, bz);
 
     traceGrowing.push({
       line,
@@ -775,7 +733,8 @@ function toggleTrace() {
 
 /** Called from the render loop to animate growing segments. */
 function updateTraceGrow() {
-  if (!traceGrowing.length) return;
+  const v = viewer;
+  if (!v || !traceGrowing.length) return;
   const now = performance.now();
   const done: number[] = [];
   for (let i = 0; i < traceGrowing.length; i++) {
@@ -786,21 +745,12 @@ function updateTraceGrow() {
     const bx = seg.from[0] + (seg.to[0] - seg.from[0]) * e;
     const by = seg.from[1] + (seg.to[1] - seg.from[1]) * e;
     const bz = seg.from[2] + (seg.to[2] - seg.from[2]) * e;
-    const pos = seg.line.geometry.getAttribute("position");
-    pos.array[3] = bx;
-    pos.array[4] = by;
-    pos.array[5] = bz;
-    pos.needsUpdate = true;
+    const pos = new Float32Array([seg.from[0], seg.from[1], seg.from[2], bx, by, bz]);
+    v.setAttribute(seg.line, "position", pos);
     // Grow edge line in sync
-    if (seg.edgeLine) {
-      const ep = seg.edgeLine.geometry.getAttribute("position");
-      ep.array[3] = bx;
-      ep.array[4] = by;
-      ep.array[5] = bz;
-      ep.needsUpdate = true;
-    }
+    if (seg.edgeLine !== undefined) v.setAttribute(seg.edgeLine, "position", pos);
     // Fade in destination sphere
-    seg.sphere.material.opacity = e * 1.0;
+    v.setOpacity(seg.sphere, e * 1.0);
     if (t >= 1) done.push(i);
   }
   // Remove completed from active list (iterate backwards)
@@ -812,12 +762,12 @@ function updateTraceGrow() {
 // ── Build point clouds ───────────────────────────────────────────────────
 
 /** Build a date→color map using evenly spaced hues. */
-function buildDatePalette(pts: UmapPoint[]): Map<string, ThreeColor> {
+function buildDatePalette(pts: UmapPoint[]): Map<string, { rgb: Rgb; hex: number }> {
   const dates = [...new Set(pts.filter((p) => p.utc > 0).map((p) => utcToLocalDate(p.utc)))].sort();
-  const map = new Map<string, ThreeColor>();
+  const map = new Map<string, { rgb: Rgb; hex: number }>();
   for (let i = 0; i < dates.length; i++) {
     const hue = dates.length <= 1 ? 0.55 : i / dates.length;
-    map.set(dates[i], new THREE.Color().setHSL(hue, UMAP_DATE_SAT, UMAP_DATE_LIT));
+    map.set(dates[i], colorFromHsl(hue, UMAP_DATE_SAT, UMAP_DATE_LIT));
   }
   return map;
 }
@@ -826,12 +776,17 @@ function buildDatePalette(pts: UmapPoint[]): Map<string, ThreeColor> {
 let dateLegend = $state<{ date: string; hex: string }[]>([]);
 
 function buildCloud(pts: UmapPoint[], positions: Float32Array) {
+  const v = viewer;
+  if (!v) return;
   const n = pts.length;
-  const colA = new THREE.Color(COLOR_A),
-    colB = new THREE.Color(COLOR_B);
+  const colA = linearFromHex(COLOR_A),
+    colB = linearFromHex(COLOR_B);
   const datePalette = colorByDate ? buildDatePalette(pts) : null;
   if (datePalette) {
-    dateLegend = [...datePalette.entries()].map(([date, col]) => ({ date, hex: `#${col.getHexString()}` }));
+    dateLegend = [...datePalette.entries()].map(([date, col]) => ({
+      date,
+      hex: `#${col.hex.toString(16).padStart(6, "0")}`,
+    }));
   } else {
     dateLegend = [];
   }
@@ -857,65 +812,43 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
   }
   const gradSpan = gradMaxUtc - gradMinUtc || 1;
   // Muted grey for the "other" session — lighter on dark, darker on light
-  const fadedColor = isDark ? new THREE.Color(0.35, 0.35, 0.4) : new THREE.Color(0.72, 0.72, 0.75);
+  const fadedColor: Rgb = isDark ? [0.35, 0.35, 0.4] : [0.72, 0.72, 0.75];
 
   const colors = new Float32Array(n * 3);
-  const lPos: number[] = [],
-    lCol: number[] = [],
-    lIdx: number[] = [];
+  const lIdx: number[] = [];
   for (let i = 0; i < n; i++) {
-    let c: ThreeColor;
+    let c: Rgb;
     if (gradSess) {
       const sessIdx = gradSess === "A" ? 0 : 1;
       if (pts[i].session === sessIdx && pts[i].utc > 0) {
         const t = (pts[i].utc - gradMinUtc) / gradSpan;
-        const [jr, jg, jb] = jet(t);
-        c = new THREE.Color(jr, jg, jb);
+        c = jet(t);
       } else {
         c = fadedColor;
       }
     } else if (datePalette && pts[i].utc > 0) {
-      c = datePalette.get(utcToLocalDate(pts[i].utc)) ?? colA;
+      c = datePalette.get(utcToLocalDate(pts[i].utc))?.rgb ?? colA;
     } else {
       c = pts[i].session === 0 ? colA : colB;
     }
-    colors[i * 3] = c.r;
-    colors[i * 3 + 1] = c.g;
-    colors[i * 3 + 2] = c.b;
-    if (pts[i].label) {
-      lPos.push(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
-      lCol.push(c.r, c.g, c.b);
-      lIdx.push(i);
-    }
+    colors[i * 3] = c[0];
+    colors[i * 3 + 1] = c[1];
+    colors[i * 3 + 2] = c[2];
+    if (pts[i].label) lIdx.push(i);
   }
-  if (mainCloud) {
-    scene.remove(mainCloud);
-    mainCloud.geometry.dispose();
-    mainCloud.material.dispose();
-  }
-  if (labelCloud) {
-    scene.remove(labelCloud);
-    labelCloud.traverse(disposeSceneObject);
-    labelCloud = null;
-  }
+  if (mainCloud !== null) v.remove(mainCloud);
+  mainCloud = null;
+  if (labelCloud !== null) v.remove(labelCloud);
+  labelCloud = null;
+  labelDots = [];
+  labelRings = [];
+  labelBaseScale = [];
+  labelOfHandle = new Map();
   clearAllLinks();
   const ps = UMAP_POINT_SIZE * pointScale;
-  if (raycaster) raycaster.params.Points.threshold = ps * 0.6;
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(positions.slice(), 3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  mainCloud = new THREE.Points(
-    g,
-    new THREE.PointsMaterial({
-      size: ps,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.5,
-      sizeAttenuation: true,
-      depthWrite: false,
-    }),
-  );
-  scene.add(mainCloud);
+  pointThreshold = ps * 0.6;
+  // Vertex-coloured, half transparent, no depth writes, sized in world units.
+  mainCloud = v.addPoints(0, positions.slice(), colors, ps, true, 0xffffff, 0.5, true, 0);
 
   // Labeled points — grouped by label, each label gets a unique hue-shifted
   // ring color so you can visually distinguish clusters with the same label.
@@ -924,16 +857,16 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
     // Collect unique labels and assign each a bright hue
     // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
     const uniqueLabels = [...new Set(lIdx.map((i) => pts[i].label!))];
-    const labelColorMap = new Map<string, ThreeColor>();
+    const labelColorMap = new Map<string, Rgb>();
     for (let li = 0; li < uniqueLabels.length; li++) {
       const hue = li / Math.max(uniqueLabels.length, 1);
-      labelColorMap.set(uniqueLabels[li], new THREE.Color().setHSL(hue, 0.9, 0.65));
+      labelColorMap.set(uniqueLabels[li], colorFromHsl(hue, 0.9, 0.65).rgb);
     }
 
     // For each labeled point, create a shape + billboard ring encoding the session:
     //   Session A (0) → sphere       + smooth 24-segment circular ring
-    //   Session B (1) → octahedron   + 4-segment ring rotated 45° (diamond border)
-    const labelGrp = new THREE.Group();
+    //   Session B (1) → octahedron   + 4-segment ring (a diamond border)
+    const labelGrp = v.addGroup(0);
     const DOT_R = UMAP_POINT_SIZE * pointScale * 1.2;
     const RING_I = UMAP_POINT_SIZE * pointScale * 1.8;
     const RING_O = UMAP_POINT_SIZE * pointScale * 2.4;
@@ -951,12 +884,12 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
       const sess = pts[i].session; // 0 = A, 1 = B
       const sessionCol =
         datePalette && pts[i].utc > 0
-          ? (datePalette.get(utcToLocalDate(pts[i].utc))?.getHex() ?? COLOR_A)
+          ? (datePalette.get(utcToLocalDate(pts[i].utc))?.hex ?? COLOR_A)
           : sess === 0
             ? COLOR_A
             : COLOR_B;
       // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
-      const ringCol = labelColorMap.get(pts[i].label!) ?? new THREE.Color(0xffffff);
+      const ringCol = labelColorMap.get(pts[i].label!) ?? ([1, 1, 1] as Rgb);
       const px = positions[i * 3],
         py = positions[i * 3 + 1],
         pz = positions[i * 3 + 2];
@@ -965,57 +898,45 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
       const d = pts[i].dist;
       const sizeMult = d != null ? SCALE_NEAR - ((d - distMin) / distSpan) * (SCALE_NEAR - SCALE_FAR) : 1.0;
 
-      // Dot: sphere for session A, octahedron for session B.
-      const dotGeo = sess === 0 ? new THREE.SphereGeometry(DOT_R, 8, 8) : new THREE.OctahedronGeometry(DOT_R);
-      const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: sessionCol }));
-      dot.position.set(px, py, pz);
-      dot.scale.setScalar(sizeMult);
-      (dot as LabelMesh)._baseScale = sizeMult;
-      labelGrp.add(dot);
+      // Dot: sphere for session A, octahedron for session B. Opaque basic material.
+      const dot = v.addMesh(labelGrp, sess === 0 ? 0 : 1, DOT_R, 8, 8, 0, sessionCol, 1, false, true, 1, 0, 0, 0, 0);
+      v.setPosition(dot, px, py, pz);
+      v.setScale(dot, sizeMult, sizeMult, sizeMult);
 
-      // Ring: smooth circle for A; 4-segment square rotated 45° → diamond for B.
-      const ringGeo =
-        sess === 0 ? new THREE.RingGeometry(RING_I, RING_O, 24) : new THREE.RingGeometry(RING_I, RING_O, 4);
-      const ring = new THREE.Mesh(
-        ringGeo,
-        new THREE.MeshBasicMaterial({
-          color: ringCol,
-          transparent: true,
-          opacity: 0.85,
-          side: THREE.DoubleSide,
-        }),
+      // Ring: smooth circle for A; 4 segments for B. Double-sided, facing the camera.
+      const ring = v.addMesh(
+        labelGrp,
+        3,
+        RING_I,
+        RING_O,
+        sess === 0 ? 24 : 4,
+        0,
+        0xffffff,
+        0.85,
+        true,
+        true,
+        1,
+        2,
+        0,
+        0,
+        0,
       );
-      ring.position.set(px, py, pz);
-      ring.scale.setScalar(sizeMult);
-      if (sess === 1) ring.rotation.z = Math.PI / 4; // square → diamond orientation
-      ring.userData.billboard = true;
-      (ring as LabelMesh)._baseScale = sizeMult;
-      labelGrp.add(ring);
+      v.setColorRgb(ring, ringCol[0], ringCol[1], ringCol[2]);
+      v.setPosition(ring, px, py, pz);
+      v.setScale(ring, sizeMult, sizeMult, sizeMult);
+      v.setBillboard(ring, true);
+
+      labelDots.push(dot);
+      labelRings.push(ring);
+      labelBaseScale.push(sizeMult);
+      labelOfHandle.set(dot, li);
+      labelOfHandle.set(ring, li);
 
       // Save base colors so applyHighlight can restore them later.
-      const dc = typeof sessionCol === "number" ? sessionCol : new THREE.Color(sessionCol).getHex();
-      labelCloudBase.push({ dc, rr: ringCol.r, rg: ringCol.g, rb: ringCol.b });
+      labelCloudBase.push({ dc: sessionCol, rr: ringCol[0], rg: ringCol[1], rb: ringCol[2] });
     }
 
-    labelCloud = labelGrp as LabelCloudGroup;
-    scene.add(labelCloud);
-
-    // Store labeled geometry update function for animation
-    labelCloud.__updatePositions = (pos: Float32Array) => {
-      let ci = 0;
-      for (let li = 0; li < lIdx.length; li++) {
-        const i = lIdx[li];
-        const px = pos[i * 3],
-          py = pos[i * 3 + 1],
-          pz = pos[i * 3 + 2];
-        // dot
-        labelGrp.children[ci].position.set(px, py, pz);
-        ci++;
-        // ring
-        labelGrp.children[ci].position.set(px, py, pz);
-        ci++;
-      }
-    };
+    labelCloud = labelGrp;
   }
   curPoints = pts;
   labeledIdx = lIdx;
@@ -1025,17 +946,23 @@ function buildCloud(pts: UmapPoint[], positions: Float32Array) {
 }
 
 function applyPositions(pos: Float32Array) {
-  if (!mainCloud) return;
-  const a = mainCloud.geometry.getAttribute("position");
-  a.array.set(pos);
-  a.needsUpdate = true;
-  labelCloud?.__updatePositions?.(pos);
+  const v = viewer;
+  if (!v || mainCloud === null) return;
+  v.setAttribute(mainCloud, "position", pos);
+  for (let li = 0; li < labeledIdx.length; li++) {
+    const i = labeledIdx[li];
+    const px = pos[i * 3],
+      py = pos[i * 3 + 1],
+      pz = pos[i * 3 + 2];
+    v.setPosition(labelDots[li], px, py, pz);
+    v.setPosition(labelRings[li], px, py, pz);
+  }
   curPositions = pos;
 }
 
 // ── Handle data changes ──────────────────────────────────────────────────
 function onDataChange(d: UmapResult) {
-  if (!scene || !d?.points?.length) return;
+  if (!viewer || !d?.points?.length) return;
   stopTrace();
   selectedLabel = null;
   proximateLabels = [];
@@ -1071,14 +998,13 @@ $effect(() => {
   }
   if (s === prevPointScale) return;
   prevPointScale = s;
-  if (mainCloud) {
+  if (mainCloud !== null) {
     const ps = UMAP_POINT_SIZE * s;
-    mainCloud.material.size = ps;
-    mainCloud.material.needsUpdate = true;
-    if (raycaster) raycaster.params.Points.threshold = ps * 0.6;
+    viewer?.setPointSize(mainCloud, ps);
+    pointThreshold = ps * 0.6;
   }
   // Rebuild labeled cloud geometries at new scale
-  if (curPoints.length > 0 && scene) {
+  if (curPoints.length > 0 && viewer) {
     buildCloud(curPoints, curPositions);
   }
 });
@@ -1094,7 +1020,7 @@ $effect(() => {
   if (cbd === prevColorByDate) return;
   prevColorByDate = cbd;
   if (cbd) timeGradient = null; // colorByDate overrides time gradient
-  if (curPoints.length > 0 && scene) {
+  if (curPoints.length > 0 && viewer) {
     buildCloud(curPoints, curPositions);
   }
 });
@@ -1109,7 +1035,7 @@ $effect(() => {
   }
   if (tg === prevTimeGradient) return;
   prevTimeGradient = tg;
-  if (curPoints.length > 0 && scene) {
+  if (curPoints.length > 0 && viewer) {
     buildCloud(curPoints, curPositions);
   }
 });
@@ -1136,16 +1062,15 @@ function flashExport(kind: "png" | "json") {
 }
 
 /**
- * Capture the WebGL canvas as a PNG and trigger a browser download.
+ * Capture the canvas as a PNG and trigger a browser download.
  *
- * Requires `preserveDrawingBuffer: true` on the renderer (set in onMount).
- * We force a synchronous render immediately before calling `toDataURL` so
- * the buffer is guaranteed to contain the current frame.
+ * A WebGPU / WebGL canvas can be read back in the task that drew it, so we
+ * draw a frame immediately before calling `toDataURL`.
  */
 function exportPng() {
-  if (!renderer || !scene || !camera) return;
-  renderer.render(scene, camera); // ensure buffer is current
-  const url = renderer.domElement.toDataURL("image/png");
+  if (!viewer || !canvasEl) return;
+  viewer.render(); // the frame `toDataURL` reads
+  const url = canvasEl.toDataURL("image/png");
   const a = document.createElement("a");
   a.href = url;
   a.download = `umap-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.png`;
@@ -1159,7 +1084,7 @@ function exportPng() {
  * Each entry contains:
  * - `x_umap / y_umap / z_umap` — raw UMAP coordinates (dimensionality-
  *   reduced space, as returned by the Rust UMAP worker)
- * - `x3d / y3d / z3d` — normalised Three.js scene coordinates used for
+ * - `x3d / y3d / z3d` — normalised scene coordinates used for
  *   rendering (centred on origin, scaled to ±UMAP_SCALE/2)
  * - `session` — 0 = A, 1 = B
  * - `utc` — Unix timestamp of the EEG window (seconds)
@@ -1204,94 +1129,89 @@ function exportJson() {
 }
 
 // ── Mount ────────────────────────────────────────────────────────────────
+/** OrbitControls: damping 0.08, auto-rotate 0.8, 5–80 units; ⌘/Ctrl turns left-drag into pan. */
+function setControls(pan: boolean) {
+  viewer?.setOrbit(true, 0.08, true, 0.8, 5, 80, pan ? 2 : 0, 1, 2);
+}
+
+function addGrid(dark: boolean) {
+  const v = viewer;
+  if (!v) return;
+  if (grid) v.remove(grid);
+  grid = v.addGrid(0, SCALE * 1.2, 8, dark ? 0x444466 : 0x999999, dark ? 0x333355 : 0xbbbbbb, 1);
+  v.setPosition(grid, 0, -SCALE * 0.5 - 0.5, 0);
+}
+
+/** Labelled point, else any point, under the pointer: its index in `curPoints`, or -1. */
+function pointAt(e: PointerEvent): number {
+  const v = viewer;
+  if (!v || !canvasEl) return -1;
+  const r = canvasEl.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  const y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  // Labeled group first (dot and ring both count for their point).
+  if (labelDots.length) {
+    const h = v.pick(x, y, new Uint32Array([...labelDots, ...labelRings]), pointThreshold);
+    const li = h.length ? labelOfHandle.get(h[0]) : undefined;
+    if (li !== undefined && li < labeledIdx.length) return labeledIdx[li];
+  }
+  if (mainCloud !== null) {
+    const h = v.pick(x, y, new Uint32Array([mainCloud]), pointThreshold);
+    if (h.length) return h[1];
+  }
+  return -1;
+}
+
 onMount(async () => {
   if (!container) return;
   try {
-    THREE = await import("three");
-    const { OrbitControls } = await import("three/examples/jsm/controls/OrbitControls.js");
+    const viz = await loadViz3d();
+    if (destroyed || !container) return;
 
     // Create canvas manually and append to container
     const canvas = document.createElement("canvas");
     canvas.style.width = "100%";
     canvas.style.height = "100%";
     canvas.style.display = "block";
+    canvas.style.touchAction = "none";
     container.appendChild(canvas);
+    canvasEl = canvas;
 
-    // Wait for layout — container may have 0 width on first frame
-    let w = container.clientWidth;
-    let h = container.clientHeight;
-    if (w < 1 || h < 1) {
-      // Force a reflow and try again after a frame
+    // Wait for layout — container may have 0 size on the first frame.
+    if (container.clientWidth < 1 || container.clientHeight < 1) {
       await new Promise((r) => requestAnimationFrame(r));
-      w = container.clientWidth;
-      h = container.clientHeight;
     }
-    if (w < 1 || h < 1) {
-      // Still 0 — try parentElement dimensions
-      w = container.parentElement?.clientWidth || 600;
-      h = container.parentElement?.clientHeight || 400;
+
+    const v = await viz.SceneViewer.create(canvas, 55, 0.1, 1000);
+    if (destroyed) {
+      v.free();
+      return;
     }
+    viewer = v;
 
     // Scene — theme-aware background
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(isDark ? UMAP_BG : UMAP_BG_LIGHT);
-
-    // Camera
-    camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 1000);
-    camera.position.set(0, 0, 25);
-
-    // Renderer — use the canvas we created
-    // preserveDrawingBuffer keeps the framebuffer alive after each render
-    // so that exportPng() can call canvas.toDataURL() at any time.
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.setSize(w, h);
-
-    // Controls
-    controls = new OrbitControls(camera, canvas);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.8;
-    controls.minDistance = 5;
-    controls.maxDistance = 80;
+    v.setBackground(isDark ? UMAP_BG : UMAP_BG_LIGHT);
+    v.setCameraPosition(0, 0, 25);
+    v.setTarget(0, 0, 0);
+    setControls(false);
 
     // ── Cmd / Ctrl + drag → pan camera ───────────────────────────────
-    // OrbitControls reads mouseButtons at the start of each drag, so we
-    // switch the LEFT button mapping while the modifier key is held.
     _onCmdDown = (e: KeyboardEvent) => {
       if (e.key !== "Meta" && e.key !== "Control") return;
-      controls.mouseButtons = {
-        LEFT: THREE.MOUSE.PAN,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN,
-      };
+      setControls(true);
       cmdHeld = true;
     };
     _onCmdUp = (e: KeyboardEvent) => {
       if (e.key !== "Meta" && e.key !== "Control") return;
-      controls.mouseButtons = {
-        LEFT: THREE.MOUSE.ROTATE,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN,
-      };
+      setControls(false);
       cmdHeld = false;
     };
     window.addEventListener("keydown", _onCmdDown);
     window.addEventListener("keyup", _onCmdUp);
 
     // Grid + light — theme-aware
-    const gridMain = isDark ? 0x444466 : 0x999999;
-    const gridSub = isDark ? 0x333355 : 0xbbbbbb;
-    const grid = new THREE.GridHelper(SCALE * 1.2, 8, gridMain, gridSub);
-    grid.position.y = -SCALE * 0.5 - 0.5;
-    scene.add(grid);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-
-    // Raycaster
-    raycaster = new THREE.Raycaster();
-    raycaster.params.Points = { threshold: 0.5 };
-    mouse = new THREE.Vector2();
+    addGrid(isDark);
+    v.addAmbientLight(0xffffff, 0.5);
 
     // ── Hover ────────────────────────────────────────────────────────
     _onPointerMove = (e: PointerEvent) => {
@@ -1300,25 +1220,7 @@ onMount(async () => {
         return;
       }
       const r = canvas.getBoundingClientRect();
-      mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-      mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      let hitIdx = -1;
-      // Check labeled group (meshes, every 2nd child is a dot)
-      if (labelCloud) {
-        const h = raycaster.intersectObjects(labelCloud.children, false);
-        if (h.length) {
-          // Each labeled point = 2 children (dot + ring), so child index / 2 = label index
-          const childIdx = labelCloud.children.indexOf(h[0].object);
-          const li = Math.floor(childIdx / 2);
-          if (li >= 0 && li < labeledIdx.length) hitIdx = labeledIdx[li];
-        }
-      }
-      if (hitIdx < 0 && mainCloud) {
-        const h = raycaster.intersectObject(mainCloud);
-        // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
-        if (h.length) hitIdx = h[0].index!;
-      }
+      const hitIdx = pointAt(e);
       if (hitIdx >= 0 && hitIdx < curPoints.length) {
         const p = curPoints[hitIdx];
         const dt = new Date(p.utc * 1000);
@@ -1349,93 +1251,49 @@ onMount(async () => {
     canvas.addEventListener("pointerdown", _onPointerDown);
     _onPointerUp = (e: PointerEvent) => {
       if ((e.clientX - downPos.x) ** 2 + (e.clientY - downPos.y) ** 2 > 25) return;
-      const r = canvas.getBoundingClientRect();
-      mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-      mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      let label: string | undefined;
-      if (labelCloud) {
-        const h = raycaster.intersectObjects(labelCloud.children, false);
-        if (h.length) {
-          const childIdx = labelCloud.children.indexOf(h[0].object);
-          const li = Math.floor(childIdx / 2);
-          if (li >= 0 && li < labeledIdx.length) label = curPoints[labeledIdx[li]]?.label;
-        }
-      }
-      if (!label && mainCloud) {
-        const h = raycaster.intersectObject(mainCloud);
-        // biome-ignore lint/style/noNonNullAssertion: value is guaranteed by surrounding logic
-        if (h.length) label = curPoints[h[0].index!]?.label;
-      }
+      const hitIdx = pointAt(e);
+      const label = hitIdx >= 0 ? curPoints[hitIdx]?.label : undefined;
       if (label) {
         toggleLinks(label);
       }
     };
     canvas.addEventListener("pointerup", _onPointerUp);
 
-    // ── Resize ───────────────────────────────────────────────────────
-    resizeObs = new ResizeObserver(() => {
-      if (!container || !renderer) return;
-      const nw = container.clientWidth || 600;
-      const nh = container.clientHeight || 400;
-      if (nw < 2 || nh < 2) return;
-      camera.aspect = nw / nh;
-      camera.updateProjectionMatrix();
-      renderer.setSize(nw, nh);
-    });
-    resizeObs.observe(container);
-
-    // ── Render loop ──────────────────────────────────────────────────
-    function loop() {
-      animId = requestAnimationFrame(loop);
-      // Animation
-      if (fromPos && toPos && mainCloud) {
-        const t = Math.min(1, (performance.now() - animStart) / ANIM_MS);
-        const e = easeOut(t);
-        const n = toPos.length;
-        const buf = new Float32Array(n);
-        for (let i = 0; i < n; i++) buf[i] = fromPos[i] + (toPos[i] - fromPos[i]) * e;
-        applyPositions(buf);
-        if (t >= 1) {
-          fromPos = null;
-          toPos = null;
-          animating = false;
-          if (pendingAutoConnect) {
-            pendingAutoConnect = false;
-            runAutoConnect();
+    // ── Render loop: the intro animation and the trace, then controls and a frame ──
+    stopView = runView(canvas, v, {
+      maxPixelRatio: 2,
+      onFrame: () => {
+        if (fromPos && toPos && mainCloud !== null) {
+          const t = Math.min(1, (performance.now() - animStart) / ANIM_MS);
+          const e = easeOut(t);
+          const n = toPos.length;
+          const buf = new Float32Array(n);
+          for (let i = 0; i < n; i++) buf[i] = fromPos[i] + (toPos[i] - fromPos[i]) * e;
+          applyPositions(buf);
+          if (t >= 1) {
+            fromPos = null;
+            toPos = null;
+            animating = false;
+            if (pendingAutoConnect) {
+              pendingAutoConnect = false;
+              runAutoConnect();
+            }
           }
         }
-      }
-      // Chronological trace grow animation
-      updateTraceGrow();
-      // Billboard rings — make them face the camera
-      if (labelCloud) {
-        labelCloud.traverse((child) => {
-          if (child.userData?.billboard && camera) {
-            child.quaternion.copy(camera.quaternion);
-          }
-        });
-      }
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    loop();
+        // Chronological trace grow animation
+        updateTraceGrow();
+      },
+    });
 
     loaded = true;
 
     // Watch for theme changes and update scene, cloud colors, and trace
     const themeObs = new MutationObserver(() => {
       const dark = document.documentElement.classList.contains("dark");
-      if (scene) scene.background = new THREE.Color(dark ? UMAP_BG : UMAP_BG_LIGHT);
-      if (grid) {
-        const cols = grid.material;
-        if (Array.isArray(cols)) {
-          cols[0]?.color?.setHex(dark ? 0x444466 : 0x999999);
-          cols[1]?.color?.setHex(dark ? 0x333355 : 0xbbbbbb);
-        }
-      }
+      viewer?.setBackground(dark ? UMAP_BG : UMAP_BG_LIGHT);
+      addGrid(dark);
       // Rebuild cloud colors (jet / faded colors are theme-dependent)
-      if (curPoints.length > 0 && scene) {
+      if (curPoints.length > 0 && viewer) {
         buildCloud(curPoints, curPositions);
       }
       // Restart trace with new theme colors if active
@@ -1445,6 +1303,7 @@ onMount(async () => {
       }
     });
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    themeObserver = themeObs;
 
     // Process current data if already available
     if (data?.points?.length) {
@@ -1456,23 +1315,26 @@ onMount(async () => {
   }
 });
 
+let themeObserver: MutationObserver | null = null;
+
 onDestroy(() => {
+  destroyed = true;
   stopTrace();
   clearHighlightEdges();
+  themeObserver?.disconnect();
   if (exportFlashTimer) clearTimeout(exportFlashTimer);
   if (_onCmdDown) window.removeEventListener("keydown", _onCmdDown);
   if (_onCmdUp) window.removeEventListener("keyup", _onCmdUp);
-  const cvs = renderer?.domElement;
+  const cvs = canvasEl;
   if (cvs) {
     if (_onPointerMove) cvs.removeEventListener("pointermove", _onPointerMove);
     if (_onPointerLeave) cvs.removeEventListener("pointerleave", _onPointerLeave);
     if (_onPointerDown) cvs.removeEventListener("pointerdown", _onPointerDown);
     if (_onPointerUp) cvs.removeEventListener("pointerup", _onPointerUp);
   }
-  if (animId) cancelAnimationFrame(animId);
-  resizeObs?.disconnect();
-  controls?.dispose();
-  renderer?.dispose();
+  stopView?.();
+  viewer?.free();
+  viewer = null;
 });
 </script>
 

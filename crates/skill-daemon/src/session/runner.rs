@@ -357,7 +357,10 @@ pub(crate) async fn run_adapter_session(
         if kind.starts_with("lsl") {
             let secs = state.lsl_idle_timeout_secs.lock().map(|g| *g).unwrap_or(None);
             // off: a timer that does not go off in this session's lifetime
-            secs.map_or(std::time::Duration::from_secs(10 * 365 * 86_400), std::time::Duration::from_secs)
+            secs.map_or(
+                std::time::Duration::from_secs(10 * 365 * 86_400),
+                std::time::Duration::from_secs,
+            )
         } else {
             IDLE_TIMEOUT
         }
@@ -983,6 +986,11 @@ mod tests {
     };
     use tempfile::TempDir;
 
+    /// Every virtual LSL source advertises the same stream name, so two tests
+    /// running at once resolve each other's outlet (a 4-ch test connects to the
+    /// 32-ch one and the reverse).  Tests that start one hold this throughout.
+    static VIRTUAL_LSL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     // ── MockAdapter ───────────────────────────────────────────────────────────
 
     /// A scripted adapter that emits a fixed sequence of events, then ends.
@@ -1251,7 +1259,10 @@ mod tests {
         assert!(!silent_lsl(&state, 45).await, "ended before the 60 s were over");
         assert!(silent_lsl(&state, 70).await, "still waiting after the 60 s");
         *state.lsl_idle_timeout_secs.lock().unwrap() = None;
-        assert!(!silent_lsl(&state, 24 * 3600).await, "ended although the timeout is off");
+        assert!(
+            !silent_lsl(&state, 24 * 3600).await,
+            "ended although the timeout is off"
+        );
     }
 
     /// Panics mid-session, the way a real bug in the notification path would.
@@ -3295,6 +3306,7 @@ mod tests {
     async fn lsl_virtual_source_full_pipeline() {
         use skill_lsl::{LslAdapter, VirtualLslSource, VirtualSourceConfig};
 
+        let _lsl = VIRTUAL_LSL.lock().await;
         let dir = TempDir::new().unwrap();
         let state = test_state(dir.path());
 
@@ -3570,6 +3582,7 @@ mod tests {
     async fn lsl_virtual_source_daemon_status_reflects_session() {
         use skill_lsl::{VirtualLslSource, VirtualSourceConfig, VIRTUAL_STREAM_NAME};
 
+        let _lsl = VIRTUAL_LSL.lock().await;
         let dir = TempDir::new().unwrap();
         let state = test_state(dir.path());
 

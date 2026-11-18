@@ -5,7 +5,6 @@
 
 use std::time::Duration;
 
-use chrono::{Datelike, Timelike};
 use tracing::info;
 
 use crate::routes::settings_io::{load_user_settings, patch_user_settings_sync};
@@ -369,30 +368,20 @@ fn spawn_weekly_digest(state: AppState) {
             // Check once per hour if it's time to send the digest.
             tokio::time::sleep(Duration::from_secs(3600)).await;
 
-            let now = chrono::Local::now();
+            let now = skill_time::LocalNow::now();
             // Fire on Monday between 9:00-9:59 AM.
-            if now.weekday() != chrono::Weekday::Mon || now.hour() != 9 {
+            if now.weekday_from_monday() != 1 || now.hour() != 9 {
                 continue;
             }
             // Dedup: only fire once per ISO week (prevents re-fire on daemon restart).
-            let iso_week = now.iso_week().week() as i32;
+            let iso_week = i32::from(now.iso_week());
             if iso_week == last_digest_week {
                 continue;
             }
             last_digest_week = iso_week;
 
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-            let week_start = {
-                let today = now.date_naive();
-                let monday = today - chrono::Duration::days(7);
-                monday
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(chrono::Local)
-                    .earliest()
-                    .map(|t| t.timestamp() as u64)
-                    .unwrap_or(0)
-            };
+            let week_start = now.start_of_day_days_ago_unix(7).map_or(0, |t| t as u64);
 
             let digest = tokio::task::spawn_blocking(move || {
                 skill_data::activity_store::ActivityStore::open_readonly(&skill_dir)
@@ -495,8 +484,8 @@ fn spawn_daily_brain_report(state: AppState) {
         tokio::time::sleep(Duration::from_secs(60)).await;
         let mut last_report_day: i32 = -1;
         loop {
-            let now = chrono::Local::now();
-            let day_of_year = now.ordinal() as i32;
+            let now = skill_time::LocalNow::now();
+            let day_of_year = i32::from(now.day_of_year());
             // Fire if we're past 18:00 today and haven't reported yet.
             if now.hour() < 18 || day_of_year == last_report_day {
                 tokio::time::sleep(Duration::from_secs(3600)).await;
@@ -505,15 +494,7 @@ fn spawn_daily_brain_report(state: AppState) {
             last_report_day = day_of_year;
 
             let skill_dir = state.skill_dir.lock().map(|g| g.clone()).unwrap_or_default();
-            let today_start = {
-                let d = now.date_naive();
-                d.and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(chrono::Local)
-                    .earliest()
-                    .map(|t| t.timestamp() as u64)
-                    .unwrap_or(0)
-            };
+            let today_start = now.start_of_day_unix().map_or(0, |t| t as u64);
 
             let report = tokio::task::spawn_blocking(move || {
                 skill_data::activity_store::ActivityStore::open_readonly(&skill_dir)

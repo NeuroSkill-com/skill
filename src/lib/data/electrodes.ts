@@ -23,7 +23,7 @@ export type ElectrodeSystem = "10-20" | "10-10" | "10-5";
 
 export interface Electrode {
   name: string;
-  /** Raw position in Three.js coords [x, y, z] in mm (from MNE standard montage) */
+  /** Raw position [x, y, z] in mm, y up (MNE standard montage, three.js axes) */
   pos: [number, number, number];
   region: BrainRegion;
   lobe: string;

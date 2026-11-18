@@ -12,7 +12,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{DateTime, Local, TimeZone, Timelike};
 use serde::Deserialize;
 use skill_daemon_common::ApiError;
 use skill_data::activity_store::ActivityStore;
@@ -20,6 +19,7 @@ use skill_data::validation_store::{
     self, decide_prompt, eeg_fatigue_index, KssRecord, PromptDecision, PvtRecord, SchedulerCtx, TlxRecord,
     ValidationConfig, ValidationStore,
 };
+use skill_time::LocalNow;
 
 use crate::state::AppState;
 
@@ -52,15 +52,6 @@ fn open_store(state: &AppState) -> Result<ValidationStore, (StatusCode, Json<Api
         .map(|g| g.clone())
         .map_err(|_| err500("lock", "skill_dir poisoned"))?;
     ValidationStore::open(&dir).ok_or_else(|| err503("db_unavailable", "validation store offline"))
-}
-
-fn next_local_midnight(now: DateTime<Local>) -> i64 {
-    let tomorrow = (now + chrono::Duration::days(1))
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .and_then(|n| Local.from_local_datetime(&n).single())
-        .unwrap_or(now);
-    tomorrow.timestamp()
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -124,7 +115,7 @@ struct DisableTodayReq {
 }
 
 async fn disable_today(State(state): State<AppState>, Json(req): Json<DisableTodayReq>) -> R<serde_json::Value> {
-    let midnight = next_local_midnight(Local::now());
+    let midnight = LocalNow::now().next_midnight_unix();
     let mut rt = state
         .validation_runtime
         .lock()
@@ -160,10 +151,10 @@ async fn should_prompt(State(state): State<AppState>, Query(q): Query<ShouldProm
     let in_flow = read_in_flow(&state).unwrap_or(false);
     let break_coach_active = read_break_coach_active(&state).unwrap_or(false);
 
-    let now_local = Local::now();
-    let local_hour = now_local.hour() as u8;
-    let now_unix = now_local.timestamp();
-    let midnight = next_local_midnight(now_local);
+    let now_local = LocalNow::now();
+    let local_hour = now_local.hour();
+    let now_unix = now_local.unix();
+    let midnight = now_local.next_midnight_unix();
 
     let runtime_snapshot = {
         let rt = state

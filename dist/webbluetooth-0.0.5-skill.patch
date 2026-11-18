@@ -1,0 +1,310 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 34e27df..0991b62 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -226,6 +226,11 @@ jobs:
+       - name: Refresh rlx to main
+         uses: ./.github/actions/refresh-rlx-main
+ 
++      # One webbluetooth version across every target, wasm32 included —
++      # `cargo tree` on this runner would only see Linux. Seconds, no build.
++      - name: webbluetooth lockstep
++        run: bash scripts/check-webbluetooth-lockstep.sh
++
+       # clippy (workspace crates — no Tauri app / espeak link)
+       - name: cargo clippy (workspace crates)
+         env:
+diff --git a/Cargo.toml b/Cargo.toml
+index 7634144..dda1cf3 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -102,11 +102,11 @@ members = [
+ openbci         = { path = "patches/openbci-0.0.2" }
+ # Every other BLE crate needs NO patch: all are published, and every one of
+ # them plus skill-daemon, skill-devices and the vendored openbci declares the
+-# same registry `webbluetooth` version (0.0.4), so the resolver unifies them
+-# onto one package.  As of 2026-10-15 that is awear 0.3.0, idun 0.0.4,
+-# mendi 0.0.3, muse-rs 0.2.2, mw75 0.0.8, poop 0.0.2, vital 0.0.2 — nine
+-# dependents of one `webbluetooth` node, with no btleplug left between any of
+-# them and the radio.
++# same registry `webbluetooth` version (0.0.5), so the resolver unifies them
++# onto one package.  As of 2026-11-17 that is awear 0.3.1, emotibit 0.1.1,
++# idun 0.0.5, mendi 0.0.4, muse-rs 0.2.4, mw75 0.0.9, poop 0.0.3, vital 0.0.3
++# — eleven dependents of one `webbluetooth` node, with no btleplug left between
++# any of them and the radio.
+ #
+ # That unification is a correctness requirement, not a tidiness one:
+ # `Bluetooth::shared()` memoises into a `OnceLock`, so two copies of the
+@@ -114,6 +114,13 @@ openbci         = { path = "patches/openbci-0.0.2" }
+ # not connect.  Re-check after any change to the BLE deps:
+ #
+ #   cargo tree -p skill-daemon -i webbluetooth   # must be exactly one node
++#   scripts/check-webbluetooth-lockstep.sh       # the same, for every target
++#
++# `cargo tree` only sees the host target.  awear, mendi, muse-rs, poop and
++# vital also ask for `webbluetooth-wasm` by its own version, under
++# `cfg(target_arch = "wasm32")`, and a stale one of those splits the browser
++# build while every native `cargo tree` looks clean.  Cargo.lock covers all
++# targets, so the script counts versions there; CI runs it.
+ #
+ # Bumping ONE of them is never enough, and the failure is not subtle.  Cargo
+ # treats 0.0.x releases as mutually incompatible — `0.0.1` means `>=0.0.1,
+diff --git a/changes/unreleased/deps-webbluetooth-0.0.5.md b/changes/unreleased/deps-webbluetooth-0.0.5.md
+new file mode 100644
+index 0000000..04cb90d
+--- /dev/null
++++ b/changes/unreleased/deps-webbluetooth-0.0.5.md
+@@ -0,0 +1,7 @@
++### Dependencies
++
++- **webbluetooth** → 0.0.5, together with every BLE device crate on it: awear 0.3.1, emotibit 0.1.1, idun 0.0.5, mendi 0.0.4, muse-rs 0.2.4, mw75 0.0.9, poop 0.0.3, vital 0.0.3, and the vendored openbci. All of them still share one `Bluetooth::shared()` session. Five of the device crates also asked for `webbluetooth-wasm` 0.0.4 directly in their browser builds, which `cargo tree` on a desktop does not show; they are on 0.0.5 too.
++
++### Build
++
++- **webbluetooth lockstep check**: `scripts/check-webbluetooth-lockstep.sh` fails when `Cargo.lock` holds more than one version of any `webbluetooth*` crate, on any target, wasm32 included. It runs in CI ahead of clippy.
+diff --git a/crates/skill-daemon/Cargo.toml b/crates/skill-daemon/Cargo.toml
+index a2664fc..e9b26e2 100644
+--- a/crates/skill-daemon/Cargo.toml
++++ b/crates/skill-daemon/Cargo.toml
+@@ -150,7 +150,7 @@ base64 = { workspace = true }
+ # BLE advertisement scanning.  One process-wide `Bluetooth::shared()` session
+ # is shared with the device crates that connect, so the scan no longer has to
+ # be torn down for a connect to succeed (see scanner.rs).
+-webbluetooth = { version = "0.0.4", features = ["uuid"] }
++webbluetooth = { version = "0.0.5", features = ["uuid"] }
+ cognionics = { version = "0.0.1", default-features = false }
+ dirs = "7"
+ rand = "0.10"
+@@ -225,8 +225,8 @@ sysinfo              = "0.40"
+ # Search tests write legacy *.sqlite fixtures to exercise the one-time import.
+ rusqlite = { workspace = true }
+ tempfile             = "3"
+-mendi                = { version = "0.0.3", features = ["simulate"] }
+-mw75                 = { version = "0.0.8" }
++mendi                = { version = "0.0.4", features = ["simulate"] }
++mw75                 = { version = "0.0.9" }
+ rlsl                 = { version = "0.1.2" }
+ tokio-tungstenite    = "0.30"
+ 
+diff --git a/crates/skill-devices/Cargo.toml b/crates/skill-devices/Cargo.toml
+index 2252122..3ec86db 100644
+--- a/crates/skill-devices/Cargo.toml
++++ b/crates/skill-devices/Cargo.toml
+@@ -22,7 +22,7 @@ bitflags    = { version = "2", features = ["serde"] }
+ # Muse EEG – library only, no TUI feature.
+ # 0.2 swapped the BLE backend from btleplug to webbluetooth; the
+ # MuseClient / MuseDevice / MuseHandle / MuseEvent API is unchanged.
+-muse-rs = { version = "0.2.2", default-features = false }
++muse-rs = { version = "0.2.4", default-features = false }
+ 
+ # OpenBCI board drivers (Ganglion BLE, Cyton serial, …).
+ #
+@@ -47,7 +47,7 @@ openbci = { version = "0.0.2", features = ["ble"] }
+ # 0.0.8 dropped btleplug and talks to `webbluetooth` directly, so this is no
+ # longer one of the crates the btleplug shim stands in for — it reaches
+ # `Bluetooth::shared()` natively.
+-mw75 = { version = "0.0.8", default-features = false }
++mw75 = { version = "0.0.9", default-features = false }
+ 
+ # Emotiv EPOC / Insight / Flex (Cortex WebSocket API)
+ #
+@@ -59,7 +59,8 @@ mw75 = { version = "0.0.8", default-features = false }
+ # `protocol.rs` are byte-identical to 0.0.13.  Enabling `raw` later would give
+ # Emotiv headsets a direct BLE path (no Cortex service) and make this the
+ # eleventh member of the `webbluetooth` lockstep set documented in the
+-# workspace root; it asks for 0.0.4, the version everything else is on.
++# workspace root.  It asks for 0.0.4, one release behind everything else
++# (0.0.5), so it needs an emotiv release on 0.0.5 before `raw` goes on.
+ emotiv = { version = "0.0.14", default-features = false }
+ 
+ # IDUN Guardian in-ear EEG earbud (BLE).
+@@ -68,7 +69,7 @@ emotiv = { version = "0.0.14", default-features = false }
+ # `Bluetooth::shared()` natively.  Purely additive: the three new items are the
+ # service/characteristic UUIDs its grant needs (`GUARDIAN_SERVICE`,
+ # `BATTERY_SERVICE`, `DEVICE_ID_CHARACTERISTIC`) and the prelude is unchanged.
+-idun = { version = "0.0.4", default-features = false }
++idun = { version = "0.0.5", default-features = false }
+ 
+ # Mendi fNIRS headband (BLE).
+ #
+@@ -77,7 +78,7 @@ idun = { version = "0.0.4", default-features = false }
+ # shim stands in for — it reaches `Bluetooth::shared()` natively.  Its
+ # `webbluetooth-wasm` dep is `cfg(target_arch = "wasm32")`-gated and never
+ # enters a native build.
+-mendi = { version = "0.0.3", default-features = false }
++mendi = { version = "0.0.4", default-features = false }
+ 
+ # Cognionics / CGX EEG headsets (USB/FTDI serial)
+ cognionics = { version = "0.0.1", default-features = false }
+@@ -103,14 +104,14 @@ rusb = { version = "0.9", features = ["vendored"] }
+ # firmware version) — but nothing was REMOVED: 45 public items became 84, and
+ # the prelude only gained `BoardType`, `FirmwareVersion`, `ReadyInfo`.  That is
+ # why this was a one-line change here.
+-awear = { version = "0.3.0", default-features = false }
++awear = { version = "0.3.1", default-features = false }
+ 
+ # Vital Neuro EEG headphones (BLE: 3 ch @ 250 Hz, accelerometer, battery).
+ #
+-# Same `webbluetooth 0.0.4` requirement as muse-rs and skill-daemon, which is
++# Same `webbluetooth` requirement as muse-rs and skill-daemon, which is
+ # what keeps `Bluetooth::shared()` a single session — see the lockstep note in
+ # the workspace Cargo.toml.
+-vital = { version = "0.0.2" }
++vital = { version = "0.0.3" }
+ 
+ # Oura Ring 3/4/5 (BLE, reverse-engineered protocol via open_oura).
+ #
+@@ -129,21 +130,22 @@ oura-protocol = { git = "https://github.com/Th0rgal/open_oura", rev = "e57c43ce5
+ # `default-features = false` drops its `tui` default, which would otherwise pull
+ # ratatui + crossterm into the daemon for a terminal UI nothing here renders.
+ #
+-# Already on `webbluetooth 0.0.4` + `uuid`, the same requirement as muse-rs /
++# On the same `webbluetooth` requirement (+ `uuid`) as muse-rs /
+ # vital / skill-daemon, so it unifies onto the one `Bluetooth::shared()` session
+ # rather than opening a second CBCentralManager.  Its `webbluetooth-wasm` dep is
+ # `cfg(target_arch = "wasm32")`-gated and never enters a native build.
+-poop = { version = "0.0.2", default-features = false }
++poop = { version = "0.0.3", default-features = false }
+ 
+ # EmotiBit (EDA / PPG / IMU / temperature wristband board).  Only the `ble`
+ # feature: the defaults add a ratatui TUI, an espflash flasher, LSL/OSC outputs
+ # and a WebSocket bridge, none of which this app renders.  It also speaks WiFi
+-# (stock firmware) with no extra feature.  `ble` is the same `webbluetooth 0.0.4`
++# (stock firmware) with no extra feature.  `ble` is the same `webbluetooth`
+ # + `uuid` as the crates above, so it joins the one `Bluetooth::shared()` session.
+-emotibit = { version = "0.1.0", default-features = false, features = ["ble"] }
++emotibit = { version = "0.1.1", default-features = false, features = ["ble"] }
+ 
+-# Same `webbluetooth 0.0.4` lockstep requirement as muse-rs / vital / skill-daemon.
+-webbluetooth = { version = "0.0.4", features = ["uuid"] }
++# The `webbluetooth` lockstep requirement shared with every BLE crate above and
++# skill-daemon (see the workspace Cargo.toml).  Bump them all or none.
++webbluetooth = { version = "0.0.5", features = ["uuid"] }
+ 
+ # Needed by the Oura ring adapter: `futures` for webbluetooth's notification and
+ # scan streams, `hex` to parse the auth key, `anyhow`/`tracing` to report a
+diff --git a/docs/webbluetooth-migration.md b/docs/webbluetooth-migration.md
+index 148db43..c62b0cd 100644
+--- a/docs/webbluetooth-migration.md
++++ b/docs/webbluetooth-migration.md
+@@ -348,6 +348,44 @@ Once the pause is gone the `[patch.crates-io] btleplug` entry is the last thing
+ left — and that only disappears when the crates still on the table above stop
+ depending on btleplug by name, which is a separate migration from this one.
+ 
++## Moving to a new webbluetooth release (0.0.4 → 0.0.5, 2026-11)
++
++Every 0.0.x release is a breaking one as far as Cargo is concerned, so a
++webbluetooth bump is never one crate's business: all eleven dependents move in
++one go or the graph splits into two sessions. In skill that is `skill-daemon`,
++`skill-devices` and the vendored `patches/openbci-0.0.2`. Upstream it is
++awear, emotibit, idun, mendi, muse-rs, mw75, poop and vital, which come first,
++because skill cannot ask for a version crates.io does not have. (`emotiv`
++would be a twelfth if its `raw` feature were turned on; 0.0.14 is still on
++0.0.4.)
++
++**The trap is `webbluetooth-wasm`.** awear, mendi, muse-rs, poop and vital also
++ask for it by its own version under `cfg(target_arch = "wasm32")`. Bump
++`webbluetooth` alone and every native check is clean, because `cargo tree`
++resolves the host target only, while the browser build carries two
++webbluetooth stacks. Grep each device crate for every `webbluetooth-*`
++requirement, not just `webbluetooth`, and check with
++`cargo check --lib --target wasm32-unknown-unknown`.
++
++Order that worked for 0.0.5:
++
++1. Bump the device crates (version plus every `webbluetooth-*` requirement),
++   with clippy and tests green in each.
++2. Before anything is published, check skill against the local checkouts
++   using a `[patch.crates-io]` overlay kept **outside** the repo and passed with
++   `cargo --config /tmp/overlay.toml …`. Back up `Cargo.lock` first and
++   restore it afterwards, since the overlay writes path sources into it.
++3. Keep skill's half as a patch, not as edited manifests, so the tree keeps
++   building against what is published in the meantime.
++4. Publish the device crates, apply skill's half, and update **only** those
++   crates. A blanket `cargo update` would also take any other release that
++   came out in the meantime.
++
++`scripts/check-webbluetooth-lockstep.sh` (run in CI before clippy) fails if
++`Cargo.lock`, which is resolved for every target at once, holds two versions of
++any `webbluetooth*` crate. That is the check that would have caught the wasm
++pins.
++
+ ## Open questions for hardware validation
+ 
+ Ranked. The first is the one that can regress a shipped device.
+diff --git a/patches/openbci-0.0.2/Cargo.toml b/patches/openbci-0.0.2/Cargo.toml
+index 1d539fa..f83d263 100644
+--- a/patches/openbci-0.0.2/Cargo.toml
++++ b/patches/openbci-0.0.2/Cargo.toml
+@@ -112,8 +112,8 @@ serialport = "4"
+ # Bluetooth LE for native Ganglion support (optional, behind `ble` feature).
+ #
+ # This version MUST stay in lockstep with every other `webbluetooth`
+-# requirement in the graph (skill-daemon, skill-devices, the btleplug shim,
+-# muse-rs, mw75, mendi, poop, vital).  Cargo treats 0.0.x releases as mutually
++# requirement in the graph (skill-daemon, skill-devices, awear, emotibit,
++# idun, mendi, muse-rs, mw75, poop, vital).  Cargo treats 0.0.x releases as mutually
+ # incompatible, so a mismatch here puts two copies of webbluetooth in the tree
+ # — two `OnceLock`s, two sessions, two CBCentralManagers — and devices stop
+ # connecting:
+@@ -122,7 +122,7 @@ serialport = "4"
+ # No `uuid` feature needed: `IntoUuid` is implemented for `&str`, and openbci's
+ # characteristic UUIDs were already `&str` constants.  No `unrestricted`
+ # either — the Ganglion's services are named in `GanglionConfig::services`.
+-webbluetooth = { version = "0.0.4", optional = true }
++webbluetooth = { version = "0.0.5", optional = true }
+ 
+ # Owns the runtime the blocking `Board` trait drives webbluetooth's futures on,
+ # and the notification pump that outlives `start_stream`.  webbluetooth itself
+diff --git a/scripts/check-webbluetooth-lockstep.sh b/scripts/check-webbluetooth-lockstep.sh
+new file mode 100755
+index 0000000..2c7f9c8
+--- /dev/null
++++ b/scripts/check-webbluetooth-lockstep.sh
+@@ -0,0 +1,46 @@
++#!/usr/bin/env bash
++# ── Fail if Cargo.lock holds more than one version of any webbluetooth crate ──
++#
++# Usage:
++#   bash scripts/check-webbluetooth-lockstep.sh [path/to/Cargo.lock]
++#
++# Two versions of webbluetooth in one graph = two `Bluetooth::shared()`
++# sessions = two CBCentralManagers = devices that will not connect (see the
++# lockstep note in the workspace Cargo.toml).  `cargo tree -i webbluetooth`
++# only resolves the host target, so it misses a stale `webbluetooth-wasm`
++# asked for under `cfg(target_arch = "wasm32")`.  Cargo.lock is resolved for
++# every target at once, so counting versions there catches both.
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++LOCK="${1:-$ROOT/Cargo.lock}"
++
++[[ -f "$LOCK" ]] || { echo "error: $LOCK not found" >&2; exit 2; }
++
++# "name version" for every webbluetooth / webbluetooth-* package in the lock.
++pairs="$(awk '
++  /^\[\[package\]\]/ { name = "" }
++  /^name = /         { gsub(/"/, "", $3); name = $3 }
++  /^version = / && name ~ /^webbluetooth(-[a-z0-9]+)?$/ { gsub(/"/, "", $3); print name, $3 }
++' "$LOCK" | sort -u)"
++
++if [[ -z "$pairs" ]]; then
++  echo "error: no webbluetooth packages in $LOCK" >&2
++  exit 2
++fi
++
++split="$(awk '{ print $1 }' <<<"$pairs" | uniq -d)"
++if [[ -n "$split" ]]; then
++  echo "error: webbluetooth is split — more than one version of:" >&2
++  for name in $split; do
++    echo "  $name: $(awk -v n="$name" '$1 == n { printf "%s ", $2 }' <<<"$pairs")" >&2
++  done
++  echo "Every BLE crate must move to the same webbluetooth 0.0.x together;" >&2
++  echo "find the stragglers with:  cargo tree --target all -i <name>@<old version>" >&2
++  exit 1
++fi
++
++versions="$(awk '{ print $2 }' <<<"$pairs" | sort -u | tr '\n' ' ')"
++echo "webbluetooth lockstep OK: $(wc -l <<<"$pairs" | tr -d ' ') crates, version ${versions% }"

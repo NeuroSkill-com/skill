@@ -33,7 +33,6 @@
 //! // payload is a HealthSyncPayload ready for health_store.sync(&payload)
 //! ```
 
-use chrono::{NaiveDate, NaiveDateTime};
 use oura_api::{DateQuery, DatetimeQuery, OuraClient};
 use skill_health::{
     HealthMetric, HealthSyncPayload, HeartRateSample, MindfulnessSample, SleepSample, StepsSample,
@@ -524,17 +523,9 @@ fn valid_ts(ts: i64) -> bool {
 /// Handles formats like `"2026-03-15T23:45:00+02:00"` and
 /// `"2026-03-15T21:45:00Z"`.  Falls back to 0 on parse failure.
 fn parse_datetime_to_utc(s: &str) -> i64 {
-    // Try RFC 3339 (with timezone offset)
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-        return dt.timestamp();
-    }
-    // Try naive datetime (no timezone — assume UTC)
-    if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
-        return ndt.and_utc().timestamp();
-    }
-    // Try with fractional seconds
-    if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f") {
-        return ndt.and_utc().timestamp();
+    // RFC 3339, or no timezone (assumed UTC), with or without fractional seconds
+    if let Some(ts) = skill_time::parse_datetime_unix(s) {
+        return ts;
     }
     eprintln!("[oura] failed to parse datetime: {s:?}");
     0
@@ -542,10 +533,8 @@ fn parse_datetime_to_utc(s: &str) -> i64 {
 
 /// Parse an ISO 8601 date string (`"YYYY-MM-DD"`) to midnight UTC unix timestamp.
 fn parse_date_to_utc(s: &str) -> i64 {
-    if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-        if let Some(dt) = d.and_hms_opt(0, 0, 0) {
-            return dt.and_utc().timestamp();
-        }
+    if let Some(ts) = skill_time::parse_date_unix(s) {
+        return ts;
     }
     eprintln!("[oura] failed to parse date: {s:?}");
     0
