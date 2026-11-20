@@ -874,8 +874,9 @@ checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
 
 [[package]]
 name = "bids-core"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4034e87dcd81b3af0fd1eebe06e5e389eac99bb3d973b68cfc49bbe73a7321c5"
 dependencies = [
  "flate2",
  "indexmap 2.14.2",
@@ -888,15 +889,14 @@ dependencies = [
 
 [[package]]
 name = "bids-eeg"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e41e4ee3cb15cad359e3ff1b6ce351d47f2968807bc4206b534e3c71c88f8e6d"
 dependencies = [
  "bids-core",
  "bids-filter",
  "bids-io",
  "bids-layout",
- "bids-variables",
- "bytemuck",
  "flate2",
  "serde",
  "serde_json",
@@ -904,16 +904,17 @@ dependencies = [
 
 [[package]]
 name = "bids-filter"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22c925d683503d01efe64455db64281bc01be779e597d9d2833b19800000ab7b"
 
 [[package]]
 name = "bids-io"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2d968c9ab481b292a4a82a4f58446f7afe8ca3f926363c2b0b51a174776337c"
 dependencies = [
  "bids-core",
- "csv",
  "flate2",
  "indexmap 2.14.2",
  "regex",
@@ -923,14 +924,14 @@ dependencies = [
 
 [[package]]
 name = "bids-layout"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7faa330f180c21e6c284f1c5b1fd09cf783e75d9e94042689bdcdc7f87fc02a5"
 dependencies = [
  "bids-core",
  "bids-io",
  "bids-schema",
  "bids-validate",
- "duckdb",
  "indexmap 2.14.2",
  "log",
  "regex",
@@ -940,52 +941,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "bids-nifti"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
-dependencies = [
- "bids-core",
- "bytemuck",
- "flate2",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "bids-schema"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eec753aeafe8534838951314a10246df5cf39b18571d740dc1536a2dda677379"
 dependencies = [
  "bids-core",
  "regex",
+ "rustls-graviola",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "bids-validate"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f3deaf602574c7eb9bf63ca4bc9f82dc0f6d87ee0f8c88ed3335f1c0ac1bed5"
 dependencies = [
  "bids-core",
  "bids-schema",
  "regex",
  "walkdir",
-]
-
-[[package]]
-name = "bids-variables"
-version = "0.0.4"
-source = "git+https://github.com/eugenehp/bids-rs?branch=main#a2995e37da9b77c8699d2152837b94373ced3752"
-dependencies = [
- "bids-core",
- "bids-io",
- "bids-layout",
- "bids-nifti",
- "regex",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -2425,7 +2402,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -2636,7 +2613,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -3022,7 +2999,7 @@ dependencies = [
  "anstream",
  "anstyle",
  "env_filter",
- "jiff",
+ "jiff 0.2.46",
  "log",
 ]
 
@@ -3229,17 +3206,6 @@ name = "fancy-regex"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1e1dacd0d2082dfcf1351c4bdd566bbe89a2b263235a2b50058f1e130a47277"
-dependencies = [
- "bit-set 0.8.0",
- "regex-automata",
- "regex-syntax",
-]
-
-[[package]]
-name = "fancy-regex"
-version = "0.19.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
 dependencies = [
  "bit-set 0.8.0",
  "regex-automata",
@@ -3969,6 +3935,16 @@ dependencies = [
  "presser",
  "thiserror 2.0.21",
  "windows",
+]
+
+[[package]]
+name = "graviola"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0377ccc5ef095424121430046e475cf06658e23475b1af526655cfad0b86b2"
+dependencies = [
+ "cfg-if",
+ "getrandom 0.4.3",
 ]
 
 [[package]]
@@ -5133,9 +5109,25 @@ version = "0.2.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175dc66334db3b9ab9985bf8b61cfed50dc16d20964bb47f9e479adcae984a7f"
 dependencies = [
- "jiff-core",
- "jiff-static",
- "jiff-tzdb-platform",
+ "jiff-core 0.1.8",
+ "jiff-static 0.2.46",
+ "jiff-tzdb-platform 0.1.3",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
+ "windows-link 0.2.1",
+]
+
+[[package]]
+name = "jiff"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed5d126d72eb017f10b302e73bdeca446bea405ee449af4d9e7866d6b082d83e"
+dependencies = [
+ "jiff-core 1.0.1",
+ "jiff-static 1.0.1",
+ "jiff-tzdb-platform 1.0.0",
  "log",
  "portable-atomic",
  "portable-atomic-util",
@@ -5153,15 +5145,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "jiff-core"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6b46a105a9874634dd96231021526bf24ca04955a5998c59a9c7666e634b7b8"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "jiff-static"
 version = "0.2.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7b1af7547d47354bc438d797e3854601bde8f8d185780c5ba4ab27afa54f1ba"
 dependencies = [
- "jiff-core",
+ "jiff-core 0.1.8",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "jiff-static"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0127e9bde3c6130d6169e7d8d68676e4be69c4bf7573c308b6f960a5089c428"
+dependencies = [
+ "jiff-core 1.0.1",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -5171,12 +5184,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0980fca2cc272465bd60e82397607ba9f33add9e48defd77923301bbd03808f2"
 
 [[package]]
+name = "jiff-tzdb"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12e71a1b68a875a44a33bb7a1dd84392cb77145a3367a552a3cfe6a4f5cf3afc"
+
+[[package]]
 name = "jiff-tzdb-platform"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
 dependencies = [
- "jiff-tzdb",
+ "jiff-tzdb 0.1.10",
+]
+
+[[package]]
+name = "jiff-tzdb-platform"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc65b284afcfa8f6cf189c7274c805505314a7ab975c60e1f548bff56525420e"
+dependencies = [
+ "jiff-tzdb 1.0.0",
 ]
 
 [[package]]
@@ -5298,15 +5326,15 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a42a11b47492e6a2cc76e9c7bcc8077776cb31dac444e0795d7f61bcc6441c08"
+checksum = "0e37f27df77c7887edbc5f5a59ecd8e5ec4a669319266ec1b61068667a603183"
 dependencies = [
  "ahash",
  "bytecount",
  "data-encoding",
  "email_address",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.2",
  "fraction",
  "getrandom 0.3.4",
  "itoa",
@@ -5326,18 +5354,18 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "107aeb6ff14b8deb5610096a8ce5c554ec89806b521147eaeb3cae05b07edb7a"
+checksum = "7e41151614b6c927e21982be8bef5a26741ae5a0ae6a781eedee2aa930a980e6"
 dependencies = [
  "regex-syntax",
 ]
 
 [[package]]
 name = "jsonschema-value"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e281d6b177bb4834f2ffd6f92aa0443cffe29c996b251c8d94eb6f456186feba"
+checksum = "1515b9a91134ef67d7bac95c2d76fbc7e383c4c55ee544204ceec8088f881fef"
 dependencies = [
  "ahash",
  "bytecount",
@@ -5692,9 +5720,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.39.1"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
+checksum = "b06e69070b7e12262b0cd90832f0a7396f142a2b330181255562decf9f0c6215"
 dependencies = [
  "cc",
  "pkg-config",
@@ -6927,7 +6955,7 @@ dependencies = [
  "pin-project-lite",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.21",
  "tokio",
  "tokio-stream",
@@ -6970,7 +6998,7 @@ checksum = "8d0160422832eea1cc11c34be04ee6d5a046452b0b46cfb14695d55a1f24c954"
 dependencies = [
  "cfg_aliases",
  "libc",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -8671,7 +8699,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -9268,9 +9296,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f42818036d3b37cda6bd4c494543158a36e431cb717015ef7c93acc6ba214d3b"
+checksum = "a028057ef852c58a42d75e09da87b5e733f4030f4c7411728955e4f87203a577"
 dependencies = [
  "ahash",
  "fluent-uri",
@@ -9447,9 +9475,9 @@ dependencies = [
 
 [[package]]
 name = "rlsl"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "429b939f72dcab54423014271038c3a9430c526623074a6527c9ede2aaf5e7c0"
+checksum = "f86319c9e2fbf3dbf1112e7aa2e5fb25e7d269fe3be6e285420a7387dcb59c90"
 dependencies = [
  "crossbeam-channel",
  "fxhash",
@@ -9466,9 +9494,9 @@ dependencies = [
 
 [[package]]
 name = "rlsl-iroh"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "192851b0961c8f7198a2a7c1fc4ee01f3383ad032e5074dca5f48fec75f4499a"
+checksum = "51b04938048d38258652926af1757bda8185956e17ff5c2e3f16b3a370879aad"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -12627,9 +12655,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.41.1"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
+checksum = "f172c4812a19b26d1c23cdb0070e69db335503dfa378b910eb857386e5b8beba"
 dependencies = [
  "bitflags 2.13.2",
  "fallible-iterator",
@@ -12720,6 +12748,16 @@ dependencies = [
  "rustls-webpki",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "rustls-graviola"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf5d0a370be690f7f1aa4e1b912fde3f5f9a5c53285062fd2d6ac1a52ab3e883"
+dependencies = [
+ "graviola",
+ "rustls",
 ]
 
 [[package]]
@@ -13188,7 +13226,7 @@ dependencies = [
  "hex",
  "indexmap 1.9.3",
  "indexmap 2.14.2",
- "jiff",
+ "jiff 0.2.46",
  "schemars 0.9.0",
  "schemars 1.2.3",
  "serde_core",
@@ -13454,11 +13492,10 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "skill"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
- "chrono",
  "csv",
  "dirs 7.0.0",
  "dispatch2",
@@ -13481,14 +13518,12 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "serialport",
  "sha2 0.11.1",
  "skill-autostart",
  "skill-calendar",
  "skill-constants",
  "skill-daemon-common",
  "skill-data",
- "skill-devices",
  "skill-eeg",
  "skill-headless",
  "skill-history",
@@ -13500,10 +13535,10 @@ dependencies = [
  "skill-oura",
  "skill-settings",
  "skill-skills",
+ "skill-time",
  "skill-tools",
  "skill-tray",
  "skill-tts",
- "skill-vision",
  "stacker",
  "sysinfo 0.40.4",
  "tauri",
@@ -13608,7 +13643,7 @@ dependencies = [
 
 [[package]]
 name = "skill-daemon"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "antneuro",
  "anyhow",
@@ -13619,7 +13654,6 @@ dependencies = [
  "brainbit",
  "brainmaster",
  "brainvision",
- "chrono",
  "cognionics",
  "dirs 7.0.0",
  "fast-hnsw",
@@ -13675,6 +13709,7 @@ dependencies = [
  "skill-screenshots",
  "skill-settings",
  "skill-skills",
+ "skill-time",
  "skill-tools",
  "skill-tts",
  "sysinfo 0.40.4",
@@ -13759,7 +13794,6 @@ dependencies = [
  "anyhow",
  "arrow-array",
  "arrow-schema",
- "chrono",
  "csv",
  "grayscale",
  "libc",
@@ -13774,6 +13808,7 @@ dependencies = [
  "skill-gpu",
  "skill-health",
  "skill-oura",
+ "skill-time",
  "sysinfo 0.40.4",
  "tempfile",
  "thiserror 2.0.21",
@@ -14048,12 +14083,12 @@ name = "skill-oura"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "chrono",
  "oura-api",
  "oura-protocol",
  "serde",
  "serde_json",
  "skill-health",
+ "skill-time",
  "tempfile",
 ]
 
@@ -14080,7 +14115,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
- "chrono",
  "crossbeam-channel",
  "fast-hnsw",
  "gif",
@@ -14138,11 +14172,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-time"
+version = "0.0.1"
+dependencies = [
+ "jiff 1.0.1",
+]
+
+[[package]]
 name = "skill-tools"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "chrono",
  "dirs 7.0.0",
  "iana-time-zone",
  "jsonschema",
@@ -14156,6 +14196,7 @@ dependencies = [
  "skill-headless",
  "skill-location",
  "skill-skills",
+ "skill-time",
  "thiserror 2.0.21",
  "tokio",
  "ureq 3.5.2",
@@ -14198,12 +14239,12 @@ dependencies = [
 
 [[package]]
 name = "skill-tty"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
- "chrono",
  "dirs 7.0.0",
  "libc",
+ "skill-time",
 ]
 
 [[package]]
@@ -15269,7 +15310,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
  "windows-sys 0.61.2",

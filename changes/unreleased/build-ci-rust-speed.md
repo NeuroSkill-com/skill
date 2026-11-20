@@ -1,3 +1,0 @@
-### Build
-
-- **Faster Rust CI**: the Linux Rust job spent ~62 of its 66 minutes compiling and 24 s running tests. Clippy and tests now run as parallel jobs (`Rust — clippy`, `Rust — test`), each with its own kache store. Unit and integration tests run in one cargo invocation per crate selection, so shared dependencies are no longer rebuilt for a second step that selected a different crate set. kache now caches C/C++ (`cache-c-cpp`): DuckDB's bundled C++ — built by the `libduckdb-sys` build script, ~10 min each, six times per run — was the largest cost and was never cached (73% of crates hit but only 23% of compile cost).
