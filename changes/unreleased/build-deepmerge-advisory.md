@@ -1,4 +1,0 @@
-### Build
-
-- **npm audit clean**: all 7 low-severity warnings came from `deepmerge` 4.3.1 (GHSA-gcqx-w48m-w2h4, prototype poisoning through an own `__proto__` key merged into a null-prototype target), pulled in by `@sveltejs/vite-plugin-svelte`. No patched release exists, and npm's suggested `--force` fix would have downgraded SvelteKit to 0.0.30. `deepmerge` is now overridden with `patches/npm/deepmerge-4.3.1`: upstream 4.3.1 plus a `__proto__` guard in `mergeObject`, with identical output on ordinary merges. Remove it once upstream ships a fix.
-- **npm dependencies updated** within their ranges (Biome 2.6.8, SvelteKit 3.2.0, Vite 8.3.8, Tailwind 4.3.5, bits-ui 2.21.0, maplibre-gl 6.18.0, marked 18.2.0, …); `biome.json` schema bumped to match. `allowScripts` now names `esbuild@0.28.2`, so its postinstall runs again after the update.
