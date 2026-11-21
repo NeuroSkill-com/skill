@@ -2,10 +2,10 @@ name: Homebrew cask
 
 # Keeps Casks/neuroskill.rb pinned to the latest *stable* GitHub release.
 #
-# Why a reconcile (not a step inside Release - Mac): a release published with the
+# Why a reconcile (not a step inside Release): a release published with the
 # default GITHUB_TOKEN cannot, by design, trigger another workflow, so a
 # `release: [released]` trigger would never fire. Instead this job runs after the
-# mac release build completes (and on a weekly safety net), reads the current
+# release workflow completes (and on a weekly safety net), reads the current
 # latest stable release, and commits the bump to main whenever the cask has
 # drifted. RC builds are harmless: the reconcile always targets the latest
 # *stable*, so an RC run finds no drift and does nothing.
@@ -16,7 +16,7 @@ name: Homebrew cask
 # the release asset's sha256 digest, so there is nothing for a review to catch.
 on:
   workflow_run:
-    workflows: ["Release - Mac"]
+    workflows: ["Release"]
     types: [completed]
   schedule:
     - cron: "17 6 * * 1" # Mondays 06:17 UTC

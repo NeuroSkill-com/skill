@@ -11,8 +11,7 @@
 // A tag that exists but points somewhere else is never moved or overwritten: that
 // is a published release (or a collision with one), and the script says so.
 //
-// `--no-verify` skips the pre-push hook, which re-runs clippy and tests for the
-// changed crates. `npm run release -- --rc --skip-checks` passes it through.
+// `--no-verify` skips the pre-push hook (`npm test -- push`) for the tag push.
 
 import { execFileSync } from "node:child_process";
 import { readVersionFile } from "./version-utils.mjs";

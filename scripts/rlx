@@ -6,6 +6,7 @@
 #   scripts/rlx local        build against ../rlx + ../rlx-models   (aliases: on, dev)
 #   scripts/rlx deployed     build against GitHub via Cargo.lock    (aliases: off, crates, github)
 #   scripts/rlx toggle       flip between the two
+#   scripts/rlx bump         move the GitHub pins in Cargo.lock to the tip of rlx / rlx-models main
 #
 # Thin wrapper around scripts/ensure-rlx.sh, which does the cargo [patch] +
 # Cargo.lock skip-worktree bookkeeping so the committed git-pinned lock
@@ -18,6 +19,11 @@ CONFIG="${REPO_ROOT}/.cargo/rlx-local.toml"
 MARK="# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)"
 
 if [[ -t 1 ]]; then G=$'\033[1;32m'; B=$'\033[1;34m'; DIM=$'\033[2m'; R=$'\033[0m'; else G=""; B=""; DIM=""; R=""; fi
+
+# Marker that keeps .envrc's automatic ensure-rlx.sh run from re-enabling local.
+DEPLOYED="${REPO_ROOT}/.cargo/rlx-deployed"
+go_local()    { rm -f "${DEPLOYED}"; bash "${SCRIPT_DIR}/ensure-rlx.sh" >/dev/null; }
+go_deployed() { bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null; touch "${DEPLOYED}"; }
 
 is_local() { [[ -f "${CONFIG}" ]] && grep -qF "${MARK}" "${CONFIG}"; }
 
@@ -44,6 +50,27 @@ status() {
   fi
 }
 
+# CI and release builds use exactly the rlx revisions in the committed Cargo.lock.
+# This is the one way to move them. It needs deployed mode (a path-patched lock
+# has no GitHub revisions to move), so a local session is switched off and left
+# off: Cargo.lock must be visible to git until the new pins are committed.
+bump() {
+  if is_local; then
+    go_deployed
+    printf '%srlx: switched to DEPLOYED to update the pins%s\n' "${DIM}" "${R}"
+  fi
+  local before after
+  before="$(grep -oE 'MIT-RLX/rlx(-models)?\.git[^"]*#[0-9a-f]{40}' "${REPO_ROOT}/Cargo.lock" | sort -u || true)"
+  ( cd "${REPO_ROOT}" && cargo update -p rlx -p rlx-models-core )
+  after="$(grep -oE 'MIT-RLX/rlx(-models)?\.git[^"]*#[0-9a-f]{40}' "${REPO_ROOT}/Cargo.lock" | sort -u || true)"
+  if [[ "${before}" == "${after}" ]]; then
+    printf '%srlx: pins already at the tip of main%s\n' "${G}" "${R}"
+  else
+    printf '%srlx: pins moved%s\n%s\n' "${G}" "${R}" "${after}"
+    printf '%s     commit Cargo.lock, then `scripts/rlx local` to resume local development%s\n' "${DIM}" "${R}"
+  fi
+}
+
 usage() {
   cat >&2 <<EOF
 rlx — switch skill between local siblings and GitHub-pinned rlx / rlx-models
@@ -53,18 +80,19 @@ rlx — switch skill between local siblings and GitHub-pinned rlx / rlx-models
   scripts/rlx deployed     build against GitHub via Cargo.lock    (aliases: off, crates, github)
   scripts/rlx toggle       flip between the two
   scripts/rlx refresh      re-scan siblings for added/removed crates (aliases: re)
+  scripts/rlx bump         move the Cargo.lock pins to the tip of rlx / rlx-models main
 EOF
 }
 
 case "${1:-status}" in
   status|st)                            status ;;
-  local|on|dev|up)                      bash "${SCRIPT_DIR}/ensure-rlx.sh"     >/dev/null; status ;;
-  deployed|off|crates|published|prod|github) bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null; status ;;
-  refresh|re)                           RLX_REFRESH=1 bash "${SCRIPT_DIR}/ensure-rlx.sh" >/dev/null; status ;;
+  local|on|dev|up)                      go_local; status ;;
+  deployed|off|crates|published|prod|github) go_deployed; status ;;
+  refresh|re)                           rm -f "${DEPLOYED}"; RLX_REFRESH=1 bash "${SCRIPT_DIR}/ensure-rlx.sh" >/dev/null; status ;;
   toggle)
-    if is_local; then bash "${SCRIPT_DIR}/ensure-rlx.sh" off >/dev/null
-    else              bash "${SCRIPT_DIR}/ensure-rlx.sh"     >/dev/null; fi
+    if is_local; then go_deployed; else go_local; fi
     status ;;
+  bump|update)                          bump ;;
   -h|--help|help)                       usage ;;
   *) printf 'rlx: unknown command %s\n\n' "$1" >&2; usage; exit 2 ;;
 esac

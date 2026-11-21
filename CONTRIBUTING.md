@@ -19,8 +19,11 @@ cd skill
 # Install all platform dependencies + JS deps (interactive)
 npm run setup
 
-# Ensure Rust is up to date (CI uses latest stable)
+# Ensure Rust is up to date (CI uses latest stable; clippy needs >= 1.95)
 rustup update stable
+
+# Default EEG model (Hugging Face CLI: https://huggingface.co/docs/huggingface_hub/guides/cli)
+hf download Zyphra/ZUNA
 
 # Run in development mode (starts Vite dev server + Tauri)
 npm run tauri dev
@@ -31,11 +34,9 @@ npm run tauri:build
 
 `npm run setup` auto-detects your platform and installs everything needed
 (protobuf, OpenMP, GNU ar, sccache, etc.).  Pass `--yes` to skip prompts.
-See also `npm run setup:build-cache`
-for optional build acceleration, and `npm run setup:rlx` for the optional
-[RLX](https://github.com/MIT-RLX/rlx) sibling checkout (required for CI and
-for `llm-rlx` / `text-embeddings-rlx` features). Details:
-[docs/DEVELOPMENT.md#rlx-optional-path-dependency](docs/DEVELOPMENT.md#rlx-optional-path-dependency).
+`npm run setup:build-cache` adds optional build acceleration (see
+[Build acceleration](#build-acceleration)). A local [RLX](https://github.com/MIT-RLX/rlx)
+checkout is **not** needed; see [RLX](#rlx) if you work on rlx itself.
 
 ## Project Structure
 
@@ -84,10 +85,9 @@ for `llm-rlx` / `text-embeddings-rlx` features). Details:
 │   └── widgets/             # macOS WidgetKit extension
 ├── skills/                  # Pluggable skill definitions (markdown + manifests)
 ├── scripts/                 # Build, CI & test scripts (Node.js + bash, no Python)
+│   ├── check.mjs            # The one list of checks (npm test, git hooks, CI)
+│   ├── release.js           # npm run release rc|stable|status
 │   ├── ci.mjs               # Cross-platform CI helpers
-│   ├── test-picker.mjs      # Interactive test suite picker
-│   ├── test-all.sh          # Suite runner (fmt, lint, clippy, daemon, e2e, …)
-│   ├── test-fast.sh         # Tiered Rust unit tests
 │   └── shell-hooks/         # zsh/bash/fish/PowerShell preexec hooks
 ├── docs/                    # Architecture + coverage docs
 ├── Casks/                   # Generated Homebrew cask
@@ -98,187 +98,114 @@ See `AGENTS.md` for the authoritative crate inventory and architecture rules.
 
 ## Development Workflow
 
-### Running Tests
+### Checks and tests
+
+Every check lives in one list, `scripts/check.mjs`. `npm test`, both git
+hooks, `npm run bump -- --check` and CI's frontend job all run steps from it,
+so a check added there is enforced everywhere.
 
 ```bash
-# ── Interactive picker (shows all options) ────────────────────────
-npm test                       # Arrow keys + space to pick, enter to run
+npm test                        # fast tier: fmt, biome, tiny-text, types, vitest, ci, clippy, tier-1 Rust tests
+npm test -- push                # what pre-push runs: everything, scoped to what your push changes
+npm test -- full                # every check, unscoped (deny, shellcheck, ruff, a11y, catalogs, all Rust tests, …)
+npm test -- vitest clippy       # individual steps, in the order given
+npm test -- full --continue     # don't stop at the first failure
+npm test -- --list              # every tier and step
 
-# ── Quick shortcuts ───────────────────────────────────────────────
-npm run test:fast              # fmt + lint + clippy + vitest + rust + ci + types
-npm run test:all               # everything (deny, smoke, daemon, e2e, mlx-e2e, widgets, …)
+npm test -- llm-e2e             # opt-in steps need models, builds or hardware:
+npm test -- mlx-e2e             #   llm-e2e, mlx-e2e, smoke, daemon-packaging,
+npm test -- widgets             #   daemon-e2e, widgets
 
-# ── Individual suites ─────────────────────────────────────────────
-npm run test:fmt               # Rust + frontend formatting
-npm run test:lint              # Frontend lint (biome)
-npm run test:clippy            # Rust clippy
-npm run test:deny              # Dependency audit (cargo deny)
-npm run test:vitest            # Frontend unit tests (vitest)
-npm run test:types             # TypeScript/Svelte type checking
-npm run test:rust              # Tier 1 Rust tests (~5 s warm)
-npm run test:rust:all          # All Rust tiers (~65 s clean)
-npm run test:ci                # CI script self-test
-npm run test:a11y              # Accessibility audit
-npm run test:i18n              # i18n key validation
-npm run test:changelog         # Changelog fragment check
-npm run test:smoke             # Build verification
-npm run test:e2e               # LLM E2E (downloads model, ~15 s cached)
-npm run test:mlx-e2e           # MLX backend E2E — UMAP + FFT (macOS only)
-npm run test:llm:e2e           # Direct cargo LLM E2E (no shell wrapper)
-
-# ── Daemon packaging (sidecar install/upgrade) ────────────────────
-npm run test:daemon-packaging        # Auto-detects OS
-npm run test:daemon-packaging:mac    # macOS-specific
-npm run test:daemon-packaging:linux  # Linux-specific
-npm run test:daemon-packaging:win    # Windows (PowerShell)
-
-# ── Git hook checks ──────────────────────────────────────────────
-npm run test:hooks             # pre-commit + pre-push (full)
-npm run test:pre-commit        # Just pre-commit checks
-npm run test:pre-push          # Full pre-push suite
-
-# ── Mix and match ─────────────────────────────────────────────────
-bash scripts/test-all.sh clippy vitest ci      # Run specific suites
-bash scripts/test-all.sh --continue all        # Don't stop on first failure
-bash scripts/test-all.sh --list                # Show available suites
+npm run test:watch              # vitest in watch mode
+npm run test:ui -- src/tests/chat-ui-e2e.spec.ts [--headed]   # Playwright UI specs
 ```
 
-#### Rust Test Tiers
-
-Tests are split into tiers by compilation cost so you get fast feedback:
-
-| Tier | What it tests | Clean build | Warm cache | Tests |
-|------|---------------|-------------|------------|-------|
-| **1** | Core logic: eeg, tools, jobs, constants, exg, gpu | ~27 s | ~5 s | ~350 |
-| **2** | + data, settings, history, health, router, tts, labels, skills, commands | ~53 s | ~8 s | ~550 |
-| **3** | + screenshots, devices, llm (adds ML, TLS, heavy native deps) | ~65 s | ~15 s | ~650 |
-| **E2E** | LLM download → inference → tool calling (manual/CI dispatch) | ~15 s | ~12 s | 1 |
+Steps whose tool is not installed (shellcheck, ruff, pwsh, cargo-deny) are
+skipped with a note; CI runs them.
 
 > **Tip:** Install [kache](https://github.com/kunobi-ninja/kache)
 > (`brew install kunobi-ninja/kunobi/kache && kache init`) for faster clean rebuilds and
-> cache reuse across worktrees. [sccache](https://github.com/mozilla/sccache)
-> (`RUSTC_WRAPPER=sccache`) also works; the npm build scripts prefer kache when both exist.
+> cache reuse across worktrees. `npm test` and the build scripts prefer kache, then sccache.
 
 See [docs/TEST-COVERAGE.md](docs/TEST-COVERAGE.md) for a detailed coverage analysis and gaps.
 
-### Code Quality
+### Git hooks
+
+`npm ci` points git at `.githooks/`:
+
+- **pre-commit** — `npm test -- commit`: rlx pin guard, `llm_catalog.json`
+  parses, i18n locales (when staged), `cargo fmt` (formats and re-stages staged `.rs`). Seconds.
+- **pre-push** — `npm test -- push`: changelog fragments, plus fmt / biome /
+  shellcheck / vitest / ci self-test / deny / clippy / cargo test for what the
+  push changes. `PREPUSH_FULL=1 git push` runs the unscoped `full` tier;
+  `git push --no-verify` skips it.
+
+### Fixing and formatting
 
 ```bash
-# Frontend lint & format
-npm run lint          # Check
-npm run lint:fix      # Auto-fix
-npm run format        # Format only
-npm run format:check  # Check formatting
-
-# Rust
-cargo fmt             # Format
-cargo fmt --check     # Check formatting
-cargo clippy --workspace  # Lint
-
-# Type checking
-npm run check         # Svelte + TypeScript
-
-# i18n
-npm run sync:i18n:check   # Verify translation keys
-npm run sync:i18n:fix     # Auto-fix missing keys
-npm run audit:i18n        # Find unused / undefined keys
-npm run check:i18n:critical  # Critical-locale coverage
-
-# Catalog + README sync
-npm run sync:llm:catalog:check     # LLM model catalog drift
-npm run sync:readme:supported:check
-
-# Accessibility
-npm run audit:a11y:check
-
-# Dependency audit
-cargo audit
-cargo deny check -A no-license-field -A parse-error -A license-not-encountered
+npm run lint:fix              # biome lint + fixes
+npm run format                # biome format
+cargo fmt
+npm run sync:i18n:fix         # add missing translation keys
+npm run audit:i18n            # unused / undefined keys
+npm run sync:llm:catalog      # refresh GGUF file lists from the Hub
+npm run sync:hf:downloads     # crawl Hub download counts (also refreshed weekly by CI)
+npm run sync:readme:supported
+npm run check:changelog:fix
 ```
+
+The matching `--check` modes are all steps of `npm test -- full`.
 
 ### Faster local `cargo check`
 
-`cargo check -p skill` can be slow on a cold cache because it compiles many heavy deps.
-Use these faster options during day-to-day work:
-
 ```bash
-# Check only crates affected by your branch (same idea as CI)
-BASE=origin/main
-FLAGS=$(bash scripts/changed-crates.sh "$BASE")
-cargo check $FLAGS
-
-# Or check only core app lib target
-cargo check -p skill --lib
-
-# Optional: speed up rebuilds with kache (or sccache)
-kache init            # once; or: export RUSTC_WRAPPER=sccache
+cargo check $(bash scripts/changed-crates.sh origin/main)   # crates your branch affects
+cargo check -p skill --lib                                   # just the app's lib target
 ```
 
-### Commit Checklist
-
-The **pre-commit** hook automatically checks:
-- i18n key synchronisation (when i18n files are staged)
-- Frontend formatting via Biome
-- Rust formatting via `cargo fmt`
-
-The **pre-push** hook runs scoped checks based on changed files:
-- Frontend: `biome check` + `vitest related` on changed files
-- Rust: `cargo clippy` + `cargo test` on affected crates
-- CI scripts: `node scripts/ci.mjs self-test` when `ci.mjs` or workflows change
-- Daemon guard: `vitest run daemon-client.test.ts` when daemon proxy or scripts change
-
-### CI & Releases
-
-PR / branch CI (`ci.yml`) runs VERSION sync, clippy, frontend checks, and
-optional E2E jobs. Signed Tauri product builds run on release tags
-(`release-{mac,linux,windows}.yml`) or Preview Build — not on every PR.
-
-Shared release bootstrap lives in `.github/actions/release-setup` (Rust +
-**rust-cache only** + Node; optional frontend build). Product crates are
-compiled via `scripts/compile-product.mjs` (daemon OS umbrella → tty → app
-`custom-protocol`) so feature flags cannot drift across OS workflows.
-OS-specific signing and packaging stay in the thin release workflows.
-Helpers live in `scripts/ci.mjs` (macOS / Linux / Windows):
+### Build acceleration
 
 ```bash
-# Validate ci.mjs and workflow references
-npm run ci:test
-
-# Local release dry-run (builds frontend + Rust + .app bundle + changelog)
-npm run ci:dry-run
-
-# Same but skip compile (reuse existing binaries — fast iteration)
-npm run ci:dry-run:fast
+npm run setup:build-cache
 ```
 
-**Available `ci.mjs` commands:**
+This offers [kache](https://github.com/kunobi-ninja/kache), the preferred compiler
+cache, and falls back to sccache; on Linux it also offers mold. Toggles:
+`SKILL_NO_KACHE=1` (use sccache), `SKILL_NO_SCCACHE=1`, `SKILL_NO_MOLD=1`,
+`unset LLAMA_PREBUILT_DIR` (force a local llama.cpp build),
+`SKILL_DAEMON_SERVICE_AUTOINSTALL=0` (no daemon service auto-install while testing).
 
-| Command | What it does |
-|---------|-------------|
-| `resolve-version` | Read `VERSION`, verify derived files, validate git tag when present |
-| `verify-secrets NAME...` | Check that env vars are non-empty (no values printed) |
-| `prepare-changelog VER OUT [RANGE]` | Extract changelog + contributors to markdown |
-| `update-latest-json --platform P ...` | Merge platform entry into Tauri updater manifest |
-| `discord-notify --status S ...` | Send Discord webhook notification |
-| `import-apple-cert` | Import .p12 certificate into temporary keychain (macOS) |
-| `validate-notarization` | Check Apple notarization credentials pre-flight (macOS) |
-| `free-disk-space` | Remove unused toolchains on Linux runners |
-| `install-protoc-windows` | Install protoc via Chocolatey or direct download |
-| `self-test` | Validate all commands + workflow references |
-| `dry-run-release [--target T] [--skip-compile]` | Full local release pipeline |
+### RLX
 
-**Release workflows** (all support on-demand via `workflow_dispatch`):
-- `release-mac.yml` — macOS aarch64 (.app + .dmg)
-- `release-linux.yml` — Linux x86_64 (.deb + .rpm + portable tar)
-- `release-windows.yml` — Windows x64 (.exe NSIS installer)
+`rlx*` and `rlx-models*` come from GitHub (`MIT-RLX/rlx`, `MIT-RLX/rlx-models`,
+`branch = "main"` in the root `Cargo.toml`), at the exact revisions pinned in the
+committed `Cargo.lock`. Local builds, CI and release builds all use those pins.
 
-Tag-triggered runs publish to GitHub Releases. On-demand runs upload artifacts (14-day retention).
+```bash
+npm run rlx                   # which source is active
+npm run rlx -- local          # build against ../rlx + ../rlx-models (sibling checkouts)
+npm run rlx -- deployed       # back to the Cargo.lock pins
+npm run rlx -- bump           # move the pins to the tip of rlx / rlx-models main
+```
 
-### Changelog Fragments
+`local` path-patches every rlx crate through the gitignored
+`.cargo/rlx-local.toml` and hides the rewritten `Cargo.lock` from git
+(skip-worktree), so the GitHub pins stay committed; the pre-commit hook refuses
+a lock that points rlx at a path. With [direnv](https://direnv.net/), `.envrc`
+switches to `local` automatically when the siblings exist, unless you chose
+`deployed`. Other checkout locations: `rlx.path` / `rlx-models.path` (one line,
+absolute path; see `rlx.path.example`) or `RLX_ROOT` / `RLX_MODELS_ROOT`.
+
+**Picking up new rlx in skill** is a deliberate commit: `npm run rlx -- bump`,
+build and test, commit `Cargo.lock`, then `npm run rlx -- local` to resume.
+Until then CI and releases keep building the previous pins.
+
+### Changelog fragments
 
 Every feature or bugfix **must** include a changelog fragment:
 
-1. Create a `.md` file in `changes/unreleased/` (e.g., `feat-my-change.md`)
+1. `npm run changes:new -- <slug> --category <Category>`, or create a `.md` file
+   in `changes/unreleased/` (e.g., `feat-my-change.md`)
 2. Use the format:
    ```markdown
    ### Features
@@ -287,32 +214,89 @@ Every feature or bugfix **must** include a changelog fragment:
    ```
 3. Valid categories: `Features`, `Performance`, `Bugfixes`, `Refactor`, `Build`, `CLI`, `UI`, `LLM`, `Server`, `i18n`, `Docs`, `Dependencies`
 
-At release time, `npm run bump` compiles fragments into versioned release notes.
+A release compiles every fragment in `changes/unreleased/` into
+`changes/releases/<version>.md` and `CHANGELOG.md`.
 
-**Note**: The `bump` command includes safety checks to prevent accidental multiple bumps. It verifies that the current version has been properly tagged and pushed to the remote. If you need to bypass these checks (e.g., during recovery), use:
-
-```bash
-npm run bump --force
-```
-
-### Cutting a release
-
-Releases are PR-driven. Cutting an RC opens a release PR; `npm run release` checks the RC, rebase-merges that PR and promotes the RC to stable with no rebuild.
+## Releases
 
 ```bash
-# Cut the first RC for the next release (run from main)
-npm run release -- --rc
-
-# Iterate as bugs surface (from the release/X.Y.Z branch)
-npm run release -- --rc
-
-# Ship the latest RC to stable (from the release/X.Y.Z branch)
-npm run release
+npm run release rc            # next RC:  0.1.3 → 0.1.4-rc.1,  0.1.4-rc.1 → 0.1.4-rc.2
+npm run release stable        # stable:   0.1.4-rc.2 → 0.1.4   (no open RC: 0.1.3 → 0.1.4)
+npm run release status        # VERSION, its tag, the release build and the GitHub release
 ```
 
-See [docs/DEVELOPMENT.md → Release](docs/DEVELOPMENT.md#release) for the full flow, channel system (stable / rc), and the moving parts.
+Run it from `main` (or from a `release/*` branch to patch an older line). A cut:
 
-For emergency hotfixes that must skip RC, the low-level `bump` + `tag` primitives still work (also in `docs/DEVELOPMENT.md`).
+1. bumps `VERSION` and the Cargo workspace version, compiles the changelog
+   fragments (a stable cut after RCs also folds in the RCs' notes) and commits
+   `<version>` (`scripts/bump.js`);
+2. pushes the branch and the `v<version>` tag (`scripts/tag.js`).
+
+The tag starts `.github/workflows/release.yml`: macOS, Windows and Linux build
+and sign in parallel, and a single publish job creates the GitHub release with
+every asset, `latest.json` and the LLM catalog **only when all three
+succeeded**. A failed platform publishes nothing; re-run the failed job and
+publishing follows. There is no release PR and no promotion step: an RC and
+its stable version are separate builds of the same source, and the stable one
+reports its bare version.
+
+| Flag            | Meaning                                                     |
+|-----------------|-------------------------------------------------------------|
+| `--dry-run`     | Show what would happen; change nothing.                     |
+| `--check`       | Run `npm test -- full` before bumping (off by default: CI runs the checks before anything publishes). |
+| `--cross-check` | Type-check the Windows build first (`npm run check:cross`). |
+| `--yes`         | `stable`: skip typing the version to confirm.               |
+| `--force`       | Skip bump's "previous version is tagged and pushed" check.  |
+
+`bump` and `tag` still work on their own (`npm run bump -- 1.2.0-rc.1`,
+`npm run tag`) for recovery; `release` re-tags a bump commit whose tag push died.
+
+### Versions and channels
+
+`VERSION` is the source of truth. The only other copy is
+`[workspace.package] version` in the root `Cargo.toml`, which `src-tauri`,
+`skill-daemon` and `skill-tty` inherit; Tauri reads its version from
+`src-tauri` (`tauri.conf.json` has none). `npm run bump` writes both and CI
+fails if they drift.
+
+| Version      | Published as | Update channel | Manifest URL                                          |
+|--------------|--------------|----------------|-------------------------------------------------------|
+| `x.y.z-rc.N` | pre-release  | rc             | `…/releases/download/rc-latest/latest.json`           |
+| `x.y.z`      | latest       | stable         | `…/releases/latest/download/latest.json`              |
+
+`rc-latest` is a long-lived release whose `latest.json` (and LLM catalog) every
+build overwrites, RC or stable, so a stable release overtakes an in-flight RC
+for rc users. Users opt in via **Settings → Updates → Receive pre-releases**
+(`<app_local_data>/update-channel.txt`, read by the background poll live and by
+the plugin's static endpoint at startup). The About page shows `v0.5.1` or
+`v0.5.1 (RC · abc1234)`; the commit comes from `BUILD_INFO_COMMIT`
+(`src-tauri/build.rs`).
+
+### Moving parts
+
+| File / workflow                                   | Role                                                          |
+|---------------------------------------------------|---------------------------------------------------------------|
+| `scripts/release.js`                              | `rc` / `stable` / `status`: plan the version, bump, push, tag |
+| `scripts/bump.js`                                 | VERSION + Cargo version, changelog, `<version>` commit        |
+| `scripts/tag.js`                                  | `git tag v${VERSION}` + push to every remote                  |
+| `.github/workflows/release.yml`                   | Tag → build all platforms → publish once                      |
+| `.github/workflows/release-{mac,linux,windows}.yml` | Reusable per-platform build + sign; stage assets, publish nothing |
+| `scripts/ci.mjs stage-release-assets`             | A build job's assets + updater entry → workflow artifact      |
+| `scripts/ci.mjs publish-release`                  | Draft with every asset + `latest.json` + catalog → publish; mirror to `rc-latest` |
+| `.github/actions/release-setup`                   | Shared Rust + rust-cache + Node (+ optional frontend)         |
+| `scripts/compile-product.mjs`                     | Shared daemon (OS umbrella) → tty → app (`custom-protocol`)   |
+| `.github/workflows/homebrew-cask.yml`             | After a release, pins the cask to the latest stable           |
+
+### Builds without a release
+
+```bash
+npm run ci:dry-run [-- --skip-compile]   # local: frontend + Rust + .app + changelog
+gh workflow run "Build - Mac"            # CI: signed build, artifacts kept 14 days
+gh workflow run "Build - Linux"
+gh workflow run "Build - Windows"        # dry_run (unsigned) by default
+```
+
+Label a PR `build` (or run "Preview Build") for preview artifacts of a branch.
 
 ## Secrets & Keychain
 
@@ -356,12 +340,11 @@ npm run daemon                 # tsx scripts/daemon.ts
 # Stop any running daemon
 npm run stop                   # pkill -f skill-daemon
 
-# Audit daemon HTTP routes vs frontend invokes
+# Audit daemon HTTP routes vs frontend invokes (the invoke guard is part of `npm run check`)
 npm run audit:daemon-routes
-npm run check:daemon-invokes
 
-# Health check
-npm run health
+# Data health check
+npm run health                 # or: SKILL_DIR=/path/to/.skill npm run health
 ```
 
 On a fresh install (any OS), the installer kills any old daemon, installs the new
@@ -396,26 +379,39 @@ Located under `extensions/`:
 
 ## Packaging
 
-Cross-platform release builds are produced via `scripts/tauri-build.js`:
+Local release builds go through `scripts/tauri-build.js`:
 
 ```bash
-# macOS
-npm run tauri:build:mac:app           # .app bundle
-npm run tauri:build:mac:dmg           # .app + .dmg
+npm run tauri:build                    # host target (add -- --target <triple> --bundles appimage for Linux AppImages)
+npm run dist:mac                       # .app + .dmg
+npm run dist:win                       # NSIS installer (.exe)
+npm run dist:linux                     # portable tarball   (-- --target <triple>)
+npm run dist:linux:system              # .deb + .rpm         (-- --target <triple>)
+npm run brew:cask:generate             # Homebrew cask (CI does this after a stable release)
 
-# Linux (native arch) — daemon built with `--features linux`
-npm run tauri:build:linux:arm64       # aarch64 AppImage
-npm run tauri:build:linux:x64:native  # x86_64 AppImage
-npm run package:linux:portable        # Portable tarball
-npm run package:linux:system:arm64:native  # .deb / .rpm
-npm run package:linux:system:x64:native    # .deb / .rpm
-
-# Windows — daemon built with `--features windows`
-npm run tauri:build:win:nsis          # NSIS installer (.exe)
-
-# Homebrew cask (post-release)
-npm run brew:cask:generate
+npm test -- daemon-packaging           # verify the packaged daemon sidecar (auto-detects OS)
+bash scripts/test-daemon-packaging.sh --os macos --build   # build + verify in one step
 ```
+
+See [docs/LINUX.md](docs/LINUX.md), [docs/WINDOWS.md](docs/WINDOWS.md) and
+[docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md) for platform details.
+
+### Scripts you run by hand
+
+| Script | What it does |
+|---|---|
+| `scripts/build-macos.sh [--debug]` | Builds the WidgetKit widgets, then the app, and embeds the widget `.appex` in the bundle |
+| `scripts/e2e-neuroskill-daemon.sh` | Starts a fresh daemon with the virtual EEG device and runs every `neuroskill` CLI command against it |
+| `scripts/e2e-neuroloop-daemon.sh` | Same for neuroloop → neuroskill → daemon, including labels and LLM calls |
+| `scripts/test-upgrade-linux-docker.sh [A\|B\|both]` | Runs the daemon-upgrade end-to-end tests in a Linux container (`Dockerfile.upgrade-test`) |
+| `scripts/test-skill-tty-linux.sh` | Compile-checks `skill-tty` for Linux in a `rust:bookworm` container |
+| `scripts/create-windows-guest.sh [iso] [disk]` | Boots a QEMU Windows guest from an installer ISO for testing the Windows release build |
+| `scripts/generate-icons.js <image>` | Regenerates every Tauri app icon (PNG, `.ico`, `.icns`) from one source image |
+| `scripts/git-push-all.sh [-n] "message"` | Commits and pushes one change across the superproject and every submodule (`-n` previews) |
+| `scripts/tts-generate-wavs.sh` | Writes TTS samples to `output/tts-validate/`, one engine at a time to limit memory use |
+| `scripts/whisper_validate_tts.py` | Transcribes those samples with openai-whisper and scores how much of the text came through |
+| `scripts/orpheus-compare-quants.sh` | Runs Orpheus TTS with Whisper validation for each quantization in turn |
+| `scripts/prepare-daemon-sidecar.js` | Builds the daemon and stages it in `src-tauri/binaries/` as the Tauri sidecar |
 
 ## Encoding
 

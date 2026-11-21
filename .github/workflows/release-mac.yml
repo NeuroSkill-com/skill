@@ -1,14 +1,14 @@
-name: Release - Mac
+name: Build - Mac
 
+# Builds, signs and notarizes the macOS release assets. Publishes nothing:
+# release.yml calls this for a version tag and publishes all platforms at once.
+# Run it by hand (Actions → Run workflow) for a signed build without a release.
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+  workflow_call:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -18,7 +18,7 @@ env:
 
 jobs:
   release:
-    name: Build & Release — aarch64-apple-darwin
+    name: Build — aarch64-apple-darwin
     runs-on: macos-26
     environment: Release
 
@@ -244,7 +244,6 @@ jobs:
       # cryptography with no macOS-API bundling code, so it does not hit the
       # SIGILL that kills `npx tauri build`.
       - name: Recreate updater artifact from signed .app
-        if: steps.version_meta.outputs.is_release == 'true'
         env:
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -280,7 +279,6 @@ jobs:
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths
-        if: steps.version_meta.outputs.is_release == 'true'
         id: artifacts
         run: |
           BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
@@ -314,101 +312,20 @@ jobs:
           echo "  SIG : $APP_SIG"
           echo "  DMG : $DMG  ($(du -sh "$DMG" | cut -f1))"
 
-      # ── Create GitHub Release + upload macOS binary assets ───────────────────
-      #
-      # Creates (or updates) the release and uploads the macOS-specific binaries.
-      # latest.json is handled in the next step so that the Windows and Linux
-      # release workflows can each merge their own platform entry without
-      # overwriting each other.
-      #
-      # macOS assets uploaded here:
-      #   NeuroSkill_<ver>_aarch64.dmg       — drag-to-install disk image
-      #   NeuroSkill.app.tar.gz              — Tauri updater bundle
-      #   NeuroSkill.app.tar.gz.sig          — Ed25519 signature for the updater
-      - name: Prepare changelog notes for release
-        if: steps.version_meta.outputs.is_release == 'true'
-        run: |
-          TAG="${{ steps.version_meta.outputs.tag }}"
-          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-          RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          node scripts/ci.mjs prepare-changelog \
-            "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
-
-      - name: Create GitHub Release
-        if: steps.version_meta.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name:               ${{ steps.version_meta.outputs.tag }}
-          name:                   Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes: false
-          body_path:              release-notes.md
-          fail_on_unmatched_files: true
-          # `prerelease` is derived from the version string: any `-rc.N` suffix
-          # marks the build as a release candidate. GitHub treats prereleases
-          # specially — `releases/latest/download/...` URLs skip them — so the
-          # stable update channel automatically ignores RCs without any client
-          # configuration. RC users hit the rc-latest mirror updated below.
-          prerelease:             ${{ steps.version_meta.outputs.prerelease == 'true' }}
-          files: |
-            ${{ steps.artifacts.outputs.dmg }}
-            ${{ steps.artifacts.outputs.app_tar }}
-            ${{ steps.artifacts.outputs.app_sig }}
-
-      # ── Update latest.json ────────────────────────────────────────────────────
-      #
-      # Downloads the current latest.json from the release (if a Windows or Linux
-      # platform workflow already uploaded one), merges the darwin-aarch64 entry,
-      # then re-uploads via `gh release upload --clobber`.
-      # If no latest.json exists yet this step creates one from scratch.
-      #
-      # All three platform release workflows (macOS, Windows, Linux) use the same
-      # download → merge → upload pattern, so the single file at:
-      #   https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json
-      # accumulates entries for every platform as each build completes.
-      # The Tauri updater reads only its own platform key (e.g. "darwin-aarch64")
-      # and ignores the rest, so a partial manifest is valid while other platform
-      # builds are still in flight.
-      - name: Update latest.json
-        if: steps.version_meta.outputs.is_release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        # `--mirror-to-rc-latest` also pushes the manifest to the mutable
-        # `rc-latest` GitHub Release, which is the URL the RC update channel
-        # polls. Both stable and RC builds mirror, so RC opt-in users always
-        # see the most recent build of either kind. The release is bootstrapped
-        # automatically on the first run via cmdEnsureRcLatestRelease.
+      # ── Hand the assets to release.yml's publish job ─────────────────────
+      #   NeuroSkill_<ver>_aarch64.dmg              — drag-to-install disk image
+      #   NeuroSkill_<ver>_aarch64.app.tar.gz(.sig) — Tauri updater bundle + signature
+      - name: Stage release assets
         run: >-
-          node scripts/ci.mjs update-latest-json
-          --platform darwin-aarch64
-          --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.app_tar_name }}"
+          node scripts/ci.mjs stage-release-assets
+          --platform darwin-aarch64 --dir release-assets
+          --updater "${{ steps.artifacts.outputs.app_tar }}"
           --sig-file "${{ steps.artifacts.outputs.app_sig }}"
-          --tag "${{ steps.version_meta.outputs.tag }}"
-          --version "${{ steps.version_meta.outputs.version }}"
-          --upload
-          --mirror-to-rc-latest
+          "${{ steps.artifacts.outputs.dmg }}"
 
-      # ── Upload CI artifacts (manual / on-demand builds only) ────────────────
-      - name: Upload build artifacts
-        if: steps.version_meta.outputs.is_release != 'true'
+      - name: Upload release assets
         uses: actions/upload-artifact@v7
         with:
-          name: NeuroSkill-macOS-${{ steps.version_meta.outputs.version }}
-          path: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          name: release-darwin-aarch64
+          path: release-assets/
           retention-days: 14
-
-      # ── Discord notification ────────────────────────────────────────────────
-      - name: Notify Discord of release
-        if: always() && steps.version_meta.outputs.is_release == 'true'
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: >-
-          node scripts/ci.mjs discord-notify
-          --status  "${{ job.status }}"
-          --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — macOS ${{ job.status == 'success' && 'Published' || 'Failed' }}"
-          --version "${{ steps.version_meta.outputs.version }}"
-          --tag     "${{ steps.version_meta.outputs.tag }}"
-          --platform "macOS aarch64"
-          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

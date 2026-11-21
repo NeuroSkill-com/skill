@@ -32,7 +32,7 @@ fi
 CONF="$TAURI_DIR/tauri.conf.json"
 PRODUCT_NAME=$(python3 -c "import json; print(json.load(open('$CONF'))['productName'])")
 BUNDLE_ID=$(python3 -c "import json; print(json.load(open('$CONF'))['identifier'])")
-VERSION=$(python3 -c "import json; print(json.load(open('$CONF'))['version'])")
+VERSION="$(head -n1 "$ROOT/VERSION" | tr -d '[:space:]')"
 
 echo "→ Assembling $PRODUCT_NAME.app (v$VERSION) for $TARGET"
 

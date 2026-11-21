@@ -1,7 +1,7 @@
 name: Trial — Linux arm64 packages
 
 # Proves out an aarch64 Linux .deb/.rpm before the release pipeline depends on
-# one. Today `Release — Linux` builds x86_64 only, so there is no ARM Linux
+# one. Today `Build - Linux` builds x86_64 only, so there is no ARM Linux
 # package at all, even though scripts/package-linux-system-bundles.sh already
 # knows the aarch64 arch mapping.
 #
@@ -105,9 +105,6 @@ jobs:
       # Only to refresh Cargo.lock on the host; the build has its own toolchain.
       - name: Install Rust (lock refresh only)
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
 
       # `app` builds what a Raspberry Pi user installs: the same shared recipe
       # as the x86_64 release (frontend, then daemon → tty → Tauri app).

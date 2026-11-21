@@ -14,7 +14,7 @@
 //!   cargo test -p skill-llm --features llm-rlx-metal --test llm_e2e -- --nocapture
 //!
 //! Or via the npm convenience wrapper:
-//!   npm run test:llm:e2e
+//!   npm test -- llm-e2e
 
 #![cfg(feature = "llm-rlx")]
 

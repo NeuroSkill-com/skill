@@ -1,0 +1,122 @@
+name: Release
+
+# One version tag → one release. `npm run release rc|stable` pushes the tag.
+#
+#   build-mac / build-windows / build-linux   build + sign each platform in
+#                                             parallel; each stages its assets
+#                                             as a workflow artifact
+#   publish                                   runs only when all three succeeded:
+#                                             creates the GitHub release as a draft
+#                                             with every asset, latest.json (all
+#                                             platforms) and the LLM catalog, then
+#                                             publishes it in one step
+#
+# A `-rc.N` tag publishes as a pre-release (the rc update channel, via the
+# `rc-latest` mirror); a bare version publishes as latest (the stable channel,
+# `releases/latest/download/latest.json`). A failed platform publishes nothing,
+# so no release can ship without one; re-run the failed job and publish follows.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+
+permissions:
+  contents: write   # publish job creates the release
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-mac:
+    uses: ./.github/workflows/release-mac.yml
+    secrets: inherit
+
+  build-windows:
+    uses: ./.github/workflows/release-windows.yml
+    secrets: inherit
+
+  build-linux:
+    uses: ./.github/workflows/release-linux.yml
+    secrets: inherit
+
+  publish:
+    name: Publish release
+    needs: [build-mac, build-windows, build-linux]
+    runs-on: ubuntu-24.04
+    environment: Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # tag annotation + previous tag for the notes range
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Resolve version
+        id: version_meta
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF:        ${{ github.ref }}
+          GITHUB_REF_NAME:   ${{ github.ref_name }}
+        run: node scripts/ci.mjs resolve-version
+
+      - name: Download staged assets
+        uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Prepare release notes
+        run: |
+          TAG="${{ steps.version_meta.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          node scripts/ci.mjs prepare-changelog \
+            "${{ steps.version_meta.outputs.version }}" release-notes.md "${PREV_TAG:+$PREV_TAG..}$TAG"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/ci.mjs publish-release
+          --dir release-assets
+          --tag "${{ steps.version_meta.outputs.tag }}"
+          --version "${{ steps.version_meta.outputs.version }}"
+          --notes release-notes.md
+
+  notify:
+    name: Discord notification
+    needs: [build-mac, build-windows, build-linux, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          STATUS: ${{ needs.publish.result == 'success' && 'success' || 'failure' }}
+          RESULTS: "mac ${{ needs.build-mac.result }} · windows ${{ needs.build-windows.result }} · linux ${{ needs.build-linux.result }}"
+          VERSION: ${{ github.ref_name }}
+        run: >-
+          node scripts/ci.mjs discord-notify
+          --status  "$STATUS"
+          --title   "${{ needs.publish.result == 'success' && '🚀' || '💥' }} NeuroSkill™ ${VERSION} — ${{ needs.publish.result == 'success' && 'Published' || 'Not published' }}"
+          --version "${VERSION#v}"
+          --tag     "$VERSION"
+          --platform "$RESULTS"
+          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

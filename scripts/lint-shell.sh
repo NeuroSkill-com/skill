@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Run shellcheck on every tracked shell script (`npm run lint:sh`, CI).
+# Run shellcheck on every tracked shell script (`npm test -- shellcheck`, CI).
 #
 # Covers *.sh plus extensionless files with an sh/bash shebang (git hooks,
 # scripts/rlx, the macOS pkg postinstall). Vendored crates under patches/ are

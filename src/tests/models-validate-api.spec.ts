@@ -8,8 +8,8 @@
  *
  * Prerequisites: live skill-daemon (`npm run tauri -- dev` or equivalent).
  *
- *   npm run test:e2e:models-validate
- *   DOWNLOAD_TIMEOUT_SECS=900 npm run test:e2e:models-validate
+ *   npm run test:ui -- src/tests/models-validate-api.spec.ts
+ *   DOWNLOAD_TIMEOUT_SECS=900 npm run test:ui -- src/tests/models-validate-api.spec.ts
  */
 
 import * as fs from "node:fs";

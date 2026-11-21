@@ -149,23 +149,23 @@ From repo root, use the Linux-native script entrypoints:
 npm install
 
 # 1) Build AppImage via Tauri
-npm run tauri:build:linux:x64:native
+npm run tauri:build -- --target x86_64-unknown-linux-gnu --bundles appimage
 
 # 2) Build .deb + .rpm with system tools (dpkg-deb + rpmbuild)
 #    Reuses the release binary from step 1.
-npm run package:linux:system:x64:native -- --skip-build
+npm run dist:linux:system -- --target x86_64-unknown-linux-gnu --skip-build
 ```
 
 Optional portable tarball package:
 
 ```bash
-npm run package:linux:portable:x64:native
+npm run dist:linux -- --target x86_64-unknown-linux-gnu
 ```
 
 ### Validate daemon sidecar in Linux packaging
 
 ```bash
-npm run test:daemon-packaging:linux
+bash scripts/test-daemon-packaging.sh --os linux
 # or (build + verify)
 bash scripts/test-daemon-packaging.sh --os linux --build
 ```
@@ -182,7 +182,7 @@ Notes:
 - For intentional cross-target x86_64 builds from non-x86_64 hosts, use:
 
 ```bash
-ALLOW_LINUX_CROSS=1 npm run tauri:build:linux:x64
+ALLOW_LINUX_CROSS=1 npm run tauri:build -- --target x86_64-unknown-linux-gnu --bundles appimage
 ALLOW_LINUX_CROSS=1 bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu
 ```
 

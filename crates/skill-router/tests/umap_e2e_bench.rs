@@ -249,7 +249,7 @@ fn umap_e2e_small() {
 
 /// Medium dataset (1000 points) — GPU/Metal benchmark when hardware is present.
 #[test]
-#[ignore = "slow benchmark; run with --include-ignored or via npm run test:mlx-e2e"]
+#[ignore = "slow benchmark; run with --include-ignored or via npm test -- mlx-e2e"]
 #[cfg(feature = "accel")]
 fn umap_e2e_medium() {
     let (skill_dir, a_start, a_end, b_start, b_end) = seed_synthetic_embeddings("medium", 500, 500);
@@ -281,7 +281,7 @@ fn umap_e2e_medium() {
 
 /// Large dataset (5000 points) — stress test matching real-world cache sizes.
 #[test]
-#[ignore = "slow benchmark; run with --include-ignored or via npm run test:mlx-e2e"]
+#[ignore = "slow benchmark; run with --include-ignored or via npm test -- mlx-e2e"]
 #[cfg(feature = "accel")]
 fn umap_e2e_large() {
     let (skill_dir, a_start, a_end, b_start, b_end) = seed_synthetic_embeddings("large", 2500, 2500);

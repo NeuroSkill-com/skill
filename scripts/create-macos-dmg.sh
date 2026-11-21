@@ -36,7 +36,7 @@ trap cleanup EXIT
 
 # ── Read config ───────────────────────────────────────────────────────────
 PRODUCT_NAME=$(python3 -c "import json; print(json.load(open('$CONF'))['productName'])")
-VERSION=$(python3 -c "import json; print(json.load(open('$CONF'))['version'])")
+VERSION="$(head -n1 "$ROOT/VERSION" | tr -d '[:space:]')"
 
 BUNDLE_DIR="$TAURI_DIR/target/$TARGET/release/bundle"
 APP_DIR="$BUNDLE_DIR/macos/$PRODUCT_NAME.app"
@@ -52,15 +52,7 @@ ENTITLEMENTS="$TAURI_DIR/entitlements.plist"
 
 echo "→ Creating DMG for $PRODUCT_NAME v$VERSION ($TARGET)"
 echo "  Using config: $CONF"
-echo "  Version from config: $VERSION"
-
-# Double-check version by reading it again
-VERSION_CHECK=$(python3 -c "import json; print(json.load(open('$CONF'))['version'])")
-if [[ "$VERSION" != "$VERSION_CHECK" ]]; then
-  echo "  ⚠ Version mismatch: script has $VERSION, config has $VERSION_CHECK"
-  VERSION="$VERSION_CHECK"
-  echo "  Using config version: $VERSION"
-fi
+echo "  Version (VERSION): $VERSION"
 
 # ── Re-sign the .app (outer bundle only) ─────────────────────────────────
 # Inner bundles (skill-daemon.app, skill-tty.app) were already signed

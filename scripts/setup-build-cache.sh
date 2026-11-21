@@ -213,7 +213,7 @@ echo "════════════════════════�
 echo ""
 
 if command_exists kache; then
-  ok "kache: enabled (auto-detected by npm run tauri dev/build, scripts/test-all.sh and the pre-push hook)"
+  ok "kache: enabled (auto-detected by npm run tauri dev/build, scripts/check.mjs and the git hooks)"
   if ! grep -qs kache "$HOME/.cargo/config.toml"; then
     info "  Run \`kache init\` to use it for plain \`cargo\` commands too"
     info "  (it edits ~/.cargo/config.toml and your shell profile and shows the changes first)"

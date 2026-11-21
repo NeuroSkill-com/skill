@@ -73,5 +73,5 @@ HTTP modules move into `crates/skill-daemon-routes` when they depend only on
 
 Prefer typed clients in `src/lib/daemon/*.ts` (`tokens`, `devices`, `chat`,
 `iroh`, `lsl`, …). Use `daemonInvoke()` only for commands not yet wrapped.
-`npm run check:typed-daemon-clients` fails if `daemonInvoke("…")` is used for a
+`npm run check` fails if `daemonInvoke("…")` is used for a
 command that already has a typed wrapper.

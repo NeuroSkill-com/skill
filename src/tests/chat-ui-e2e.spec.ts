@@ -6,8 +6,8 @@
  *
  * Prerequisites: daemon up, GGUF on disk. mmproj downloaded for vision test.
  *
- *   npm run test:e2e:chat-ui
- *   CHAT_EXPECT_REPLY=1 npm run test:e2e:chat-ui   # require PONG / color word
+ *   npm run test:ui -- src/tests/chat-ui-e2e.spec.ts
+ *   CHAT_EXPECT_REPLY=1 npm run test:ui -- src/tests/chat-ui-e2e.spec.ts   # require PONG / color word
  */
 
 import * as fs from "node:fs";

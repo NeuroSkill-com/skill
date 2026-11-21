@@ -228,13 +228,13 @@ jobs:
           echo "AR=$(brew --prefix binutils)/bin/gar" >> "$GITHUB_ENV"
 
       - name: i18n sync check
-        run: npm run -s sync:i18n:check
+        run: npx tsx scripts/sync-i18n.ts --check
 
       - name: i18n audit check
-        run: npm run -s audit:i18n:check
+        run: npx tsx scripts/audit-i18n.ts --check
 
       - name: i18n locales check (all non-en locales)
-        run: npm run -s check:i18n:locales
+        run: node scripts/check-critical-i18n-locales.js
 
       # ── Validate Apple notarization credentials ──────────────────────────────
       - name: Validate Apple notarization credentials

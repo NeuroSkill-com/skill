@@ -51,14 +51,19 @@ to_cargo_path() {
 
 # Keep local [patch] lock churn out of the committed git-pinned Cargo.lock.
 lock_protect() { git -C "${REPO_ROOT}" update-index --skip-worktree Cargo.lock 2>/dev/null || true; }
-# Resume tracking Cargo.lock and refresh against GitHub git deps (no local patch).
+# Resume tracking Cargo.lock at its committed GitHub pins. While local, the
+# on-disk lock was rewritten to path sources; re-resolving that would float
+# every rlx crate to the tip of main, so restore the committed lock first (only
+# when local mode hid it — a deployed-mode lock edit is the user's own work),
+# then let cargo add whatever local dependency changes need.
 lock_unprotect() {
-  git -C "${REPO_ROOT}" update-index --no-skip-worktree Cargo.lock 2>/dev/null || true
-  if command -v cargo >/dev/null 2>&1 \
-     && ( cd "${REPO_ROOT}" && cargo metadata --format-version=1 >/dev/null 2>&1 ); then
-    return 0
+  if git -C "${REPO_ROOT}" ls-files -v Cargo.lock 2>/dev/null | grep -q '^S'; then
+    git -C "${REPO_ROOT}" update-index --no-skip-worktree Cargo.lock 2>/dev/null || true
+    git -C "${REPO_ROOT}" checkout -- Cargo.lock 2>/dev/null || true
   fi
-  git -C "${REPO_ROOT}" checkout -- Cargo.lock 2>/dev/null || true   # offline fallback
+  if command -v cargo >/dev/null 2>&1; then
+    ( cd "${REPO_ROOT}" && cargo metadata --format-version=1 >/dev/null 2>&1 ) || true
+  fi
 }
 
 # Remove our override (if any) and resume tracking Cargo.lock at its committed state.
@@ -83,6 +88,14 @@ fi
 case "${1:-}" in
   off|--off|disable|--disable) disable_override; exit 0 ;;
 esac
+
+# `scripts/rlx deployed` is sticky: the automatic run from .envrc must not
+# switch back to local behind your back (e.g. before `scripts/rlx bump`'s new
+# pins are committed). `scripts/rlx local` clears the marker.
+if [[ -f "${CONFIG_DIR}/rlx-deployed" ]]; then
+  echo "ensure-rlx: deployed mode chosen (scripts/rlx local to switch back)"
+  exit 0
+fi
 
 resolve_root() { # $1 = env value, $2 = <repo>/<pathfile>, $3 = default
   if [[ -n "${1:-}" ]]; then

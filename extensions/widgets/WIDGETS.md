@@ -86,7 +86,7 @@ cd extensions/widgets
 ./build-widgets.sh --test
 
 # Or via the CI suite
-bash scripts/test-all.sh widgets
+npm test -- widgets
 ```
 
 ### Integrated dev flow
@@ -306,7 +306,7 @@ Ad-hoc signing — no Apple account or provisioning profile:
 ```bash
 ./build-widgets.sh --release    # builds SkillWidgets.appex
 ./build-widgets.sh --test       # 93 Swift unit tests
-npm run tauri:build:mac:neo:app # embeds widget into NeuroSkill.app
+node scripts/tauri-build.js build --target mac-neo --no-bundle && bash scripts/assemble-macos-app.sh mac-neo # embeds widget into NeuroSkill.app
 ```
 
 Uses `SkillWidgets.debug.entitlements` (no App Group).

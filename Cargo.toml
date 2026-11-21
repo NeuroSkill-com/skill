@@ -58,6 +58,13 @@ members = [
     "crates/skill-db",
 ]
 
+# The product version, inherited by the three shipped crates (src-tauri,
+# skill-daemon, skill-tty) via `version.workspace = true`. Tauri reads it from
+# src-tauri's package version (tauri.conf.json has no `version`). `npm run bump`
+# writes VERSION and this line; nothing else carries the version.
+[workspace.package]
+version = "0.1.3"
+
 # btleplug is GONE from this graph, as of 2026-10-15.  There is no override and
 # no shim entry below, because no crate in the tree depends on it any more:
 #

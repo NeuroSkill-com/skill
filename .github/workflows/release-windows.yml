@@ -1,22 +1,24 @@
-name: Release — Windows
+name: Build - Windows
 
-# Triggered by the same semver tag as the macOS and Linux release workflows.
-# All three run in parallel; each uploads its own binaries and then merges
-# its platform entry into the shared latest.json updater manifest.
+# Builds and signs the Windows release assets. Publishes nothing: release.yml
+# calls this for a version tag and publishes all platforms at once. Run it by
+# hand (Actions → Run workflow) for a build without a release; dry_run (the
+# default there) also skips signing.
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+  workflow_call:
+    inputs:
+      dry_run:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'CI test only — build but skip release upload'
+        description: 'CI test only — build unsigned, stage nothing'
         type: boolean
         default: true
 
 permissions:
-  contents: write   # create/update GitHub Releases and upload assets
+  contents: read
 
 # Opt into Node.js 24 now — same rationale as ci.yml.
 env:
@@ -24,7 +26,7 @@ env:
 
 jobs:
   release-windows:
-    name: Build & Release — x86_64-pc-windows-msvc
+    name: Build — x86_64-pc-windows-msvc
     runs-on: windows-latest
     environment: ${{ inputs.dry_run && 'CI-Test' || 'Release' }}
 
@@ -656,70 +658,37 @@ jobs:
           echo "  ZIP : $NSIS_ZIP  ($(du -sh "$NSIS_ZIP" | cut -f1))"
           echo "  SIG : $NSIS_SIG"
 
-      # ── Create / update GitHub Release with Windows binaries ─────────────────
-      #
-      # softprops/action-gh-release creates the release if it doesn't exist yet,
-      # or adds files to it if it was already created by the macOS or Linux
-      # workflow.  latest.json is handled in the next step.
-      #
-      # Windows assets uploaded here:
-      #   *_x64-setup.exe          — NSIS installer (distribute to users)
-      #   *.nsis.zip               — Tauri updater bundle
-      #   *.nsis.zip.sig           — Ed25519 signature for the updater
-      - name: Prepare changelog notes for release
+      # ── Hand the assets to release.yml's publish job ─────────────────────
+      #   *_x64-setup.exe          — NSIS installer
+      #   *.nsis.zip(.sig)         — Tauri updater bundle + signature
+      - name: Stage release assets
         if: steps.version_meta.outputs.dry_run != 'true'
         shell: bash
-        run: |
-          TAG="${{ steps.version_meta.outputs.tag }}"
-          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-          RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          node scripts/ci.mjs prepare-changelog \
-            "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
-
-      - name: Create / update GitHub Release
-        if: steps.version_meta.outputs.dry_run != 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name:                ${{ steps.version_meta.outputs.tag }}
-          name:                    Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes:  false
-          body_path:               release-notes.md
-          fail_on_unmatched_files: true
-          prerelease:              ${{ steps.version_meta.outputs.prerelease == 'true' }}
-          files: |
-            ${{ steps.artifacts.outputs.nsis_exe }}
-            ${{ steps.artifacts.outputs.nsis_zip }}
-            ${{ steps.artifacts.outputs.nsis_sig }}
-
-      # ── Update latest.json ────────────────────────────────────────────────────
-      #
-      # Downloads the current latest.json from the release (created by whichever
-      # platform workflow ran first), merges the windows-x86_64 entry, then
-      # re-uploads.  If no latest.json exists yet, creates one from scratch.
-      - name: Update latest.json
-        if: steps.version_meta.outputs.dry_run != 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: >-
-          node scripts/ci.mjs update-latest-json
-          --platform windows-x86_64
-          --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.nsis_zip_name }}"
+          node scripts/ci.mjs stage-release-assets
+          --platform windows-x86_64 --dir release-assets
+          --updater "${{ steps.artifacts.outputs.nsis_zip }}"
           --sig-file "${{ steps.artifacts.outputs.nsis_sig }}"
-          --tag "${{ steps.version_meta.outputs.tag }}"
-          --version "${{ steps.version_meta.outputs.version }}"
-          --upload
-          --mirror-to-rc-latest
+          "${{ steps.artifacts.outputs.nsis_exe }}"
+
+      - name: Upload release assets
+        if: steps.version_meta.outputs.dry_run != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows-x86_64
+          path: release-assets/
+          retention-days: 14
 
       # ── Upload CI artifacts (on-demand / dry-run builds only) ────────────────
       - name: Upload build artifacts
-        if: steps.version_meta.outputs.is_release != 'true'
+        if: steps.version_meta.outputs.dry_run == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: NeuroSkill-Windows-${{ steps.version_meta.outputs.version }}
           path: |
-            ${{ steps.artifacts.outputs.nsis_exe }}
-            ${{ steps.artifacts.outputs.nsis_zip }}
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
           retention-days: 14
 
       # ── Remove the certificate from the runner's cert store ──────────────────
@@ -733,19 +702,3 @@ jobs:
               Remove-Item -Force
             Write-Host "[ok] Certificate removed from store."
           }
-
-      # ── Discord notification ──────────────────────────────────────────────────
-      - name: Notify Discord of release
-        if: always() && steps.version_meta.outputs.is_release == 'true'
-        shell: bash
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: >-
-          node scripts/ci.mjs discord-notify
-          --status  "${{ job.status }}"
-          --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Windows ${{ job.status == 'success' && 'Published' || 'Failed' }}"
-          --version "${{ steps.version_meta.outputs.version }}"
-          --tag     "${{ steps.version_meta.outputs.tag }}"
-          --platform "Windows x86_64"
-          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

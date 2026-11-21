@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-only
 // Check that the local Rust toolchain meets the minimum version.
-// Called by dev:guard and test-all.sh to catch version mismatches early.
+// Called by dev:guard and scripts/check.mjs to catch version mismatches early.
 
 import { execSync } from "child_process";
 

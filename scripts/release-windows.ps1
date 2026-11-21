@@ -267,9 +267,8 @@ if (-not $SKIP_SIGN) {
     Log "signtool: $signtool"
 }
 
-# Read version from tauri.conf.json
-$tauriConf = Get-Content (Join-Path $TAURI_DIR "tauri.conf.json") -Raw | ConvertFrom-Json
-$VERSION = $tauriConf.version
+# Read version from the repo-root VERSION file (the single source of truth)
+$VERSION = (Get-Content (Join-Path $REPO_ROOT "VERSION") -TotalCount 1).Trim()
 
 $TAURI_TARGET = if ($env:TAURI_TARGET) { $env:TAURI_TARGET } else { "x86_64-pc-windows-msvc" }
 

@@ -18,7 +18,7 @@
 //     at 0.75rem+ which already meets the floor)
 //
 // Run via:   node scripts/lint-tiny-text.mjs
-// CI hook:   wired into scripts/test-all.sh as the `tiny-text` suite.
+// CI hook:   the `tiny-text` step of scripts/check.mjs (`npm test -- tiny-text`).
 
 import * as fs from "node:fs";
 import * as path from "node:path";

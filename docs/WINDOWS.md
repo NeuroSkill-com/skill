@@ -57,7 +57,7 @@ Install from https://nodejs.org (LTS recommended).
 
 ### 4a. NSIS (for installer packaging)
 
-Required for `npm run tauri:build:win:nsis`:
+Required for `npm run dist:win`:
 
 ```powershell
 winget install NSIS.NSIS
@@ -139,7 +139,7 @@ invokes `npx tauri build` for the host triple.
 ### Build standalone NSIS installer (recommended on Windows)
 
 ```powershell
-npm run tauri:build:win:nsis
+npm run dist:win
 ```
 
 What this does:
@@ -162,7 +162,7 @@ Generated installer output:
 Run packaging checks:
 
 ```powershell
-npm run test:daemon-packaging:win
+powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1
 # or (build + verify)
 powershell -ExecutionPolicy Bypass -File scripts/test-daemon-packaging.ps1 -Build
 ```
@@ -176,7 +176,7 @@ What is validated:
 
 ### Installer walkthrough (Windows)
 
-After running `npm run tauri:build:win:nsis`, open the generated installer and follow this flow:
+After running `npm run dist:win`, open the generated installer and follow this flow:
 
 1. Open installer executable
 
@@ -319,7 +319,7 @@ crashing bundling/signing step.  The compiled binary is still produced at
 `src-tauri\target\release\skill.exe`.
 
 If you need a full NSIS installer (e.g. for a release), use
-`npm run tauri:build:win:nsis` for local packaging, or `release-windows.ps1`
+`npm run dist:win` for local packaging, or `release-windows.ps1`
 for signed release automation.
 
 ## Build cache (optional, recommended)

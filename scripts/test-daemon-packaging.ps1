@@ -24,7 +24,7 @@ function Pass($msg) {
 if ($Build) {
     Push-Location $Root
     try {
-        npm run tauri:build:win:nsis
+        npm run dist:win
     } finally {
         Pop-Location
     }

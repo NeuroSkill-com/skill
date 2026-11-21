@@ -9,8 +9,8 @@
 // Anything else is rejected.
 //
 // Source of truth: repo-root `VERSION` (one line, no "v" prefix).
-// bump.js writes VERSION then syncs package.json / tauri.conf.json /
-// src-tauri/Cargo.toml from it.
+// bump.js writes VERSION and the Cargo workspace version
+// (root Cargo.toml [workspace.package]); nothing else carries it.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";

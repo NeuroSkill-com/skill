@@ -48,4 +48,11 @@ ignore = [
     # gone as of llmfit-core 1.1.17, which also removed serde_yml's own
     # RUSTSEC-2025-0068 and noyalib's RUSTSEC-2026-0333 from this list.
     "RUSTSEC-2024-0449", # unsafe-libyaml — unmaintained (serde_yaml's backend)
+
+    # ── chrono — unmaintained, no patched release ────────────────────────────
+    # Advisory published 2026-09-14 with `patched = []`. No crate of ours uses
+    # chrono; it arrives through arrow/parquet 60 (arrow-arith, arrow-array,
+    # arrow-cast) and the antneuro / emotibit device crates, so dropping it is
+    # up to those upstreams moving to jiff or time.
+    "RUSTSEC-2026-0543", # chrono — unmaintained
 ]

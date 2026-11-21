@@ -11,7 +11,8 @@
 //   verify-secrets V1 V2 ... Check env vars are non-empty
 //   prepare-changelog VER OUT [RANGE]  Generate release notes markdown
 //   publish-llm-catalog [--tag T --upload] [--mirror-to-rc-latest]  Validate + publish src-tauri/llm_catalog.json
-//   update-latest-json ...   Merge platform entry into Tauri updater manifest
+//   stage-release-assets ... Collect one platform's release files + updater entry (build jobs)
+//   publish-release ...      Publish every platform's staged assets as one release (publish job)
 //   discord-notify ...       Send Discord webhook notification
 //   import-apple-cert        Import .p12 into temporary keychain (macOS)
 //   setup-widget-signing     Prepare WidgetKit automatic signing (macOS CI)
@@ -82,34 +83,21 @@ function confVersion() {
     throw new Error(`Invalid VERSION "${version}" (expected x.y.z or x.y.z-rc.N)`);
   }
 
-  // Derived consumers must stay in sync with VERSION (bump.js writes all of them).
-  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-  if (pkg.version !== version) {
-    throw new Error(`package.json version (${pkg.version}) does not match VERSION (${version})`);
+  // The only other copy is the Cargo workspace version (bump.js writes both).
+  // The shipped crates inherit it, and Tauri takes its version from src-tauri's.
+  const cargoText = readFileSync("Cargo.toml", "utf8");
+  const ws = cargoText.match(/^\[workspace\.package\]\s*\nversion\s*=\s*"([^"]+)"/m);
+  if (!ws) throw new Error("Could not find [workspace.package] version in Cargo.toml");
+  if (ws[1] !== version) {
+    throw new Error(`Cargo.toml [workspace.package] version (${ws[1]}) does not match VERSION (${version})`);
   }
-  const tauriText = readFileSync("src-tauri/tauri.conf.json", "utf8");
-  const tauriMatch = tauriText.match(/"version"\s*:\s*"([^"]+)"/);
-  if (!tauriMatch) throw new Error("Could not find version in src-tauri/tauri.conf.json");
-  if (tauriMatch[1] !== version) {
-    throw new Error(
-      `src-tauri/tauri.conf.json version (${tauriMatch[1]}) does not match VERSION (${version})`,
-    );
-  }
-  const cargoText = readFileSync("src-tauri/Cargo.toml", "utf8");
-  const cargoMatch = cargoText.match(/^version\s*=\s*"([^"]+)"/m);
-  if (!cargoMatch) throw new Error("Could not find package version in src-tauri/Cargo.toml");
-  if (cargoMatch[1] !== version) {
-    throw new Error(
-      `src-tauri/Cargo.toml version (${cargoMatch[1]}) does not match VERSION (${version})`,
-    );
-  }
-  for (const path of ["crates/skill-daemon/Cargo.toml", "crates/skill-tty/Cargo.toml"]) {
-    const text = readFileSync(path, "utf8");
-    const m = text.match(/^version\s*=\s*"([^"]+)"/m);
-    if (!m) throw new Error(`Could not find package version in ${path}`);
-    if (m[1] !== version) {
-      throw new Error(`${path} version (${m[1]}) does not match VERSION (${version})`);
+  for (const path of ["src-tauri/Cargo.toml", "crates/skill-daemon/Cargo.toml", "crates/skill-tty/Cargo.toml"]) {
+    if (!/^version\.workspace\s*=\s*true/m.test(readFileSync(path, "utf8"))) {
+      throw new Error(`${path} must inherit the product version (version.workspace = true)`);
     }
+  }
+  if (JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")).version !== undefined) {
+    throw new Error("src-tauri/tauri.conf.json must not set a version: Tauri reads it from src-tauri/Cargo.toml");
   }
 
   return version;
@@ -270,54 +258,113 @@ function cmdPrepareChangelog(args) {
   console.log(`✓ Release notes written to ${output} (${lines} lines)`);
 }
 
-function cmdUpdateLatestJson(args) {
-  const { platform, url, "sig-file": sigFile, tag, version, upload } = args;
-  const mirrorToRcLatest = args["mirror-to-rc-latest"] || false;
-  const signature = readFileSync(sigFile, "utf8").trim();
+/**
+ * Copy one platform's release files into <dir>/<platform>/ and record its
+ * updater entry, for the publish job to collect (each build job uploads <dir>
+ * as an artifact; nothing is published from a build job).
+ *
+ * Usage:
+ *   node scripts/ci.mjs stage-release-assets --platform <key> --dir <dir>
+ *     --updater <bundle> --sig-file <bundle.sig> <file>...
+ *
+ * <key> is the latest.json platform key (darwin-aarch64, …); <bundle> is the
+ * file the Tauri updater downloads and must also be among the files.
+ */
+function cmdStageReleaseAssets(args) {
+  const { platform, dir, updater, "sig-file": sigFile } = args;
+  if (!platform || !dir || !updater || !sigFile) {
+    throw new Error("Usage: stage-release-assets --platform <key> --dir <dir> --updater <bundle> --sig-file <sig> <file>...");
+  }
+  const files = [...new Set([...args._, updater, sigFile])];
+  const dest = join(dir, platform);
+  mkdirSync(dest, { recursive: true });
+  for (const file of files) {
+    if (!existsSync(file)) throw new Error(`release asset missing: ${file}`);
+    writeFileSync(join(dest, basename(file)), readFileSync(file));
+  }
+  const entry = { platform, file: basename(updater), signature: readFileSync(sigFile, "utf8").trim() };
+  writeFileSync(join(dest, "updater.json"), JSON.stringify(entry, null, 2) + "\n");
+  console.log(`✓ staged ${files.length} file(s) for ${platform} in ${dest}`);
+}
 
-  // Try to download existing manifest
-  const dl = run(["gh", "release", "download", tag, "--pattern", "latest.json", "--output", "latest.json", "--clobber"], { capture: true });
+/**
+ * Publish one release from every platform's staged assets
+ * (stage-release-assets output, one subdirectory per platform).
+ *
+ * Usage:
+ *   node scripts/ci.mjs publish-release --dir <dir> --tag <tag> --version <ver> --notes <file>
+ *
+ * Builds latest.json from every platform's updater entry and the LLM catalog,
+ * creates the release as a DRAFT with all assets, then publishes it: a
+ * pre-release for -rc.N, the new latest otherwise. A missing platform fails
+ * before anything is public, so a release can never ship without one. Then
+ * mirrors latest.json + the catalog to `rc-latest` (the rc update channel,
+ * which follows both kinds of build).
+ */
+function cmdPublishRelease(args) {
+  const { dir, tag, version, notes } = args;
+  if (!dir || !tag || !version || !notes) {
+    throw new Error("Usage: publish-release --dir <dir> --tag <tag> --version <ver> --notes <file>");
+  }
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo) throw new Error("GITHUB_REPOSITORY is not set");
+  const isRc = /-rc\.\d+$/.test(version);
 
-  let manifest;
-  if (dl.status === 0 && existsSync("latest.json")) {
-    manifest = JSON.parse(readFileSync("latest.json", "utf8"));
-  } else {
-    let notes = "";
-    try {
-      const r = run(["git", "tag", "-l", "--format=%(contents)", tag], { capture: true });
-      notes = (r.stdout || "").trim();
-    } catch {}
-    if (!notes) notes = `NeuroSkill\u2122 v${version}`;
-    manifest = {
-      version,
-      notes,
-      pub_date: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-      platforms: {},
+  // ── latest.json from the staged updater entries ──
+  const assets = [];
+  const platforms = {};
+  for (const sub of readdirSync(dir).sort()) {
+    const platformDir = join(dir, sub);
+    if (!statSync(platformDir).isDirectory()) continue;
+    const entryPath = join(platformDir, "updater.json");
+    if (!existsSync(entryPath)) throw new Error(`${platformDir} has no updater.json`);
+    const entry = JSON.parse(readFileSync(entryPath, "utf8"));
+    platforms[entry.platform] = {
+      url: `https://github.com/${repo}/releases/download/${tag}/${entry.file}`,
+      signature: entry.signature,
     };
+    for (const f of readdirSync(platformDir)) if (f !== "updater.json") assets.push(join(platformDir, f));
   }
+  const missing = RELEASE_PLATFORMS.filter((p) => !platforms[p]);
+  if (missing.length) throw new Error(`no build staged for ${missing.join(", ")} — refusing to publish a partial release`);
 
-  manifest.platforms = manifest.platforms || {};
-  manifest.platforms[platform] = { url, signature };
-
+  let tagNotes = "";
+  try {
+    tagNotes = (run(["git", "tag", "-l", "--format=%(contents)", tag], { capture: true }).stdout || "").trim();
+  } catch {}
+  const manifest = {
+    version,
+    notes: tagNotes || `NeuroSkill\u2122 v${version}`,
+    pub_date: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    platforms,
+  };
   writeFileSync("latest.json", JSON.stringify(manifest, null, 2) + "\n");
-  const plats = Object.keys(manifest.platforms).sort().join(", ");
-  console.log(`Updated latest.json (${Object.keys(manifest.platforms).length} platform(s): ${plats})`);
+  console.log(`✓ latest.json: ${Object.keys(platforms).sort().join(", ")}`);
 
-  if (upload) {
-    run(["gh", "release", "upload", tag, "latest.json", "--clobber"], { check: true });
-    console.log(`✓ latest.json uploaded to release ${tag}`);
-  }
+  // ── LLM catalog (validated; written next to latest.json) ──
+  cmdPublishLlmCatalog({});
+  const shared = ["latest.json", "llm_catalog.json", "llm_catalog.json.sha256"];
 
-  // The `rc-latest` release is a mutable pointer used by the RC update channel.
-  // Both stable and RC builds mirror their latest.json here so opted-in users
-  // always receive the most recent build of either kind. Stable users hit
-  // `releases/latest/download/latest.json` instead, which GitHub auto-resolves
-  // to the most recent non-prerelease release (skipping RCs).
-  if (mirrorToRcLatest) {
-    ensureRcLatestRelease();
-    run(["gh", "release", "upload", "rc-latest", "latest.json", "--clobber"], { check: true });
-    console.log("✓ latest.json mirrored to rc-latest");
+  // ── draft → publish ──
+  const existing = run(["gh", "release", "view", tag, "--json", "isDraft"], { capture: true });
+  if (existing.status === 0) {
+    if (!JSON.parse(existing.stdout).isDraft) throw new Error(`${tag} is already published; a published release is never replaced`);
+    log(`removing the unpublished draft left by an earlier attempt`);
+    run(["gh", "release", "delete", tag, "--yes"], { check: true });
   }
+  run([
+    "gh", "release", "create", tag, ...assets, ...shared,
+    "--draft", "--verify-tag",
+    "--title", `Skill v${version}`,
+    "--notes-file", notes,
+    ...(isRc ? ["--prerelease"] : []),
+  ], { check: true });
+  run(["gh", "release", "edit", tag, "--draft=false", ...(isRc ? ["--prerelease", "--latest=false"] : ["--latest"])], { check: true });
+  console.log(`✓ published ${tag} (${isRc ? "pre-release, rc channel" : "latest, stable channel"}) with ${assets.length + shared.length} assets`);
+
+  ensureRcLatestRelease();
+  run(["gh", "release", "upload", "rc-latest", ...shared, "--clobber"], { check: true });
+  console.log("✓ latest.json + llm_catalog.json mirrored to rc-latest");
 }
 
 /**
@@ -759,7 +806,8 @@ function cmdSelfTest() {
   const errors = [];
   const commandMap = {
     "resolve-version": cmdResolveVersion, "verify-secrets": cmdVerifySecrets,
-    "prepare-changelog": cmdPrepareChangelog, "update-latest-json": cmdUpdateLatestJson,
+    "prepare-changelog": cmdPrepareChangelog,
+    "stage-release-assets": cmdStageReleaseAssets, "publish-release": cmdPublishRelease,
     "discord-notify": cmdDiscordNotify,
     "import-apple-cert": cmdImportAppleCert,
     "setup-widget-signing": cmdSetupWidgetSigning,
@@ -895,7 +943,8 @@ const COMMANDS = {
   "resolve-version": cmdResolveVersion,
   "verify-secrets": cmdVerifySecrets,
   "prepare-changelog": cmdPrepareChangelog,
-  "update-latest-json": (a) => cmdUpdateLatestJson(a),
+  "stage-release-assets": cmdStageReleaseAssets,
+  "publish-release": cmdPublishRelease,
   "discord-notify": (a) => cmdDiscordNotify(a),
   "import-apple-cert": cmdImportAppleCert,
   "setup-widget-signing": cmdSetupWidgetSigning,
@@ -930,6 +979,7 @@ async function main() {
   CMD = command;
   const args = parseArgs(argv.slice(1), {
     "--platform": "platform", "--url": "url", "--sig-file": "sig-file",
+    "--dir": "dir", "--updater": "updater", "--notes": "notes",
     "--tag": "tag", "--version": "version", "--upload": true,
     "--mirror-to-rc-latest": true,
     "--status": "status", "--title": "title", "--release-url": "release-url",

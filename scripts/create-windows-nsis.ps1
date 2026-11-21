@@ -55,7 +55,7 @@ $Conf = Get-Content (Join-Path $TauriDir "tauri.conf.json") -Raw | ConvertFrom-J
 
 $ProductName = $Conf.productName
 $ProductDisplayName = if ($ProductName.EndsWith("™")) { $ProductName } else { "$ProductName™" }
-$Version = $Conf.version
+$Version = (Get-Content (Join-Path $Root "VERSION") -TotalCount 1).Trim()
 
 # NSIS's VIProductVersion requires strict 4-segment numeric format X.X.X.X
 # (Win32 VS_FIXEDFILEINFO). User-facing ProductVersion/FileVersion strings

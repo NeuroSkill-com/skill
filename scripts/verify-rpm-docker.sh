@@ -13,7 +13,7 @@
 #
 # `--synthetic` builds a throwaway package with a tiny OpenBLAS-linked binary
 # using the same spec the release script generates. That covers an architecture
-# for which no real .rpm exists yet (today: aarch64, since Release — Linux builds
+# for which no real .rpm exists yet (today: aarch64, since Build - Linux builds
 # x86_64 only) and still exercises version handling, auto-generated dependencies,
 # install, and library resolution.
 #
@@ -114,7 +114,7 @@ find_local_rpm() {
 }
 
 # Pull the published .rpm for an arch from the newest GitHub release, if one
-# exists. Release — Linux is x86_64-only today, so aarch64 finds nothing.
+# exists. Build - Linux is x86_64-only today, so aarch64 finds nothing.
 fetch_release_rpm() {
   local arch="$1" dest="$2"
   command -v gh >/dev/null 2>&1 || return 1

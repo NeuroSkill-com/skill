@@ -29,6 +29,16 @@ fn main() {
     // A build script's own `#[cfg]` describes the HOST running it, so target
     // decisions below read `t_os` (CARGO_CFG_TARGET_OS) instead.
 
+    // ── Product version ──────────────────────────────────────────────────
+    // tauri.conf.json carries no version: it lives in the Cargo workspace
+    // (root Cargo.toml [workspace.package]). The Tauri CLI fills it in, but
+    // release CI compiles with plain cargo, so hand it to tauri-build here —
+    // it stamps the Windows FileVersion / ProductVersion resource from it.
+    if std::env::var_os("TAURI_CONFIG").is_none() {
+        let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+        std::env::set_var("TAURI_CONFIG", format!(r#"{{"version":"{version}"}}"#));
+    }
+
     // ── Windows app manifest ─────────────────────────────────────────────
     // Gated on the target: with `#[cfg(target_os = "windows")]` a Windows
     // binary cross-compiled from macOS or Linux shipped without the manifest.

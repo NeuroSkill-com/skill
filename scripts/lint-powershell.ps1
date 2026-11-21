@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Run PSScriptAnalyzer on every tracked PowerShell script (`npm run lint:ps`, CI).
+  Run PSScriptAnalyzer on every tracked PowerShell script (`npm test -- pwsh`, CI).
 
 .DESCRIPTION
   Uses the rules in PSScriptAnalyzerSettings.psd1 at the repo root. Installs the

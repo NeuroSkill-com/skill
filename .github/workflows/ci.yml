@@ -56,9 +56,9 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # Source of truth: repo-root VERSION. Fails if package.json /
-      # tauri.conf.json / src-tauri/Cargo.toml drift (bump.js keeps them synced).
-      - name: Verify VERSION matches derived version files
+      # Source of truth: repo-root VERSION. Fails if the Cargo workspace version
+      # drifts from it (bump.js writes both) or a shipped crate stops inheriting it.
+      - name: Verify VERSION matches the Cargo workspace version
         run: node scripts/ci.mjs resolve-version
 
   changelog-gate:
@@ -80,24 +80,6 @@ jobs:
           node scripts/check-changelog-fragments.js \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
-
-  hf-downloads-cache-gate:
-    name: HF downloads cache
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-
-      # Offline integrity check only (no Hub crawl on every PR). The weekly
-      # hf-downloads-cache workflow refreshes counts and opens a PR.
-      - name: Verify committed downloads cache covers the catalog
-        run: npm run sync:hf:downloads:check
 
   # ── Rust backend ─────────────────────────────────────────────────────────────
   #
@@ -121,7 +103,7 @@ jobs:
           fetch-depth: 1
 
       # Pinned image rather than the runner's apt shellcheck (older, so its
-      # findings drift from what `npm run lint:sh` reports locally).
+      # findings drift from what `npm test -- shellcheck` reports locally).
       - name: shellcheck (warnings and errors)
         env:
           SHELLCHECK: docker run --rm -v ${{ github.workspace }}:/mnt -w /mnt koalaman/shellcheck:v0.11.0
@@ -220,11 +202,6 @@ jobs:
             pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
           done
           exit $missing
-
-      # Always lint/test against the latest rlx / rlx-models main (rewrites
-      # Cargo.lock pins before the `--locked` clippy/test steps below).
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
 
       # clippy (workspace crates — no Tauri app / espeak link)
       - name: cargo clippy (workspace crates)
@@ -341,11 +318,6 @@ jobs:
             pkg-config --exists "$m" || { echo "::error::system library $m is missing: the apt install step did not complete"; missing=1; }
           done
           exit $missing
-
-      # Always lint/test against the latest rlx / rlx-models main (rewrites
-      # Cargo.lock pins before the `--locked` clippy/test steps below).
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
 
       # Determine which crates need testing based on changed files.
       # On PRs: compare against the base branch.
@@ -531,44 +503,16 @@ jobs:
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci || npm ci
 
-      # Run i18n sync first — it's cheap and catches missing translation keys
-      # before the slower svelte-check.
-      - name: i18n sync check
-        run: npm run sync:i18n:check
-
-      - name: i18n audit check
-        run: npm run audit:i18n:check
-
-      - name: i18n locales check (all non-en locales)
-        run: npm run -s check:i18n:locales
-
-      # Biome — format check (fast, ~100ms; lint is advisory via warnings)
-      - name: Biome format check
-        run: npx biome format src/ scripts/
-
-      - name: Biome lint
-        run: npx biome lint src/ scripts/
-
-      - name: Daemon thin-client invoke guard
-        run: npm run -s check:daemon-invokes
-
-      - name: svelte-check
-        id: frontend_svelte_check
+      # The frontend tier of scripts/check.mjs — the same list `npm test -- frontend`
+      # runs locally: i18n sync/audit/locales, biome, svelte-check + the daemon
+      # guards, a11y, catalog/README/HF-cache sync, vitest.
+      - name: Frontend checks (scripts/check.mjs frontend)
+        id: frontend_checks
         shell: bash
         run: |
           set -euo pipefail
           start_ts="$(date +%s)"
-          npm run check
-          end_ts="$(date +%s)"
-          echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
-
-      - name: Unit tests
-        id: frontend_unit_tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          start_ts="$(date +%s)"
-          npm test
+          node scripts/check.mjs frontend --continue
           end_ts="$(date +%s)"
           echo "duration_sec=$((end_ts - start_ts))" >> "$GITHUB_OUTPUT"
 
@@ -578,21 +522,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ci-metrics
-          CHECK_SEC="${{ steps.frontend_svelte_check.outputs.duration_sec || '0' }}"
-          TEST_SEC="${{ steps.frontend_unit_tests.outputs.duration_sec || '0' }}"
+          CHECK_SEC="${{ steps.frontend_checks.outputs.duration_sec || '0' }}"
 
           {
             echo '{'
             echo '  "job": "frontend-check",'
-            echo '  "svelte_check_duration_sec":' "$CHECK_SEC" ','
-            echo '  "unit_test_duration_sec":' "$TEST_SEC"
+            echo '  "checks_duration_sec":' "$CHECK_SEC"
             echo '}'
           } > ci-metrics/frontend-check.json
 
           {
             echo "## Frontend health metrics"
-            echo "- svelte-check duration: ${CHECK_SEC}s"
-            echo "- Unit test duration: ${TEST_SEC}s"
+            echo "- Frontend checks duration: ${CHECK_SEC}s"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Frontend health metrics
@@ -688,11 +629,6 @@ jobs:
           cache-key-prefix: kache-windows-ci
           max-size: 3GiB
           pr-comment: false
-
-      # Always lint against the latest rlx / rlx-models main (rewrites Cargo.lock
-      # pins before the `--locked` clippy step below).
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
 
       - name: Install protoc (Windows)
         run: node scripts/ci.mjs install-protoc-windows
@@ -863,10 +799,6 @@ jobs:
           path: ~/.cache/huggingface
           key: hf-llm-e2e-v1
 
-      # Latest rlx / rlx-models main + reconcile Cargo.lock before the --locked test.
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
-
       - name: Run LLM E2E test
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -976,10 +908,6 @@ jobs:
             protobuf-compiler libopenblas-dev
           version: lsl-e2e-v2
 
-      # Latest rlx / rlx-models main + reconcile Cargo.lock before the --locked test.
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
-
       - name: Run LSL E2E test
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
@@ -1082,10 +1010,6 @@ jobs:
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
-
-      # Cover the latest rlx / rlx-models main + reconcile Cargo.lock (the patch).
-      - name: Refresh rlx to main
-        uses: ./.github/actions/refresh-rlx-main
 
       - name: Generate coverage (lcov + threshold)
         env:

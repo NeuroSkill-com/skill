@@ -1,24 +1,21 @@
-name: Release — Linux
+name: Build - Linux
 
-# Triggered by the same semver tag as the macOS and Windows release workflows.
-# All three run in parallel; each uploads its own binaries and then merges
-# its platform entry into the shared latest.json updater manifest.
+# Builds and signs the Linux release assets. Publishes nothing: release.yml
+# calls this for a version tag and publishes all platforms at once. Run it by
+# hand (Actions → Run workflow) for a build without a release.
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+  workflow_call:
   workflow_dispatch:
 
 permissions:
-  contents: write   # create/update GitHub Releases and upload assets
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   release-linux:
-    name: Build & Release — x86_64-unknown-linux-gnu
+    name: Build — x86_64-unknown-linux-gnu
     runs-on: ubuntu-24.04
     environment: Release
 
@@ -268,88 +265,25 @@ jobs:
           echo "  RPM SIG    : ${{ steps.artifacts.outputs.rpm }}.sig"
           echo "  TAR SIG    : ${{ steps.artifacts.outputs.portable_tar }}.sig"
 
-      # ── Create / update GitHub Release with Linux binaries ───────────────────
-      #
-      # softprops/action-gh-release creates the release if it doesn't exist yet,
-      # or adds files to it if it was already created by the macOS or Windows
-      # workflow.  latest.json is handled in the next step.
-      #
-      # Linux assets uploaded here:
-      #   *.deb                  — Debian/Ubuntu package
-      #   *.rpm                  — Fedora/RHEL/openSUSE package
-      #   *linux-portable.tar.gz — standalone Linux portable package
-      #   SHA256SUMS-linux-x86_64.txt — checksums for Linux artifacts
-      #   *.deb.sig / *.rpm.sig / *.tar.gz.sig — detached signatures
-      - name: Prepare changelog notes for release
-        if: steps.version_meta.outputs.is_release == 'true'
-        run: |
-          TAG="${{ steps.version_meta.outputs.tag }}"
-          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-          RANGE="${PREV_TAG:+$PREV_TAG..}$TAG"
-          node scripts/ci.mjs prepare-changelog \
-            "${{ steps.version_meta.outputs.version }}" release-notes.md "$RANGE"
-
-      - name: Create / update GitHub Release
-        if: steps.version_meta.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name:                ${{ steps.version_meta.outputs.tag }}
-          name:                    Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes:  false
-          body_path:               release-notes.md
-          fail_on_unmatched_files: true
-          prerelease:              ${{ steps.version_meta.outputs.prerelease == 'true' }}
-          files: |
-            ${{ steps.artifacts.outputs.deb }}
-            ${{ steps.artifacts.outputs.rpm }}
-            ${{ steps.artifacts.outputs.portable_tar }}
-            ${{ steps.integrity.outputs.checksums }}
-            ${{ steps.integrity.outputs.deb_sig }}
-            ${{ steps.integrity.outputs.rpm_sig }}
-            ${{ steps.integrity.outputs.portable_tar_sig }}
-
-      # ── Update latest.json ────────────────────────────────────────────────────
-      #
-      # Downloads the current latest.json from the release (created by whichever
-      # platform workflow ran first), merges the linux-x86_64 entry, then
-      # re-uploads.  If no latest.json exists yet, creates one from scratch.
-      - name: Update latest.json
-        if: steps.version_meta.outputs.is_release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # ── Hand the assets to release.yml's publish job ─────────────────────
+      #   *.deb / *.rpm / *linux-portable.tar.gz  + detached .sig for each
+      #   SHA256SUMS-linux-x86_64.txt
+      # The portable tarball is the Tauri updater bundle.
+      - name: Stage release assets
         run: >-
-          node scripts/ci.mjs update-latest-json
-          --platform linux-x86_64
-          --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version_meta.outputs.tag }}/${{ steps.artifacts.outputs.portable_tar_name }}"
+          node scripts/ci.mjs stage-release-assets
+          --platform linux-x86_64 --dir release-assets
+          --updater "${{ steps.artifacts.outputs.portable_tar }}"
           --sig-file "${{ steps.integrity.outputs.portable_tar_sig }}"
-          --tag "${{ steps.version_meta.outputs.tag }}"
-          --version "${{ steps.version_meta.outputs.version }}"
-          --upload
-          --mirror-to-rc-latest
+          "${{ steps.artifacts.outputs.deb }}"
+          "${{ steps.artifacts.outputs.rpm }}"
+          "${{ steps.integrity.outputs.checksums }}"
+          "${{ steps.integrity.outputs.deb_sig }}"
+          "${{ steps.integrity.outputs.rpm_sig }}"
 
-      # ── Upload CI artifacts (on-demand builds only) ──────────────────────────
-      - name: Upload build artifacts
-        if: steps.version_meta.outputs.is_release != 'true'
+      - name: Upload release assets
         uses: actions/upload-artifact@v7
         with:
-          name: NeuroSkill-Linux-${{ steps.version_meta.outputs.version }}
-          path: |
-            ${{ steps.artifacts.outputs.deb }}
-            ${{ steps.artifacts.outputs.rpm }}
-            ${{ steps.artifacts.outputs.portable_tar }}
+          name: release-linux-x86_64
+          path: release-assets/
           retention-days: 14
-
-      # ── Discord notification ──────────────────────────────────────────────────
-      - name: Notify Discord of release
-        if: always() && steps.version_meta.outputs.is_release == 'true'
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: >-
-          node scripts/ci.mjs discord-notify
-          --status  "${{ job.status }}"
-          --title   "${{ job.status == 'success' && '🚀' || '💥' }} NeuroSkill™ v${{ steps.version_meta.outputs.version }} — Linux ${{ job.status == 'success' && 'Published' || 'Failed' }}"
-          --version "${{ steps.version_meta.outputs.version }}"
-          --tag     "${{ steps.version_meta.outputs.tag }}"
-          --platform "Linux x86_64"
-          --release-url "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

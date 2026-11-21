@@ -121,8 +121,8 @@ Follow [`LINUX.md`](LINUX.md) sections 1–5 for the system packages, then:
 
 ```bash
 npm install
-npm run tauri:build:linux:arm64                 # AppImage
-npm run package:linux:system:arm64:native -- --skip-build   # .deb + .rpm
+npm run tauri:build -- --target aarch64-unknown-linux-gnu --bundles appimage                 # AppImage
+npm run dist:linux:system -- --target aarch64-unknown-linux-gnu --skip-build   # .deb + .rpm
 ```
 
 The workspace is large. On an 8 GB Pi 5, add swap and limit parallel jobs or

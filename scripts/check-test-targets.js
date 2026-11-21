@@ -10,7 +10,7 @@
 // then compiles nowhere and is silently skipped, which looks exactly like a
 // passing suite. This check lists such files.
 //
-//   npm run check:test-targets
+//   npm test -- ci
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";

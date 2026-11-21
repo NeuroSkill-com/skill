@@ -173,7 +173,7 @@ Refresh locally or on CI:
 
 ```bash
 npm run sync:hf:downloads          # crawl Hub + write cache
-npm run sync:hf:downloads:check    # verify cache covers catalog repos
+npm test -- catalogs    # verify cache covers catalog repos
 ```
 
 The weekly `.github/workflows/hf-downloads-cache.yml` job crawls catalog repos

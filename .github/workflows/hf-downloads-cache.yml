@@ -6,7 +6,7 @@ name: HF downloads cache
 # requiring network at app runtime.
 #
 # Local:  npm run sync:hf:downloads
-# Check:  npm run sync:hf:downloads:check
+# Check:  npm test -- catalogs
 
 on:
   schedule:
@@ -79,7 +79,7 @@ jobs:
           - Used by the LLM picker to sort families by popularity (desc)
 
           ## Test plan
-          - [ ] \`npm run sync:hf:downloads:check\`
+          - [ ] \`npm test -- catalogs\`
           - [ ] Settings → LLM family dropdown shows popular models first
           EOF
           )"

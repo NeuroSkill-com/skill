@@ -47,12 +47,12 @@ pass() {
 
 check_macos() {
   if [[ "$build" -eq 1 ]]; then
-    (cd "$ROOT_DIR" && npm run tauri:build:mac:dmg)
+    (cd "$ROOT_DIR" && npm run dist:mac)
   fi
 
   local dmg
   dmg="$(ls -t "$ROOT_DIR"/src-tauri/target/*/release/bundle/dmg/*.dmg 2>/dev/null | head -1 || true)"
-  [[ -n "$dmg" ]] || fail "No DMG found. Build one first (npm run tauri:build:mac:dmg)."
+  [[ -n "$dmg" ]] || fail "No DMG found. Build one first (npm run dist:mac)."
 
   local mnt
   mnt="$(mktemp -d /tmp/neuroskill-dmg.XXXXXX)"
@@ -81,7 +81,7 @@ check_macos() {
 
 check_linux() {
   if [[ "$build" -eq 1 ]]; then
-    (cd "$ROOT_DIR" && npm run package:linux:portable)
+    (cd "$ROOT_DIR" && npm run dist:linux)
   fi
 
   local pkg_dir

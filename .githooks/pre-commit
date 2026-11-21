@@ -2,92 +2,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 NeuroSkill.com
 #
-# Minimal pre-commit hook — basic validation only.
-# Full checks run in pre-push and CI.
+# Pre-commit: the `commit` tier of scripts/check.mjs — staged files only, a few
+# seconds. Run it by hand with `npm test -- commit`; list it with `npm test -- --list`.
 
 set -euo pipefail
 
-STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
-
-if [ -z "$STAGED_FILES" ]; then
-  exit 0
+# GUI git clients start hooks without the login shell's PATH.
+if [ -f "$HOME/.cargo/env" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.cargo/env"
+elif [ -d "$HOME/.cargo/bin" ]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
-# ── rlx source guard ──────────────────────────────────────────────────────────
-# Commits must never carry a local ../rlx path patch in Cargo.toml, and
-# Cargo.lock must pin `rlx` to the MIT-RLX/rlx GitHub git source (not a
-# path+file checkout). Safety net when Cargo.lock skip-worktree is bypassed
-# (fresh clone, `git add -A`, GUI clients, etc. — see scripts/ensure-rlx.sh).
-
-# 1) Cargo.toml must not reintroduce a ../rlx path patch (hard block).
-if ! git diff --cached --quiet -- Cargo.toml 2>/dev/null; then
-  if git show :Cargo.toml 2>/dev/null | grep -vE '^[[:space:]]*#' | grep -qE 'path[[:space:]]*=[[:space:]]*"\.\./rlx'; then
-    echo "❌ Staged Cargo.toml adds a ../rlx path patch — that must stay local-only." >&2
-    echo "   Remove it and use 'scripts/rlx local' (writes an override OUTSIDE the repo)." >&2
-    exit 1
-  fi
-fi
-
-# 2) Cargo.lock (as it will be committed = the index blob) must pin rlx to
-#    GitHub MIT-RLX/rlx, not a local path checkout.
-#    Disable pipefail for the early-exit awk: git show gets SIGPIPE (141) when
-#    awk closes the pipe after the first `source =` line.
-if git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1; then
-  set +o pipefail
-  rlx_blob="$(git show :Cargo.lock 2>/dev/null | awk '/^name = "rlx"$/{p=1} p{print; if(/^source =/ || (/^\[\[package\]\]/ && ++n>1)){exit}}')"
-  set -o pipefail
-  if printf '%s\n' "$rlx_blob" | grep -qE 'source = "path\+'; then
-    echo "❌ Cargo.lock pins rlx to a LOCAL path checkout — refusing to commit." >&2
-    echo "   Fix: run 'scripts/rlx deployed' (restores the GitHub-pinned lock), then commit." >&2
-    echo "        Run 'scripts/rlx local' afterward to resume local development." >&2
-    exit 1
-  fi
-  if ! printf '%s\n' "$rlx_blob" | grep -qE 'source = "git\+https://github\.com/MIT-RLX/rlx(\.git)?'; then
-    echo "❌ Cargo.lock does not pin rlx to git+https://github.com/MIT-RLX/rlx — refusing to commit." >&2
-    echo "   Expected a GitHub git source (see Cargo.toml workspace.dependencies)." >&2
-    echo "   Fix: run 'scripts/rlx deployed', then 'cargo update -p rlx', then commit." >&2
-    exit 1
-  fi
-fi
-
-# Basic JSON validation for catalog files
-if echo "$STAGED_FILES" | grep -q 'llm_catalog.json'; then
-  if ! python3 -m json.tool src-tauri/llm_catalog.json > /dev/null 2>&1; then
-    echo "❌ Invalid JSON in llm_catalog.json"
-    exit 1
-  fi
-fi
-
-# Basic i18n JSON validation
-if echo "$STAGED_FILES" | grep -q '^src/lib/i18n/.*\.ts$'; then
-  echo "🌐 i18n files changed — running basic JSON validation…"
-  npm run -s check:i18n:locales || exit 1
-fi
-
-# Run cargo fmt on staged Rust files
-if echo "$STAGED_FILES" | grep -q '\.rs$'; then
-  echo "🦀 Running cargo fmt…"
-  # GUI git clients (editors, Tower, etc.) launch hooks in a non-interactive
-  # shell that doesn't source ~/.zshrc, so rustup's ~/.cargo/bin is missing
-  # from PATH. Source the env file rustup ships, or fall back to the default
-  # install path.
-  if [ -f "$HOME/.cargo/env" ]; then
-    . "$HOME/.cargo/env"
-  elif [ -d "$HOME/.cargo/bin" ]; then
-    export PATH="$HOME/.cargo/bin:$PATH"
-  fi
-  if ! command -v cargo >/dev/null 2>&1; then
-    echo "⚠️  cargo not found on PATH; skipping cargo fmt." >&2
-    echo "   Install rustup (https://rustup.rs) or add ~/.cargo/bin to your shell's PATH." >&2
-  else
-    cargo fmt
-    # Re-stage the staged Rust files fmt may have rewritten, one path per line
-    # so names with spaces survive.
-    echo "$STAGED_FILES" | grep '\.rs$' | while IFS= read -r f; do
-      if [ -f "$f" ]; then git add -- "$f"; fi
-    done
-  fi
-fi
-
-echo "✅ Pre-commit checks passed (basic validation only)."
-echo "   Full checks will run on git push."
+exec node scripts/check.mjs commit

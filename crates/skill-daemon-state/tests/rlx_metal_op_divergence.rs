@@ -7,8 +7,8 @@
 //! node whose tensors diverge — which is the op to go and read.
 //!
 //! Kept because this is the only tool in the tree that answers "which op" for a
-//! backend numerics regression, and the rlx pin moves on every CI build (see
-//! .github/actions/refresh-rlx-main), so the question recurs.
+//! backend numerics regression, and the rlx pin moves with every
+//! `scripts/rlx bump`, so the question recurs.
 //!
 //! Run:
 //! ```sh

@@ -1,4 +1,4 @@
-# PSScriptAnalyzer rules for the repo's PowerShell scripts (`npm run lint:ps`, CI).
+# PSScriptAnalyzer rules for the repo's PowerShell scripts (`npm test -- pwsh`, CI).
 @{
     Severity     = @('Error', 'Warning')
     ExcludeRules = @(

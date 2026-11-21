@@ -118,7 +118,7 @@ Long-form documentation lives in `./docs`:
 - LLM internals: [docs/LLM.md](docs/LLM.md)
 - LSL integration notes: [docs/lsl-integration.md](docs/lsl-integration.md)
 - API reference (WebSocket + HTTP): [docs/API.md](docs/API.md)
-- Development guide: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- Development guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Linux build/packaging: [docs/LINUX.md](docs/LINUX.md)
 - Raspberry Pi (4/5, 64-bit): [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md)
 - Windows build setup: [docs/WINDOWS.md](docs/WINDOWS.md)
@@ -126,11 +126,10 @@ Long-form documentation lives in `./docs`:
 ## Development (quickstart)
 
 Product version lives in the repo-root [`VERSION`](VERSION) file (`npm run bump`
-keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in
-sync). Release builds enable one daemon OS umbrella (`apple` / `linux` /
-`windows`). PR CI runs clippy/tests; signed product builds run on release tags
-or Preview Build. Details: [CONTRIBUTING.md](CONTRIBUTING.md) ·
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+mirrors it into the Cargo workspace version, which Tauri reads). Release builds
+enable one daemon OS umbrella (`apple` / `linux` / `windows`). PR CI runs
+clippy/tests; signed product builds run on release tags or Preview Build.
+Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 `npm run setup` checks that Rust is installed, offers to install Node.js 22 into
 `~/.local` if it is missing or older than 22.17, offers to install CMake, protoc

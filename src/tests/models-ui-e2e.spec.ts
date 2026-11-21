@@ -12,8 +12,8 @@
  * (`/v1/models/validate*`).
  *
  * Run (daemon must already be up):
- *   npm run test:e2e:models-ui
- *   npm run test:e2e:models-ui:headed
+ *   npm run test:ui -- src/tests/models-ui-e2e.spec.ts
+ *   HEADED=1 npm run test:ui -- src/tests/models-ui-e2e.spec.ts --headed
  */
 
 import * as fs from "node:fs";

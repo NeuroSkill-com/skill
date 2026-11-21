@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { execSync, spawn } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { compileChangelog, validateUnreleasedFragments } from "./compile-changelog.js";
 import { bumpVersion, readVersionFile, validateVersion, writeVersionFile } from "./version-utils.mjs";
 
@@ -15,113 +15,28 @@ function writeText(path, content) {
   writeFileSync(path, content, "utf8");
 }
 
-// Sibling rlx overlay written by scripts/ensure-rlx.sh (outside the repo).
-// Must match MARK in that script.
-const RLX_OVERLAY_MARK = "# managed by skill/scripts/ensure-rlx.sh — local rlx override (do not commit)";
+// ── rlx mode ─────────────────────────────────────────────────────────────────
+//
+// `scripts/rlx local` path-patches rlx onto sibling checkouts through
+// .cargo/rlx-local.toml and hides the rewritten Cargo.lock with skip-worktree.
+// The bump commit must carry the committed GitHub-pinned lock (CI and release
+// builds use exactly those pins), so a local session is switched to deployed
+// for the bump and switched back afterwards.
 
-function rlxOverlayPath() {
-  return join(dirname(process.cwd()), ".cargo", "config.toml");
+const RLX_LOCAL_CONFIG = ".cargo/rlx-local.toml";
+const RLX_LOCAL_MARK = "# managed by skill/scripts/ensure-rlx.sh";
+
+function rlxLocalActive() {
+  return existsSync(RLX_LOCAL_CONFIG) && readText(RLX_LOCAL_CONFIG).includes(RLX_LOCAL_MARK);
 }
 
-function isManagedRlxOverlay(path) {
-  return existsSync(path) && readText(path).includes(RLX_OVERLAY_MARK);
-}
-
-/**
- * Sync Cargo.lock to the bumped crate versions against GitHub git pins.
- *
- * Local `scripts/rlx local` marks Cargo.lock skip-worktree and path-patches
- * rlx* onto sibling checkouts. That made the old `cargo generate-lockfile`
- * refresh invisible to `git add`, so RC tags shipped a stale lock (skill
- * version still at the previous RC) and CI `--locked` builds failed.
- *
- * Here we: stash the managed overlay → clear skip-worktree → `cargo metadata`
- * (keeps existing git revs; only syncs package versions / unused patches) →
- * restore the overlay. Caller must `git add` while skip-worktree is still off.
- */
-function refreshCargoLockForRelease() {
-  const overlay = rlxOverlayPath();
-  const stash = `${overlay}.bump-stash`;
-  let stashed = false;
-
-  // Recover a stash left by a crashed prior bump before we do anything else.
-  if (existsSync(stash) && !existsSync(overlay)) {
-    renameSync(stash, overlay);
-    console.log("[bump] Restored rlx overlay left from a previous interrupted bump");
-  }
-
-  if (isManagedRlxOverlay(overlay)) {
-    renameSync(overlay, stash);
-    stashed = true;
-    console.log("[bump] Stashed local rlx overlay for GitHub-pinned Cargo.lock refresh");
-  }
-
-  try {
-    try {
-      execSync("git update-index --no-skip-worktree Cargo.lock", { stdio: "ignore" });
-    } catch {
-      // Index flag may already be clear, or Cargo.lock absent in odd checkouts.
-    }
-
-    // Prefer metadata over `generate-lockfile`: the latter re-resolves every
-    // unpinned git dep to tip-of-default-branch and would float rlx on every RC.
-    console.log("[bump] Refreshing Cargo.lock (cargo metadata, GitHub git pins)…");
-    // The refresh is a side effect of resolving the graph; the JSON it prints
-    // (several MB for this workspace) is not used, so discard stdout. stderr stays
-    // attached, so cargo's progress ("Updating crates.io index") and any error show.
-    execSync("cargo metadata --format-version=1", { stdio: ["ignore", "ignore", "inherit"] });
-  } finally {
-    if (stashed && existsSync(stash)) {
-      renameSync(stash, overlay);
-      console.log("[bump] Restored local rlx overlay");
-    }
-  }
-}
-
-function protectCargoLockIfOverlayActive() {
-  if (!isManagedRlxOverlay(rlxOverlayPath())) return;
-  try {
-    execSync("git update-index --skip-worktree Cargo.lock", { stdio: "ignore" });
-    console.log("[bump] Re-marked Cargo.lock skip-worktree (local rlx overlay active)");
-  } catch {
-    // ignore
-  }
-}
-
-// Version helpers live in scripts/version-utils.mjs so bump.js, release.js,
-// and the test suite share the same implementation.
-
-function hasPkgConfig(packageName) {
-  try {
-    execSync(`pkg-config --exists ${packageName}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function ensureLinuxTauriDeps() {
-  if (process.platform !== "linux") return;
-
-  const requiredPackages = ["webkit2gtk-4.1", "javascriptcoregtk-4.1", "libsoup-3.0", "libpipewire-0.3"];
-  const missingPackages = requiredPackages.filter((name) => !hasPkgConfig(name));
-
-  if (missingPackages.length === 0) return;
-
-  const missingList = missingPackages.join(", ");
-  throw new Error(
-    [
-      `Missing Linux Tauri system dependencies (${missingList}).`,
-      "Install required packages before running npm run bump:",
-      "  sudo apt install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libpipewire-0.3-dev",
-      "If those are unavailable on your distro image, see LINUX.md for legacy alternatives.",
-    ].join("\n"),
-  );
+function rlxMode(mode) {
+  execSync(`bash scripts/rlx ${mode}`, { stdio: "inherit" });
 }
 
 /**
- * Check if the current version has been tagged and pushed to remote.
- * This prevents accidental multiple bumps before the previous version is tagged.
+ * Refuse to bump past a version that was never tagged and pushed: that is how a
+ * version gets skipped, or bumped twice.
  */
 function checkVersionTagged(version) {
   const tagName = `v${version}`;
@@ -170,544 +85,6 @@ function checkVersionTagged(version) {
   }
 }
 
-// Workspace crates that CI runs clippy + tests on (mirrors ci.yml).
-const WORKSPACE_CRATES = [
-  "skill-eeg",
-  "skill-data",
-  "skill-constants",
-  "skill-jobs",
-  "skill-tray",
-  "skill-autostart",
-  "skill-exg",
-  "skill-commands",
-  "skill-tools",
-  "skill-skills",
-  "skill-devices",
-  "skill-settings",
-  "skill-history",
-  "skill-label-index",
-  "skill-router",
-  "skill-tts",
-  "skill-headless",
-  "skill-vision",
-  "skill-health",
-  "skill-gpu",
-  "skill-screenshots",
-  "skill-llm",
-];
-
-// Subset of workspace crates that CI runs `cargo test --lib` on.
-// Keep in sync with scripts/test-fast.sh tiers and ci.yml INT_CRATES.
-const TEST_CRATES = [
-  "skill-eeg",
-  "skill-data",
-  "skill-constants",
-  "skill-tools",
-  "skill-devices",
-  "skill-settings",
-  "skill-history",
-  "skill-health",
-  "skill-router",
-  "skill-llm",
-  "skill-autostart",
-  "skill-tts",
-  "skill-gpu",
-  "skill-jobs",
-  "skill-exg",
-  "skill-label-index",
-  "skill-skills",
-  "skill-commands",
-  "skill-screenshots",
-];
-
-/**
- * Working directory of a pid, or "" if it cannot be read.
- *
- * macOS has no /proc, so this goes through lsof. `-Fn` is the machine-readable
- * form: one field per line, the cwd arriving as `n/path/to/dir`.
- */
-function processCwd(pid) {
-  try {
-    const out = execSync(`lsof -a -p ${pid} -d cwd -Fn 2>/dev/null || true`, { encoding: "utf8" });
-    const line = out.split("\n").find((l) => l.startsWith("n"));
-    return line ? line.slice(1).trim() : "";
-  } catch {
-    return "";
-  }
-}
-
-/**
- * Shorten a cargo command line for display.
- *
- * `ps` gives the whole command, which for a cargo run launched by an agent or
- * a shell one-liner can be thousands of characters of embedded heredoc — it
- * buried the question this function is trying to ask. Keep the verb and the
- * flags that identify *which* build it is, drop the rest.
- */
-function shortenCargoCommand(command) {
-  const tokens = command.split(/\s+/);
-  const start = tokens.findIndex((t) => /(^|\/)cargo$/.test(t));
-  const rest = (start >= 0 ? tokens.slice(start + 1) : tokens).filter((t) => t !== "");
-  const head = ["cargo", ...rest.slice(0, 8)].join(" ");
-  if (head.length > 64) return `${head.slice(0, 63)}…`;
-  // `…` once, whichever way the line was cut short — truncated text and
-  // dropped trailing args both mean the same thing to a reader.
-  return rest.length > 8 ? `${head} …` : head;
-}
-
-/**
- * Competing cargo processes, as a list of `{ pid, command, cwd, inScope }`.
- *
- * Only real cargo invocations: the shell wrapper that spawned one carries the
- * same text and would otherwise be listed beside it (three lines for one
- * build), and a `docker run` that happens to mention cargo builds inside a
- * container, where this repo's config cannot reach it.
- */
-function findCompetingCargo(overlayScope) {
-  let out = "";
-  try {
-    out = execSync(`ps -eo pid=,command= | grep -E '[c]argo (build|clippy|check|test|install|publish)' || true`, {
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
-    }).trim();
-  } catch {
-    return [];
-  }
-  if (!out) return [];
-
-  const found = [];
-  const seen = new Set();
-  for (const line of out.split("\n")) {
-    const m = line.trim().match(/^(\d+)\s+(.*)$/);
-    if (!m) continue;
-    const [, pid, command] = m;
-    if (Number(pid) === process.pid) continue;
-    // the launching shell, not the build
-    if (/^\S*\/(zsh|bash|sh|fish)\b/.test(command) || /^(zsh|bash|sh|fish)\b/.test(command)) continue;
-    // builds inside a container do not read this machine's cargo config
-    if (/\bdocker\b/.test(command)) continue;
-    if (!/(^|\/)cargo\s/.test(command)) continue;
-
-    const cwd = processCwd(pid);
-    const short = shortenCargoCommand(command);
-    const key = `${short}@${cwd}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    found.push({ pid, command: short, cwd, inScope: Boolean(overlayScope && cwd.startsWith(overlayScope)) });
-  }
-  // the ones this bump can actually disturb go first
-  found.sort((a, b) => Number(b.inScope) - Number(a.inScope));
-  return found;
-}
-
-/**
- * Warn about other cargo builds before the lockfile refresh touches shared
- * state, and let the user back out.
- *
- * The refresh moves the sibling rlx overlay aside for one `cargo metadata`,
- * and that file sits one directory above this repo — so it is read by *every*
- * cargo invocation under that directory, including ones in sibling checkouts.
- * A build that re-resolves inside the window resolves rlx* from git instead of
- * the local paths. Hence the prompt, and hence the cwd column: which directory
- * a build is in is the fact that decides whether it matters.
- */
-function checkForCompetingCargo() {
-  const overlay = rlxOverlayPath();
-  const overlayScope = isManagedRlxOverlay(overlay) ? dirname(dirname(overlay)) : "";
-  const competing = findCompetingCargo(overlayScope);
-  if (competing.length === 0) return;
-
-  const affected = competing.filter((c) => c.inScope);
-  const pidWidth = Math.max(...competing.map((c) => c.pid.length));
-  const cmdWidth = Math.max(...competing.map((c) => c.command.length));
-
-  console.log("");
-  console.log(`[bump] ${competing.length} other cargo build${competing.length === 1 ? "" : "s"} running:`);
-  // Mark the in-scope ones only when the list is mixed: if every build shares
-  // the overlay, the paragraph below already says so and the repeated arrow is
-  // just noise.
-  const mixed = affected.length > 0 && affected.length < competing.length;
-  for (const c of competing) {
-    const mark = mixed && c.inScope ? "  <- shares the rlx overlay" : "";
-    console.log(
-      `    pid ${c.pid.padStart(pidWidth)}  ${c.command.padEnd(cmdWidth)}  ${c.cwd || "(cwd unknown)"}${mark}`,
-    );
-  }
-  console.log("");
-  if (affected.length > 0) {
-    const which = affected.length === competing.length ? "Each of them" : `${affected.length} of them`;
-    console.log(`  ${which} runs under the local rlx overlay, which matters here:`);
-    console.log(`  the Cargo.lock refresh moves ${overlay}`);
-    console.log("  aside for one `cargo metadata`, and every cargo run under");
-    console.log(`  ${overlayScope} reads that file. A build that re-resolves inside`);
-    console.log("  that window takes rlx* from git rather than your sibling checkouts.");
-  } else {
-    console.log("  None of them is under the rlx overlay, so the lockfile refresh cannot");
-    console.log("  change what they resolve — they will only contend for the cargo lock.");
-  }
-  console.log("");
-  console.log("  Nothing has been written yet: N exits cleanly, and re-running later is free.");
-  console.log("");
-
-  let fd;
-  try {
-    fd = openSync("/dev/tty", "r");
-  } catch {
-    // No controlling terminal (CI, a pipeline, an agent harness). Asking is
-    // impossible, so report and continue rather than hanging on a read that
-    // can never return.
-    console.log("  Not a terminal — continuing without asking.");
-    return;
-  }
-
-  const buf = Buffer.alloc(1);
-  process.stdout.write("  Continue anyway? [y/N] ");
-  let answer = "";
-  while (true) {
-    const bytesRead = readSync(fd, buf, 0, 1);
-    if (bytesRead === 0) break;
-    const ch = buf.toString("utf8", 0, 1);
-    if (ch === "\n" || ch === "\r") break;
-    answer += ch;
-  }
-  closeSync(fd);
-  console.log("");
-  if (!/^y(es)?$/i.test(answer.trim())) {
-    throw new Error("Bump aborted: competing cargo processes running.");
-  }
-}
-
-// ── TUI progress helpers ─────────────────────────────────────────────────────
-
-const CSI = "\x1b[";
-
-function formatDuration(ms) {
-  const totalSec = Math.round(ms / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
-}
-
-/**
- * Detect warning lines in command output — treat any warning as fatal.
- * Returns array of warning lines.
- *
- * Cargo future-incompat notices from dependencies are excluded: clippy still
- * exits 0 with `-D warnings`, and they are not fixable from this repo. The
- * long-standing offender was `block 0.1.6`, pulled in transitively by the
- * `metal` crate; rlx-metal has since replaced metal-rs with its own bindings,
- * so that one is gone once rlx-models main carries the switch.
- */
-function extractWarnings(output) {
-  return output.split("\n").filter(
-    (line) =>
-      /\bwarning\b/i.test(line) &&
-      !/0 warnings/i.test(line) &&
-      !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
-      !/^warning: \S+@\S+:/i.test(line.trim()) &&
-      !/^warning: build failed/i.test(line.trim()) &&
-      !/DeprecationWarning|--trace-deprecation/i.test(line) &&
-      // Cargo future-incompat report (deps), not a project clippy/rustc warning
-      !/packages contain code that will be rejected by a future version of Rust/i.test(line) &&
-      !/use the option `--future-incompat-report`/i.test(line) &&
-      // Unused [patch] entries (local rlx overlay may list extras not in the graph)
-      !/patch `.+` was not used in the crate graph/i.test(line) &&
-      // Local overlay + git pins: cargo discovers both path and git checkouts
-      !/skipping duplicate package/i.test(line) &&
-      !/^\s+\/.+\.toml$/i.test(line.trim()) &&
-      !/in favor of /i.test(line),
-  );
-}
-
-/**
- * TUI class — manages a scrolling log area above a fixed progress bar.
- *
- * Layout:
- *   row 1..rows-2   — scrolling log output
- *   row rows-1      — separator
- *   row rows        — progress bar
- *
- * Uses ANSI scroll region to keep the bottom 2 lines pinned.
- */
-class BumpTUI {
-  constructor(totalSteps) {
-    this.totalSteps = totalSteps;
-    this.currentStep = 0;
-    this.stepLabel = "";
-    this.startTime = Date.now();
-    this.stepTimes = [];
-    this.rows = process.stdout.rows || 40;
-    this.cols = process.stdout.columns || 80;
-    this.timer = null;
-
-    // Listen for terminal resize
-    process.stdout.on("resize", () => {
-      this.rows = process.stdout.rows || 40;
-      this.cols = process.stdout.columns || 80;
-      this._setupScrollRegion();
-      this._renderBar();
-    });
-  }
-
-  start() {
-    // Clear screen and set up scroll region
-    process.stdout.write(`${CSI}2J${CSI}H`); // clear + home
-    this._setupScrollRegion();
-    this._renderBar();
-
-    // Update progress bar every second
-    this.timer = setInterval(() => this._renderBar(), 1000);
-  }
-
-  stop() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-    // Reset scroll region to full screen
-    process.stdout.write(`${CSI}r`);
-    // Move cursor below the bar
-    process.stdout.write(`${CSI}${this.rows};1H\n`);
-  }
-
-  _setupScrollRegion() {
-    // Scroll region: rows 1..(rows-2) for log output
-    const scrollEnd = Math.max(1, this.rows - 2);
-    process.stdout.write(`${CSI}1;${scrollEnd}r`);
-  }
-
-  /** Write log text into the scroll region (above the bar). */
-  log(text) {
-    const scrollEnd = Math.max(1, this.rows - 2);
-    // Save cursor, move to end of scroll region, print, restore cursor
-    process.stdout.write(`${CSI}s`); // save
-    process.stdout.write(`${CSI}${scrollEnd};1H`); // move to bottom of scroll area
-    process.stdout.write("\n"); // scroll up if needed
-    // Write each line — handle multi-line text
-    const lines = text.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      if (i > 0) {
-        process.stdout.write(`${CSI}${scrollEnd};1H\n`);
-      }
-      process.stdout.write(lines[i]);
-    }
-    process.stdout.write(`${CSI}u`); // restore
-    this._renderBar(); // redraw bar in case scroll corrupted it
-  }
-
-  /** Update current step info and redraw bar. */
-  setStep(index, label) {
-    if (index > 0 && this.currentStep < index) {
-      // record previous step time
-      // (stepTimes is used for ETA estimation)
-    }
-    this.currentStep = index;
-    this.stepLabel = label;
-    this._renderBar();
-  }
-
-  /** Record how long a step took (for ETA). */
-  recordStepTime(ms) {
-    this.stepTimes.push(ms);
-  }
-
-  /** Mark a step as passed — logs a green checkmark. */
-  stepPassed(label, durationMs) {
-    this.log(`  \x1b[32m✓\x1b[0m  ${label}  \x1b[2m(${formatDuration(durationMs)})\x1b[0m`);
-  }
-
-  /** Mark a step as failed — logs a red cross. */
-  stepFailed(label) {
-    this.log(`  \x1b[31m✗\x1b[0m  ${label}`);
-  }
-
-  /** Render the separator + progress bar on the bottom 2 rows. */
-  _renderBar() {
-    const cols = this.cols;
-    const rows = this.rows;
-    const current = this.currentStep;
-    const total = this.totalSteps;
-
-    const elapsedMs = Date.now() - this.startTime;
-    const avgMs = this.stepTimes.length > 0 ? this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length : 0;
-    const remaining = total - current;
-    const etaMs = this.stepTimes.length > 0 ? avgMs * remaining : 0;
-
-    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
-    const barWidth = Math.max(10, Math.min(30, cols - 60));
-    const filled = Math.round((current / total) * barWidth);
-    const bar = `\x1b[32m${"█".repeat(filled)}\x1b[0m\x1b[2m${"░".repeat(barWidth - filled)}\x1b[0m`;
-
-    const elapsed = formatDuration(elapsedMs);
-    const eta = etaMs > 0 ? formatDuration(etaMs) : "--";
-
-    const sepRow = rows - 1;
-    const barRow = rows;
-
-    // Separator line
-    const sep = `\x1b[2m${"─".repeat(cols)}\x1b[0m`;
-
-    // Progress line
-    const stepText = this.stepLabel.length > 30 ? `${this.stepLabel.slice(0, 29)}…` : this.stepLabel;
-    const progressLine = `  [${bar}] ${current}/${total} (${pct}%) | ${elapsed} elapsed | ETA ${eta} | ${stepText}`;
-
-    // Draw separator and progress bar (outside scroll region)
-    process.stdout.write(`${CSI}${sepRow};1H${CSI}K${sep}`);
-    process.stdout.write(`${CSI}${barRow};1H${CSI}K${progressLine}`);
-  }
-}
-
-// ── run a command with streamed output ───────────────────────────────────────
-
-function runCommandStreaming(label, command, tui) {
-  return new Promise((resolve, reject) => {
-    const _parts = command.split(" ");
-    // Use shell to handle pipes, redirects, 2>&1
-    const child = spawn("bash", ["-c", `${command} 2>&1`], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, FORCE_COLOR: "1" },
-    });
-
-    let output = "";
-
-    child.stdout.on("data", (data) => {
-      const text = data.toString();
-      output += text;
-      // Stream each line to the TUI log area
-      const lines = text.split("\n");
-      for (const line of lines) {
-        if (line.length > 0) {
-          tui.log(line);
-        }
-      }
-    });
-
-    child.stderr.on("data", (data) => {
-      const text = data.toString();
-      output += text;
-      const lines = text.split("\n");
-      for (const line of lines) {
-        if (line.length > 0) {
-          tui.log(line);
-        }
-      }
-    });
-
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`Command failed with exit code ${code}: ${label}`));
-        return;
-      }
-
-      // Check for warnings
-      const warningLines = extractWarnings(output);
-      if (warningLines.length > 0) {
-        tui.log(`\x1b[33m[preflight] ${warningLines.length} warning(s) in ${label}:\x1b[0m`);
-        for (const w of warningLines.slice(0, 10)) {
-          tui.log(`  \x1b[33m${w.trim()}\x1b[0m`);
-        }
-        reject(new Error(`Bump aborted: warnings found during "${label}"`));
-        return;
-      }
-
-      resolve(output);
-    });
-
-    child.on("error", (err) => {
-      reject(err);
-    });
-  });
-}
-
-// ── preflight checks (async with TUI) ───────────────────────────────────────
-
-async function runPreflightChecks() {
-  // ── Competing cargo processes ─────────────────────────────────────────────
-  checkForCompetingCargo();
-
-  // ── Build the ordered step list ───────────────────────────────────────────
-  const steps = [];
-
-  // Frontend checks
-  steps.push({ label: "npm run check", command: "npm run check" });
-  steps.push({ label: "npm run sync:i18n:check", command: "npm run sync:i18n:check" });
-  steps.push({ label: "npm run check:test-targets", command: "npm run check:test-targets" });
-  steps.push({ label: "npm test", command: "npm test" });
-
-  // Linux tauri deps (no command — handled inline)
-  steps.push({ label: "linux tauri deps", command: null });
-
-  // Clippy all workspace crates in a single invocation
-  {
-    const pkgFlags = WORKSPACE_CRATES.map((c) => `-p ${c}`).join(" ");
-    steps.push({
-      label: `clippy workspace (${WORKSPACE_CRATES.length} crates)`,
-      command: `cargo clippy ${pkgFlags} -- -D warnings`,
-    });
-  }
-
-  // Clippy app crate (depends on workspace artifacts already built above)
-  steps.push({
-    label: "clippy src-tauri",
-    command: "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
-  });
-
-  // Test all test crates (unit + integration tests)
-  {
-    const pkgFlags = TEST_CRATES.map((c) => `-p ${c}`).join(" ");
-    steps.push({
-      label: `test workspace (${TEST_CRATES.length} crates)`,
-      command: `cargo test ${pkgFlags}`,
-    });
-  }
-
-  const total = steps.length;
-  const tui = new BumpTUI(total);
-  tui.start();
-
-  tui.log("\x1b[1m[preflight] Starting checks...\x1b[0m");
-
-  try {
-    for (let i = 0; i < total; i++) {
-      const { label, command } = steps[i];
-      tui.setStep(i, label);
-
-      const stepStart = Date.now();
-
-      if (command === null) {
-        // Special: linux tauri deps check
-        ensureLinuxTauriDeps();
-        const dt = Date.now() - stepStart;
-        tui.recordStepTime(dt);
-        tui.stepPassed(label, dt);
-      } else {
-        try {
-          await runCommandStreaming(label, command, tui);
-          const dt = Date.now() - stepStart;
-          tui.recordStepTime(dt);
-          tui.stepPassed(label, dt);
-        } catch (err) {
-          tui.stepFailed(label);
-          tui.stop();
-          throw err;
-        }
-      }
-    }
-
-    // Final state
-    tui.setStep(total, "done");
-    const totalElapsed = Date.now() - tui.startTime;
-    tui.log(`\n\x1b[1;32m[preflight] All ${total} checks passed in ${formatDuration(totalElapsed)}\x1b[0m\n`);
-
-    // Brief pause so user can see the final state
-    await new Promise((r) => setTimeout(r, 1500));
-    tui.stop();
-  } catch (err) {
-    tui.stop();
-    throw err;
-  }
-}
-
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -730,28 +107,25 @@ function changedTrackedPaths() {
 // ── CLI flags ────────────────────────────────────────────────────────────────
 
 function parseArgs() {
-  const args = process.argv.slice(2);
   let dryRun = false;
   let clean = false;
   let versionArg = null;
   let force = false;
   let rc = false;
-  let skipChecks = false;
+  let check = false;
 
-  for (const a of args) {
-    if (a === "--dry-run") {
-      dryRun = true;
-    } else if (a === "--clean") {
-      clean = true;
-    } else if (a === "--force") {
-      force = true;
-    } else if (a === "--rc") {
-      rc = true;
-    } else if (a === "--skip-checks") {
-      skipChecks = true;
-    } else if (a === "--help" || a === "-h") {
+  for (const a of process.argv.slice(2)) {
+    if (a === "--dry-run") dryRun = true;
+    else if (a === "--clean") clean = true;
+    else if (a === "--force") force = true;
+    else if (a === "--rc") rc = true;
+    else if (a === "--check") check = true;
+    else if (a === "--help" || a === "-h") {
       console.log(`
-Usage: npm run bump [version] [--rc] [--dry-run] [--clean] [--force] [--skip-checks]
+Usage: npm run bump [version] [--rc] [--check] [--dry-run] [--clean] [--force]
+
+Writes the new version, compiles the changelog fragments and commits "<version>".
+Normally run for you by \`npm run release\`.
 
 Arguments:
   version       Optional specific version (e.g., 1.2.3 or 1.2.3-rc.1).
@@ -761,33 +135,23 @@ Flags:
   --rc          Bump to a release candidate.
                   Stable → next-patch-rc.1   (e.g., 0.5.0 → 0.5.1-rc.1)
                   RC     → next RC iteration (e.g., 0.5.1-rc.1 → 0.5.1-rc.2)
-                Without --rc, RC versions advance to the next stable patch
-                (e.g., 0.5.1-rc.3 → 0.5.2), starting a fresh stable cycle.
-  --dry-run     Run all checks without making any changes
-  --clean       Clean Rust build artifacts after successful bump
-  --force       Bypass version tag check (use with caution)
-  --skip-checks Skip the preflight: frontend checks, the i18n check, vitest, clippy
-                and cargo test are NOT run, and neither are the competing-cargo and
-                Linux-deps guards. The version/tag safety checks still run. Use it
-                when the tree is already known good (or CI will judge it); the
-                pre-commit hook still runs on the bump commit.
+                Without --rc, RC versions advance to the next stable patch.
+  --check       Run the full check list first (npm test -- full). Off by default:
+                CI runs it on the tag before anything is published.
+  --dry-run     Run the checks without changing anything
+  --clean       Clean Rust build artifacts after a successful bump
+  --force       Bypass the "current version is tagged and pushed" check
 
-Note: VERSION is the source of truth. bump writes VERSION then syncs
-      package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
-      crates/skill-daemon/Cargo.toml, and crates/skill-tty/Cargo.toml.
-      By default, bump will refuse to run if the current version is not tagged
-      and pushed to the remote. This prevents accidental multiple bumps. Use --force
-      to override this safety check.
+VERSION is the source of truth. bump writes it and the Cargo workspace version
+(root Cargo.toml [workspace.package]), which src-tauri, skill-daemon and
+skill-tty inherit and Tauri reads.
 `);
       process.exit(0);
-    } else if (!a.startsWith("-")) {
-      versionArg = a;
-    } else {
-      throw new Error(`Unknown flag: ${a}`);
-    }
+    } else if (!a.startsWith("-")) versionArg = a;
+    else throw new Error(`Unknown flag: ${a}`);
   }
 
-  return { dryRun, clean, versionArg, force, rc, skipChecks };
+  return { dryRun, clean, versionArg, force, rc, check };
 }
 
 // ── auto-generate changelog fragment from git log ────────────────────────────
@@ -909,19 +273,12 @@ function generateFragmentFromGitLog(currentVersion) {
 // ── main (async) ─────────────────────────────────────────────────────────────
 
 async function main() {
-  const { dryRun, clean, versionArg, force, rc, skipChecks } = parseArgs();
+  const { dryRun, clean, versionArg, force, rc, check } = parseArgs();
 
   // ── resolve new version ─────────────────────────────────────────────────────
 
-  // Source of truth: repo-root VERSION. Derived files (package.json,
-  // tauri.conf.json, src-tauri/Cargo.toml) are synced after the bump.
+  // Source of truth: repo-root VERSION, mirrored into the Cargo workspace.
   const currentVersion = readVersionFile();
-  const pkg = JSON.parse(readText("package.json"));
-  if (pkg.version !== currentVersion) {
-    console.warn(
-      `[bump] package.json version (${pkg.version}) differs from VERSION (${currentVersion}); using VERSION`,
-    );
-  }
 
   // ── Check if current version is already tagged and pushed ─────────────────
   if (!force) {
@@ -949,22 +306,17 @@ async function main() {
     console.warn("     release notes verbatim — typos, WIP markers and all.");
     console.warn("     Prefer: npm run changes:new -- <slug> --category <Category>");
     console.warn("");
-    generateFragmentFromGitLog(currentVersion);
+    if (!dryRun) generateFragmentFromGitLog(currentVersion);
   } else {
     console.log(
       `[bump] Found ${validated.files.length} changelog fragment${validated.files.length === 1 ? "" : "s"} — will use these instead of git log`,
     );
   }
 
-  // ── preflight checks (must pass before any file is modified) ──────────────
+  // ── optional checks (must pass before any file is modified) ───────────────
 
-  if (skipChecks) {
-    console.warn(
-      "\x1b[1;33m[bump] --skip-checks: preflight skipped.\x1b[0m Frontend checks, the i18n check, vitest, " +
-        "clippy and cargo test were NOT run, so CI will be the first to see this commit.",
-    );
-  } else {
-    await runPreflightChecks();
+  if (check) {
+    execSync("node scripts/check.mjs full", { stdio: "inherit" });
   }
 
   // ── In dry-run mode stop here — no files are modified ─────────────────────
@@ -973,11 +325,12 @@ async function main() {
     return;
   }
 
+  // A local rlx session hides a path-patched Cargo.lock; the commit needs the
+  // GitHub-pinned one. Switched back in `finally`.
+  const wasLocal = rlxLocalActive();
+  if (wasLocal) rlxMode("deployed");
+
   // ── Snapshot git state so we can revert on failure ─────────────────────────
-  //
-  // Stash any uncommitted changes (there shouldn't be any blocking ones, but
-  // be safe), then record HEAD so we know where to reset if the bump fails
-  // after files have been mutated.
 
   const headBefore = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
 
@@ -1009,42 +362,14 @@ async function main() {
     writeVersionFile(newVersion);
     console.log(`[bump] Wrote VERSION → ${newVersion}`);
 
-    // ── package.json (derived) ────────────────────────────────────────────────
-
-    // Re-read in case something changed
-    const pkgFresh = JSON.parse(readText("package.json"));
-    pkgFresh.version = newVersion;
-    writeText("package.json", `${JSON.stringify(pkgFresh, null, 2)}\n`);
-
-    // ── src-tauri/tauri.conf.json (derived) ───────────────────────────────────
-
-    const tauriConfPath = "src-tauri/tauri.conf.json";
-    const tauriConf = JSON.parse(readText(tauriConfPath));
-    tauriConf.version = newVersion;
-    writeText(tauriConfPath, `${JSON.stringify(tauriConf, null, 2)}\n`);
-
-    // ── src-tauri/Cargo.toml (derived) ────────────────────────────────────────
-
-    const cargoPath = "src-tauri/Cargo.toml";
-    let cargo = readText(cargoPath);
-
-    const versionLine = /^version\s*=\s*"[^"]+"/m;
-    if (!versionLine.test(cargo)) {
-      throw new Error("Could not find package version in Cargo.toml");
+    // ── Cargo workspace version (inherited by the shipped crates + Tauri) ─────
+    const cargoToml = readText("Cargo.toml");
+    const workspaceVersion = /^(\[workspace\.package\]\s*\nversion\s*=\s*)"[^"]+"/m;
+    if (!workspaceVersion.test(cargoToml)) {
+      throw new Error("Could not find [workspace.package] version in Cargo.toml");
     }
-    cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
-    writeText(cargoPath, cargo);
-
-    // ── skill-daemon + skill-tty crate versions (derived) ─────────────────────
-    for (const path of ["crates/skill-daemon/Cargo.toml", "crates/skill-tty/Cargo.toml"]) {
-      let toml = readText(path);
-      if (!versionLine.test(toml)) {
-        throw new Error(`Could not find package version in ${path}`);
-      }
-      toml = toml.replace(versionLine, `version = "${newVersion}"`);
-      writeText(path, toml);
-      console.log(`[bump] Synced ${path} → ${newVersion}`);
-    }
+    writeText("Cargo.toml", cargoToml.replace(workspaceVersion, `$1"${newVersion}"`));
+    console.log(`[bump] Wrote Cargo.toml [workspace.package] version → ${newVersion}`);
 
     checkpoint();
 
@@ -1070,10 +395,12 @@ async function main() {
       console.log(`[bump]   - ${category}: ${count}`);
     }
 
-    // Keep Cargo.lock in sync with the bumped skill version so CI `--locked`
-    // builds (npm run release → tag → Release workflows) don't fail.
+    // Sync Cargo.lock to the bumped crate versions so CI `--locked` builds pass.
+    // `cargo metadata` keeps every existing git revision (`generate-lockfile`
+    // would float rlx to the tip of main); its JSON output is not needed.
     checkpoint();
-    refreshCargoLockForRelease();
+    console.log("[bump] Refreshing Cargo.lock (cargo metadata, pinned revisions kept)…");
+    execSync("cargo metadata --format-version=1", { stdio: ["ignore", "ignore", "inherit"] });
     checkpoint();
 
     // ── optionally clean Rust build artifacts to free disk space ──────────────
@@ -1088,13 +415,9 @@ async function main() {
     checkpoint();
 
     // ── create bump commit ────────────────────────────────────────────────────
-    // Cargo.lock must be addable here: refreshCargoLockForRelease cleared
-    // skip-worktree. Re-protect after commit if the local rlx overlay is back.
 
     execSync("git add -A", { stdio: "inherit" });
-    execSync("git add Cargo.lock", { stdio: "inherit" });
     execSync(`git commit -m "${newVersion}"`, { stdio: "inherit" });
-    protectCargoLockIfOverlayActive();
 
     console.log(`\n\x1b[1;32m[bump] ✓ ${newVersion} committed successfully\x1b[0m`);
   } catch (err) {
@@ -1129,7 +452,6 @@ async function main() {
         }
         // Remove any untracked files created during bump (e.g. release archive)
         execSync(`git clean -fd changes/releases`, { stdio: "ignore" });
-        protectCargoLockIfOverlayActive();
       } catch (revertErr) {
         console.error(`\x1b[31m[bump] Revert failed: ${revertErr.message}. Manual cleanup may be needed.\x1b[0m`);
         console.error(`[bump] To restore manually: git reset --hard ${headBefore}`);
@@ -1139,6 +461,7 @@ async function main() {
   } finally {
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
+    if (wasLocal) rlxMode("local");
   }
 }
 

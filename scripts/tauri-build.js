@@ -722,7 +722,7 @@ function assembleMacOsApp() {
   const tauriConf = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf-8"));
   const productName = tauriConf.productName || "NeuroSkill";
   const bundleId = tauriConf.identifier || "com.neuroskill.skill";
-  const version = tauriConf.version || "0.0.0";
+  const version = readFileSync(resolve(root, "VERSION"), "utf-8").split(/\r?\n/)[0].trim();
   const resources = tauriConf.bundle?.resources || {};
   const macConf = tauriConf.bundle?.macOS || {};
 
