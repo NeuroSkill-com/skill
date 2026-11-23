@@ -143,7 +143,7 @@ poop = { version = "0.0.2", default-features = false }
 emotibit = { version = "0.1.0", default-features = false, features = ["ble"] }
 
 # Same `webbluetooth 0.0.4` lockstep requirement as muse-rs / vital / skill-daemon.
-webbluetooth = { version = "0.0.4", features = ["uuid"] }
+webbluetooth = { version = "0.0.5", features = ["uuid"] }
 
 # Needed by the Oura ring adapter: `futures` for webbluetooth's notification and
 # scan streams, `hex` to parse the auth key, `anyhow`/`tracing` to report a

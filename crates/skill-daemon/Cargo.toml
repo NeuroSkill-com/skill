@@ -150,7 +150,7 @@ base64 = { workspace = true }
 # BLE advertisement scanning.  One process-wide `Bluetooth::shared()` session
 # is shared with the device crates that connect, so the scan no longer has to
 # be torn down for a connect to succeed (see scanner.rs).
-webbluetooth = { version = "0.0.4", features = ["uuid"] }
+webbluetooth = { version = "0.0.5", features = ["uuid"] }
 cognionics = { version = "0.0.1", default-features = false }
 dirs = "7"
 rand = "0.10"
